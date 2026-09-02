@@ -6,13 +6,11 @@ import souther.compiler.publish.PublicationOrders;
 
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.EnumSet;
 import java.util.List;
 import java.util.Objects;
-import java.util.Set;
 
 /**
- * Where one obligation stands in the account a report counts it in.
+ * What became of one obligation the model owes a row at.
  *
  * <p>Derived from the evidence and never held beside it. What the readings came to
  * ({@link ObligationCoverage}) and what has shown a row can be written here
@@ -21,26 +19,41 @@ import java.util.Set;
  * Asked of the evidence at each of those places instead, the three had three chances to read one
  * pair of answers differently.
  *
- * <p>Four states, and three of them are counted. A counted obligation is one the model owes a row at
- * and the rows were read against, so the three make a partition of the denominator: a row stands at
- * it, no row does and the model says one can be written, or nobody can say which. What is not
- * counted is said with every reason it is not, because the reasons are independent — nothing was
- * read <em>and</em> nothing has shown a row can be written is a state, and a disposition naming one
- * of the two would be choosing between them.
+ * <p><b>Three states, and every one of them is counted.</b> Whether a row is owed at a point is the
+ * model's answer and is settled before anything here: a border that owes no row at a point says so
+ * with a reason read off the rules ({@link souther.compiler.partition.NotOwedReason}), and a point
+ * the rules leave nothing at never becomes an obligation. Nothing this compiler failed to read,
+ * compose or represent reaches that decision, so nothing here subtracts. What the three say is what
+ * is known about a point that is owed: a row stands at it, no row does and something showed one
+ * could, or nobody can say which.
+ *
+ * <p>There was a fourth. A point every row was read against and none was at, with nothing to show a
+ * row could be written there, was left out of the account entirely — on the reading that asking for
+ * a row nothing promises is asking for work nobody can do. That reads a limit of this compiler as an
+ * answer about the model. Nothing composed and every candidate refused are facts about the composer;
+ * the model's own refusal has its own way of being said, one paragraph up, and is not any of them.
+ * What the fourth state cost is that a field nobody could compose a value for took its siblings'
+ * obligations out of the denominator with it — the row is written against the whole value, so one
+ * unreadable rule anywhere under a parameter emptied the grounds for every point beneath it
+ * (issue #1249).
+ *
+ * <p><b>And an open question carries what it is open on.</b> A name for the question alone sends
+ * every reader back to the evidence beside it to work out what to say, and each of them works it
+ * out on its own terms — so what one point is open on is as many answers as there are readers
+ * ({@link Uncertainty}). Which is also why the two questions are families rather than names: a
+ * reading that stopped short and no reading at all are one question open for two reasons, and so
+ * are a showing a budget ended and a showing nothing ever made.
  */
 public sealed interface ObligationDisposition {
 
-    /** One this account counts, which is one the rows were read against and a row could answer. */
-    sealed interface Counted extends ObligationDisposition {}
-
     /** A row this compilation observed stands at the point. */
-    record Met() implements Counted {}
+    record Met() implements ObligationDisposition {}
 
     /**
      * No row is at the point, the readings ran to the end, and something has shown a row can be
      * written there. The one state a finding is made of and a build can be told to refuse over.
      */
-    record Unmet() implements Counted {}
+    record Unmet() implements ObligationDisposition {}
 
     /**
      * No row was seen, and something this compiler could not do is why nobody can say more.
@@ -62,7 +75,7 @@ public sealed interface ObligationDisposition {
      * ({@link PublicationOrders#OPEN_QUESTIONS}): what a reader is shown cannot come out of the
      * order a fold happened to put them in.
      */
-    record Undecided(CanonicalSelection<Uncertainty> because) implements Counted {
+    record Undecided(CanonicalSelection<Uncertainty> because) implements ObligationDisposition {
 
         public Undecided {
             if (because == null || because.isEmpty()) {
@@ -88,6 +101,17 @@ public sealed interface ObligationDisposition {
     sealed interface Uncertainty {
 
         /**
+         * Which of the questions this is.
+         *
+         * <p>Said by the value and not worked out from the class it arrived in. A question is a
+         * family — whether a row is there is open where a reading stopped and where nothing was
+         * read — so a reader that keyed on the concrete answer would hold two things where the
+         * order and the document hold one, and would be deciding which question a point is open on
+         * from what happened to leave it open.
+         */
+        Class<? extends Uncertainty> question();
+
+        /**
          * Whether a row that is written stands at the point: a reading of the rows stopped short.
          *
          * <p>With what the readings met, each reason once ({@link ReadingReasons}). Which reading
@@ -95,10 +119,42 @@ public sealed interface ObligationDisposition {
          * an answer that paired them would be answering about a reading in the sentence about the
          * line.
          */
-        record WhetherARowIsThere(ReadingReasons met) implements Uncertainty {
+        sealed interface WhetherARowIsThere extends Uncertainty {
 
-            public WhetherARowIsThere {
-                Objects.requireNonNull(met, "a reading that stopped short says what it met");
+            @Override
+            default Class<? extends Uncertainty> question() {
+                return WhetherARowIsThere.class;
+            }
+
+            /**
+             * A reading that could have been holding a row did not run to the end, and this is what
+             * the readings met.
+             *
+             * <p>Each reason once ({@link ReadingReasons}). Which reading met which is no part of
+             * this: the readings are named under the point, one to a line, and an answer that
+             * paired them would be answering about a reading in the sentence about the line.
+             */
+            record ReadingsStopped(ReadingReasons met) implements WhetherARowIsThere {
+
+                public ReadingsStopped {
+                    Objects.requireNonNull(met, "a reading that stopped short says what it met");
+                }
+            }
+
+            /**
+             * Nothing was read against the point at all, and this is why nobody looked.
+             *
+             * <p>The other half of the same question, and it is open for a reason of the build's
+             * rather than of a reading's: no row names the behavior, or this build asked for no
+             * measurement over rows. The obligation is the model's either way — what the rows were
+             * not read against is not something the model stopped owing (issue #1249) — so the
+             * question is open and says which of the two left it so.
+             */
+            record NothingWasRead(NotMeasuredReason why) implements WhetherARowIsThere {
+
+                public NothingWasRead {
+                    Objects.requireNonNull(why, "a point nobody read against says why nobody did");
+                }
             }
         }
 
@@ -106,12 +162,34 @@ public sealed interface ObligationDisposition {
          * Whether a row can be written at the point: the showing of it stopped short, and this is
          * what stopped it.
          */
-        record WhetherARowCanBeWritten(WritabilityKnowledge.Prevented stopped)
-                implements Uncertainty {
+        sealed interface WhetherARowCanBeWritten extends Uncertainty {
 
-            public WhetherARowCanBeWritten {
-                Objects.requireNonNull(stopped, "a showing that was stopped says what stopped it");
+            @Override
+            default Class<? extends Uncertainty> question() {
+                return WhetherARowCanBeWritten.class;
             }
+
+            /** The showing of it stopped short, and this is what stopped it. */
+            record Stopped(WritabilityKnowledge.Prevented by) implements WhetherARowCanBeWritten {
+
+                public Stopped {
+                    Objects.requireNonNull(by, "a showing that was stopped says what stopped it");
+                }
+            }
+
+            /**
+             * Nothing showed a row can be written here, and nothing was stopped from showing it.
+             *
+             * <p>Nothing composed, or every value composed was refused — both of them things this
+             * compiler did, and neither of them the model refusing a row. What the model refuses is
+             * said where a border declines to owe the point at all, so an absence here leaves the
+             * obligation exactly where it was and leaves this question open (issue #1249).
+             *
+             * <p>No payload, and that is the answer rather than a field nobody filled: what was
+             * tried is the point's own to say, one line per reading, and a copy here would be a
+             * second account of the same searches.
+             */
+            record NothingShowedIt() implements WhetherARowCanBeWritten {}
         }
     }
 
@@ -161,87 +239,71 @@ public sealed interface ObligationDisposition {
     }
 
 
-    /** One this account does not count, with every reason it does not. */
-    record NotCounted(CanonicalSelection<Reason> because) implements ObligationDisposition {
 
-        public NotCounted {
-            if (because == null || because.isEmpty()) {
-                throw new IllegalArgumentException(
-                        "an obligation left out of the count says why it is out");
-            }
-        }
-
-        /** The reasons an obligation is out of the count, in the order they are said in. */
-        public static NotCounted because(Collection<Reason> reasons) {
-            return new NotCounted(PublicationOrders.NOT_COUNTED_REASONS.keep(reasons));
-        }
-    }
-
-    /** Why an obligation is not counted. Both can hold of one obligation. */
-    enum Reason {
-        /** Nothing was read against the point, so there is nothing to have found. */
-        NOTHING_WAS_READ,
-        /** Nothing has shown a row can be written here, so a miss is where the reading stopped
-         *  rather than where the model does. */
-        NOT_KNOWN_TO_BE_WRITABLE
-    }
 
     /**
      * Where {@code coverage} and {@code knowledge} put the obligation.
      *
      * <p>The one place the pair is read, and read coverage first. What the rows came to is what
-     * decides which question is even open: a row found is met whatever else is so, a reading that
-     * stopped leaves the point undecided whatever anybody built, and a point nothing was read
-     * against is out of the count however well the rules prove a value could stand there.
+     * decides which question is even open: a row found is met whatever else is so, and a reading
+     * that came to nothing leaves the point undecided whatever anybody built.
      *
      * <p><b>What has shown a row can be written is a refinement of one of those and not a gate over
      * all of them.</b> It is what tells a miss the rows ran out on from a finding — an author told
-     * to write a row at a point nothing promises may be told to write one that cannot exist. Asked
-     * before the coverage instead, it takes an obligation nobody could decide out of the count as
-     * well, and the account then says the model admits no row at a point where the rows simply went
-     * unread.
+     * to write a row at a point nothing promises may be told to write one this compiler cannot show
+     * exists. What it never does is decide whether the point is owed: that is the model's answer and
+     * is settled before anything here (issue #1249).
      *
-     * <p>And the middle answer of the three is why that refinement has three arms rather than two.
-     * A point where the showing was stopped by a budget of this compiler's is not one where nothing
-     * promises a row: it is one where the promise was being made and did not arrive. Counted, and
-     * never a finding.
+     * <p>Every answer is counted. A point where the showing was stopped by a budget of this
+     * compiler's, and one where nothing was composed at all, and one nobody read against, are three
+     * things this compiler did or did not do — and none of them is the model taking a row back.
      */
     static ObligationDisposition of(ObligationCoverage coverage, WritabilityKnowledge knowledge) {
         return switch (coverage) {
             case ObligationCoverage.Witnessed _ -> new Met();
             // What the rows left open, and beside it whatever else is open about the same point. A
-            // reading that stopped and a showing that was stopped are two questions, and a point
-            // where both happened is undecided about both.
-            case ObligationCoverage.Undecided it -> {
-                List<Uncertainty> open = new ArrayList<>();
-                open.add(new Uncertainty.WhetherARowIsThere(whatTheReadingsMet(it.by())));
-                if (knowledge instanceof WritabilityKnowledge.Prevented stopped) {
-                    open.add(new Uncertainty.WhetherARowCanBeWritten(stopped));
-                }
-                yield Undecided.about(open);
-            }
+            // reading that came to nothing and a showing that came to nothing are two questions,
+            // and a point where both happened is undecided about both.
+            case ObligationCoverage.Undecided it -> Undecided.about(alsoWritability(
+                    new Uncertainty.WhetherARowIsThere.ReadingsStopped(whatTheReadingsMet(it.by())),
+                    knowledge));
             case ObligationCoverage.Missed _ -> switch (knowledge) {
                 case WritabilityKnowledge.Established _ -> new Unmet();
                 // The rows are read out and no row is at the point, and what would have shown a row
-                // can be written was stopped on the way. The obligation stays in the count — a
-                // budget of this compiler's is not the model refusing anything — and no finding is
-                // made of it, because nothing here can say the row an author would write is one
-                // that exists.
+                // can be written did not arrive. No finding is made of it, because nothing here can
+                // say the row an author would write is one that exists — and the obligation stays,
+                // because what did not arrive is a showing and not the model's answer.
                 case WritabilityKnowledge.Prevented stopped -> Undecided.about(
-                        List.of(new Uncertainty.WhetherARowCanBeWritten(stopped)));
-                case WritabilityKnowledge.NoEvidence _ ->
-                        NotCounted.because(EnumSet.of(Reason.NOT_KNOWN_TO_BE_WRITABLE));
+                        List.of(new Uncertainty.WhetherARowCanBeWritten.Stopped(stopped)));
+                case WritabilityKnowledge.NoEvidence _ -> Undecided.about(
+                        List.of(new Uncertainty.WhetherARowCanBeWritten.NothingShowedIt()));
             };
-            // Nothing was read against it, so there is nothing to have found. What is known about a
-            // row being writable there is said beside that rather than instead of it: the two are
-            // independent facts about the point and a reader is owed both.
-            case ObligationCoverage.NotMeasured _ -> {
-                Set<Reason> because = EnumSet.of(Reason.NOTHING_WAS_READ);
-                if (!(knowledge instanceof WritabilityKnowledge.Established)) {
-                    because.add(Reason.NOT_KNOWN_TO_BE_WRITABLE);
-                }
-                yield NotCounted.because(because);
-            }
+            // Nothing was read against it, so there is nothing to have found. Counted all the same:
+            // whether a row is owed here is the model's answer, and no row naming the behavior is a
+            // setting of this build (issue #1249). What is known about a row being writable there
+            // is said beside that rather than instead of it.
+            case ObligationCoverage.NotMeasured it -> Undecided.about(alsoWritability(
+                    new Uncertainty.WhetherARowIsThere.NothingWasRead(it.why()), knowledge));
         };
+    }
+
+    /**
+     * The question the rows left open, and the one about writing a row where that is open too.
+     *
+     * <p>In the order the two are said in, which {@link Undecided} holds them to. Written at each
+     * of the two places the pair can arise, the order would be written twice.
+     */
+    private static List<Uncertainty> alsoWritability(Uncertainty rows,
+                                                     WritabilityKnowledge knowledge) {
+        List<Uncertainty> open = new ArrayList<>();
+        open.add(rows);
+        switch (knowledge) {
+            case WritabilityKnowledge.Established _ -> { }
+            case WritabilityKnowledge.Prevented stopped ->
+                    open.add(new Uncertainty.WhetherARowCanBeWritten.Stopped(stopped));
+            case WritabilityKnowledge.NoEvidence _ ->
+                    open.add(new Uncertainty.WhetherARowCanBeWritten.NothingShowedIt());
+        }
+        return open;
     }
 }

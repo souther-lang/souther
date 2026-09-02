@@ -192,10 +192,10 @@ class AnObligationsExplanationNamesEachReasonOnceTest {
     @Test
     void theOpenQuestionsAreSaidInTheOrderTheyArePublishedIn() {
         ObligationDisposition.Uncertainty there =
-                new ObligationDisposition.Uncertainty.WhetherARowIsThere(
+                new ObligationDisposition.Uncertainty.WhetherARowIsThere.ReadingsStopped(
                         ReadingReasons.of(List.of(ReadingGap.NO_VALUE)));
         ObligationDisposition.Uncertainty written =
-                new ObligationDisposition.Uncertainty.WhetherARowCanBeWritten(prevented());
+                new ObligationDisposition.Uncertainty.WhetherARowCanBeWritten.Stopped(prevented());
 
         assertEquals(List.of(there, written),
                 ObligationDisposition.Undecided.about(List.of(written, there)).because().written(),
@@ -204,7 +204,7 @@ class AnObligationsExplanationNamesEachReasonOnceTest {
                 ObligationDisposition.Undecided.about(List.of(there, there)).because().written(),
                 "and one question is one entry, however many times it arrived");
         ObligationDisposition.Uncertainty alsoThere =
-                new ObligationDisposition.Uncertainty.WhetherARowIsThere(
+                new ObligationDisposition.Uncertainty.WhetherARowIsThere.ReadingsStopped(
                         ReadingReasons.of(List.of(ReadingGap.of(A_LIMIT))));
         assertThrows(IllegalArgumentException.class,
                 () -> ObligationDisposition.Undecided.about(List.of(there, alsoThere)),
@@ -225,7 +225,8 @@ class AnObligationsExplanationNamesEachReasonOnceTest {
         ObligationDisposition.Undecided undecided =
                 assertInstanceOf(ObligationDisposition.Undecided.class, disposition,
                         "a point whose readings did not run out is one nobody can decide");
-        return assertInstanceOf(ObligationDisposition.Uncertainty.WhetherARowIsThere.class,
+        return assertInstanceOf(
+                ObligationDisposition.Uncertainty.WhetherARowIsThere.ReadingsStopped.class,
                 undecided.because().written().getFirst(),
                 "and the question the readings left open is whether a row is there").met();
     }

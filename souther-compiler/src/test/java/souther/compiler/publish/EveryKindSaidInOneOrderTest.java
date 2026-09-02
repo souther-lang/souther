@@ -4,23 +4,19 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.partition.ReadingGap;
+import souther.compiler.query.EstablishmentGap;
 
-import java.io.File;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 import java.lang.reflect.RecordComponent;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
@@ -35,8 +31,12 @@ import static org.junit.jupiter.api.Assertions.fail;
  * Both are asked of every order there is rather than of the one somebody was editing.
  *
  * <p>The population is read off the declarations. What the kinds are is read off the types, and
- * which orders exist is read off the class files of the package that is allowed to declare them —
- * so an order added, or a member added to a kind, arrives here without anybody adding a line.
+ * which orders exist is read off the one place that declares them — so an order added, or a member
+ * added to a kind, arrives here without anybody adding a line.
+ *
+ * <p>That nothing else declares one is not asked here. It is a question about who calls the two
+ * factories rather than about what any class holds, and it is asked of the compiled code in
+ * {@code OnlyOnePlaceDeclaresAPublicationOrderTest}.
  */
 class EveryKindSaidInOneOrderTest {
 
@@ -166,33 +166,12 @@ class EveryKindSaidInOneOrderTest {
                 "one reason met twice is one reason");
         assertThrows(IllegalArgumentException.class,
                 () -> PublicationOrders.ESTABLISHMENT_GAPS.keep(List.of(
-                        souther.compiler.query.EstablishmentGap.Observation.of(
+                        EstablishmentGap.Observation.of(
                                 List.of(Incompleteness.Code.VALUE_TRUNCATED)),
-                        souther.compiler.query.EstablishmentGap.Observation.of(
+                        EstablishmentGap.Observation.of(
                                 List.of(Incompleteness.Code.VALUE_UNREADABLE)))),
                 "two observations are one observation naming both, and putting them in order is"
                         + " not what makes them one");
-    }
-
-    /**
-     * Nothing but {@link PublicationOrders} declares one.
-     *
-     * <p>Making an order is closed to the package by the compiler, which leaves one way for a
-     * second order over a kind to be written: another class in this package. What the check above
-     * would say of such a class is nothing, because it reads the orders off this one.
-     */
-    @Test
-    void nothingElseInThisPackageDeclaresAnOrder() throws Exception {
-        for (Class<?> each : classesInThisPackage()) {
-            if (each.equals(PublicationOrders.class)) {
-                continue;
-            }
-            for (Field field : each.getDeclaredFields()) {
-                assertNotEquals(CanonicalSelection.Order.class, field.getType(),
-                        () -> each.getSimpleName() + " declares an order, and the orders are"
-                                + " written in one place so that a kind cannot have two");
-            }
-        }
     }
 
     /** Every order this compiler publishes anything in, by the name it is declared under. */
@@ -275,21 +254,4 @@ class EveryKindSaidInOneOrderTest {
                 + " the kind is cannot be read off it");
     }
 
-    /** Every class of this package, read off what was compiled. */
-    private static List<Class<?>> classesInThisPackage() throws Exception {
-        Path root = Path.of(CanonicalSelection.class.getProtectionDomain()
-                .getCodeSource().getLocation().toURI());
-        Path here = root.resolve(CanonicalSelection.class.getPackageName().replace('.', '/'));
-        List<Class<?>> out = new ArrayList<>();
-        try (Stream<Path> files = Files.walk(here)) {
-            for (Path each : files.filter(p -> p.toString().endsWith(".class")).toList()) {
-                out.add(Class.forName(root.relativize(each).toString()
-                        .replace(File.separatorChar, '.').replaceFirst("\\.class$", ""),
-                        false, CanonicalSelection.class.getClassLoader()));
-            }
-        }
-        assertTrue(out.contains(PublicationOrders.class),
-                "the classes of this package are read off what was compiled, and this found none");
-        return out;
-    }
 }

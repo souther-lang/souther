@@ -115,7 +115,7 @@ class APositionThisDidNotReadIsNotOneTheModelSaysNothingAboutTest {
         assertTrue(linesOf("inAConjunction").stream()
                         .anyMatch(line -> line.axis().equals("inAConjunction/r.cost")),
                 "the body compares it two lines above, so a line was read on it");
-        assertFalse(blockOf("inAConjunction").contains("not derivable: r.cost"),
+        assertFalse(blockOf("inAConjunction").contains("divided no way: r.cost"),
                 "the body compares it two lines above: " + blockOf("inAConjunction"));
     }
 
@@ -135,7 +135,7 @@ class APositionThisDidNotReadIsNotOneTheModelSaysNothingAboutTest {
     void aPositionNothingComparesIsStillSaidToBeUndivided() {
         String block = blockOf("nothingCompared");
 
-        assertTrue(block.contains("not derivable: r.cost"), block);
+        assertTrue(block.contains("divided no way: r.cost"), block);
     }
 
     /**
@@ -150,7 +150,7 @@ class APositionThisDidNotReadIsNotOneTheModelSaysNothingAboutTest {
     void aPositionTheWalkStoppedAtSaysSo() {
         String block = blockOf("returnsToItself");
 
-        assertFalse(block.contains("not derivable: o.deep.more@Some"), block);
+        assertFalse(block.contains("divided no way: o.deep.more@Some"), block);
         assertTrue(block.contains("the input returns here to a declaration already read above it"),
                 block);
     }
@@ -161,7 +161,7 @@ class APositionThisDidNotReadIsNotOneTheModelSaysNothingAboutTest {
         String block = blockOf("byEquality");
 
         assertFalse(notReadAbout(block, "r.cost"), block);
-        assertFalse(block.contains("not derivable: r.cost"), block);
+        assertFalse(block.contains("divided no way: r.cost"), block);
     }
 
     /**
@@ -186,7 +186,7 @@ class APositionThisDidNotReadIsNotOneTheModelSaysNothingAboutTest {
         String block = blockOf("byDateTime");
 
         assertFalse(notReadAbout(block, "at"), block);
-        assertFalse(block.contains("not derivable: at"), block);
+        assertFalse(block.contains("divided no way: at"), block);
     }
 
     /**
@@ -201,7 +201,7 @@ class APositionThisDidNotReadIsNotOneTheModelSaysNothingAboutTest {
     void aPositionBoundedByARuleThisCouldNotReadIsSaidToBeUnread() {
         String block = blockOf("boundedByAnUnreadableEnd");
 
-        assertFalse(block.contains("not derivable: m"), block);
+        assertFalse(block.contains("divided no way: m"), block);
         assertTrue(notReadAbout(block, "m"), block);
         assertTrue(block.contains("this compiler does not read"), block);
     }
@@ -217,7 +217,7 @@ class APositionThisDidNotReadIsNotOneTheModelSaysNothingAboutTest {
     void aBoundOnADateIsALineTheSameWayAGuardsIs() {
         String block = blockOf("boundedByADate");
 
-        assertFalse(block.contains("not derivable: c"), block);
+        assertFalse(block.contains("divided no way: c"), block);
         assertFalse(notReadAbout(block, "c"), block);
         assertTrue(block.contains("border      borders 1   obligations 0/0\n"), block);
     }
@@ -268,7 +268,7 @@ class APositionThisDidNotReadIsNotOneTheModelSaysNothingAboutTest {
     void aPositionBoundedByANumberIsNamedNeitherWay() {
         String block = blockOf("boundedByANumber");
 
-        assertFalse(block.contains("not derivable: a"), block);
+        assertFalse(block.contains("divided no way: a"), block);
         assertFalse(notReadAbout(block, "a"), block);
     }
 
@@ -277,7 +277,7 @@ class APositionThisDidNotReadIsNotOneTheModelSaysNothingAboutTest {
     void aPositionThatWasReadIsNotNamedAtAll() {
         String block = blockOf("alone");
 
-        assertFalse(block.contains("not derivable: r.cost"), block);
+        assertFalse(block.contains("divided no way: r.cost"), block);
         assertFalse(notReadAbout(block, "r.cost"), block);
     }
 

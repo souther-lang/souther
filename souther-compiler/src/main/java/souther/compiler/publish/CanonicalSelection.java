@@ -99,14 +99,33 @@ public final class CanonicalSelection<T> {
         }
 
         /**
-         * The order of a kind whose members carry something, one place per arm.
+         * The order of a kind whose members carry something, one place per family.
+         *
+         * <p>A family and not a class. What a report says once may be answered in more than one
+         * way — a question about a point is open where a reading stopped and where nothing was
+         * read — and a place per concrete answer would hold two where the sentence holds one, which
+         * is the order deciding a question from whatever happened to leave it open. Where a family
+         * has one member the two are the same thing.
          *
          * <p>At most one member to a place, which is what {@link #keep} holds to. Two members of
-         * one arm are two answers to a question the arm asks once, and putting them in order would
-         * be this deciding something about the arm's payload.
+         * one family are two answers to a question asked once, and putting them in order would be
+         * this deciding which of the two a reader is told.
          */
-        static <T> Order<T> overArms(List<Class<? extends T>> arms) {
-            return new Order<>(List.copyOf(arms), Object::getClass);
+        static <T> Order<T> overFamilies(List<Class<? extends T>> families) {
+            List<Object> slots = List.copyOf(families);
+            return new Order<>(slots, value -> {
+                Object found = null;
+                for (Object each : slots) {
+                    if (((Class<?>) each).isInstance(value)) {
+                        if (found != null) {
+                            throw new IllegalArgumentException("a reason in two places in the order"
+                                    + " it is published in: " + value);
+                        }
+                        found = each;
+                    }
+                }
+                return found;
+            });
         }
 
         /**
@@ -152,8 +171,12 @@ public final class CanonicalSelection<T> {
          * two members in one place are all impossible in a sequence; a member the order leaves out
          * is not, and it is a reason something could be published for and no order anywhere would
          * place.
+         *
+         * <p>Kept inside this package. Offered wider, the full order is a list anybody can walk and
+         * keep what they hold of — which is the thing {@link #keep} exists to be the only way to
+         * do, written out again at the far end.
          */
-        public List<Object> slots() {
+        List<Object> slots() {
             return slots;
         }
     }

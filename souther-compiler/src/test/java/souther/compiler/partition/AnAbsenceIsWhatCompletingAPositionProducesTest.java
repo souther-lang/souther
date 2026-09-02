@@ -103,7 +103,7 @@ class AnAbsenceIsWhatCompletingAPositionProducesTest {
         UndividedPosition said = of(pending(new StructuralInspection.Continuation.None(), unread))
                 .complete(new BodyCutInspection.Exhausted());
 
-        assertFalse(said.isAbsent(), said.toString());
+        assertFalse(said.why() instanceof UndividedPosition.Why.Absent, said.toString());
         // And the verdict says only that: what stopped it is the rule's, said by the reader that
         // read the rule and naming which rule it was.
         assertNull(of(pending(new StructuralInspection.Continuation.None(), unread))
@@ -127,7 +127,7 @@ class AnAbsenceIsWhatCompletingAPositionProducesTest {
                         pending(new StructuralInspection.Continuation.None(), read))
                 .complete(new BodyCutInspection.Exhausted());
 
-        assertFalse(said.isAbsent(), said.toString());
+        assertFalse(said.why() instanceof UndividedPosition.Why.Absent, said.toString());
         assertInstanceOf(UndividedPosition.Why.StatedWithoutALine.class, said.why(), said.toString());
     }
 
@@ -147,7 +147,7 @@ class AnAbsenceIsWhatCompletingAPositionProducesTest {
                 new BlockReason.UnreadValueRule()));
 
         assertFalse(pending.complete(new BodyCutInspection.NoLine(new LeftAtThePosition.AReadingStopped(
-                        new BlockReason.UnreadValueRule()))).isAbsent());
+                        new BlockReason.UnreadValueRule()))).why() instanceof UndividedPosition.Why.Absent);
         assertNull(pending.reportable(), "each rule is said with its rule, not as this position");
     }
 
@@ -187,7 +187,7 @@ class AnAbsenceIsWhatCompletingAPositionProducesTest {
         UndividedPosition done = new PendingPosition.Leaf(AT)
                 .complete(new BodyCutInspection.Exhausted());
 
-        assertTrue(done.isAbsent());
+        assertTrue(done.why() instanceof UndividedPosition.Why.Absent);
         assertEquals(AT, done.at());
     }
 
@@ -197,7 +197,7 @@ class AnAbsenceIsWhatCompletingAPositionProducesTest {
         UndividedPosition done = new PendingPosition.Leaf(AT).complete(new BodyCutInspection.NoLine(new LeftAtThePosition.AReadingStopped(
                         new BlockReason.UnreadValueRule())));
 
-        assertFalse(done.isAbsent());
+        assertFalse(done.why() instanceof UndividedPosition.Why.Absent);
         assertEquals(new UndividedPosition.Why.CannotDerive(), done.why());
     }
 
@@ -215,7 +215,7 @@ class AnAbsenceIsWhatCompletingAPositionProducesTest {
                 new BodyCutInspection.NoLine(new LeftAtThePosition.ARuleWithNoLine(
                         new BlockReason.ComparisonBetweenPositions())));
 
-        assertFalse(done.isAbsent());
+        assertFalse(done.why() instanceof UndividedPosition.Why.Absent);
         assertEquals(new UndividedPosition.Why.StatedWithoutALine(), done.why());
     }
 

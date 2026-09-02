@@ -6,6 +6,8 @@ import souther.compiler.partition.ReadingGap;
 import souther.compiler.query.EstablishmentGap;
 import souther.compiler.query.ItemAssessment;
 import souther.compiler.query.ObligationDisposition;
+import souther.compiler.report.WeakeningVocabulary;
+import souther.compiler.report.WeakeningWord;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -109,7 +111,7 @@ public final class PublicationOrders {
      * are the orders above; said again here they would be a second order over kinds that have one.
      */
     public static final CanonicalSelection.Order<EstablishmentGap> ESTABLISHMENT_GAPS =
-            CanonicalSelection.Order.overArms(List.<Class<? extends EstablishmentGap>>of(
+            CanonicalSelection.Order.overFamilies(List.<Class<? extends EstablishmentGap>>of(
                     EstablishmentGap.Observation.class,
                     EstablishmentGap.Composition.class));
 
@@ -119,24 +121,56 @@ public final class PublicationOrders {
      * <p>What a reader does about the two differs — the first is answered by reading more of what
      * is written and the second is not work an author can do — and the first is said first because
      * it is the one they can act on.
+     *
+     * <p>The questions and not the answers. Each of the two is open for more than one reason, and a
+     * place per reason would say twice what the sentence says once.
      */
     public static final CanonicalSelection.Order<ObligationDisposition.Uncertainty> OPEN_QUESTIONS =
-            CanonicalSelection.Order.overArms(
+            CanonicalSelection.Order.overFamilies(
                     List.<Class<? extends ObligationDisposition.Uncertainty>>of(
                             ObligationDisposition.Uncertainty.WhetherARowIsThere.class,
                             ObligationDisposition.Uncertainty.WhetherARowCanBeWritten.class));
 
     /**
-     * Why an account leaves an obligation out of its count.
+     * What a document says one measurement went without.
      *
-     * <p>Nothing having been read is said first, as the one that holds of the point whatever else
-     * is so: a line nobody read is short of every answer, and what is known about a row being
-     * writable there is a second fact about a point already out of the count.
+     * <p>Two vocabularies in one array ({@link WeakeningVocabulary}), and one order over the pair.
+     * The observation codes come first and in the order they are said in everywhere else, then the
+     * words this document has of its own — a value that was read and did not come back whole is
+     * nearer an answer than a reading that never happened, which is the principle the codes are
+     * already in the order of.
+     *
+     * <p>The words of this document's own are in the order the things they are about are met: what
+     * a row came back with, then what was read of the model, then what the rules left, then what a
+     * proof or an arm came to.
      */
-    public static final CanonicalSelection.Order<ObligationDisposition.Reason> NOT_COUNTED_REASONS =
-            CanonicalSelection.Order.overValues(List.of(
-                    ObligationDisposition.Reason.NOTHING_WAS_READ,
-                    ObligationDisposition.Reason.NOT_KNOWN_TO_BE_WRITABLE));
+    public static final CanonicalSelection.Order<WeakeningVocabulary> WEAKENING_WORDS =
+            CanonicalSelection.Order.overValues(everyWeakeningWord());
+
+    private static List<WeakeningVocabulary> everyWeakeningWord() {
+        List<WeakeningVocabulary> out = new ArrayList<>();
+        for (Incompleteness.Code code : OBSERVATION_CODES_IN_ORDER) {
+            out.add(new WeakeningVocabulary.AnObservationCode(code));
+        }
+        for (WeakeningWord word : List.of(
+                WeakeningWord.OUTPUT_CASES_UNREADABLE,
+                WeakeningWord.INPUT_CASES_UNREADABLE,
+                WeakeningWord.BORDER_VALUE_UNREADABLE,
+                WeakeningWord.BORDER_VALUE_ABSENT,
+                WeakeningWord.BODIES_NOT_ELABORATED,
+                WeakeningWord.BEHAVIOR_INPUT_NOT_READ,
+                WeakeningWord.BEHAVIOR_BOUNDARY_NOT_DERIVED,
+                WeakeningWord.RULE_UNREAD,
+                WeakeningWord.POSITION_NOT_READ,
+                WeakeningWord.RULES_NOT_REACHED,
+                WeakeningWord.QUESTION_UNANSWERED,
+                WeakeningWord.PAIR_SPACE_TRUNCATED,
+                WeakeningWord.PROOF_CONTRADICTED,
+                WeakeningWord.ARMS_UNSETTLED)) {
+            out.add(new WeakeningVocabulary.AWordOfThisDocuments(word));
+        }
+        return out;
+    }
 
     /**
      * What has shown a row can be written at a point.

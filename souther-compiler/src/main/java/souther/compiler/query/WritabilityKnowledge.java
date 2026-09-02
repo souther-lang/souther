@@ -62,8 +62,8 @@ public sealed interface WritabilityKnowledge {
      * everything that would have to be raised, and a choice between them would tell them about
      * whichever reading a walk happened to reach first.
      *
-     * <p>Put together here rather than by whoever collects them, and put in order after that
-     * ({@link #of}). So two runs that were stopped by the same things hold one value, whatever
+     * <p>Put together by {@link #of} rather than by whoever collects them, and put in order after
+     * that. So two runs that were stopped by the same things hold one value, whatever
      * order the readings arrived in and whatever order the kinds are declared in.
      */
     record Prevented(CanonicalSelection<EstablishmentGap> by) implements WritabilityKnowledge {

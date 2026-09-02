@@ -196,7 +196,7 @@ public sealed interface ItemAssessment {
      *
      * <p>Empty is the whole of what {@code Unknown} was. Nothing here can say a point is unwritable:
      * a decoder refusing every candidate that was tried says nothing about the ones that were not, so
-     * an empty set is the absence of evidence and never evidence of absence. What says a point cannot
+     * holding none is the absence of evidence and never evidence of absence. What says a point cannot
      * be written at is the border refusing to owe it at all.
      *
      * <p>Held in the order they are published in ({@link PublicationOrders#WRITABILITY_GROUNDS}),
@@ -254,7 +254,7 @@ public sealed interface ItemAssessment {
             if (valueWasBuilt) {
                 grounds.add(Ground.A_VALUE_WAS_BUILT);
             }
-            return new WritabilityEvidence(PublicationOrders.WRITABILITY_GROUNDS.keep(grounds));
+            return of(grounds);
         }
 
         /** Whether anything at all has shown a row can be written here. False leaves it open, never

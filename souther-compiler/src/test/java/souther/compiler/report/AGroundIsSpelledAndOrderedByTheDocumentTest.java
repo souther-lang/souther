@@ -37,8 +37,9 @@ class AGroundIsSpelledAndOrderedByTheDocumentTest {
     @Test
     void theDocumentsOrderIsTheOneWrittenDownHere() {
         List<String> written = new ArrayList<>();
-        for (Object ground : PublicationOrders.WRITABILITY_GROUNDS.slots()) {
-            written.add(AdequacyReport.wire((Ground) ground));
+        for (Ground ground : PublicationOrders.WRITABILITY_GROUNDS
+                .keep(List.of(Ground.values())).written()) {
+            written.add(AdequacyReport.wire(ground));
         }
         assertEquals(AS_THE_DOCUMENT_WRITES_THEM, written,
                 "the order or the spelling of `writableBecause` moved, and a consumer keyed on"

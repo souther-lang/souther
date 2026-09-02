@@ -170,11 +170,20 @@ public sealed interface BlockReason {
     /**
      * A rule read to the end that left no position divided, which is the other half.
      *
-     * <p>Three ways for that to happen and they are three: the quantity the rule cuts is empty, the
-     * quantity is a form over several positions and divides none of them on its own, and the line
-     * falls where the quantity never runs. Each is a fact about the rule rather than about this
-     * compiler — the reading finished — and each is still worth saying, because a position nothing
-     * is said about comes back as one the model states nothing about, and the model states this.
+     * <p><b>The reading of the rule succeeded.</b> That is the line between this and
+     * {@link ReadingStopReason} and it is a line about the reading, not about how sure anybody is:
+     * a rule reaches here having been taken in through this position, and what is absent is an
+     * ordered line coming out of what it says. A reader that cannot tell which half it is in is
+     * holding a rule it did not finish, and that is the other half — there is no arm here for
+     * "read far enough to guess", and one added would be this compiler's uncertainty filed as a
+     * fact about the model.
+     *
+     * <p>Ways for that to happen, and they are their own: the quantity the rule cuts is empty, the
+     * quantity is a form over several positions and divides none of them on its own, the line falls
+     * where the quantity never runs, and the rule divides the position by something that is not an
+     * order at all. Each is a fact about the rule rather than about this compiler — the reading
+     * finished — and each is still worth saying, because a position nothing is said about comes
+     * back as one the model states nothing about, and the model states this.
      *
      * <p>No measure is short of anything here, and that is what makes them one half rather than
      * three reasons that happen to agree. A rule that was read has had whatever it places placed by
@@ -556,6 +565,33 @@ public sealed interface BlockReason {
      * what is absent is a partition, because the model divides no position by it.
      */
     record ComparisonOverARun() implements ReadToEndWithoutLine {}
+
+    /**
+     * The rule divides this position, and the division is not one this measure draws lines on.
+     *
+     * <p>A rule stating which strings stand at a position divides its values in two, and nothing
+     * about that division is an order: there is no value on either side of a line for a row to be
+     * owed at, because there is no line — the classes are a set of strings and its complement.
+     * What this measure carries is intervals on an order, and a set that is not one is a partition
+     * it has no representation for.
+     *
+     * <p><b>Not an absence, which is what it used to be read as.</b> A position whose only rule was
+     * a format came back with no classes and no reason, and every reader downstream took that for
+     * the model dividing it no way at all — a conclusion about a model, drawn from this measure
+     * having nothing to say (issue #1249). The rule was read from end to end; what has no line is
+     * the shape of what it says.
+     *
+     * <p>Nor a limit of the reading. Whether a format is read into a set of strings is
+     * {@link souther.compiler.check.StringPredicates}'s answer and is a separate question — a
+     * pattern nobody could take apart stops the reading and is
+     * {@link ReadingStopReason}'s. This one is for a rule that <em>was</em> taken in.
+     *
+     * <p>Named for the measure and not for what happened to reach it first. A congruence divides a
+     * position the same way — {@code Int.floorMod(value, 1000) == 0} states which of the values an
+     * order does hold are in, and no interval says it — so the day that is read this is the word
+     * for it too.
+     */
+    record RuleDividingOutsideAnOrder() implements ReadToEndWithoutLine {}
 
     /**
      * What a derivation would have to be able to reach into.

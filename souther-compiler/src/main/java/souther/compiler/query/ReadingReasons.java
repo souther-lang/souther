@@ -47,8 +47,8 @@ public record ReadingReasons(CanonicalSelection<ReadingGap> eachKindOnce) {
      *
      * <p>Offered to anybody, because there is nothing here for a caller to get wrong: what comes
      * out is the written order with what was met kept, and a second caller reaches the same value
-     * as the first. What used to be worth closing off was the putting in order, and no caller does
-     * that any more.
+     * as the first. No caller puts anything in order, so there is no second place for the order to
+     * be decided in.
      */
     public static ReadingReasons of(Collection<ReadingGap> met) {
         return new ReadingReasons(PublicationOrders.READING_GAPS.keep(met));

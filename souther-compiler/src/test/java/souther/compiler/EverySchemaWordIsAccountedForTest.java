@@ -401,10 +401,10 @@ class EverySchemaWordIsAccountedForTest {
             new Vocabulary("obligations[].disposition",
                     List.of("$defs", "obligations", "items", "properties", "disposition"),
                     List.of(ObligationDisposition.class), dispositionWords(), Set.of()),
-            new Vocabulary("obligations[].notCountedBecause",
+            new Vocabulary("obligations[].undecidedAbout",
                     List.of("$defs", "obligations", "items", "properties",
-                            "notCountedBecause", "items"),
-                    List.of(ObligationDisposition.Reason.class), notCountedWords(), Set.of()),
+                            "undecidedAbout", "items"),
+                    List.of(ObligationDisposition.Uncertainty.class), undecidedWords(), Set.of()),
             new Vocabulary("obligations[].readings[].reason",
                     List.of("$defs", "obligations", "items",
                             "properties", "readings", "items", "properties", "reason"),
@@ -455,14 +455,18 @@ class EverySchemaWordIsAccountedForTest {
                 new ObligationDisposition.Met(),
                 new ObligationDisposition.Unmet(),
                 ObligationDisposition.Undecided.about(List.of(
-                        new ObligationDisposition.Uncertainty.WhetherARowIsThere(
+                        new ObligationDisposition.Uncertainty.WhetherARowIsThere.ReadingsStopped(
                                 ReadingReasons.of(List.of(ReadingGap.NO_VALUE))))),
                 ObligationDisposition.Undecided.about(List.of(
-                        new ObligationDisposition.Uncertainty.WhetherARowCanBeWritten(
+                        new ObligationDisposition.Uncertainty.WhetherARowIsThere.NothingWasRead(
+                                ItemAssessment.Coverage.NotAsked.NO_ROWS))),
+                ObligationDisposition.Undecided.about(List.of(
+                        new ObligationDisposition.Uncertainty.WhetherARowCanBeWritten.Stopped(
                                 WritabilityKnowledge.Prevented.by(EstablishmentGap.Observation.of(
                                         Set.of(Incompleteness.Code.VALUE_UNREADABLE)))))),
-                ObligationDisposition.NotCounted.because(
-                        Set.of(ObligationDisposition.Reason.NOTHING_WAS_READ)));
+                ObligationDisposition.Undecided.about(List.of(
+                        new ObligationDisposition.Uncertainty
+                                .WhetherARowCanBeWritten.NothingShowedIt())));
     }
 
     /** Every kind of disposition is sampled above, so the words below are all the words there are. */
@@ -529,11 +533,40 @@ class EverySchemaWordIsAccountedForTest {
                 .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
     }
 
-    /** The reasons an obligation leaves the count, likewise spelled by the writer. */
-    private static Set<String> notCountedWords() {
-        return Arrays.stream(ObligationDisposition.Reason.values())
-                .map(AdequacyReport::wire)
-                .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+    /**
+     * The questions an obligation may be undecided about, likewise spelled by the writer.
+     *
+     * <p>Read off the answers sampled above rather than off the order they are said in. The word a
+     * document carries is the question's and not what left it open, so any member of a family
+     * spells it — which {@code AnObligationsExplanationNamesEachReasonOnceTest} holds the writer
+     * to — and a sample missing a question is what {@code everyDispositionHasASample} is about.
+     */
+    private static Set<String> undecidedWords() {
+        Set<String> out = new LinkedHashSet<>();
+        for (ObligationDisposition each : dispositions()) {
+            if (each instanceof ObligationDisposition.Undecided open) {
+                open.because().written().forEach(question -> out.add(AdequacyReport.wire(question)));
+            }
+        }
+        return out;
+    }
+
+    /**
+     * One answer of each question, for a caller that wants the word rather than the answer.
+     *
+     * <p>The word a document carries is the question's and not what left it open, so any member of
+     * the family spells it — which {@code AnObligationsExplanationNamesEachReasonOnceTest} holds
+     * the writer to.
+     */
+    private static ObligationDisposition.Uncertainty oneOf(
+            Class<? extends ObligationDisposition.Uncertainty> question) {
+        for (ObligationDisposition each : dispositions()) {
+            if (each instanceof ObligationDisposition.Undecided open
+                    && open.because().written().getFirst().question() == question) {
+                return open.because().written().getFirst();
+            }
+        }
+        throw new AssertionError("no sample above is open on " + question);
     }
 
     /** The grounds a document may name, spelled by the one writer of the field. */

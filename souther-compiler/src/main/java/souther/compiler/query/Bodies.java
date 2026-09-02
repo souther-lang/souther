@@ -20,6 +20,7 @@ import souther.compiler.check.HelperGraph;
 import souther.compiler.check.HelperNames;
 import souther.compiler.check.HelperTable;
 import souther.compiler.check.InjectionSigs;
+import souther.compiler.inputs.InputDomain;
 import souther.compiler.check.InliningPolicy;
 import souther.compiler.check.InvariantChecker;
 import souther.compiler.check.Lower;
@@ -1998,9 +1999,10 @@ public final class Bodies {
             souther.compiler.coverage.DecisionSources decisions, souther.compiler.coverage.SuppliedRules supplied) {
         ReadingPolicy policy = db.ask(new Front.Reading()).value();
         Answer<Symbols> scope = Names.derivedSymbols(db, module);
-        Answer<Map<String, souther.compiler.inputs.InputDomain>> inputs =
+        Answer<Map<String, InputDomain>> inputs =
                 db.ask(new souther.compiler.query.Adequacy.Inputs(module));
-        if (!scope.present() || !inputs.present()) {
+        Answer<Map<String, Sig>> sigs = db.ask(new Signatures(module));
+        if (!scope.present() || !inputs.present() || !sigs.present()) {
             return Map.of();
         }
         // The same numbering every measure is taken over, so a claim and the reading that judges it
@@ -2013,17 +2015,24 @@ public final class Bodies {
                 souther.compiler.coverage.CoverageSites.of(bodies, decisions, supplied);
         Map<String, souther.compiler.claims.Claims> out = new LinkedHashMap<>();
         for (Hir.BehaviorDef behavior : settled.behaviors()) {
-            souther.compiler.inputs.InputDomain read = inputs.value().get(behavior.name());
             Core body = bodies.get(behavior.name());
-            if (!(behavior instanceof Hir.SpecBehavior) || read == null || body == null) {
+            // What this compilation worked out about the behavior's boundary, read off the one
+            // classification. A composition has no body of its own and a behavior whose input was
+            // not read has nothing for a claim to be judged against; both come back as no local
+            // reading, and neither is decided here — the other reader of this same walk decides it
+            // from the same value.
+            if (body == null
+                    || !(BoundaryForMeasurement.of(sigs.value(), inputs.value(), behavior)
+                    instanceof BoundaryForMeasurement.Derived(
+                            Sig _, InputForMeasurement.Local(
+                                    Hir.SpecBehavior spec, InputDomain read)))) {
                 continue;
             }
-            Hir.FnDef fn = db.ask(new SettledFn(module, behavior.name())).value();
-            out.put(behavior.name(), souther.compiler.claims.Claims.of(
+            Hir.FnDef fn = db.ask(new SettledFn(module, spec.name())).value();
+            out.put(spec.name(), souther.compiler.claims.Claims.of(
                     souther.compiler.claims.UnreachableClaims.of(body, read, scope.value(), plan),
                     souther.compiler.check.PathReachability.of(
-                            body, policy, (Hir.SpecBehavior) behavior, fn, plan, read,
-                            scope.value())));
+                            body, policy, spec, fn, plan, read, scope.value())));
         }
         // In the order the module declares them, which is the order a reader meets the diagnostics
         // these carry. `Map.copyOf` keeps the entries and not the order (see `Ordered`), so a
@@ -2035,7 +2044,7 @@ public final class Bodies {
      *  than judged again: what refuses a build and what a report prints are one answer. */
     private static List<Report> contradicted(Db db, String module,
                                              Map<String, souther.compiler.claims.Claims> claims) {
-        Answer<Map<String, souther.compiler.inputs.InputDomain>> inputs =
+        Answer<Map<String, InputDomain>> inputs =
                 db.ask(new souther.compiler.query.Adequacy.Inputs(module));
         if (!inputs.present()) {
             return List.of();
