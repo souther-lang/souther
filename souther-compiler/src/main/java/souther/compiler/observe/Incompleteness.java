@@ -345,8 +345,20 @@ public record Incompleteness(Code code, Target target, Optional<Citation> at) {
                     occurrence.at().map(Set::of).orElseGet(Set::of));
         }
 
-        /** Both occurrences of one fact, as one: the fact, cited everywhere either was met. */
+        /**
+         * Both occurrences of one fact, as one: the fact, cited everywhere either was met.
+         *
+         * <p>Of one fact, and it says so rather than taking the caller's word. What comes out
+         * carries this one's fact, so two that are not one fact would come out as this one met
+         * somewhere it was not — a reader sent to a place that is about something else. That the
+         * caller only ever asks under one key is true of the callers there are and is not what
+         * makes the answer right.
+         */
         public Met mergedWith(Met other) {
+            if (!fact.equals(other.fact)) {
+                throw new IllegalArgumentException("two occurrences of one fact are of one fact: "
+                        + fact + " and " + other.fact);
+            }
             Set<Citation> both = new HashSet<>(citations);
             both.addAll(other.citations);
             return new Met(fact, both);

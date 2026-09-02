@@ -59,6 +59,10 @@ public sealed interface ClosureGap {
      * anything to accumulate before anything can put two of them together.
      */
     static ClosureGap merged(ClosureGap had, ClosureGap also) {
+        if (!had.fact().equals(also.fact())) {
+            throw new IllegalArgumentException("two gaps put together are two of one fact: "
+                    + had.fact() + " and " + also.fact());
+        }
         return switch (had) {
             case RuleUnread it -> it.mergedWith(it.andAlso(also));
             case QuestionUnanswered it -> it.mergedWith(it.andAlso(also));

@@ -2,6 +2,9 @@ package souther.compiler.publish;
 
 import souther.compiler.observe.Incompleteness;
 
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -27,5 +30,35 @@ public record PublishedIncompleteness(Incompleteness.Fact fact, Optional<Publish
             throw new IllegalArgumentException("an entry says what could not be read");
         }
         at = at == null ? Optional.empty() : at;
+    }
+
+    /**
+     * What a module could not read, as the entries a document writes, in the order it writes them.
+     *
+     * <p>The one way to have these. Three surfaces say them — the document a build reads, the page
+     * a person reads, and the block a generator writes — and each of the three would otherwise take
+     * the account's own set and publish whatever it iterated in, which is how two of them came to
+     * disagree with the third. Made once here, there is no set for a surface to walk.
+     *
+     * <p>The place for each is chosen out of everywhere the fact was met, and the choosing happens
+     * before anything is written: recording a source is what a document does while writing, so a
+     * comparison asked at that point would let the sorting decide which sources a document goes on
+     * to explain.
+     *
+     * <p>A fact met nowhere a reader can be sent has no place, and the schema says a place is
+     * optional — so it is written without one. A fact met only at places none of which names a file
+     * this compile holds is the other thing, and it is refused ({@link NoPlaceToWrite}).
+     */
+    public static CanonicalArrangement<PublishedIncompleteness> everyOne(
+            Collection<Incompleteness.Met> gaps) {
+        List<PublishedIncompleteness> out = new ArrayList<>(gaps.size());
+        for (Incompleteness.Met gap : gaps) {
+            Optional<PublishedAt> place = PublicationOrders.placeFor(gap.citations());
+            if (place.isEmpty() && !gap.citations().isEmpty()) {
+                throw new NoPlaceToWrite(gap.citations().iterator().next());
+            }
+            out.add(new PublishedIncompleteness(gap.fact(), place));
+        }
+        return PublicationOrders.WHAT_WENT_UNREAD.arrange(out);
     }
 }

@@ -27,7 +27,6 @@ import souther.compiler.partition.RoleAnswer;
 import souther.compiler.partition.UndividedPosition;
 import souther.compiler.diag.Citation;
 import souther.compiler.diag.SourceNameResolver;
-import souther.compiler.diag.TheCompilerDisagreesWithItself;
 import souther.compiler.inputs.InputQuestion;
 import souther.compiler.meta.ModuleMetadata;
 import souther.compiler.check.Prepared;
@@ -65,6 +64,7 @@ import souther.compiler.query.EstablishmentGap;
 import souther.compiler.query.WritabilityKnowledge;
 import souther.compiler.publish.CanonicalSelection;
 import souther.compiler.publish.AdequacyOpeningWord;
+import souther.compiler.publish.NoPlaceToWrite;
 import souther.compiler.publish.NotMeasuredWord;
 import souther.compiler.publish.PublicationOrders;
 import souther.compiler.publish.PublishedAt;
@@ -229,8 +229,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
          * rather than the set is what makes the order one thing rather than three.
          */
         public List<PublishedIncompleteness> incompleteness() {
-            return PublicationOrders.WHAT_WENT_UNREAD
-                    .arrange(entriesOf(weakenedBy().observationCauses())).written();
+            return PublishedIncompleteness.everyOne(weakenedBy().observationCauses()).written();
         }
 
         /**
@@ -2736,28 +2735,6 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
     }
 
     /**
-     * What a module could not read, as the entries a document writes, with the place for each
-     * chosen out of everywhere the fact was met.
-     *
-     * <p>A fact met nowhere a reader can be sent has no place, and the schema says a place is
-     * optional — so it is written without one. A fact met only at places none of which names a
-     * file this compile holds is the other thing, and it is refused for the reason
-     * {@link NoPlaceToWrite} gives: the document would otherwise say a reader can be sent
-     * somewhere and leave the fields out.
-     */
-    static List<PublishedIncompleteness> entriesOf(Set<Incompleteness.Met> gaps) {
-        List<PublishedIncompleteness> out = new ArrayList<>(gaps.size());
-        for (Incompleteness.Met gap : gaps) {
-            Optional<PublishedAt> place = PublicationOrders.placeFor(gap.citations());
-            if (place.isEmpty() && !gap.citations().isEmpty()) {
-                throw new NoPlaceToWrite(gap.citations().iterator().next());
-            }
-            out.add(new PublishedIncompleteness(gap.fact(), place));
-        }
-        return out;
-    }
-
-    /**
      * The same, of a place already chosen out of the several a fact was met at.
      *
      * <p>The one writer of the field, so that a place a document points at is the same shape
@@ -2772,37 +2749,6 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         at.put("column", place.column());
         ObjectNode writtenAt = at.putObject("writtenAt");
         place.writtenAt().fields().forEach(writtenAt::put);
-    }
-
-    /**
-     * A place this document was asked to write that names no file.
-     *
-     * <p>The shipped schema says a place has a source, a line and a column, and there are two ways
-     * to arrive here without one. A position in a text this compilation cannot name, in a document
-     * about a compile whose every source is named, is a position a pass minted rather than read — the
-     * open question about whether such a position is a place at all. And a position inside a module's
-     * own published text is a real place in a text no reader holds, which the contract has no shape
-     * for: not a source, a line and a column, and not nothing either, since what a reader is owed
-     * there is which module the code is in.
-     *
-     * <p>A refusal rather than a document with the fields left out or filled in from whatever file
-     * was to hand. Both of those are documents the shipped schema forbids, written silently and read
-     * by a build that trusted the version on them. Widening what a consumer must handle is a
-     * decision about the contract, and it is not one to take by writing a field.
-     *
-     * <p>So what this says is that the decision has not been taken. It is loud on purpose: over this
-     * compiler's own suite the places written here are eight, all of them in files it holds, which
-     * is far too few to read as "this cannot happen".
-     */
-    static final class NoPlaceToWrite extends IllegalArgumentException
-            implements TheCompilerDisagreesWithItself {
-
-        private static final long serialVersionUID = 1L;
-
-        NoPlaceToWrite(Citation where) {
-            super("an adequacy document writes places in files this compile holds, and was given "
-                    + where);
-        }
     }
 
     private static void signature(ObjectNode behavior, Adequacy.SignatureEvidence signature) {
