@@ -199,7 +199,8 @@ class ASumStatesWhatItsCasesShareAndLeavesTheCasesToAMatchTest {
     /** Reading everything but the rules {@code declaration} wrote. */
     private static GuaranteeWalk.Scope without(String declaration) {
         return new GuaranteeWalk.Scope(new GuaranteeWalk.Extent.EveryName(), _ -> false,
-                RulesLeftOut.writtenOn(each -> each.name().equals(declaration)));
+                RulesLeftOut.writtenOn(each -> each.name().equals(declaration)),
+                PartsLeftOut.NONE);
     }
 
     /**

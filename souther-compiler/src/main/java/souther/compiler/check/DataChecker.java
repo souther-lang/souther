@@ -175,11 +175,6 @@ public final class DataChecker {
         out.putAll(all.originated());
     }
 
-    /** Whether {@code nd} arrived here already made, rather than being written here. */
-    private static boolean carried(Hir.NewData nd, TypeSymbol.AtModule built) {
-        return nd.origin().carried(built);
-    }
-
     static void collectConstructs(Hir.Expr e, Constructs out, Symbols symbols,
                                           Map<String, Constructs> recConstructs) {
         switch (e) {
@@ -210,7 +205,7 @@ public final class DataChecker {
                 // name is written, and the fields written under it are still walked.
                 if (nd.typeName().answered() instanceof Hir.Name.Denoting built) {
                     Map<TypeSymbol, String> side =
-                            built.type() instanceof TypeSymbol.AtModule made && carried(nd, made)
+                            built.type() instanceof TypeSymbol.AtModule made && nd.wasCarried(made)
                                     ? out.carried() : out.originated();
                     side.putIfAbsent(built.type(), nd.typeName().name().quoted());
                 }
@@ -232,7 +227,7 @@ public final class DataChecker {
                 Constructs viaHelper = call.answered() == null
                         ? null : recConstructs.get(call.answered().reaches());
                 if (viaHelper != null) {
-                    out.absorb(call.origin().viaValueReference() ? viaHelper.allCarried() : viaHelper);
+                    out.absorb(call.wasCarriedByValue() ? viaHelper.allCarried() : viaHelper);
                 }
                 call.args().forEach(a -> collectConstructs(a, out, symbols, recConstructs));
             }

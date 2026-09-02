@@ -1,7 +1,6 @@
 package souther.compiler.ast;
 
 import souther.compiler.diag.SourcePos;
-import souther.compiler.types.ConstructionOrigin;
 
 import org.junit.jupiter.api.Test;
 
@@ -32,8 +31,7 @@ class EverySlotIsAChildTest {
     private static Ast.NewData construction() {
         return new Ast.NewData(Ast.Name.written("Person", POS),
                 List.of(new Ast.FieldInit(WrittenName.of("age", POS), name("n"))),
-                List.of(name("base")),
-                ConstructionOrigin.own(), POS, null);
+                List.of(name("base")), POS, null);
     }
 
     private static List<Ast.Expr> childrenOf(Ast.Expr e) {

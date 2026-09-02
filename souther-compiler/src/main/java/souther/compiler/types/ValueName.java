@@ -209,22 +209,13 @@ public sealed interface ValueName {
      * A type written where a value goes: a unit data as a value, or a newtype applied to the value
      * it wraps. Which of the two is decided by what the type is, not by how the name was written.
      *
-     * <p>{@code origin} says where the construction came from. A unit data is *constructed* by being
-     * named, and a construction says where it came from ({@link souther.compiler.ast.Hir.NewData}) so
-     * that the permission check can tell the reader's own from one it was handed; a unit data has no
-     * node of its own to say it on, so the name says it.
+     * <p>Where the construction came from is not said here. A unit data is constructed by being
+     * named, and the permission check does not collect one (spec §constructs-excludes-unit-data): a
+     * unit has no fields, can carry no invariant, and has one value, so minting another is not
+     * tellable from passing the existing one through. Nothing asks this name what it was handed, and
+     * a mark it carried would be one no reader reads.
      */
-    record OfType(String name, TypeSymbol type, ConstructionOrigin origin) implements InScope {
-
-        /** The same name, carried into a reader by {@code module}'s published body. */
-        public OfType publishedBy(String module) {
-            return new OfType(name, type, origin.publishedIn(module));
-        }
-
-        /** The same name, carried into a body by a value that body named. */
-        public OfType carriedByValue() {
-            return new OfType(name, type, origin.carriedByValue());
-        }
+    record OfType(String name, TypeSymbol type) implements InScope {
 
         @Override
         public String toString() {

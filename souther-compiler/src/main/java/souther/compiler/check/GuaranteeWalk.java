@@ -67,16 +67,19 @@ final class GuaranteeWalk {
      * @param withoutClauses  rules this reader asked to leave out, what is under the declarations
      *                        that wrote them still being read
      */
-    record Scope(Extent extent, Predicate<TypeSymbol> stopAt, RulesLeftOut withoutClauses) {
+    record Scope(Extent extent, Predicate<TypeSymbol> stopAt, RulesLeftOut withoutClauses,
+                 PartsLeftOut withoutParts) {
 
         /** Every rule down to {@code names} names followed, wherever it is written. */
         static Scope asFarAs(int names) {
-            return new Scope(new Extent.AsFarAs(names), _ -> false, RulesLeftOut.NONE);
+            return new Scope(new Extent.AsFarAs(names), _ -> false, RulesLeftOut.NONE,
+                    PartsLeftOut.NONE);
         }
 
         /** Every rule the model writes under this value. */
         static Scope everyName() {
-            return new Scope(new Extent.EveryName(), _ -> false, RulesLeftOut.NONE);
+            return new Scope(new Extent.EveryName(), _ -> false, RulesLeftOut.NONE,
+                    PartsLeftOut.NONE);
         }
     }
 
@@ -194,7 +197,7 @@ final class GuaranteeWalk {
         // The reading first, because what stands here is what this walk's own limits are about: the
         // name it was told to stop at and the name it has already entered are the declaration's, and
         // asking the type for one beside the reading is a second answer to that.
-        TypeGuarantees.At here = guarantees.at(root, at);
+        TypeGuarantees.At here = guarantees.at(root, at, scope.withoutParts());
         TypeSymbol name = here.entered();
         if (name != null) {
             if (scope.stopAt().test(name)) {

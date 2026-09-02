@@ -3,6 +3,10 @@
 Status: Accepted. The rounding-mode entry under "what is still refused" is superseded by
 ADR-0087, which makes `RoundingMode` an ordinary value type.
 
+The `ConstructionOrigin` component written in the signatures below is no longer part of `Ast.Apply`.
+Where a construction came from is settled below resolution, and the parsed tree says nothing about
+it; what this decided — that what is applied is an ordinary subexpression — is unchanged.
+
 ## Context
 
 Issue #261 reported that the specification writes `Map.empty` and the compiler rejects it, and that the rejection names `Map` as an unknown local and suggests a parameter called `p`. Both symptoms come from one shape in the tree:

@@ -209,7 +209,7 @@ class WhatATypeGuaranteesIsOneAnswerWhoeverAsksTest {
     void aNameTheReaderStopsAtIsNotDescendedInto() {
         GuaranteeWalk.Scope stopping =
                 new GuaranteeWalk.Scope(new GuaranteeWalk.Extent.AsFarAs(4),
-                        named("NonNegInt")::equals, RulesLeftOut.NONE);
+                        named("NonNegInt")::equals, RulesLeftOut.NONE, PartsLeftOut.NONE);
 
         assertTrue(guaranteedUnder("Money", stopping).isEmpty(),
                 "the only clause under Money is NonNegInt's, and this reader stops there");
@@ -231,7 +231,7 @@ class WhatATypeGuaranteesIsOneAnswerWhoeverAsksTest {
 
         GuaranteeWalk.Scope without =
                 new GuaranteeWalk.Scope(new GuaranteeWalk.Extent.AsFarAs(2), _ -> false,
-                        RulesLeftOut.writtenOn(named("Bounded")::equals));
+                        RulesLeftOut.writtenOn(named("Bounded")::equals), PartsLeftOut.NONE);
 
         assertEquals(List.of("cap"),
                 List.copyOf(guaranteedUnder("Bounded", without).keySet()),
@@ -254,7 +254,7 @@ class WhatATypeGuaranteesIsOneAnswerWhoeverAsksTest {
                 "the rule three names down is read, and read at the value it governs");
         assertTrue(guaranteedUnder("Deeper",
                         new GuaranteeWalk.Scope(new GuaranteeWalk.Extent.AsFarAs(2), _ -> false,
-                                RulesLeftOut.NONE)).isEmpty(),
+                                RulesLeftOut.NONE, PartsLeftOut.NONE)).isEmpty(),
                 "a reader that can afford two names does not reach it — which is what makes"
                         + " borrowing its number a change to what the model says");
     }

@@ -4,7 +4,6 @@ import souther.compiler.DefaultStdlib;
 import souther.compiler.stdlib.Stdlib;
 import souther.compiler.ast.Hir;
 import souther.compiler.diag.SourcePos;
-import souther.compiler.types.ConstructionOrigin;
 import souther.compiler.types.ReachName;
 import souther.compiler.types.ValueName;
 
@@ -52,8 +51,7 @@ class TheCallGraphReadsASugarFromTheLibraryThatDeclaresItTest {
         for (int i = 0; i < args; i++) {
             given.add(new Hir.IntLit(i, POS, null));
         }
-        return new Hir.Apply(name.qualified(), new ReachName.OfLibrary(name), given,
-                ConstructionOrigin.own(), POS, null);
+        return new Hir.Apply(name.qualified(), new ReachName.OfLibrary(name), given, POS, null);
     }
 
     /** The library's helpers as a table is keyed: under the operation each is the body of, which

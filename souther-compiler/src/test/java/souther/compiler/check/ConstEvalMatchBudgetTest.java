@@ -3,7 +3,6 @@ package souther.compiler.check;
 import souther.compiler.DefaultStdlib;
 import souther.compiler.ast.Hir;
 import souther.compiler.diag.SourcePos;
-import souther.compiler.types.ConstructionOrigin;
 import souther.compiler.types.ReachName;
 import souther.compiler.types.ValueName;
 
@@ -33,7 +32,7 @@ class ConstEvalMatchBudgetTest {
         return ConstEval.against(Symbols.none(DefaultStdlib.get())).eval(new Hir.Apply("String.matches",
                 new ReachName.OfLibrary(matches),
                 List.of(new Hir.StringLit(pattern, POS, null), new Hir.StringLit(subject, POS, null)),
-                ConstructionOrigin.own(), POS, null));
+                POS, null));
     }
 
     @Test
