@@ -394,12 +394,17 @@ final class Conditions {
      * What {@code e} is written in terms of, or {@code null} where it is written in terms of
      * nothing.
      *
-     * <p>Four spellings of a denial and two of an assertion, read as one thing. {@code Bool.not} is
-     * an ordinary helper: the analysis representation keeps it as a call, and a clause read off an
-     * imported declaration is the body it expands to — {@code if b then false else true} over a
-     * binding holding the argument. A comparison against a written {@code true} or {@code false} is
-     * the sixth: {@code p == false} and {@code p /= true} deny what {@code p} states, and the other
-     * two state it.
+     * <p>Read in the analysis representation and in no other. {@code Bool.not} is an ordinary
+     * helper, which that representation keeps as a call; the settled representation an imported
+     * clause is read in has expanded it into a body, and a rule about the operation has nothing to
+     * be about there. Reading the expansion too would be this deciding what a clause means from the
+     * shape a lowering happened to leave, for one helper out of every one the settling expands —
+     * the fragment an imported clause falls outside of is the whole of them (spec
+     * §invariant-discharge-representation).
+     *
+     * <p>So: the call, the {@code if} an author wrote themselves, and a comparison against a
+     * written {@code true} or {@code false} — {@code p == false} and {@code p /= true} deny what
+     * {@code p} states, and the other two state it.
      *
      * <p>The equivalence class and not the spellings. What a reader below is given is an atom and a
      * polarity, so {@code not (p == false)} and {@code p} arrive as the same pair — and a reader

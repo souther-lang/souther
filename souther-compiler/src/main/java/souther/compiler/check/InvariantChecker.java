@@ -199,9 +199,12 @@ public final class InvariantChecker {
      * <p>{@code invariants} holds the clauses of the module being checked. A type another module
      * declares is not among them and its clauses are read off its declaration, which for a module
      * reached through its published classes is the declaration that module published, read back by
-     * this front end (spec §published-modules). Either way the clause read here is the rule its
-     * author wrote, so where a declaration was written does not decide what can be discharged
-     * against it (spec §invariant-discharge-representation).
+     * this front end (spec §published-modules). That declaration carries the settled clauses, so an
+     * imported rule is read in the representation the backend emits from and an operation these
+     * rules are written about may already have been expanded out of it — which is where an imported
+     * clause falls outside the statically dischargeable fragment (spec
+     * §invariant-discharge-representation). Where the declaration was written decides which
+     * representation there is of it, and nothing else does.
      */
     public record Source(Hir.Expr body, AnalysisInvariants invariants,
                          Map<ValueName.Behavior, StatedContract> contracts) {

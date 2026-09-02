@@ -47,9 +47,11 @@ final class Clauses {
      * @param inTheAnalysisRepresentation the clauses of the module being checked, in the
      *        representation the discharge rules are written at ({@link InliningPolicy#DISCHARGE}). A
      *        type another module declares is not among them and its clauses are read off its
-     *        declaration, which says what its author wrote whether that module was compiled here or
-     *        published and read back (spec §invariant-discharge-representation). What can be
-     *        discharged against a clause is the same either way.
+     *        declaration, in the settled representation that travels with it (spec
+     *        §invariant-discharge-representation). That is what an imported clause's analysis
+     *        representation is, and it is where one falls outside the fragment this can discharge
+     *        against: an operation the settled form expanded is no longer written as the operation
+     *        a rule is about.
      */
     Clauses(Symbols symbols,
             AnalysisInvariants inTheAnalysisRepresentation) {

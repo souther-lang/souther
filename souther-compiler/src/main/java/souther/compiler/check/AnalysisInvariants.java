@@ -43,7 +43,9 @@ public final class AnalysisInvariants {
     /**
      * What {@code module} wrote, keyed by the declaration that wrote it.
      *
-     * @param written every declaration {@code module} makes, including the ones with no clauses
+     * @param written the declarations of {@code module} that wrote a clause, and only those — a
+     *        declaration with none is left out and is read as having none, not as one this is
+     *        missing
      */
     public AnalysisInvariants(String module,
                               Map<TypeSymbol.AtModule, List<Hir.InvariantClause>> written) {
