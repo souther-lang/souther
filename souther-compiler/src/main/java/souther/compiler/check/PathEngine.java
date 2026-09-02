@@ -595,7 +595,9 @@ final class PathEngine {
                  InvariantChecker.Gathering gathering, InvariantChecker.Reach reach) {
         Seeding seeding = new Seeding(k, gathering);
         walk.from(root, path, at,
-                new GuaranteeWalk.Scope(extent, reach.stopAt(), reach.withoutClauses()), seeding);
+                new GuaranteeWalk.Scope(extent, reach.stopAt(), reach.withoutClauses(),
+                        reach.withoutParts()),
+                seeding);
         return seeding.known;
     }
 

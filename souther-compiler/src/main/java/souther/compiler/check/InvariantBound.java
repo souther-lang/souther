@@ -9,7 +9,6 @@ import souther.compiler.numeric.Towards;
 import souther.compiler.types.ValueName;
 
 import java.math.BigDecimal;
-import java.util.Optional;
 
 /**
  * Where one conjunct of a numeric newtype's invariant leaves its value able to stop.
@@ -29,8 +28,6 @@ import java.util.Optional;
  * @param lower whether this bounds the value below; otherwise above
  */
 public record InvariantBound(boolean lower, Endpoint end) {
-
-    private static final String VALUE = "value";
 
     /**
      * What a reading of one ordered rule came to.
@@ -83,21 +80,16 @@ public record InvariantBound(boolean lower, Endpoint end) {
      * included — was downgraded to one nothing promises is writable.
      */
     public static Read of(Hir.Expr clause, Carrier carrier) {
-        ClauseComparison read = carrier == null ? null
-                : ClauseComparison.of(clause).orElse(null);
-        if (read == null) {
-            return NO_END;
-        }
-        // `0 <= value` says what `value >= 0` says: read the value-bearing side as the left one.
-        if (!isValue(read.left())) {
-            read = read.turned();
-        }
+        // Which number the clause is about is recognised above this, so `0 <= value` arrives
+        // saying what `value >= 0` says and this reads one shape.
+        ClauseSubject about = carrier == null ? null : ClauseSubject.of(clause, null);
         // An equality states both ends at once and a disequality states neither, so neither is an
-        // end this has anywhere to put.
-        if (!isValue(read.left()) || !(read.claim() instanceof ComparisonClaim.Cut cut)) {
+        // end this has anywhere to put. Which is not that they say nothing: what such a rule is
+        // about is the recognition's answer and is there for the readers that want it.
+        if (about == null || !(about.comparison().claim() instanceof ComparisonClaim.Cut cut)) {
             return NO_END;
         }
-        Place bound = carrier.literalOf(read.right());
+        Place bound = carrier.literalOf(about.comparison().right());
         return bound == null ? NO_END : ordered(cut, bound, carrier);
     }
 
@@ -109,48 +101,16 @@ public record InvariantBound(boolean lower, Endpoint end) {
      * it — every one of them counts something.
      */
     public static Read ofSize(Hir.Expr clause, ValueName measure) {
+        ClauseSubject about = ClauseSubject.of(clause, measure);
+        if (about == null
+                || !(about.number() instanceof NumberAt.OfWhatNumber.OfWhatAnOperationAnswers)
+                || !(about.comparison().claim() instanceof ComparisonClaim.Cut cut)) {
+            return NO_END;
+        }
+        BigDecimal count = wholeLiteral(about.comparison().right());
         // A size is a whole number whatever it is a size of, so it steps like an `Int` and stops
         // where one does.
-        SizeComparison read = sizeComparedIn(clause, measure, VALUE).orElse(null);
-        return read != null && read.claim() instanceof ComparisonClaim.Cut cut
-                ? ordered(cut, Count.of(read.count()), Carrier.WHOLE)
-                : NO_END;
-    }
-
-    /**
-     * A comparison of a counted number against a literal, as it was written.
-     *
-     * @param claim what the comparison placed on the count, read with the count on the left however
-     *              the clause was spelled
-     * @param count what it is compared against
-     */
-    private record SizeComparison(ComparisonClaim claim, BigDecimal count) {}
-
-    /**
-     * The comparison {@code clause} makes about {@code measure} taken of {@code subject}, or empty
-     * where it makes none.
-     *
-     * <p>Before any reading of what it means. {@link #ofSize} turns one of these into an end of a
-     * range and answers nothing for the comparisons that are not ends — an equality states both ends
-     * at once and a disequality states neither, so a range has nowhere to put them. Kept apart from
-     * that reading so that the shape a clause has to be to say anything about a count is recognised
-     * in one place, and what such a comparison means in as many as there are questions to ask of it.
-     */
-    private static Optional<SizeComparison> sizeComparedIn(Hir.Expr clause, ValueName measure,
-                                                           String subject) {
-        ClauseComparison read = ClauseComparison.of(clause).orElse(null);
-        if (read == null) {
-            return Optional.empty();
-        }
-        if (!takesSizeOf(read.left(), measure, subject)) {
-            read = read.turned();
-        }
-        if (!takesSizeOf(read.left(), measure, subject)) {
-            return Optional.empty();
-        }
-        BigDecimal count = wholeLiteral(read.right());
-        return count == null ? Optional.empty()
-                : Optional.of(new SizeComparison(read.claim(), count));
+        return count == null ? NO_END : ordered(cut, Count.of(count), Carrier.WHOLE);
     }
 
     /**
@@ -202,20 +162,6 @@ public record InvariantBound(boolean lower, Endpoint end) {
     }
 
     /**
-     * Whether {@code e} is {@code measure} applied to the named subject: {@code value} inside a
-     * newtype's rule, a field's name inside the rule of the record that has it.
-     *
-     * <p>Asked of the name the application resolved to, not of how it was spelled: an import lets a
-     * library operation be written without its qualifier, and a reader comparing text would miss
-     * every clause written that way while looking as though it had read them.
-     */
-    private static boolean takesSizeOf(Hir.Expr e, ValueName measure, String subject) {
-        return e instanceof Hir.Apply call && call.args().size() == 1
-                && call.args().get(0) instanceof Hir.Var arg && arg.name().equals(subject)
-                && call.function() instanceof Hir.Var.Denoting fn && measure.equals(fn.denotes());
-    }
-
-    /**
      * A strict bound moved onto the count beside it — where the carrier has one there.
      *
      * <p>Asked of the carrier, which is the one place that knows where its counts stop. Read off the
@@ -231,10 +177,6 @@ public record InvariantBound(boolean lower, Endpoint end) {
     private static Read stepped(boolean lower, Place onto) {
         return onto == null ? PAST_THE_END
                 : placed(lower, Endpoint.inclusive(onto));
-    }
-
-    private static boolean isValue(Hir.Expr e) {
-        return e instanceof Hir.Var v && v.name().equals(VALUE);
     }
 
     /** A whole number a literal names, or null where it names one with a fraction: a value that

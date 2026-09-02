@@ -78,18 +78,19 @@ class AClauseOfATypeDoesNotPartItsValuesTest {
     /**
      * A clause of a declaration that names one of the value's own numbers draws no line.
      *
-     * <p>Which is what says where the words for a role with no point can be reached from. Only a
-     * rule that names a value has such a role, and a declaration draws none: what a clause leaves is
-     * a range, and a clause naming one value leaves a range of one rather than a line through the
-     * values. So the sentence belongs under a behavior, where a body's comparison and an
+     * <p>Which is what says where the words for a role with no point can be reached from. A role
+     * goes unplayed only where the rule that drew the line names a value, and a declaration's lines
+     * are ends: a clause naming one leaves a range of one, and the ends of that range are what a
+     * row is owed at. So the sentence belongs under a behavior, where a body's comparison and an
      * {@code ensures} are, and a report that carried it under the declarations would carry a
      * sentence no model can reach.
      *
      * <p>Asked of the lines rather than reasoned about, because which surface a sentence belongs to
-     * turns on it.
+     * turns on it. Which is why this asks what the roles come to and not whether a line was drawn:
+     * a clause naming a value does leave the values stopping somewhere, and a row is owed there.
      */
     @Test
-    void aClauseNamingOneOfItsOwnValuesDrawsNoLine() {
+    void aClauseNamingOneOfItsOwnValuesDrawsNoLineWithARoleUnplayed() {
         List<String> drawn = new java.util.ArrayList<>();
         souther.compiler.query.Compilation compilation = compiled("""
                 module example.only
@@ -109,12 +110,15 @@ class AClauseOfATypeDoesNotPartItsValuesTest {
                     | "one" : (H { a = A(5) }) -> Yes
                 """);
         souther.compiler.query.Adequacy.boundariesOf(compilation.db(), "example.only").values()
-                .forEach(each -> each.forEach(at -> drawn.add(at.label() + " "
-                        + at.border().origin().getClass().getSimpleName() + " "
-                        + at.border().inEachRole().values())));
+                .forEach(each -> each.forEach(at -> at.border().inEachRole()
+                        .forEach((role, played) -> {
+                            if (!(played instanceof RoleAnswer.Played)) {
+                                drawn.add(at.label() + " " + role + " " + played);
+                            }
+                        })));
         assertEquals(List.of(), drawn,
-                "a clause naming one of the value's own numbers leaves a range of one, and draws"
-                        + " no line through the values for a role to have no point in");
+                "the ends of the range a clause naming a value leaves are ends like any other, and"
+                        + " no role of a line drawn from one goes unplayed");
     }
 
     private static souther.compiler.query.Compilation compiled(String model) {

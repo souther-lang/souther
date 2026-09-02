@@ -4,6 +4,7 @@ import souther.compiler.ast.Hir;
 import souther.compiler.check.NumberAt;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.DeclaredBounds;
+import souther.compiler.check.DeclaredSubjects;
 import souther.compiler.check.RuleKey;
 import souther.compiler.check.FieldDomains;
 import souther.compiler.check.NarrowedBounds;
@@ -26,6 +27,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * What can arrive at each position of one behavior's input, read once.
@@ -940,7 +942,7 @@ public final class InputDomain {
                 ? StructuralInspection.stoppedAt(
                         new BlockReason.RecursiveExpansion(unfolds, already))
                 : StructuralInspection.of(input.shape(), declared);
-        Position here = read(input, path, symbols, placed, structure, declared);
+        Position here = read(input, path, symbols, policy, placed, structure, declared);
         // Passing through an occurrence is not finding a position. A reading following a path the
         // model named opens every declaration on the way — that is how it knows which step to take
         // and whose rules reach the end of it — and what it reports is the end. Published all the
@@ -1298,6 +1300,7 @@ public final class InputDomain {
      * that the length is the number being measured.
      */
     private static Position read(ReadablePosition input, TermPath path, Symbols symbols,
+                                 ReadingPolicy policy,
                                  PlacedRules placed, StructuralInspection structure,
                                  List<Case> declared) {
         TypeView view = input.view();
@@ -1322,12 +1325,21 @@ public final class InputDomain {
         // dropped and from the list that still holds them, because this is the one place that knows
         // which rules they were — recovered afterwards from a position with no axis, the finding
         // could name the position and nothing else, which is what it is for.
+        // Which of the position's numbers its own rules are written about, whatever each of them
+        // came to. What a rule is about and where it leaves the values are two questions, and only
+        // the first decides this.
+        //
+        // Asked of the reading that turned the clauses into constraints, which is the one place the
+        // canonical quantity of each of them was worked out. A second reader recognising the number
+        // off the spelling of a side answers nothing for `String.length(value) * 2 >= 4`, whose
+        // sides are neither a name nor a measure of one.
+        Set<NumberAt.OfWhatNumber> written = DeclaredSubjects.of(type, symbols, policy);
         List<RuleWithoutALine> competing = List.of();
-        if (undecidable(ofType, valueOfType, stated, taken, carried)) {
+        if (undecidable(written, stated, taken, carried)) {
             competing = competingCoordinates(stated, path, type, symbols);
             stated = List.of();
         }
-        boolean bySize = measuredHere(ofType, valueOfType, stated, taken);
+        boolean bySize = measuredHere(written, stated, taken);
         NumericTerm.FromOnePosition term = bySize
                 ? NumericTerm.TakenOf.of(taken, path, type, symbols)
                 : new NumericTerm.ValueOf(path);
@@ -1336,10 +1348,20 @@ public final class InputDomain {
                     "this reading decided " + path + " is measured by " + taken
                             + ", which is not what its type is measured by: " + Type.show(type));
         }
-        DeclaredBounds.Bounds own = bySize
-                ? DeclaredBounds.and(ofType, DeclaredBounds.placed(stated, answeredBy(taken), Carrier.WHOLE))
-                : carried == null ? null
-                        : DeclaredBounds.and(valueOfType, DeclaredBounds.placed(stated, ITS_OWN_VALUE, carried));
+        // And the ends a conjunct that placed none moved, which the reading of the clauses as they
+        // are written cannot see: no comparison places them, and where they are is in what the
+        // other rules leave.
+        List<FieldDomains.Placed> moved = placed.movedAtTheValue();
+        // Three sources and not two: what the type's own clauses wrote, what a conjunct of them
+        // moved, and what the value this position sits in placed. Each is ends of one coordinate
+        // and they are intersected, every rule that put an end where it is kept.
+        NumberAt.OfWhatNumber kind = bySize ? answeredBy(taken) : ITS_OWN_VALUE;
+        Carrier on = bySize ? Carrier.WHOLE : carried;
+        DeclaredBounds.Bounds own = !bySize && carried == null ? null
+                : DeclaredBounds.and(
+                        DeclaredBounds.and(bySize ? ofType : valueOfType,
+                                DeclaredBounds.placed(moved, kind, on)),
+                        DeclaredBounds.placed(stated, kind, on));
         // A value whose rules contradict has no positions to cover: every edge of every field of it
         // is a row nobody can write, which is not the same answer as a field nothing bounds.
         boolean nothingExists = placed.bounds().infeasible();
@@ -1463,6 +1485,13 @@ public final class InputDomain {
     /**
      * Whether this position's one coordinate is the count taken of it rather than its value.
      *
+     * <p><b>From what the type's rules are written about, and not from which of them placed an
+     * end.</b> Whether a clause came to an end is a fact about the clauses beside it and about this
+     * compiler's arithmetic; which number a position is is neither. Read off the ends, a type whose
+     * one rule is {@code String.length(value) /= 0} was measured on the string's own order — the
+     * length was no number of the model at all, and nothing about where a length stops could come
+     * into it.
+     *
      * <p>The position's own type answers first and its answer stands. A rule reaching the position
      * from the value it sits in states an end on a coordinate; it does not say which coordinate the
      * position is measured at, and letting it say so takes an axis away — {@code data Name = String
@@ -1472,13 +1501,12 @@ public final class InputDomain {
      * <p>Where the type chose nothing, one of these rules may — and only one, which is what
      * {@link #undecidable} has already refused.
      */
-    private static boolean measuredHere(DeclaredBounds.Bounds ofType,
-                                        DeclaredBounds.Bounds valueOfType,
+    private static boolean measuredHere(Set<NumberAt.OfWhatNumber> written,
                                         List<FieldDomains.Placed> stated, ValueName.Stdlib taken) {
-        if (stated(ofType)) {
+        if (taken != null && written.contains(answeredBy(taken))) {
             return true;
         }
-        if (stated(valueOfType)) {
+        if (written.contains(ITS_OWN_VALUE)) {
             return false;
         }
         return taken != null && stated(DeclaredBounds.placed(stated, answeredBy(taken), Carrier.WHOLE));
@@ -1628,12 +1656,15 @@ public final class InputDomain {
      * the model wrote about both from outside. Choosing either would put a line the author can read
      * beside one they cannot see, so the position is left as one nothing divides and both rules go
      * unread — the coarser of the two things that could be said, and the one that claims nothing.
+     *
+     * <p>"Said nothing about either" is the type's rules being written about neither number, which
+     * is not the same as their having placed no end on either. A type whose own rule names one of
+     * its numbers has chosen, whatever a range could be made of that rule.
      */
-    private static boolean undecidable(DeclaredBounds.Bounds ofType,
-                                       DeclaredBounds.Bounds valueOfType,
+    private static boolean undecidable(Set<NumberAt.OfWhatNumber> written,
                                        List<FieldDomains.Placed> stated, ValueName.Stdlib taken,
                                        Carrier carried) {
-        return !stated(ofType) && !stated(valueOfType)
+        return written.isEmpty()
                 && taken != null && carried != null
                 && stated(DeclaredBounds.placed(stated, answeredBy(taken), Carrier.WHOLE))
                 && stated(DeclaredBounds.placed(stated, ITS_OWN_VALUE, carried));

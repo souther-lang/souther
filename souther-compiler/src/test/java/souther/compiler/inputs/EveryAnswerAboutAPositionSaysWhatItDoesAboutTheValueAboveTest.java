@@ -93,6 +93,14 @@ class EveryAnswerAboutAPositionSaysWhatItDoesAboutTheValueAboveTest {
                         + "every rule reaching it, and this is asked of a reading and owes the "
                         + "clauses that reading holds",
                 "AClauseAboveASumDrawsItsLineOnceTest"));
+        table.put("movedAtTheValue", new Decided(Above.NOT_ASKED,
+                "the same answer as `placed` and for the same reason, which is what it is the "
+                        + "other half of: an end a rule of the value above moved is an end of that "
+                        + "value's own coordinate, placed under that value and accounted for "
+                        + "there. What is asked here is only the ends moved at the value this "
+                        + "reading is opened at, which is the one place the reading of the clauses "
+                        + "as they are written cannot see them",
+                "NoRuleIsPlacedWhereNothingAccountsForItTest.everyRuleThatPlacedAnEndIsInTheAccount"));
         table.put("bounds", new Decided(Above.NOT_ASKED,
                 "what a reading holds of its own value, which is what the answers above are taken "
                         + "from — the value above is asked through them and not through this",
