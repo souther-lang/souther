@@ -29,6 +29,11 @@ import java.util.Optional;
  * written here is a form that pass never answers with, and
  * {@code TheParsedTreeHoldsOnlyWhatTheFrontendWritesTest} asks of each of these forms whether it
  * is one.
+ *
+ * <p>The same holds of a form's parts. A component a parse cannot decide reads as a distinction the
+ * tree draws, and offers a pass below an answer to take — one that says the same thing wherever it
+ * is asked, since that is all a parse can put there. Where a construction came from is the one that
+ * was here; {@code TheParsedTreeDoesNotSayWhereAConstructionCameFromTest} is what says it is not.
  */
 public interface Ast {
 
