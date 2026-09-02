@@ -19,11 +19,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * What one conjunct of a rule was holding is read by asking what the rules leave without it.
  *
- * <p>A rule that names a value places no end, and where the value it names sits at an edge of what
- * everything else leaves, it moves that edge: {@code String.length(value) /= 0} takes the nought
- * away from a length that is never negative, and the position starts at one. Asked of the rules
- * with that conjunct still in them, the answer is that the rule cuts where the quantity does not
- * run — its own effect having already taken the value away.
+ * <p>Every conjunct that placed no end and is about one number, and not the ones naming a value
+ * alone. A disequality, an equality and an arithmetic no end could be read from are three ways of
+ * leaving a coordinate somewhere without saying where.
+ *
+ * <p>{@code String.length(value) /= 0} takes the nought away from a length that is never negative,
+ * and the position starts at one. Asked of the rules with that conjunct still in them, the answer
+ * is that the rule cuts where the quantity does not run — its own effect having already taken the
+ * value away.
  *
  * <p>So the reading is asked twice, and what moves between the two is what the conjunct was
  * holding. The floor a clause wrote and the floor the carrier supplies go through it alike: neither
@@ -77,12 +80,28 @@ class WhatAConjunctWasHoldingIsReadByLeavingItOutTest {
                 "the value stops at five either way");
     }
 
-    /** The ends every conjunct naming a value moved, in the order the rules were read. */
+    /**
+     * A rule whose arithmetic no end was read from, which names no coordinate on either side.
+     *
+     * <p>The same question and the same answer. What it moved is read off the values, and nothing
+     * anywhere inverts the {@code 2 *}.
+     */
+    @Test
+    void anArithmeticNoEndWasReadFromMovesAnEndAlike() {
+        assertEquals(List.of(Endpoint.inclusive(Count.of(2))),
+                movedBy("""
+                        data Subject = Int
+                            invariant doubled = value * 2 >= 4
+                        """),
+                "the values start at two, and the rule that put them there is this one");
+    }
+
+    /** The ends every conjunct over one coordinate moved, in the order the rules were read. */
     private static List<Endpoint> movedBy(String declaration) {
         FieldDomains read = domainsOf(declaration);
-        assertTrue(!read.namesAValue().isEmpty(),
-                "the model under test writes a rule that names a value");
-        return read.namesAValue().stream()
+        assertTrue(!read.overOneCoordinate().isEmpty(),
+                "the model under test writes a rule that placed no end on one number");
+        return read.overOneCoordinate().stream()
                 .flatMap(each -> read.movedEndsOf(each).stream())
                 .map(InvariantBound::end)
                 .toList();

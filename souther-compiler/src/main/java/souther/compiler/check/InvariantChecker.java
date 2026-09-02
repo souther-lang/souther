@@ -1264,7 +1264,7 @@ public final class InvariantChecker {
      */
     record Reading(List<Direct> directs, List<FieldDomains.NoLine> noLines,
                    List<FieldDomains.WithoutAnEnd> withoutAnEnd,
-                   List<FieldDomains.NamesAValue> namesAValue,
+                   List<FieldDomains.OverOneCoordinate> overOneCoordinate,
                    Map<RuleKey, List<TypeSymbol.AtModule>> narrowers,
                    Map<RuleRef, Required> raised,
                    Map<RuleRef, Map<Core, Required>> raisedByPart,
@@ -1295,7 +1295,7 @@ public final class InvariantChecker {
         List<Direct> out = new ArrayList<>();
         List<FieldDomains.NoLine> noLines = new ArrayList<>();
         List<FieldDomains.WithoutAnEnd> withoutAnEnd = new ArrayList<>();
-        List<FieldDomains.NamesAValue> namesAValue = new ArrayList<>();
+        List<FieldDomains.OverOneCoordinate> overOneCoordinate = new ArrayList<>();
         Map<RuleKey, List<TypeSymbol.AtModule>> narrowers = new LinkedHashMap<>();
         Map<RuleRef, Required> raised = new LinkedHashMap<>();
         Map<RuleRef, Map<Core, Required>> raisedByPart = new LinkedHashMap<>();
@@ -1303,12 +1303,12 @@ public final class InvariantChecker {
                 new LinkedHashMap<>();
         stated.forEach(each ->
                 direct(each.clause(), each.from(), new int[1], at, byName, out, noLines,
-                        withoutAnEnd, namesAValue, narrowers, raised,
+                        withoutAnEnd, overOneCoordinate, narrowers, raised,
                         took, typeAt, parts, raisedByPart, standing, withoutParts));
         // Insertion order, kept: `Map.copyOf` iterates in an order salted once per JVM run, and
         // what a report prints for a position is these in the order the declaration writes them.
         return new Reading(List.copyOf(out), List.copyOf(noLines), List.copyOf(withoutAnEnd),
-                List.copyOf(namesAValue),
+                List.copyOf(overOneCoordinate),
                 Map.copyOf(narrowers),
                 Collections.unmodifiableMap(new LinkedHashMap<>(raised)),
                 Collections.unmodifiableMap(new LinkedHashMap<>(raisedByPart)),
@@ -1408,7 +1408,7 @@ public final class InvariantChecker {
                         Map<FactSubject, Coordinate> byName, List<Direct> out,
                         List<FieldDomains.NoLine> noLines,
                         List<FieldDomains.WithoutAnEnd> withoutAnEnd,
-                        List<FieldDomains.NamesAValue> naming,
+                        List<FieldDomains.OverOneCoordinate> naming,
                         Map<RuleKey, List<TypeSymbol.AtModule>> narrowers,
                         Map<RuleRef, Required> raised, ReadingEvidence took,
                         Map<RuleKey, Type> typeAt,
@@ -1517,7 +1517,7 @@ public final class InvariantChecker {
             // author to lift and there is a conjunct for the reading that draws lines to make what
             // it can of.
             withoutAnEnd.add(new FieldDomains.WithoutAnEnd(from, part, bin));
-            singles(found, bound, said, from, part, bin, at, byName, naming);
+            overOneCoordinate(read, from, part, bin, naming);
             return;
         }
         // An end where the other side is a constant, and a relation everywhere else. Which it is
@@ -1588,7 +1588,7 @@ public final class InvariantChecker {
             // having no end, and they answer different questions: what an author is owed a word
             // about, and what the next reading is given to read.
             withoutAnEnd.add(new FieldDomains.WithoutAnEnd(from, part, bin));
-            singles(found, bound, said, from, part, bin, at, byName, naming);
+            overOneCoordinate(read, from, part, bin, naming);
             // The declaration and not the clause. Which declaration took an edge in is what ADR-0090
             // names beside a line, and what a reader is sent to look at is the declaration holding
             // the relation.
@@ -1889,27 +1889,29 @@ public final class InvariantChecker {
     }
 
     /**
-     * Written down where this conjunct names a value of one coordinate and of nothing else.
+     * Written down where this conjunct placed no end and its quantity is over one coordinate.
      *
-     * <p>Both shapes of such a rule, since which of them it is says which values are kept and not
-     * which number is named. What the rule does to that number is nobody's answer here: it is read
-     * afterwards, from what the rules leave the coordinate without this conjunct
+     * <p>Off the canonical quantity, which is what says which number a rule is about. A rule naming
+     * a value, one holding the value away from one, and one whose arithmetic no end could be read
+     * from are three ways of leaving a coordinate somewhere without saying where — and read off the
+     * spelling of a side instead, the third is a rule about nothing at all: {@code value * 2 >= 4}
+     * has a bare name on neither side.
+     *
+     * <p>One coordinate, which is what leaves a relation out: a rule over a form on two of them is
+     * about the pair, and an end attributed to it at either would be an end of a number it does not
+     * divide.
+     *
+     * <p>What the rule does to that number is nobody's answer here. It is read afterwards, from
+     * what the rules leave the coordinate without this conjunct
      * ({@link FieldDomains#movedEndsOf}).
-     *
-     * <p>And only where the other side names no coordinate. A rule naming a value of a form over
-     * two of them is about the pair, and an end attributed to it at either would be an end of a
-     * number it does not divide — the same condition an ordering is held to before it becomes a
-     * bound.
      */
-    private void singles(Coordinate found, Core bound, ComparisonClaim said,
-                         RuleRef.Invariant from, int part, Core.Binary bin, Denotations at,
-                         Map<FactSubject, Coordinate> byName,
-                         List<FieldDomains.NamesAValue> out) {
-        if (found == null || !(said instanceof ComparisonClaim.Singled)
-                || !coordinatesIn(bound, at, byName).isEmpty()) {
+    private static void overOneCoordinate(Arithmetic read, RuleRef.Invariant from, int part,
+                                          Core.Binary bin,
+                                          List<FieldDomains.OverOneCoordinate> out) {
+        if (!(read instanceof Arithmetic.OverOne one)) {
             return;
         }
-        out.add(new FieldDomains.NamesAValue(found.at(), from, bin, part));
+        out.add(new FieldDomains.OverOneCoordinate(one.at().at(), from, bin, part));
     }
 
     /** One finding, kept once. A coordinate reached twice is one place with one thing to say. */
@@ -1994,9 +1996,18 @@ public final class InvariantChecker {
         record NotRead(Comparison comparison,
                        UnreadComparison.Quantity.NotRead<RuleKey> quantity) implements Arithmetic {}
 
-        /** The quantity the canonical form cuts is over one position. */
+        /**
+         * The quantity the canonical form cuts is over one position.
+         *
+         * @param at which number the canonical form is over, as the value's rules name it. Beside
+         *           the quantity rather than read back out of it: a quantity says which name the
+         *           form is over, and a name carries more than one number — so a reader rebuilding
+         *           the coordinate from the name has to decide which of them, which is what this
+         *           reading already did
+         */
         record OverOne(Comparison comparison,
-                       UnreadComparison.Quantity.OverOne<RuleKey> quantity) implements Arithmetic {}
+                       UnreadComparison.Quantity.OverOne<RuleKey> quantity,
+                       Coordinate at) implements Arithmetic {}
 
         /** The quantity the canonical form cuts is over several. */
         record OverSeveral(Comparison comparison,
@@ -2039,15 +2050,22 @@ public final class InvariantChecker {
                         .minus(((AffineForms.Outcome.Composed<FactSubject, Denotations>) right)
                                 .form());
         java.util.Set<RuleKey> over = new LinkedHashSet<>();
+        // And which number each name is, kept beside the name. A path carries more than one number
+        // and the reading has both here; projected to the path alone, whoever wanted the number
+        // would have to choose between them again.
+        java.util.Map<RuleKey, Coordinate> which = new LinkedHashMap<>();
         for (FactSubject atom : whole.coefs().keySet()) {
-            over.add(byName.get(atom).path());
+            Coordinate found = byName.get(atom);
+            over.add(found.path());
+            which.putIfAbsent(found.path(), found);
         }
         if (over.isEmpty()) {
             return new Arithmetic.CutsNothing(recognised, whole.constant());
         }
         if (over.size() == 1) {
+            RuleKey one = over.iterator().next();
             return new Arithmetic.OverOne(recognised,
-                    new UnreadComparison.Quantity.OverOne<>(over.iterator().next()));
+                    new UnreadComparison.Quantity.OverOne<>(one), which.get(one));
         }
         return new Arithmetic.OverSeveral(recognised,
                 new UnreadComparison.Quantity.OverSeveral<>(over));

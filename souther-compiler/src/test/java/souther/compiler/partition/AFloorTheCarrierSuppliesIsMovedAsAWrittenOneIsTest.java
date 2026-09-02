@@ -93,6 +93,54 @@ class AFloorTheCarrierSuppliesIsMovedAsAWrittenOneIsTest {
                 "one model writes one clause about the length and the other writes two");
     }
 
+    /**
+     * A rule whose arithmetic no end was read from leaves its line where the plain one does.
+     *
+     * <p>{@code value * 2 >= 4} has a bare name on neither side, so the reading of ends made
+     * nothing of it and every reader below was told the model bounds the value nowhere. What it
+     * leaves the position is where the plain rule leaves it, and a row is owed at the same place.
+     *
+     * <p>Nothing inverts the {@code 2 *}. What the rule did is read from the values the rules leave
+     * with it and without it, which is the same question a rule naming a value is asked.
+     */
+    @Test
+    void aRuleWhoseArithmeticPlacedNoEndLeavesItsLineWhereThePlainOneDoes() {
+        assertEquals(bordersOf("""
+                data Subject = Int
+                    invariant plain = value >= 2
+                """), bordersOf("""
+                data Subject = Int
+                    invariant doubled = value * 2 >= 4
+                """));
+    }
+
+    /** The same of a record's field, which is read through another walk. */
+    @Test
+    void aFieldsArithmeticLeavesItsLineWhereThePlainOneDoes() {
+        assertEquals(bordersOf("""
+                data Subject = { x: Int }
+                    invariant plain = x >= 2
+                """), bordersOf("""
+                data Subject = { x: Int }
+                    invariant doubled = x * 2 >= 4
+                """));
+    }
+
+    /**
+     * And a quantity over two coordinates is not read this way at all.
+     *
+     * <p>Such a rule divides neither of them, so an end attributed to it at either would be an end
+     * of a number it does not divide. Its line is drawn as the relation it is, and a row is owed
+     * there.
+     */
+    @Test
+    void aQuantityOverTwoCoordinatesIsNoOnePositionsEnd() {
+        assertEquals(List.of("n.lo = n.hi"), bordersOf("""
+                data Subject = { lo: Int, hi: Int }
+                    invariant ordered = lo <= hi
+                """), "one line, where the pair parts, and no end at either of them");
+    }
+
     /** What each border is called, in the order a report shows them. */
     private static List<String> bordersOf(String declaration) {
         return boundariesOf(declaration).stream().map(BorderAssessment::label).toList();

@@ -82,8 +82,8 @@ public final class FieldDomains {
     /** The conjuncts this reading got no end out of, for whoever reads them next — see
      * {@link #withoutAnEnd}. */
     private final List<WithoutAnEnd> withoutAnEnd;
-    /** The conjuncts that name a value of one coordinate — see {@link #namesAValue}. */
-    private final List<NamesAValue> namesAValue;
+    /** The conjuncts that name a value of one coordinate — see {@link #overOneCoordinate}. */
+    private final List<OverOneCoordinate> overOneCoordinate;
     /**
      * Which conjunct this reading was asked to leave out, so that a reading standing in for a
      * counterfactual is not asked one of its own.
@@ -170,7 +170,7 @@ public final class FieldDomains {
                          Map<RuleKey, List<UnreadReason>> unreadByName,
                          Set<RuleKey> notSeparatedByName,
                          List<InvariantChecker.Direct> directs, List<NoLine> noLines,
-                         List<WithoutAnEnd> withoutAnEnd, List<NamesAValue> namesAValue,
+                         List<WithoutAnEnd> withoutAnEnd, List<OverOneCoordinate> overOneCoordinate,
                          PartsLeftOut withoutParts,
                          Map<RuleRef, Required> raised,
                          Map<RuleRef, Map<Core, Required>> raisedByPart,
@@ -193,7 +193,7 @@ public final class FieldDomains {
         this.directs = directs;
         this.noLines = noLines;
         this.withoutAnEnd = List.copyOf(withoutAnEnd);
-        this.namesAValue = List.copyOf(namesAValue);
+        this.overOneCoordinate = List.copyOf(overOneCoordinate);
         this.withoutParts = withoutParts;
         this.raised = raised;
         this.raisedByPart = raisedByPart;
@@ -438,7 +438,7 @@ public final class FieldDomains {
                 named(seeded, field).forEach(term -> placeOf.putIfAbsent(term, field)));
         return new FieldDomains(Map.copyOf(out), Map.copyOf(holds), Map.copyOf(admitted),
                 Map.copyOf(unread), Set.copyOf(notSeparated), seeded.reading().directs(), seeded.reading().noLines(),
-                seeded.reading().withoutAnEnd(), seeded.reading().namesAValue(),
+                seeded.reading().withoutAnEnd(), seeded.reading().overOneCoordinate(),
                 reach.withoutParts(),
                 seeded.reading().raised(), seeded.reading().raisedByPart(),
                 seeded.reading().standing(), seeded.took(),
@@ -513,27 +513,38 @@ public final class FieldDomains {
     }
 
     /**
-     * One conjunct that names a value of one coordinate and of nothing else.
+     * One conjunct that placed no end and whose quantity is over exactly one coordinate.
      *
-     * <p>An equality and a disequality both, since which of the two it is says which values are
-     * kept and not which number is named. What such a rule does to that number is not here and is
-     * not this reading's: it is read by asking what the rules leave the coordinate without this
-     * conjunct, and comparing.
+     * <p><b>Read off the canonical quantity and not off how a side was spelled.</b> Which number a
+     * rule is about is what its arithmetic came to: {@code value * 2 >= 4} is about the value and
+     * leaves it at two, and a reader looking for a bare name on one side finds none and calls it a
+     * rule about nothing. The same reading was already made for a {@code guard}'s comparison, where
+     * {@code a + 1 <= 10} had been classified as naming no position.
      *
-     * <p>One coordinate. A rule naming a value of a form over two of them — {@code lo == hi} — is
-     * about the pair, and an end attributed to it at either would be an end of a number the rule
-     * does not divide.
+     * <p>Every shape of rule that placed no end, and not the ones that name a value. An equality, a
+     * disequality and an arithmetic this reading could not put an end on are three ways of leaving
+     * the coordinate somewhere without saying so, and what each of them did to it is one question
+     * with one answer.
      *
-     * @param at       the number it names a value of
+     * <p>Exactly one coordinate. A rule over a form on two of them is about the pair, and an end
+     * attributed to it at either would be an end of a number the rule does not divide — that rule
+     * draws its line as a relation and is owed a row there instead.
+     *
+     * <p>What such a rule does to the number is not here and is not this reading's: it is read by
+     * asking what the rules leave the coordinate without this conjunct, and comparing
+     * ({@link #movedEndsOf}).
+     *
+     * @param at       the number its quantity is over
      * @param from     the clause it is a conjunct of
      * @param part     the conjunct itself, which is what a counterfactual reading is asked without
      * @param conjunct which of the clause's conjuncts it is
      */
-    public record NamesAValue(Coordinate at, RuleRef.Invariant from, Core part, int conjunct) {
+    public record OverOneCoordinate(Coordinate at, RuleRef.Invariant from, Core part,
+                                    int conjunct) {
 
-        public NamesAValue {
+        public OverOneCoordinate {
             if (at == null || from == null || part == null) {
-                throw new IllegalArgumentException("a named value is some rule's, at some number");
+                throw new IllegalArgumentException("a quantity over one number is some rule's");
             }
         }
     }
@@ -1047,7 +1058,7 @@ public final class FieldDomains {
      */
     public List<Placed> movedEnds() {
         List<Placed> moved = new ArrayList<>();
-        for (NamesAValue names : namesAValue) {
+        for (OverOneCoordinate names : overOneCoordinate) {
             for (InvariantBound end : movedEndsOf(names)) {
                 moved.add(new Placed(names.at(), names.from(), end.lower(), end.end(),
                         names.conjunct()));
@@ -1106,8 +1117,8 @@ public final class FieldDomains {
      * rules say — so it is read by {@link #movedEndsOf} and not written down as each conjunct
      * arrives.
      */
-    public List<NamesAValue> namesAValue() {
-        return namesAValue;
+    public List<OverOneCoordinate> overOneCoordinate() {
+        return overOneCoordinate;
     }
 
     /**
@@ -1125,7 +1136,7 @@ public final class FieldDomains {
      * <p>Empty where nothing moved, which is a rule whose value has other values either side of it:
      * a hole with something to side it is a hole, and no end of a range says where it is.
      */
-    public List<InvariantBound> movedEndsOf(NamesAValue names) {
+    public List<InvariantBound> movedEndsOf(OverOneCoordinate names) {
         // A reading standing in for a counterfactual has no such question of its own. Asked, it
         // would read itself again without one of its conjuncts and never come back — and what it
         // is for is answering what one conjunct of the reading above it was holding.
