@@ -8,6 +8,7 @@ import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
 import souther.compiler.types.Type;
 import souther.compiler.core.Core;
+import souther.compiler.diag.Citation;
 import souther.compiler.inputs.ClauseWithoutAnEnd;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
@@ -82,7 +83,8 @@ public final class DeclaredThresholds {
         // there is nothing a behavior answered for it to be about.
         // And no arrival: a declaration's clause stands in no body for anything to be on the way
         // to, which reads as an arrival that restricts nothing.
-        ComparisonAssessment assessed = ComparisonAssessment.of(behavior, comparison, read,
+        ComparisonAssessment assessed = ComparisonAssessment.of(behavior, comparison,
+                Citation.of(binary.pos()), read,
                 InputReads.ofADeclaredClause(roots), null, true,
                 new souther.compiler.reach.ComparisonArrival.NoProjection());
         // Only the quantity that is on no position. Why this drew no line where it drew none is not

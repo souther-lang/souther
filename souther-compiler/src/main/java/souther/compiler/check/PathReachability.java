@@ -3,6 +3,7 @@ package souther.compiler.check;
 import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
+import souther.compiler.coverage.ComparisonOccurrence;
 import souther.compiler.coverage.ControlPointId;
 import souther.compiler.inputs.Admits;
 import souther.compiler.inputs.InputDomain;
@@ -236,6 +237,20 @@ public final class PathReachability {
     }
 
     /**
+     * Which comparison {@code node} is, where this plan instruments it, or null.
+     *
+     * <p>Two questions and two answers, asked of whichever holds each. Which comparison a node is,
+     * the catalog says, for every comparison the bodies hold; whether a run through it is written
+     * down anywhere, the plan says, for the ones it numbered. What is filed under one of these is
+     * about a place a run can be observed at, so both have to answer.
+     */
+    private static ComparisonOccurrence numbered(Core.Binary node, CoverageSites.Plan plan) {
+        return plan.comparisons().occurrenceAt(node)
+                .filter(which -> plan.emissionSiteOf(which).isPresent())
+                .orElse(null);
+    }
+
+    /**
      * That the walk answered for every comparison the plan numbered in this body.
      *
      * <p>What the reading owes, checked rather than left to the shape of the walk. Absent and
@@ -275,7 +290,7 @@ public final class PathReachability {
             // Which comparison this is, asked of the plan. Read off an outcome's own name instead,
             // this would say a comparison is numbered where the plan numbered a way out of it, and
             // the two are the plan's to keep in step rather than a reader's to assume.
-            var at = plan.comparisonAt(comparison).orElse(null);
+            ComparisonOccurrence at = numbered(comparison, plan);
             if (at != null && !arriving.containsKey(at)) {
                 return java.util.Optional.of(
                         "this reading said nothing about what arrives at " + comparison.op()
@@ -471,8 +486,10 @@ public final class PathReachability {
                             List<PathDecision> decided) {
         // What arrives is about the comparison and not about either way out of it, so it is filed
         // under the comparison the plan names and asked of the plan directly.
-        plan.comparisonAt(comparison).ifPresent(site ->
-                arriving.put(site, arrivalAt(comparison, k, at, reads)));
+        ComparisonOccurrence which = numbered(comparison, plan);
+        if (which != null) {
+            arriving.put(which, arrivalAt(comparison, k, at, reads));
+        }
         for (boolean result : new boolean[] {true, false}) {
             var where = plan.outcomeOf(comparison, result);
             if (where.isEmpty()) {

@@ -363,7 +363,7 @@ class ARowNothingRanFillsNoCombinationTest {
             switch (claim.at()) {
                 case ControlPointId.ArmOccurrence arm -> taken.add(arm.probe().getAsInt());
                 case ControlPointId.ComparisonPoint point -> {
-                    taken.add(point.at().emissionSite());
+                    taken.add(point.at().value());
                     ways.add(point.way());
                 }
             }

@@ -102,7 +102,9 @@ final class CoverageNaming implements Naming<Outcome> {
             // it, so there is nothing here to say. The fork on it is named where the way in is.
             return null;
         }
-        ComparisonOccurrence site = plan.comparisonAt(comparison).orElse(null);
+        ComparisonOccurrence site = plan.comparisons().occurrenceAt(comparison)
+                .filter(which -> plan.emissionSiteOf(which).isPresent())
+                .orElse(null);
         // The one reading of this comparison, which is the reading whatever admitted the way used.
         // Read again here, the decision would be said of a number the admission never saw.
         ComparedNumber drawn = numbers.of(comparison, reads);

@@ -184,10 +184,11 @@ class AClauseOfATypeDoesNotPartItsValuesTest {
                 new souther.compiler.types.CoverageOrigin("example.weigh", 2, 0,
                         souther.compiler.types.CoverageConstruct.BINARY)),
                 new OriginRef.ComparisonOrigin.Read(
-                        new souther.compiler.coverage.ComparisonOccurrence(0),
+                        new souther.compiler.coverage.ComparisonOccurrence("weigh", 0),
                         new souther.compiler.check.RuleCitation.WrittenAt(
                                 souther.compiler.diag.Citation.of(
-                                        new souther.compiler.diag.SourcePos(3, 5)))),
+                                        new souther.compiler.diag.SourcePos(3, 5))),
+                        new souther.compiler.coverage.ComparisonEmissionSite(0)),
                 new LineFacts(new souther.compiler.check.ComparisonClaim.Cut(Towards.BELOW, true)));
     }
 }

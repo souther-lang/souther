@@ -4,6 +4,7 @@ import souther.compiler.check.Comparison;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.ComparisonCatalog;
+import souther.compiler.coverage.ComparisonOccurrence;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.types.BinOp;
 import souther.compiler.inputs.InputReading;
@@ -59,12 +60,17 @@ final class ComparisonReadings {
      *                reading has no arithmetic for is on the list as a decline, so the two are not
      *                one answer
      */
-    record Reading(Comparison comparison, InputReads reads, List<OnTheWay> assumed,
-                   BoundaryPolicy.Standing standing) {
+    record Reading(ComparisonCatalog.Catalogued catalogued, InputReads reads,
+                   List<OnTheWay> assumed, BoundaryPolicy.Standing standing) {
 
-        /** The node this is a reading of, for a reader joining on the tree. */
-        Core.Binary at() {
-            return comparison.at();
+        /** Which comparison this is a reading of, which is what every reader joins on. */
+        ComparisonOccurrence at() {
+            return catalogued.which();
+        }
+
+        /** What the recognition established: what the comparison placed, and on which two sides. */
+        Comparison comparison() {
+            return catalogued.comparison();
         }
     }
 
@@ -83,8 +89,12 @@ final class ComparisonReadings {
     ReachingCuts reaching(CoverageSites.Plan plan) {
         ReachingCuts.Collected cuts = new ReachingCuts.Collected();
         for (Reading each : readings) {
-            plan.comparisonAt(each.at())
-                    .ifPresent(site -> cuts.reached(site, each.assumed()));
+            // Only where a run through it is written down. What stands on the way to a comparison
+            // nothing records is a fact about the body all the same, and there is no run for a
+            // reader of this to hold it against.
+            if (plan.emissionSiteOf(each.at()).isPresent()) {
+                cuts.reached(each.at(), each.assumed());
+            }
         }
         return cuts.made();
     }
@@ -138,11 +148,11 @@ final class ComparisonReadings {
         ComparisonCatalog.Catalogued catalogued = e instanceof Core.Binary binary
                 ? plan.comparisons().at(binary).orElse(null) : null;
         if (catalogued != null) {
-            // What the catalog holds, which is the node together with what its operator placed.
-            // Recognising it as a comparison is what put it there, so the recognition is taken from
-            // it rather than made again here.
+            // What the catalog holds, kept whole. It carries which comparison this is, what the
+            // recognition established and where it is written, and all three travel to whoever
+            // reads this — taken apart here, a reader wanting one of them again would have to find
+            // its way back to the node, which is the arrangement this replaces.
             Comparison comparison = catalogued.comparison();
-            Core.Binary at = catalogued.node();
             // Read only where the policy admits it, and under the names in force here, which is
             // the one environment the comparison is about. `answer` is null: a body has nothing
             // that is the answer.
@@ -154,13 +164,15 @@ final class ComparisonReadings {
             // existing. Asked as an optional, a policy that stopped proving it would hand the
             // reading below the answer that restricts nothing, and this stage disagreeing with the
             // plan would go out as an arrival nobody could project.
-            BoundaryPolicy.Standing standing = BoundaryPolicy.refuses(at, plan, live)
+            BoundaryPolicy.Standing standing =
+                    BoundaryPolicy.refuses(catalogued.which(), plan, live)
                     .<BoundaryPolicy.Standing>map(BoundaryPolicy.Standing.Refused::new)
                     .orElseGet(() -> new BoundaryPolicy.Standing.Admitted(
-                            ComparisonAssessment.of(in.behavior(), comparison, in.read(), reads,
+                            ComparisonAssessment.of(in.behavior(), comparison, catalogued.at(),
+                                    in.read(), reads,
                                     null, false,
-                                    in.arrives().arrivalAt(plan.requireComparisonAt(at)))));
-            out.add(new Reading(comparison, reads, assumed, standing));
+                                    in.arrives().arrivalAt(catalogued.which()))));
+            out.add(new Reading(catalogued, reads, assumed, standing));
         }
         switch (e) {
             // The right operand runs only where the left came out the way that leaves the answer

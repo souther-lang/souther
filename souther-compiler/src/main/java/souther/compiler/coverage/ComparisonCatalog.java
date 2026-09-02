@@ -3,8 +3,12 @@ package souther.compiler.coverage;
 import souther.compiler.check.Comparison;
 import souther.compiler.core.Core;
 import souther.compiler.diag.Citation;
+import souther.compiler.types.CoverageOrigin;
 
+import java.util.ArrayList;
 import java.util.IdentityHashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -26,6 +30,13 @@ import java.util.Optional;
  * <p>Atomic and no wider. {@code &&} and {@code ||} combine comparisons rather than being ones, and
  * {@code +} is not one at all; what this holds is exactly what leaves a truth on the stack for a
  * probe to copy, which is what lets the numbering be checked rather than remembered.
+ *
+ * <p><b>The node gets a reader in and goes no further.</b> A walk over the tree — the emitter, the
+ * numbering — meets a node and has to ask which comparison it is, and {@link #occurrenceAt} is that
+ * question. What comes back is a {@link ComparisonOccurrence}, which is what every reader below
+ * joins on, and there is no way back from one to the node it was found at. That is what stops the
+ * tree being the join key: a reader holding an occurrence cannot fall back on matching objects, and
+ * cannot go to the node for an operator the recognition has already read.
  */
 public final class ComparisonCatalog {
 
@@ -36,42 +47,66 @@ public final class ComparisonCatalog {
      * it, so one comparison the author wrote stands here once per call — each reached under its
      * caller's own conditions, and each its own thing to say something about.
      *
-     * @param comparison the comparison itself, which is what every reader joins on, together with
-     *                   what its operator placed. Recognising the node as a comparison is what puts
-     *                   it here, so what the recognition established travels with it and a reader
-     *                   below has no operator left to read again. Joined on by identity: Core nodes
-     *                   are records, so two comparisons that look the same are equal, and a reader
-     *                   handed the wrong one of two would be answering about the other body
+     * @param which      which comparison of which body this is, which is what every reader joins on
+     * @param comparison what the recognition established: what the operator placed, and the two
+     *                   sides it placed it on. Recognising the node as a comparison is what puts it
+     *                   here, so what the recognition established travels with it and a reader
+     *                   below has no operator left to read again
      * @param at         where it is written, as a report may say it. A {@link Citation} and not a
      *                   position, because a comparison spliced in from another module is written in
      *                   that module's file and reached from a call in this one — and it is here
      *                   rather than taken again wherever a report needs one, so that a rule and the
      *                   line it draws are found at one place because they read one answer
+     * @param origin     what wrote it, which is how a report names the rule it states. Beside the
+     *                   citation because they are one question — which written thing this is — and
+     *                   a reader that had to go to the tree for either would have the tree, and
+     *                   with it everything the recognition already answered
      */
-    public record Catalogued(Comparison comparison, Citation at) {
+    public record Catalogued(ComparisonOccurrence which, Comparison comparison, Citation at,
+                             CoverageOrigin origin) {
 
-        /** The node itself, for a reader joining on the tree. */
-        public Core.Binary node() {
-            return comparison.at();
+        public Catalogued {
+            if (which == null || comparison == null || at == null) {
+                throw new IllegalArgumentException(
+                        "a catalogued comparison is one comparison, named and placed");
+            }
         }
     }
 
-    private final IdentityHashMap<Core, Catalogued> byNode;
+    /** How a walk over the tree gets in, and the whole of what the node is used for. */
+    private final IdentityHashMap<Core, ComparisonOccurrence> occurrenceAtNode;
 
-    private ComparisonCatalog(IdentityHashMap<Core, Catalogued> byNode) {
-        this.byNode = byNode;
+    /** What the module holds, under the names this issued. */
+    private final Map<ComparisonOccurrence, Catalogued> byOccurrence;
+
+    private ComparisonCatalog(IdentityHashMap<Core, ComparisonOccurrence> occurrenceAtNode,
+                              Map<ComparisonOccurrence, Catalogued> byOccurrence) {
+        this.occurrenceAtNode = occurrenceAtNode;
+        this.byOccurrence = byOccurrence;
     }
 
     /** The comparisons of every behavior body of one module. */
     public static ComparisonCatalog of(Map<String, Core> behaviorBodies) {
-        IdentityHashMap<Core, Catalogued> byNode = new IdentityHashMap<>();
-        for (Core body : behaviorBodies.values()) {
-            walk(body, byNode);
+        IdentityHashMap<Core, ComparisonOccurrence> occurrenceAtNode = new IdentityHashMap<>();
+        Map<ComparisonOccurrence, Catalogued> byOccurrence = new LinkedHashMap<>();
+        for (Map.Entry<String, Core> body : behaviorBodies.entrySet()) {
+            List<Core.Binary> found = new ArrayList<>();
+            walk(body.getValue(), found);
+            for (int ordinal = 0; ordinal < found.size(); ordinal++) {
+                Core.Binary binary = found.get(ordinal);
+                ComparisonOccurrence which =
+                        new ComparisonOccurrence(body.getKey(), ordinal);
+                occurrenceAtNode.put(binary, which);
+                byOccurrence.put(which, new Catalogued(which,
+                        Comparison.of(binary).orElseThrow(() -> new IllegalStateException(
+                                "a comparison was gathered that compares no values: " + binary)),
+                        Citation.of(binary.pos()), binary.origin()));
+            }
         }
-        return new ComparisonCatalog(byNode);
+        return new ComparisonCatalog(occurrenceAtNode, byOccurrence);
     }
 
-    private static void walk(Core e, IdentityHashMap<Core, Catalogued> byNode) {
+    private static void walk(Core e, List<Core.Binary> found) {
         // What a representation kept standing for an analysis to read. What a run does is measured
         // over the tree that runs, which keeps none of these, so reaching one would mean this
         // enumeration was taken over a tree nothing executes.
@@ -79,22 +114,48 @@ public final class ComparisonCatalog {
             throw preserved.unexpectedIn("the comparisons of a body");
         }
         if (e instanceof Core.Binary binary && binary.origin() != null
-                && binary.origin().isWritten()) {
-            Comparison.of(binary).ifPresent(comparison ->
-                    byNode.put(binary, new Catalogued(comparison, Citation.of(binary.pos()))));
+                && binary.origin().isWritten() && Comparison.of(binary).isPresent()) {
+            found.add(binary);
         }
-        Core.forEachChild(e, child -> walk(child, byNode));
+        Core.forEachChild(e, child -> walk(child, found));
     }
 
     /**
      * Which comparison {@code node} is, or empty where it is not one of this module's.
      *
-     * <p>What a reader asks instead of matching on the shape of the node. Empty is the answer for a
-     * node that is not a comparison, for one written where this compile has no source, and for one
-     * standing in a tree this catalog was not taken over — three things a reader deciding for itself
-     * would have had to remember to ask about separately.
+     * <p>What a walk over the tree asks instead of matching on the shape of the node. Empty is the
+     * answer for a node that is not a comparison, for one written where this compile has no source,
+     * and for one standing in a tree this catalog was not taken over — three things a reader
+     * deciding for itself would have had to remember to ask about separately.
      */
+    public Optional<ComparisonOccurrence> occurrenceAt(Core node) {
+        return Optional.ofNullable(occurrenceAtNode.get(node));
+    }
+
+    /** The same, together with what was recognised there and where it is written. */
     public Optional<Catalogued> at(Core node) {
-        return Optional.ofNullable(byNode.get(node));
+        return occurrenceAt(node).map(byOccurrence::get);
+    }
+
+    /**
+     * What {@code which} names.
+     *
+     * <p>Total, because the only way to hold one of these is to have been given it here. A reader
+     * that has an occurrence has one of this module's comparisons, so there is no answer for it not
+     * to have — and an occurrence from another module's catalog is a mistake this says out loud
+     * rather than an empty a caller writes a branch for.
+     */
+    public Catalogued of(ComparisonOccurrence which) {
+        Catalogued held = byOccurrence.get(which);
+        if (held == null) {
+            throw new IllegalArgumentException(
+                    "no comparison of this module is " + which);
+        }
+        return held;
+    }
+
+    /** Every comparison the module holds, in the order the bodies were walked. */
+    public List<Catalogued> all() {
+        return List.copyOf(byOccurrence.values());
     }
 }

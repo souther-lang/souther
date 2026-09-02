@@ -7,13 +7,12 @@ import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 
 import java.util.ArrayList;
-import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -54,7 +53,9 @@ class AComparisonIsHeldWhereverItIsWrittenTest {
     }
 
     private static void collect(Core e, ComparisonCatalog catalog, List<Core.Binary> out) {
-        catalog.at(e).ifPresent(each -> out.add(each.node()));
+        if (e instanceof Core.Binary binary && catalog.occurrenceAt(binary).isPresent()) {
+            out.add(binary);
+        }
         Core.forEachChild(e, child -> collect(child, catalog, out));
     }
 
@@ -68,6 +69,25 @@ class AComparisonIsHeldWhereverItIsWrittenTest {
 
                 if ok then 1 else 0
             }
+            """;
+
+    private static final String INSIDE_A_FUNCTION_VALUE = """
+            module example.inside
+
+            behavior positives : (xs: List<Int>) -> List<Int>
+
+            let positives (xs) = List.filter(x -> x > 0, xs)
+            """;
+
+    private static final String BEHIND_AN_ABORT = """
+            module example.abort
+
+            behavior pick : (a: Int) -> Int
+
+            let pick (a) =
+                if a > 10 then
+                    (if a > 20 then unreachable "never" else unreachable "nor this")
+                else 3
             """;
 
     /** A comparison a name stands for is a comparison, and the fork below tests the name. */
@@ -105,69 +125,35 @@ class AComparisonIsHeldWhereverItIsWrittenTest {
      */
     @Test
     void aComparisonInsideAFunctionValueIsOneOfTheBodyThatHoldsIt() {
-        assertEquals(List.of("GT"), operatorsIn("""
-                module example.inside
-
-                behavior positives : (xs: List<Int>) -> List<Int>
-
-                let positives (xs) = List.filter(x -> x > 0, xs)
-                """));
+        assertEquals(List.of("GT"), operatorsIn(INSIDE_A_FUNCTION_VALUE));
     }
 
     /**
-     * A plan that numbered something other than a comparison is refused where it is built.
+     * A comparison the catalog holds and the plan numbers no site for is a state this can hold.
      *
-     * <p>What the emitter does with a number is copy the value the node left on the stack, so a
-     * number on {@code a + b} hands it half a {@code long} to copy and the class will not verify.
-     * Said here rather than left to the emitter, because the emitter is the last reader and a plan
-     * is what every earlier one joins on: a numbering that got this wrong would have been agreed
-     * with by the reading, the partition and the reachability before anything ran.
+     * <p>The two are different questions and the answers differ: every comparison of every body is
+     * catalogued, and what gets a site is what a run could be recorded at. A comparison behind an
+     * abort is one no run reaches, so nothing numbers it — and it is still a comparison the model
+     * holds, which is what a reading about it is about.
+     *
+     * <p>What used to stand here was two tests that a plan is refused when it numbers something the
+     * catalog does not hold. Neither state can be built now: a numbering is keyed by which
+     * comparison it is, so there is no number to put on a node that is not one, and no way to name
+     * a comparison of a body this catalog never walked.
      */
     @Test
-    void aPlanCannotNumberSomethingThatIsNotAComparison() {
-        Map<String, Core> bodies = bodiesOf("""
-                module example.sum
+    void aComparisonCanBeCataloguedWithNoSiteToRecordARunAt() {
+        Map<String, Core> bodies = bodiesOf(BEHIND_AN_ABORT);
+        ComparisonCatalog catalog = ComparisonCatalog.of(bodies);
+        CoverageSites.Plan plan = CoverageSites.of(bodies, DecisionSources.NONE,
+                SuppliedRules.NONE);
 
-                behavior total : (a: Int, b: Int) -> Int
-
-                let total (a, b) = a + b
-                """);
-        Core.Binary sum = (Core.Binary) sumIn(bodies);
-        IdentityHashMap<Core, Integer> numbered = new IdentityHashMap<>();
-        numbered.put(sum, 0);
-
-        IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
-                () -> planNumbering(numbered, ComparisonCatalog.of(bodies)));
-        assertTrue(refused.getMessage().contains("ADD"), refused.getMessage());
-    }
-
-    /**
-     * Nor one the catalog does not hold, which is the half a node's own operator cannot answer.
-     *
-     * <p>Two answers about what a comparison is, each complete on its own terms and each about a
-     * different body: the emitter and the reachability read the numbering, the partition reads the
-     * catalog. Nothing downstream can notice — a partition over an empty catalog draws no line and
-     * reports no unread rule, which is what a model stating none looks like.
-     */
-    @Test
-    void aPlanCannotNumberAComparisonItsCatalogDoesNotHold() {
-        Map<String, Core> bodies = bodiesOf(NAMED_BEFORE_THE_FORK);
-        Core.Binary comparison = comparisonsIn(bodies).get(0);
-        IdentityHashMap<Core, Integer> numbered = new IdentityHashMap<>();
-        numbered.put(comparison, 0);
-
-        IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
-                () -> planNumbering(numbered, ComparisonCatalog.of(Map.of())));
-        assertTrue(refused.getMessage().contains("one answer or they are two"),
-                refused.getMessage());
-    }
-
-    /** A plan that numbers {@code numbered} and holds {@code catalog}, and nothing else. */
-    private static CoverageSites.Plan planNumbering(IdentityHashMap<Core, Integer> numbered,
-                                                    ComparisonCatalog catalog) {
-        return new CoverageSites.Plan(List.of(), List.of(), new IdentityHashMap<>(), numbered,
-                new IdentityHashMap<>(), new IdentityHashMap<>(), java.util.Set.of(),
-                new IdentityHashMap<>(), catalog);
+        List<ComparisonOccurrence> held = catalog.all().stream()
+                .map(ComparisonCatalog.Catalogued::which).toList();
+        assertEquals(2, held.size(), "the body holds two comparisons");
+        assertEquals(1, held.stream().filter(each -> plan.emissionSiteOf(each).isPresent()).count(),
+                () -> "and one of them stands where nothing answers, so nothing records a run"
+                        + " through it: " + held);
     }
 
     private static Core sumIn(Map<String, Core> bodies) {
@@ -202,8 +188,66 @@ class AComparisonIsHeldWhereverItIsWrittenTest {
         CoverageSites.Plan plan = CoverageSites.of(bodies, souther.compiler.coverage.DecisionSources.NONE, souther.compiler.coverage.SuppliedRules.NONE);
         Core.Binary comparison = comparisonsIn(bodies).get(0);
 
-        assertTrue(plan.comparisonAt(comparison).isPresent(), "it is numbered");
+        assertTrue(plan.comparisons().occurrenceAt(comparison)
+                        .flatMap(plan::emissionSiteOf).isPresent(), "it is numbered");
         assertTrue(plan.mayRepeat(comparison), "and one run may pass it once per element");
+    }
+
+    /**
+     * Every comparison a body holds is one the catalog holds.
+     *
+     * <p>What keeps the two readings one. The catalog gathers what a walk of the bodies recognises
+     * and what this compile has source for; a reader that met a comparison the catalog had no name
+     * for would have nothing to say which one it was, and the readings would each be complete about
+     * a different set. Held here as the property rather than as a check inside the walk, because
+     * what it is about is the two definitions agreeing and not one body being odd.
+     */
+    @Test
+    void everyComparisonOfABodyIsOneTheCatalogNames() {
+        for (String source : List.of(NAMED_BEFORE_THE_FORK, INSIDE_A_FUNCTION_VALUE, BEHIND_AN_ABORT)) {
+            Map<String, Core> bodies = bodiesOf(source);
+            ComparisonCatalog catalog = ComparisonCatalog.of(bodies);
+            bodies.values().forEach(body -> recognised(body, each ->
+                    assertTrue(catalog.occurrenceAt(each).isPresent(),
+                            () -> "the catalog names " + each.op() + " at " + each.pos())));
+        }
+    }
+
+    /**
+     * Two comparisons spelled the same way in one body are two occurrences.
+     *
+     * <p>What an occurrence is for. {@code Core} nodes are records, so the two are equal as values
+     * and a reading that told them apart by what they say would have one answer for both — which is
+     * what a line drawn on one and a run recorded at the other come to.
+     */
+    @Test
+    void twoComparisonsSpelledAlikeAreTwoOccurrences() {
+        Map<String, Core> bodies = bodiesOf("""
+                module example.twice
+
+                behavior band : (a: Int) -> Int
+
+                let over (x: Int): Bool = x > 10
+
+                let band (a) = if over(a) then (if over(a) then 1 else 2) else 3
+                """);
+        ComparisonCatalog catalog = ComparisonCatalog.of(bodies);
+
+        List<ComparisonCatalog.Catalogued> held = catalog.all();
+        assertEquals(2, held.size(), "the helper is spliced into the body at both calls");
+        assertEquals(held.get(0).at(), held.get(1).at(),
+                "the two are written in one place, which is the helper's");
+        assertNotEquals(held.get(0).which(), held.get(1).which(),
+                "and are two occurrences all the same, each reached under its own conditions");
+    }
+
+    /** Every binary of {@code e} the language reads as a comparison, in the order it is written. */
+    private static void recognised(Core e, java.util.function.Consumer<Core.Binary> each) {
+        if (e instanceof Core.Binary binary
+                && souther.compiler.check.Comparison.of(binary).isPresent()) {
+            each.accept(binary);
+        }
+        Core.forEachChild(e, child -> recognised(child, each));
     }
 
     /** What the catalog holds is what the plan numbers, wherever the comparison stands. */

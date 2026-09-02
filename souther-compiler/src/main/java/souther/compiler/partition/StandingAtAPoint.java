@@ -1,6 +1,6 @@
 package souther.compiler.partition;
 
-import souther.compiler.coverage.ComparisonOccurrence;
+import souther.compiler.coverage.ComparisonEmissionSite;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.observe.ObservedValue;
 
@@ -94,13 +94,14 @@ public final class StandingAtAPoint {
      * caller could put a line drawn at one reading to the rows of a behavior read at another —
      * which two behaviors taking a parameter spelled the same way is all it takes.
      *
-     * @param site which comparison a row has to have got an answer out of, for a rule that meeting
-     *             takes more than standing at the level. Empty where standing there is the whole
-     *             of it
+     * @param site where a run through the comparison a row has to have got an answer out of is
+     *             recorded, for a rule that meeting takes more than standing at the level. Empty
+     *             where standing there is the whole of it. The place a run is written down and not
+     *             which comparison it is, because what this asks it of is a run's own record
      */
     public static Met met(MeasuredInput.BorderReading line,
                           List<ObservedInputs> observed, Criterion criterion,
-                          Optional<ComparisonOccurrence> site) {
+                          Optional<ComparisonEmissionSite> site) {
         BorderQuantity quantity = line.quantity();
         BehaviorInputs where = line.subject().inputs();
         Set<ReadingGap> unreadable = new java.util.LinkedHashSet<>();

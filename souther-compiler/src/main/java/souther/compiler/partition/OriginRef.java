@@ -142,9 +142,15 @@ public sealed interface OriginRef {
          *              comparison's own place and not the fork's — a condition holding three
          *              comparisons is three rules, and a reader sent to the {@code if} is given one
          *              handle for all of them
+         * @param recordedAt where a run through that comparison is written down. Beside the
+         *              comparison and not instead of it: which comparison this reads is what
+         *              everything about the rule is said of, and this is only how a run is asked
+         *              whether it got there. Minted together with the comparison, from the plan
+         *              that numbered it, so the two cannot come from different builds
          */
         public record Read(souther.compiler.coverage.ComparisonOccurrence comparison,
-                           souther.compiler.check.RuleCitation.WrittenAt written) {}
+                           souther.compiler.check.RuleCitation.WrittenAt written,
+                           souther.compiler.coverage.ComparisonEmissionSite recordedAt) {}
 
     }
 
@@ -523,6 +529,23 @@ public sealed interface OriginRef {
         return switch (this) {
             case ComparisonOrigin g -> java.util.Optional.of(g.read().comparison());
             case NarrowedOrigin n -> n.bound().comparisonAt();
+            case InvariantOrigin _, EnsuresOrigin _ -> java.util.Optional.empty();
+        };
+    }
+
+    /**
+     * Where a run through that comparison is recorded, for a rule that meeting takes reaching one.
+     *
+     * <p>Beside {@link #comparisonAt} and asked by whoever is holding a recording. Which comparison
+     * the rule is about is what a report says and what a reading joins on; whether some run got
+     * there is answered against what the run wrote down, and what a run writes down is a number.
+     * One projection for both would hand a reading the emitter's number and let it stand for the
+     * comparison, which is how the two came to be one value.
+     */
+    default java.util.Optional<souther.compiler.coverage.ComparisonEmissionSite> recordedAt() {
+        return switch (this) {
+            case ComparisonOrigin g -> java.util.Optional.of(g.read().recordedAt());
+            case NarrowedOrigin n -> n.bound().recordedAt();
             case InvariantOrigin _, EnsuresOrigin _ -> java.util.Optional.empty();
         };
     }

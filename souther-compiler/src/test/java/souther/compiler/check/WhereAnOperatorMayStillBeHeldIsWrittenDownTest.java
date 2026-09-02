@@ -291,10 +291,6 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                             + " comparison for — the recognition everything below it holds"),
             new Held("souther.compiler.codegen.BodyGen.lambda$binary$0",
                     "names the operator in what it says of a comparison that placed nothing"),
-            new Held("souther.compiler.codegen.BodyGen.ordered",
-                    "names the operator in what it says of an order the checker admitted and the"
-                            + " types turn out not to have: the emission itself is off what the"
-                            + " comparison stated"),
 
             // And whether it compares at all, asked of the one place that says so — by a reader
             // recognising a comparison, and by no reader below one.

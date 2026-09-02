@@ -1,6 +1,5 @@
 package souther.compiler.coverage;
 
-import souther.compiler.check.Comparison;
 import souther.compiler.core.Core;
 import souther.compiler.diag.Citation;
 import souther.compiler.diag.SourcePos;
@@ -10,6 +9,7 @@ import souther.compiler.types.CoverageOrigin;
 
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.OptionalInt;
 import java.util.Map;
@@ -219,58 +219,21 @@ public final class CoverageSites {
      * here must be the ones the emitter is walking — the same answer, not an equal one.
      */
     public record Plan(List<Site> sites, List<GuardRef> guards, IdentityHashMap<Core, int[]> byNode,
-                       IdentityHashMap<Core, Integer> byComparison,
+                       Map<ComparisonOccurrence, Integer> byComparison,
                        IdentityHashMap<Core, ControlPointId.ArmOccurrence[]> armsByNode,
-                       IdentityHashMap<Core, Integer> controlByComparison,
+                       Map<ComparisonOccurrence, Integer> controlByComparison,
                        java.util.Set<Core> mayRepeat,
                        IdentityHashMap<Core, ForkOccurrence> forkByNode,
                        ComparisonCatalog comparisons) {
 
-        public Plan {
-            // Every number is of a comparison this plan's catalog holds. Two things go wrong
-            // without it and they are not the same thing.
-            //
-            // What a number means to the emitter is "copy the value this node left on the stack",
-            // so a number on anything but a comparison is a copy of something else — half a `long`
-            // where the node was arithmetic, or the whole condition where it was an `&&`. That much
-            // the node's own operator answers.
-            //
-            // The catalog is the other half, and it is the one this PR is about. A plan numbering a
-            // comparison the catalog does not hold is a plan with two answers about what a
-            // comparison is: the emitter and the reachability read the numbering, the partition
-            // reads the catalog, and each is complete on its own terms while they describe
-            // different bodies. Nothing downstream can notice — a partition over an empty catalog
-            // draws no line and reports no unread rule, which reads exactly like a model that
-            // states none.
-            for (Core numbered : byComparison.keySet()) {
-                requireIsACatalogued(numbered, comparisons, "numbered");
-            }
-            for (Core numbered : controlByComparison.keySet()) {
-                requireIsACatalogued(numbered, comparisons, "given a control point");
-            }
-        }
-
-        private static void requireIsACatalogued(Core node, ComparisonCatalog comparisons,
-                                                 String what) {
-            // Whether it is a comparison at all is asked where that is decided, so this reading
-            // holds no list of operators of its own. The two questions stay two: a node that is no
-            // comparison and a comparison outside this catalog are different breakages, and one
-            // answer for both would send a reader after the wrong one.
-            Comparison comparison = node instanceof Core.Binary binary
-                    ? Comparison.of(binary).orElse(null) : null;
-            if (comparison == null) {
-                throw new IllegalArgumentException(
-                        "something that is not a comparison was " + what + ": " + node);
-            }
-            if (comparisons.at(comparison.at()).isEmpty()) {
-                throw new IllegalArgumentException("a comparison this plan's catalog does not hold "
-                        + "was " + what + " at " + comparison.at().pos()
-                        + "; the numbering and the catalog are one answer or they are two");
-            }
-        }
+        // What a number is of is not checked here, because it cannot be anything else. A
+        // ComparisonOccurrence is issued by the catalog and by nothing else, so a numbering keyed
+        // by one is a numbering of comparisons this catalog holds — where a numbering keyed by the
+        // node could be a number on an `&&` or on arithmetic, and the emitter would copy half a
+        // `long` off the stack for it.
 
         public static final Plan NONE = new Plan(List.of(), List.of(), new IdentityHashMap<>(),
-                new IdentityHashMap<>(), new IdentityHashMap<>(), new IdentityHashMap<>(),
+                new LinkedHashMap<>(), new IdentityHashMap<>(), new LinkedHashMap<>(),
                 java.util.Set.of(), new IdentityHashMap<>(), ComparisonCatalog.of(Map.of()));
 
         /**
@@ -310,33 +273,13 @@ public final class CoverageSites {
          *  numbered no comparison there. */
         public java.util.Optional<ControlPointId.ComparisonPoint> outcomeOf(Core comparison,
                                                                            boolean result) {
-            Integer control = controlByComparison.get(comparison);
-            return control == null ? java.util.Optional.empty()
-                    : comparisonAt(comparison).map(at -> new ControlPointId.ComparisonPoint(
-                            control, new ComparisonOutcome(at, result)));
-        }
-
-        /**
-         * Which comparison of this plan {@code comparison} is, or empty where it numbered none there.
-         *
-         * <p>What a reading of the model joins on, and what it is given instead of the number. Empty
-         * is an ordinary answer for the same reason {@link #comparisonSiteOf} has one.
-         */
-        public java.util.Optional<ComparisonOccurrence> comparisonAt(Core comparison) {
-            Integer site = byComparison.get(comparison);
-            return site == null ? java.util.Optional.empty()
-                    : java.util.Optional.of(new ComparisonOccurrence(site));
-        }
-
-        /**
-         * The same, where the caller's own construction says there is one.
-         *
-         * <p>Absent here is not a comparison that cannot be measured — it is this plan and the reader
-         * that found the comparison disagreeing about what a condition is made of, which no
-         * measurement should paper over.
-         */
-        public ComparisonOccurrence requireComparisonAt(Core comparison) {
-            return new ComparisonOccurrence(requireComparisonSiteOf(comparison));
+            return comparisons.occurrenceAt(comparison).flatMap(which -> {
+                Integer control = controlByComparison.get(which);
+                return control == null ? java.util.Optional.empty()
+                        : emissionSiteOf(which).map(site ->
+                                new ControlPointId.ComparisonPoint(
+                                        control, new ComparisonOutcome(site, result)));
+            });
         }
 
         /**
@@ -369,9 +312,11 @@ public final class CoverageSites {
          * later and from more: a comparison the partition reads nothing off keeps its site and nobody
          * asks about it. The emitter walks comparisons in both cases and asks this of each.
          */
-        public java.util.OptionalInt comparisonSiteOf(Core comparison) {
-            Integer site = byComparison.get(comparison);
-            return site == null ? java.util.OptionalInt.empty() : java.util.OptionalInt.of(site);
+        public java.util.Optional<ComparisonEmissionSite> emissionSiteOf(
+                ComparisonOccurrence which) {
+            Integer site = byComparison.get(which);
+            return site == null ? java.util.Optional.empty()
+                    : java.util.Optional.of(new ComparisonEmissionSite(site));
         }
 
         /**
@@ -379,17 +324,13 @@ public final class CoverageSites {
          *
          * <p>A boundary is read off a comparison this plan numbers, so the site was planned before
          * the line was. Absent here is not a boundary that cannot be measured — it is this plan and
-         * the reader that found the comparison disagreeing about what a comparison is, which no
-         * measurement should paper over.
+         * the reader that found the comparison disagreeing about which comparisons are instrumented,
+         * which no measurement should paper over.
          */
-        public int requireComparisonSiteOf(Core comparison) {
-            Integer site = byComparison.get(comparison);
-            if (site == null) {
-                throw new IllegalStateException(
-                        "no comparison site was planned at " + comparison.pos()
-                                + "; a line is read off a comparison this plan does not hold");
-            }
-            return site;
+        public ComparisonEmissionSite requireEmissionSiteOf(ComparisonOccurrence which) {
+            return emissionSiteOf(which).orElseThrow(() -> new IllegalStateException(
+                    "no comparison site was planned for " + which
+                            + "; a line is read off a comparison this plan does not instrument"));
         }
 
         /** The arms of one behavior, which is what a branch measure counts. */
@@ -426,11 +367,12 @@ public final class CoverageSites {
         private final List<Site> sites = new ArrayList<>();
         private final List<GuardRef> guards = new ArrayList<>();
         private final IdentityHashMap<Core, int[]> byNode = new IdentityHashMap<>();
-        private final IdentityHashMap<Core, Integer> byComparison = new IdentityHashMap<>();
+        private final Map<ComparisonOccurrence, Integer> byComparison = new LinkedHashMap<>();
         private final IdentityHashMap<Core, ControlPointId.ArmOccurrence[]> armsByNode =
                 new IdentityHashMap<>();
         private final IdentityHashMap<Core, ForkOccurrence> forkByNode = new IdentityHashMap<>();
-        private final IdentityHashMap<Core, Integer> controlByComparison = new IdentityHashMap<>();
+        private final Map<ComparisonOccurrence, Integer> controlByComparison =
+                new LinkedHashMap<>();
         /** The reading of the body being walked, which every question about a node in it is asked
          *  of. Rooted at the body because what a name reads is settled by what bound it. */
         private NormalReturn answering = NormalReturn.ofBody(null);
@@ -716,21 +658,22 @@ public final class CoverageSites {
          *               site for it would be one the emitter lights on no run
          */
         private void number(Core.Binary comparison, boolean inside) {
+            // Which comparison this node is, asked of the catalog, which is where that is decided.
             // Numbered once. A node reached twice is one comparison written once, and a second number
             // for it would be a site the emitter never lights — which is the shape of a real omission
             // and would be reported as one.
-            if (!inside || comparisons.at(comparison).isEmpty()
-                    || byComparison.containsKey(comparison)) {
+            ComparisonOccurrence which = comparisons.occurrenceAt(comparison).orElse(null);
+            if (!inside || which == null || byComparison.containsKey(which)) {
                 return;
             }
-            // Keyed on where the comparison was written and not on what tests it. A condition can be
-            // an application of a function parameter, and then the comparison is the caller's: two
+            // Keyed on which comparison it is and not on what tests it. A condition can be an
+            // application of a function parameter, and then the comparison is the caller's: two
             // predicates written separately are two lines, and one predicate handed to two calls is
             // one, neither of which a fork can say.
-            byComparison.put(comparison,
+            byComparison.put(which,
                     site(new SourceOutcome.Compared(comparison.op()), comparison,
                             comparison.origin(), 0, DecidedBy.THE_DECLARATION));
-            controlByComparison.put(comparison, controls++);
+            controlByComparison.put(which, controls++);
         }
 
         private static SourceOutcome matched(Core.Case arm) {

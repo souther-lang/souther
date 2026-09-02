@@ -13,6 +13,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 /**
@@ -80,7 +81,10 @@ class WhyAComparisonBearsNoLineIsAnAnswerAndNotAnAbsenceTest {
                         // What arrives is not what this is about: read with nothing said about it,
                         // every line is held to the declarations alone.
                         souther.compiler.check.PathReachability.Answers.NONE).all()) {
-            byLine.put(each.at().pos().line(), each.standing());
+            souther.compiler.diag.Citation.Written at = assertInstanceOf(
+                    souther.compiler.diag.Citation.Written.class, each.catalogued().at(),
+                    "the model under test is written in this compile's own source");
+            byLine.put(at.at().line(), each.standing());
         }
         return byLine;
     }

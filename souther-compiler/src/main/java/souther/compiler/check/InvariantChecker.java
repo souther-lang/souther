@@ -1526,7 +1526,7 @@ public final class InvariantChecker {
             // §example-partition). A position carries more than one statement, and an end read at
             // it says nothing about the rule beside it: kept as what the position was left with,
             // a bound on a field's own type swallowed the record's clause about the same field.
-            noLineDrawn(read, from, part, at, byName, noLines);
+            noLineDrawn(read, from, bin, part, at, byName, noLines);
             // The declaration and not the clause. Which declaration took an edge in is what ADR-0090
             // names beside a line, and what a reader is sent to look at is the declaration holding
             // the relation.
@@ -1636,6 +1636,20 @@ public final class InvariantChecker {
     }
 
     /**
+     * The same for a comparison, which is the two sides one after the other.
+     *
+     * <p>A comparison stands at no place of the value, so what it names is what its sides name and
+     * the sides are what there is to walk. Read off a node holding both, this would be the same
+     * walk reached through a value the readers below have no reason to hold.
+     */
+    private List<Coordinate> coordinatesIn(Comparison comparison, Denotations at,
+                                           Map<FactSubject, Coordinate> byName) {
+        List<Coordinate> out = new ArrayList<>(coordinatesIn(comparison.left(), at, byName));
+        out.addAll(coordinatesIn(comparison.right(), at, byName));
+        return out;
+    }
+
+    /**
      * What one expression is made of here, and which coordinate each place it named turned out to
      * be.
      *
@@ -1731,13 +1745,13 @@ public final class InvariantChecker {
      * what the arithmetic made of them are three readings of one comparison, and handed over as
      * three arguments they are as much one comparison as the caller left them.
      */
-    private void noLineDrawn(Arithmetic read, RuleRef.Invariant from, int conjunct,
+    private void noLineDrawn(Arithmetic read, RuleRef.Invariant from, Core clause, int conjunct,
                             Denotations at,
                             Map<FactSubject, Coordinate> byName, List<FieldDomains.NoLine> out) {
         if (!(read.comparison().claim() instanceof ComparisonClaim.Cut)) {
             return;
         }
-        Core.Binary comparison = read.comparison().at();
+        Comparison comparison = read.comparison();
         Places left = placesIn(comparison.left(), at, byName);
         Places right = placesIn(comparison.right(), at, byName);
         Predicate<RuleKey> ordered = place -> carrierAt(place, left, right) != null;
@@ -1750,14 +1764,14 @@ public final class InvariantChecker {
                 BlockReason.RuleWithoutLineReason why =
                         UnreadComparison.ofTheQuantity(quantity, ordered);
                 for (RuleKey path : UnreadComparison.filedAt(quantity, List.copyOf(met.keySet()))) {
-                    file(met.get(path), from, comparison, conjunct, why, out);
+                    file(met.get(path), from, clause, conjunct, why, out);
                 }
             }
             // Where the reading stopped there is no quantity to be a subject, so every place the
             // walk met is asked, and asked for itself.
             case UnreadComparison.Quantity.NotRead<RuleKey> notRead -> {
                 for (Coordinate each : met.values()) {
-                    file(each, from, comparison, conjunct,
+                    file(each, from, clause, conjunct,
                             UnreadComparison.whereItStopped(ruleAt(each, left, right), notRead,
                                     ordered),
                             out);
@@ -1827,11 +1841,11 @@ public final class InvariantChecker {
     }
 
     /** One finding, kept once. A coordinate reached twice is one place with one thing to say. */
-    private static void file(Coordinate where, RuleRef.Invariant from, Core.Binary comparison,
+    private static void file(Coordinate where, RuleRef.Invariant from, Core clause,
                              int conjunct, BlockReason.RuleWithoutLineReason why,
                              List<FieldDomains.NoLine> out) {
         FieldDomains.NoLine said =
-                new FieldDomains.NoLine(where.at(), from, comparison, conjunct, why);
+                new FieldDomains.NoLine(where.at(), from, clause, conjunct, why);
         if (!out.contains(said)) {
             out.add(said);
         }
@@ -1933,15 +1947,14 @@ public final class InvariantChecker {
      */
     private Arithmetic arithmeticOf(Comparison recognised, Denotations at,
                                     Map<FactSubject, Coordinate> byName) {
-        Core.Binary comparison = recognised.at();
         // Named against this reader's own coordinates rather than against every number the
         // discharge procedure can identify. A value that is a number and is no coordinate of the
         // subject is one the walk stops at, so the expression and its environment come back
         // together — read as an atom and found unprojectable afterwards, both were already gone.
         AffineForms.Outcome<FactSubject, Denotations> left =
-                terms.outcomeOf(comparison.left(), at, byName::containsKey);
+                terms.outcomeOf(recognised.left(), at, byName::containsKey);
         AffineForms.Outcome<FactSubject, Denotations> right =
-                terms.outcomeOf(comparison.right(), at, byName::containsKey);
+                terms.outcomeOf(recognised.right(), at, byName::containsKey);
         for (AffineForms.Outcome<FactSubject, Denotations> side : java.util.List.of(left, right)) {
             if (side instanceof AffineForms.Outcome.StoppedAt<FactSubject, Denotations> stopped) {
                 return new Arithmetic.NotRead(recognised, new UnreadComparison.Quantity.NotRead<>(
