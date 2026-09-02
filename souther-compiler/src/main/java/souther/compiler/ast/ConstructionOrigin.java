@@ -1,7 +1,5 @@
 package souther.compiler.ast;
 
-import souther.compiler.types.TypeSymbol;
-
 /**
  * Where a construction standing in a body came from — what a permission check needs in order to tell
  * a construction the body makes from one that arrived in it already made.
@@ -16,44 +14,15 @@ import souther.compiler.types.TypeSymbol;
  * value reference names no module — the construction belongs to the definition of the value, and the
  * behavior reading the name originates nothing whatever module declared the type.
  *
- * <p>This is not a value a pass names. Its arms are declared in this package and nothing outside can
- * name one, and the two crossings that answer differently are {@link Origins}' to write, so the only
- * origins there are, are the ones the two forms that hold one make: a construction is its own where
- * it is built, and becomes one of the other two where a body crosses into a reader. All a pass
- * elsewhere can do with an origin is hand back the one it was given — {@link Hir.NewData} and
- * {@link Hir.Apply} take none when they are built, and carry the one they have when they are
- * rebuilt. What is public here is what a reader asks, and a reader asks the node.
+ * <p>Nothing is written here. What an origin is, is {@link Origins}' to say and this package's to
+ * ask: the arms are declared there and so are the two questions a permission check has and the two
+ * crossings that change an answer. A value of this type outside the package is a token — held by the
+ * form that holds it, handed on by a rebuild, and asked about by asking the form
+ * ({@link Hir.NewData#wasCarried}, {@link Hir.Apply#wasCarriedByValue}).
  *
- * <p>The transitions, of which carried by a value is the last word:
- *
- * <pre>
- * Own          --published(m)--&gt; Published(m)     --byValue--&gt; ByValue
- * Published(_) --published(m)--&gt; Published(m)     --byValue--&gt; ByValue
- * ByValue      --published(_)--&gt; ByValue          --byValue--&gt; ByValue
- * </pre>
- *
- * <p>A construction a value carried stays the value's however many published bodies then carry it:
- * the definition of the value is where it was made, and a reader further along is no more the one
- * that made it than the first was. Answering {@code Published} there would put a construction back
- * under the authority of a body that only passed it on.
+ * <p>That is what makes the answer the node's rather than whoever has one in hand. A member here
+ * would be a second place to ask and a second place to change: read through a pass's own reasoning
+ * about a value it happens to hold, rather than through the form that knows what it is.
  */
 public sealed interface ConstructionOrigin
-        permits Origins.Own, Origins.Published, Origins.ByValue {
-
-    /**
-     * Whether the body holding this construction of {@code built} was handed it rather than making
-     * it, and so answers for none of it.
-     */
-    default boolean carried(TypeSymbol.AtModule built) {
-        return switch (this) {
-            case Origins.Own _ -> false;
-            case Origins.Published published -> published.module().equals(built.module());
-            case Origins.ByValue _ -> true;
-        };
-    }
-
-    /** Whether a value this body named is what carried the construction in. */
-    default boolean viaValueReference() {
-        return this instanceof Origins.ByValue;
-    }
-}
+        permits Origins.Own, Origins.Published, Origins.ByValue { }

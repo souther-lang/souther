@@ -1604,7 +1604,7 @@ public interface Hir {
 
         /** The same construction, carried into a body by a value that body named. */
         public NewData carriedByValue() {
-            return new NewData(typeName, inits, spreads, Origins.byValue(origin), fields, pos,
+            return new NewData(typeName, inits, spreads, Origins.carriedByValue(origin), fields, pos,
                     region);
         }
 
@@ -1625,7 +1625,7 @@ public interface Hir {
          * answers for none of it — asked of the node, which is what holds the answer.
          */
         public boolean wasCarried(TypeSymbol.AtModule built) {
-            return origin.carried(built);
+            return Origins.carried(origin, built);
         }
     }
 
@@ -2088,7 +2088,7 @@ public interface Hir {
          * where its constructions would otherwise stand, and it is what has to say where it came
          * from. */
         public Apply carriedByValue() {
-            return new Apply(function, args, Origins.byValue(origin), appliedAs, pos, region);
+            return new Apply(function, args, Origins.carriedByValue(origin), appliedAs, pos, region);
         }
 
         /** The same application over rewritten arguments — a pass that touches only the arguments
@@ -2127,7 +2127,7 @@ public interface Hir {
         /** Whether a value this body named is what carried the construction this stands for in —
          *  asked of the node, which is what holds the answer. */
         public boolean wasCarriedByValue() {
-            return origin.viaValueReference();
+            return Origins.viaValueReference(origin);
         }
     }
 
