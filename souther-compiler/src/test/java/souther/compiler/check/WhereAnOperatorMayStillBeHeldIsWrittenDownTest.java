@@ -217,6 +217,11 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                     "asks which operator a library operation is defined as"),
             new Held("souther.compiler.coverage.CoverageSites.Walk.number",
                     "records the operator an outcome was written with, which is what a report shows"),
+            new Held("souther.compiler.coverage.ExecutableIdentity.say",
+                    "what a comparison does, written into what says whether two bodies do the same"
+                            + " thing: two bodies alike but for which way they compare are two"
+                            + " bodies, and a run recorded against one says nothing about the"
+                            + " other"),
             new Held("souther.compiler.report.ArmVocabulary.label",
                     "writes the operator into the words a report shows for an arm"),
             new Held("souther.compiler.reading.Meetings.run",
