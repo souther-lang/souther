@@ -91,7 +91,7 @@ class OneFactIsOneWeakeningHoweverItWasEvidencedTest {
                 "which reader cited it first is no part of what the union comes to");
         assertEquals(Set.of(new RuleCitation.Named("n"),
                         new RuleCitation.WrittenAt(Citation.of(new SourcePos(3, 3)))),
-                ruleUnreadIn(named.union(placed)).cited(),
+                ruleUnreadIn(named.union(placed)).finding().cited(),
                 "and the one rule keeps every handle a reader was offered");
     }
 
@@ -108,7 +108,7 @@ class OneFactIsOneWeakeningHoweverItWasEvidencedTest {
                         + " another");
         assertEquals(Set.of(new RuleCitation.Named("n"),
                         new RuleCitation.WrittenAt(Citation.of(new SourcePos(3, 3)))),
-                questionIn(named.union(placed)).cited(),
+                questionIn(named.union(placed)).question().cited(),
                 "and the one question keeps every handle a reader was offered");
     }
 
@@ -133,9 +133,11 @@ class OneFactIsOneWeakeningHoweverItWasEvidencedTest {
         assertEquals(1, met.union(metElsewhere).causes().size(),
                 "which rule it is and what it asks are what tell one standing question from"
                         + " another");
-        assertEquals(Set.of(named, placed), questionIn(met.union(metElsewhere)).cited(),
+        assertEquals(Set.of(named, placed),
+                questionIn(met.union(metElsewhere)).question().cited(),
                 "and both handles came with it");
-        assertEquals(List.of(form, none), questionIn(met.union(metElsewhere)).stopped(),
+        assertEquals(List.of(form, none),
+                questionIn(met.union(metElsewhere)).question().stopped(),
                 "and what the author wrote it short of is what it was, in their order");
     }
 

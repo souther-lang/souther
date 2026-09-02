@@ -122,7 +122,7 @@ class WhatKeepsAnUndeterminedVerdictOpenIsSaidTest {
 
         assertTrue(only instanceof Weakening.ModelReadingIncomplete it
                         && it.cause() instanceof ClosureGap.RuleUnread rule
-                        && rule.rule().why() instanceof BlockReason.RuleAboutADerivedValue,
+                        && rule.finding().why() instanceof BlockReason.RuleAboutADerivedValue,
                 () -> "the comparison in `List.isEmpty` is about a value made from the position: "
                         + only);
     }

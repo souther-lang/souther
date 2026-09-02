@@ -1,14 +1,9 @@
 package souther.compiler.partition;
 
-import souther.compiler.check.RuleCitation;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.RuleWithoutALine;
 import souther.compiler.inputs.StandingQuestion;
 import souther.compiler.observe.RunSensitivity;
-
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
 
 /**
  * One thing that stopped a measure's reading of the model from running out.
@@ -86,31 +81,26 @@ public sealed interface ClosureGap {
      * nothing here for it to be counted as. `MeasureClosure` asks the reason before building one of
      * these, and this refuses what that question would have had to let through.
      */
-    record RuleUnread(RuleWithoutALine.Fact rule, Set<RuleCitation> cited) implements ClosureGap {
+    record RuleUnread(RuleWithoutALine finding) implements ClosureGap {
 
         public RuleUnread {
-            if (!(rule.why() instanceof BlockReason.RuleReadingStopped)) {
+            if (!(finding.why() instanceof BlockReason.RuleReadingStopped)) {
                 throw new IllegalArgumentException(
-                        "a rule read to the end leaves no measure short: " + rule.why());
-            }
-            cited = cited == null ? Set.of() : Set.copyOf(cited);
-            if (cited.isEmpty()) {
-                throw new IllegalArgumentException(
-                        "a rule with no line here is one a reader can be sent to look at");
+                        "a rule read to the end leaves no measure short: " + finding.why());
             }
         }
 
-        /** One reader's finding, as that reader produced it: the rule it stopped on, and the handle
-         *  it would send somebody to. */
+        /** What the readers found, whole. Taken apart into the rule and the handles, this would
+         *  hold a second answer to what makes two findings one and a second way of putting two
+         *  together — and the type that has those is the one the readers produced. */
         public static RuleUnread of(RuleWithoutALine found) {
-            return new RuleUnread(found.fact(), found.cited());
+            return new RuleUnread(found);
         }
 
-        /** The rule, the position and the limit. The handle is how a reader finds it and not what
-         *  tells it from another. */
+        /** The finding's own, which is the rule, the position and the limit. */
         @Override
         public Object fact() {
-            return rule;
+            return finding.fact();
         }
 
         /** The other one, where it really is one of these. Two gaps filed under one fact and not
@@ -123,18 +113,16 @@ public sealed interface ClosureGap {
                     + " are filed under one fact");
         }
 
-        /** Both readers' findings, as one: the rule, with every handle either of them offered. */
+        /** Both readers' findings, as one, which the finding itself says how to do. */
         public RuleUnread mergedWith(RuleUnread other) {
-            Set<RuleCitation> both = new HashSet<>(cited);
-            both.addAll(other.cited);
-            return new RuleUnread(rule, both);
+            return new RuleUnread(finding.mergedWith(other.finding));
         }
 
         /** The rule's own answer, which the constructor above has already made sure there is one
          *  of: only a reading that stopped is admitted here, and a stop answers this. */
         @Override
         public RunSensitivity runSensitivity() {
-            return ((BlockReason.RuleReadingStopped) rule.why()).runSensitivity();
+            return ((BlockReason.RuleReadingStopped) finding.why()).runSensitivity();
         }
     }
 
@@ -146,44 +134,19 @@ public sealed interface ClosureGap {
      * both or yields neither and records what stopped its reading. Which is why a comparison's
      * incompleteness reaches this only as {@link RuleUnread}.
      */
-    record QuestionUnanswered(StandingQuestion.Fact question, Set<RuleCitation> cited,
-                              List<BlockReason.AboutARule> stopped) implements ClosureGap {
+    record QuestionUnanswered(StandingQuestion question) implements ClosureGap {
 
-        public QuestionUnanswered {
-            cited = cited == null ? Set.of() : Set.copyOf(cited);
-            if (cited.isEmpty()) {
-                throw new IllegalArgumentException(
-                        "a question names a rule a reader can be sent to");
-            }
-            // In the order the author wrote the parts of the rule that raised it, carried and not
-            // gathered into a set. A document says these in that order, so a set here would be the
-            // same testimony in a second shape, and whichever shape reached a reader first would
-            // decide what they were told the author wrote.
-            stopped = stopped == null ? List.of() : List.copyOf(stopped);
-            if (stopped.isEmpty()) {
-                throw new IllegalArgumentException(
-                        "a question stands because something was short of it");
-            }
-        }
-
-        /**
-         * One reading's account of it: the question, the handle for the rule that raised it, and
-         * what that reading was short of.
-         *
-         * <p>What it was short of arrives as the author wrote it and is carried that way. A
-         * document says these in that order, so a shape of this compiler's own here would be the
-         * same testimony twice and whichever reached a reader first would decide what they were
-         * told the author wrote.
-         */
+        /** What a reading found, whole, for the reason {@link RuleUnread#of} gives: what makes two
+         *  of these one question, what happens to the handles, and what may be said about the order
+         *  the author wrote, are the question's own answers. */
         public static QuestionUnanswered of(StandingQuestion asked) {
-            return new QuestionUnanswered(asked.fact(), asked.cited(), asked.stopped());
+            return new QuestionUnanswered(asked);
         }
 
-        /** Which rule raised it and what it asks. What a reading was short of is why it stands
-         *  rather than which question it is. */
+        /** The question's own, which is the rule that raised it and what it asks. */
         @Override
         public Object fact() {
-            return question;
+            return question.fact();
         }
 
         /** The other one, where it really is one of these, for the reason {@link RuleUnread}
@@ -196,21 +159,9 @@ public sealed interface ClosureGap {
                     + " are filed under one fact");
         }
 
-        /**
-         * Both readings' accounts, as one: the question, with every handle either offered.
-         *
-         * <p>What each was short of is neither joined nor chosen between. It is one answer about
-         * the model in the order the author wrote it, so two accounts that disagree about it are
-         * two accounts one of which is wrong, and this compiler has contradicted itself.
-         */
+        /** Both readings' accounts, as one, which the question itself says how to do. */
         public QuestionUnanswered mergedWith(QuestionUnanswered other) {
-            if (!stopped.equals(other.stopped)) {
-                throw new souther.compiler.inputs.TwoAccountsOfOneQuestion(
-                        question, stopped, other.stopped);
-            }
-            Set<RuleCitation> handles = new HashSet<>(cited);
-            handles.addAll(other.cited);
-            return new QuestionUnanswered(question, handles, stopped);
+            return new QuestionUnanswered(question.mergedWith(other.question));
         }
 
         /**
@@ -226,7 +177,7 @@ public sealed interface ClosureGap {
          */
         @Override
         public RunSensitivity runSensitivity() {
-            return stopped.stream()
+            return question.stopped().stream()
                     .allMatch(each -> each.runSensitivity()
                             == RunSensitivity.MAY_CHANGE)
                     ? RunSensitivity.MAY_CHANGE
