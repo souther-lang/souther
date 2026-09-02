@@ -3,6 +3,7 @@ package souther.compiler.inputs;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.DeclaredBounds;
+import souther.compiler.check.DeclaredSubjects;
 import souther.compiler.check.RuleKey;
 import souther.compiler.check.FieldDomains;
 import souther.compiler.check.NarrowedBounds;
@@ -25,6 +26,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * What can arrive at each position of one behavior's input, read once.
@@ -1323,12 +1325,16 @@ public final class InputDomain {
         // dropped and from the list that still holds them, because this is the one place that knows
         // which rules they were — recovered afterwards from a position with no axis, the finding
         // could name the position and nothing else, which is what it is for.
+        // Which of the position's numbers its own rules are written about, whatever each of them
+        // came to. What a rule is about and where it leaves the values are two questions, and only
+        // the first decides this.
+        Set<FieldDomains.CoordinateKind> written = DeclaredSubjects.of(type, symbols, taken);
         List<RuleWithoutALine> competing = List.of();
-        if (undecidable(ofType, valueOfType, stated, taken, carried)) {
+        if (undecidable(written, stated, taken, carried)) {
             competing = competingCoordinates(stated, path, type, symbols);
             stated = List.of();
         }
-        boolean bySize = measuredHere(ofType, valueOfType, stated, taken);
+        boolean bySize = measuredHere(written, stated, taken);
         NumericTerm.FromOnePosition term = bySize
                 ? NumericTerm.TakenOf.of(taken, path, type, symbols)
                 : new NumericTerm.ValueOf(path);
@@ -1492,6 +1498,13 @@ public final class InputDomain {
     /**
      * Whether this position's one coordinate is the count taken of it rather than its value.
      *
+     * <p><b>From what the type's rules are written about, and not from which of them placed an
+     * end.</b> Whether a clause came to an end is a fact about the clauses beside it and about this
+     * compiler's arithmetic; which number a position is is neither. Read off the ends, a type whose
+     * one rule is {@code String.length(value) /= 0} was measured on the string's own order — the
+     * length was no number of the model at all, and nothing about where a length stops could come
+     * into it.
+     *
      * <p>The position's own type answers first and its answer stands. A rule reaching the position
      * from the value it sits in states an end on a coordinate; it does not say which coordinate the
      * position is measured at, and letting it say so takes an axis away — {@code data Name = String
@@ -1501,13 +1514,12 @@ public final class InputDomain {
      * <p>Where the type chose nothing, one of these rules may — and only one, which is what
      * {@link #undecidable} has already refused.
      */
-    private static boolean measuredHere(DeclaredBounds.Bounds ofType,
-                                        DeclaredBounds.Bounds valueOfType,
+    private static boolean measuredHere(Set<FieldDomains.CoordinateKind> written,
                                         List<FieldDomains.Placed> stated, ValueName.Stdlib taken) {
-        if (stated(ofType)) {
+        if (taken != null && written.contains(answeredBy(taken))) {
             return true;
         }
-        if (stated(valueOfType)) {
+        if (written.contains(ITS_OWN_VALUE)) {
             return false;
         }
         return taken != null && stated(DeclaredBounds.placed(stated, answeredBy(taken), Carrier.WHOLE));
@@ -1658,12 +1670,15 @@ public final class InputDomain {
      * the model wrote about both from outside. Choosing either would put a line the author can read
      * beside one they cannot see, so the position is left as one nothing divides and both rules go
      * unread — the coarser of the two things that could be said, and the one that claims nothing.
+     *
+     * <p>"Said nothing about either" is the type's rules being written about neither number, which
+     * is not the same as their having placed no end on either. A type whose own rule names one of
+     * its numbers has chosen, whatever a range could be made of that rule.
      */
-    private static boolean undecidable(DeclaredBounds.Bounds ofType,
-                                       DeclaredBounds.Bounds valueOfType,
+    private static boolean undecidable(Set<FieldDomains.CoordinateKind> written,
                                        List<FieldDomains.Placed> stated, ValueName.Stdlib taken,
                                        Carrier carried) {
-        return !stated(ofType) && !stated(valueOfType)
+        return written.isEmpty()
                 && taken != null && carried != null
                 && stated(DeclaredBounds.placed(stated, answeredBy(taken), Carrier.WHOLE))
                 && stated(DeclaredBounds.placed(stated, ITS_OWN_VALUE, carried));

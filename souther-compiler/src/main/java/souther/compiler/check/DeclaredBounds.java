@@ -1,11 +1,9 @@
 package souther.compiler.check;
 
-import souther.compiler.ast.Hir;
 import souther.compiler.numeric.CountDomain;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.Place;
 import souther.compiler.types.Type;
-import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
@@ -155,47 +153,24 @@ public final class DeclaredBounds {
         }
         End min = null;
         End max = null;
-        // Every name the value wears, not the outermost one. A rule written on the type a newtype
-        // wraps bounds the value as much as one written on the newtype does, and the two intersect:
-        // `Inner: value >= 0` under `Outer: value <= 10` is a range of `[0, 10]`, and neither layer
-        // alone says so. How far that reaches is asked of `TypeOps` rather than walked again here,
-        // and every layer that put an end where it is is kept, because each is a rule a row is owed.
-        for (TypeOps.Layer layer : TypeOps.newtypeChain(type, symbols)) {
-            // The clauses with the declaration each was written on, which is what names the line
-            // (ADR-0090). Read flat, every clause a spread brought in was named after the type that
-            // spread it, and two clauses of one declaration were one rule.
-            // A layer wraps a declaration a module wrote, which is what having a `Hir.Data` for it
-            // says; the pattern is where the layer's name says so.
-            if (!(layer.named() instanceof TypeSymbol.AtModule named)) {
+        // The ends of the clauses, which is one projection of them and not the reading of them.
+        // Every layer that put an end where it is is kept, because each is a rule a row is owed.
+        for (DeclaredClauses.Conjunct each : DeclaredClauses.of(type, symbols)) {
+            // An end and nothing else. A rule this reads no end from narrows nothing here, and a
+            // rule stepping past the last value of the order states an end no value is at — which
+            // is a declaration with no value, answered where counts are and not by a bound written
+            // at a place nothing can be.
+            if (!((measure == null ? InvariantBound.of(each.expr(), carrier)
+                    : InvariantBound.ofSize(each.expr(), measure))
+                    instanceof InvariantBound.Read.AnEnd placed)) {
                 continue;
             }
-            for (TypeOps.Declared declared
-                    : TypeOps.declaredInvariants(named, layer.data(), symbols, _ -> null)) {
-                RuleRef.Invariant rule = new RuleRef.Invariant(Clause.Ref.of(declared));
-                // Which conjunct of the clause each end came out of, counted over all of them in
-                // the order the clause was written. The other reading of these clauses counts them
-                // the same way, which is what makes an end read here and an end read through the
-                // value this type sits in one line rather than two.
-                int conjunct = -1;
-                for (Hir.Expr each : ClauseHelpers.conjunctsOf(declared.clause().expr())) {
-                    conjunct++;
-                    // An end and nothing else. A rule this reads no end from narrows nothing here,
-                    // and a rule stepping past the last value of the order states an end no value is
-                    // at — which is a declaration with no value, answered where counts are and not
-                    // by a bound written at a place nothing can be.
-                    if (!((measure == null ? InvariantBound.of(each, carrier)
-                            : InvariantBound.ofSize(each, measure))
-                            instanceof InvariantBound.Read.AnEnd placed)) {
-                        continue;
-                    }
-                    InvariantBound read = placed.bound();
-                    End end = new End(read.end(), List.of(new Drawn(rule, conjunct)));
-                    if (read.lower()) {
-                        min = End.tighter(min, end, false);
-                    } else {
-                        max = End.tighter(max, end, true);
-                    }
-                }
+            InvariantBound read = placed.bound();
+            End end = new End(read.end(), List.of(new Drawn(each.rule(), each.conjunct())));
+            if (read.lower()) {
+                min = End.tighter(min, end, false);
+            } else {
+                max = End.tighter(max, end, true);
             }
         }
         return new Bounds(min, max, carrier);
