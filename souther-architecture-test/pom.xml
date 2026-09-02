@@ -22,10 +22,10 @@
 
         The reactor had no such place. This is one: it depends on every other module and nothing
         depends on it, so Maven builds it last and every module's classes are there when its tests
-        run. That every module is depended on is what the tests here assert of their own classpath,
-        rather than something the build order would show — an omitted dependency takes an edge away,
-        and the remaining edges go on sending this module to the end whenever one of them names a
-        module written after the one that was forgotten.
+        run. That every module is depended on is what the tests here assert of this pom's own
+        dependencies, rather than something the build order would show — an omitted dependency takes
+        an edge away, and the remaining edges go on sending this module to the end whenever one of
+        them names a module written after the one that was forgotten.
 
         Nothing ships from here and there is no main source. The dependencies are test-scoped
         because that is what they are for: compiling and running these tests, and telling Maven what

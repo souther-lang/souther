@@ -88,14 +88,14 @@ class WhereAConstructionCameFromIsNotAPassesToWriteTest {
      * Every module of the repository is depended on from here, which is what has them built when
      * this runs and so what makes the answer above about all of them.
      *
-     * <p>Asked of what this module declares, because that is what Maven orders the reactor on. Not
-     * of the build order, which shows an omission only sometimes: what sends this module to the end
-     * is every edge it has, so a missing edge is covered whenever another module it does depend on
-     * is written after the one it forgot — measured, dropping {@code souther-cli} left the order
-     * unchanged. And not of the classpath these tests run on, which says where each dependency was
-     * resolved from rather than which are declared: run to {@code test} it holds each module's
-     * {@code target/classes}, and run to {@code verify} it holds their jars, so a check reading it
-     * answers about how the build was invoked.
+     * <p>Asked of what this module declares as a dependency, because that is what Maven orders the
+     * reactor on. Not of the build order, which shows an omission only sometimes: what sends this
+     * module to the end is every edge it has, so a missing edge is covered whenever another module
+     * it does depend on is written after the one it forgot — measured, dropping
+     * {@code souther-cli} left the order unchanged. And not of the classpath these tests run on,
+     * which says where each dependency was resolved from rather than which are declared: run to
+     * {@code test} it holds each module's {@code target/classes}, and run to {@code verify} it
+     * holds their jars, so a check reading it answers about how the build was invoked.
      */
     @Test
     void andEveryModuleTheRepositoryHoldsIsDependedOnFromHere() {
@@ -205,22 +205,53 @@ class WhereAConstructionCameFromIsNotAPassesToWriteTest {
         return REPOSITORY.root().resolve("souther-architecture-test");
     }
 
-    /** The modules of this repository that this module's pom names as dependencies. */
+    /**
+     * The modules of this repository that this module depends on, test-scoped as its pom says they
+     * are.
+     *
+     * <p>Read at {@code project > dependencies > dependency} and nowhere else, because that is what
+     * Maven builds the reactor's order from. A {@code <dependency>} under
+     * {@code <dependencyManagement>} says what version one would have if it were depended on, and
+     * orders nothing; found by a search for the element wherever it appears, it would answer this
+     * question with a declaration that does not have a module built before these tests run.
+     */
     private static Set<String> dependenciesOfThisModule() {
         Set<String> modules = everyModule();
         Set<String> named = new LinkedHashSet<>();
-        Document pom = read(here().resolve("pom.xml"));
-        NodeList dependencies = pom.getElementsByTagName("dependency");
-        for (int i = 0; i < dependencies.getLength(); i++) {
-            NodeList parts = ((Element) dependencies.item(i)).getElementsByTagName("artifactId");
-            for (int part = 0; part < parts.getLength(); part++) {
-                String artifact = parts.item(part).getTextContent().trim();
-                if (modules.contains(artifact)) {
-                    named.add(artifact);
-                }
+        for (Element dependency : childrenNamed(
+                onlyChildNamed(read(here().resolve("pom.xml")).getDocumentElement(), "dependencies"),
+                "dependency")) {
+            String artifact = textOf(dependency, "artifactId");
+            if (modules.contains(artifact) && "test".equals(textOf(dependency, "scope"))) {
+                named.add(artifact);
             }
         }
         return named;
+    }
+
+    /** The one element of {@code parent} with this name, of its own children. */
+    private static Element onlyChildNamed(Element parent, String name) {
+        List<Element> found = childrenNamed(parent, name);
+        assertEquals(1, found.size(), parent.getTagName() + " holds one <" + name + ">");
+        return found.get(0);
+    }
+
+    /** {@code parent}'s own children of this name — not its descendants. */
+    private static List<Element> childrenNamed(Element parent, String name) {
+        List<Element> found = new ArrayList<>();
+        NodeList children = parent.getChildNodes();
+        for (int i = 0; i < children.getLength(); i++) {
+            if (children.item(i) instanceof Element child && child.getTagName().equals(name)) {
+                found.add(child);
+            }
+        }
+        return found;
+    }
+
+    /** What {@code element} says under this name, or the empty string where it says nothing. */
+    private static String textOf(Element element, String name) {
+        List<Element> found = childrenNamed(element, name);
+        return found.isEmpty() ? "" : found.get(0).getTextContent().trim();
     }
 
     private static Document read(Path pom) {

@@ -29,9 +29,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * check does not read — which is what {@code ValueName.OfType} was — or a second place the same
  * question is answered, and the check that reads these forms would not know to look at it.
  *
- * <p>The pair is asserted rather than assumed, because the check over the compiled classes takes the
- * forms it watches from this same walk. Both read a component's own type: a form whose component
- * were a form that holds one would hold one at a remove, and neither says it may not.
+ * <p>The pair is asserted rather than assumed, and asserted here rather than anywhere else: this is
+ * where it can be. The check that reads the whole reactor's compiled classes forbids handing an
+ * origin into this package at all, and so has no need to know which forms hold one — which is what
+ * keeps a form added beside them from being a way in that it passes over.
+ *
+ * <p>What is read is a component's own type, and a form whose component were a form that holds one
+ * would hold one at a remove. Nothing says it may not.
  */
 class TheParsedTreeDoesNotSayWhereAConstructionCameFromTest {
 
