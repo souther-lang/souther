@@ -6,6 +6,7 @@ import souther.compiler.check.Carrier;
 import souther.compiler.check.RuleKey;
 import souther.compiler.check.DeclaredBounds;
 import souther.compiler.check.ClauseHelpers;
+import souther.compiler.check.StringPredicates;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
 import souther.compiler.check.FieldDomains;
@@ -366,7 +367,7 @@ public final class Partitions {
         for (Drawn at : drawn) {
             BodyCutInspection came = null;
             for (Axis axis : at.axes()) {
-                came = BodyCutInspection.outranking(came,
+                came = BodyCutInspection.combined(came,
                         cameTo(axis.term(), axis.path(), rulesWithoutALine));
             }
             if (came == null) {
@@ -433,20 +434,26 @@ public final class Partitions {
     private static BodyCutInspection cameTo(NumericTerm.FromOnePosition term,
                                             souther.compiler.inputs.TermPath path,
                                             List<RuleWithoutALine> rules) {
-        LeftAtThePosition left = LeftAtThePosition.of(rules.stream().filter(one -> term == null
+        List<RuleWithoutALine> here = rules.stream().filter(one -> term == null
                 ? one.at().path().equals(path)
                 : switch (one.at()) {
                     case souther.compiler.inputs.FilingCoordinate.OfTerm it ->
                             it.term().equals(term);
                     case souther.compiler.inputs.FilingCoordinate.AtPosition it ->
                             it.path().equals(path);
-                }).toList());
-        // Which of the two this phase was left with, and not merely that it was left with
-        // something. The verdict below tells a reading that stopped from a rule read to the end,
-        // and answered here with one word it read every rule this phase understood as one it could
-        // not read.
-        return left == null ? new BodyCutInspection.Exhausted()
-                : new BodyCutInspection.NoLine(left);
+                }).toList();
+        if (here.isEmpty()) {
+            return new BodyCutInspection.Exhausted();
+        }
+        // What the rules came to, asked of each of them and kept apart. A reading that stopped on
+        // one rule is not answered for by another read from end to end, and a rule read from end to
+        // end is the model stating something whatever became of the reading beside it.
+        return new BodyCutInspection.NoLine(
+                here.stream().anyMatch(one ->
+                        one.why() instanceof souther.compiler.inputs.BlockReason.RuleReadingStopped),
+                here.stream().anyMatch(one ->
+                        one.why() instanceof souther.compiler.inputs.BlockReason
+                                .ReadToEndWithoutLine));
     }
 
     /**
@@ -779,7 +786,7 @@ public final class Partitions {
             // What the rules came to about the location, folded as its numbers are measured. One
             // sentence for the location: a number the rules divide and a number they say nothing
             // about are both measures of it, and which of the two answers a report is owed is
-            // `outranking`'s to settle rather than the order this happens to walk them in.
+            // taken together rather than chosen between by the order this happens to walk them in.
             BodyCutInspection came = null;
             List<NumericTerm.FromOnePosition> numbers = numbersMeasuring(at, evidence, account);
             for (NumericTerm.FromOnePosition term : numbers) {
@@ -788,7 +795,7 @@ public final class Partitions {
                 // the location is, which is where this reads it from.
                 Axis measured = at.axes().stream()
                         .filter(each -> each.term().equals(term)).findFirst().orElse(null);
-                came = BodyCutInspection.outranking(came,
+                came = BodyCutInspection.combined(came,
                         measureAt(here, at, measured, term, evidence, reading,
                                 symbols, policy, rules, account));
             }
@@ -799,7 +806,7 @@ public final class Partitions {
                     continue;
                 }
                 here.add(axis);
-                came = BodyCutInspection.outranking(came,
+                came = BodyCutInspection.combined(came,
                         cameTo(axis.term(), axis.path(), rules));
             }
             if (came == null) {
@@ -1118,33 +1125,30 @@ public final class Partitions {
                 // all the same: a `Map` a rule about its size divides is one nothing was read into,
                 // and taking that off the axis with the fallback is how the stop went unreported
                 // (issue #1084).
-                PositionAccount at = PositionAccount.of(behavior, position, null, null);
+                PositionAccount at = PositionAccount.of(behavior, position, null);
                 drawn.add(new Drawn(at,
                         List.of(Axis.of(behavior, term, divided.classes(),
                                 divided.cuts().cuts(), List.of(), position.narrowedEnds()))));
             }
             // Nothing local divides the position, which is what licenses asking what it is made of.
-            // Whether the reading got to the end of the rules is carried rather than acted on here:
-            // a position made of positions is given up in favour of what is under it either way,
-            // and a rule about the whole value that this could not read says nothing about which of
-            // its fields it would have divided.
-            case LocalPartition.Open _, LocalPartition.Blocked _ -> {
+            // What its rules still raise is carried rather than acted on here: a position made of
+            // positions is given up in favour of what is under it either way, and a question about
+            // the whole value says nothing about which of its fields it would have divided.
+            case LocalPartition.Open _ -> {
                 switch (position.structure()) {
                     // The one answer that takes the position away: what is under it is what the
                     // classes belong to, and those positions were read on their own.
                     case StructuralInspection.Decomposed _ -> { }
                     // A leaf and a block are both positions still to be answered for, and each
-                    // carries what it is left with if nothing answers — including a rule about this
-                    // position that the local reading could not take in, which is what keeps the
-                    // position from completing as one the model divides no way.
+                    // carries what the walk found and what its rules still raise, which is what
+                    // keeps the position from completing as one the model divides no way.
                     case StructuralInspection.Retained retained -> {
                         // The position and no measure of it. Nothing local divided the number the
                         // declarations name, and a measure with nothing in it would be a location
                         // counted among the measures — what is still to be answered for here is
                         // the position's to carry.
                         drawn.add(new Drawn(
-                                PositionAccount.of(behavior, position, retained.continuation(),
-                                        leftAt(position)),
+                                PositionAccount.of(behavior, position, retained.continuation()),
                                 List.of()));
                     }
                 }
@@ -1154,33 +1158,6 @@ public final class Partitions {
 
 
 
-
-    /**
-     * What a position with no evidence is left with, where an absence may not be concluded from it.
-     *
-     * <p>The end reading's answer ahead of the value reading's, where both have one. A rule this
-     * read for a line and could not use is the nearer of the two: lifting that limit is what would
-     * give the position an axis, and the reading that turns clauses into sets of values has no word
-     * for a range at all — so it names one limit while the report's own line names another, and one
-     * position came back with two causes for one clause.
-     *
-     * <p><b>A stop ahead of a rule read to the end, and not the first of the list.</b> Either keeps
-     * the position from completing as one the model draws no line through, and they are not alike
-     * in anything else: one is a limit somebody can lift and the other is what the model says. Taken
-     * in the order the rules happen to be in, which of the two a position came out under turned on
-     * which clause its author wrote first.
-     *
-     * <p>Which of the two it is travels with it, so nothing downstream works it out again. That is
-     * what {@link LeftAtThePosition} is for: the same distinction is drawn by a verdict, by a
-     * generation's account of why no row could answer, and by the words a claim is annotated with,
-     * and each of them used to read it off where the evidence had come from.
-     */
-    private static LeftAtThePosition leftAt(Position position) {
-        return LeftAtThePosition.outranking(
-                LeftAtThePosition.of(position.rulesWithoutALine()),
-                position.valuesUnread() == null ? null
-                        : new LeftAtThePosition.AReadingStopped(position.valuesUnread()));
-    }
 
     // --- small helpers ----------------------------------------------------------------------------
 
@@ -1680,10 +1657,15 @@ public final class Partitions {
                     // to the runtime, which is a format and nothing else, and this is which strings
                     // the rule admits — asked through the constraint, every predicate the decoder
                     // has no word for proposed no value, and a position an author had written a
-                    // rule for was offered `"x"` and refused (issue #1249).
-                    souther.compiler.regex.PatternSyntax admits =
-                            souther.compiler.check.StringPredicates.statedByWritten(each, symbols);
-                    String written = admits == null ? null : writtenFor(admits);
+                    // rule for was offered `"x"` and refused.
+                    //
+                    // Told which strings only where the reading came to them. Why it did not is
+                    // the reading's to keep and nothing here has a use for it: a rule this could
+                    // not read proposes no value, the same as one whose strings nobody can paste.
+                    StringPredicates.Reading admits =
+                            StringPredicates.statedByWritten(each, symbols);
+                    String written = admits instanceof StringPredicates.Reading.Accepting it
+                            ? writtenFor(it.accepts()) : null;
                     if (written != null) {
                         candidates.add(FixtureTemplate.string(written));
                     }
@@ -1708,10 +1690,11 @@ public final class Partitions {
     /**
      * A value a source can carry that {@code regex} accepts, or null where there is none to offer.
      *
-     * <p>Null three ways, and they are one answer here: a pattern outside the subset this compiler
-     * reads, one whose machine costs more than writing a value is allowed, and one every string of
-     * which is something nobody can paste. What a caller does with each of them is offer no
-     * candidate, so they are not told apart — a row is offered or it is not.
+     * <p>Null two ways, and they are one answer here: a pattern whose machine costs more than
+     * writing a value is allowed, and one every string of which is something nobody can paste. What
+     * a caller does with each of them is offer no candidate, so they are not told apart — a row is
+     * offered or it is not. A pattern outside the subset this compiler reads never reaches here:
+     * the reading says so, and the caller offers no candidate for the same reason.
      *
      * <p>Read by the one thing here that reads patterns. What this used to have was a reader of its
      * own, which meant two answers to "what does this pattern accept" and one model where they

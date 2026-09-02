@@ -200,17 +200,6 @@ public sealed interface Position permits ReadPosition {
     Set<RulesLeftUnread> rulesLeftUnread();
 
     /**
-     * What stopped the reading of which values this position may hold, or null where nothing did.
-     *
-     * <p>{@link #completeness()} said in the vocabulary a report is projected from. Kept apart from
-     * whatever left a <em>bound</em> unread: a rule stating where the values stop and a rule naming
-     * which values there are are read by different readers of the same clause, and only the second
-     * is what decides whether an absence of classes may be reported as the model stating no
-     * division.
-     */
-    BlockReason.ReadingStopReason valuesUnread();
-
-    /**
      * The rules written about this position that the reading of ends drew no line from.
      *
      * <p>Both ways of there being none. A rule that reading got partway through, and one it read
