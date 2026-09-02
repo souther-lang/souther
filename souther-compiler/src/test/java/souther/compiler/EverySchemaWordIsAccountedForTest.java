@@ -228,7 +228,7 @@ class EverySchemaWordIsAccountedForTest {
                     Set.of("probe_mapping_lost", "row_did_not_finish"),
                     Incompleteness.Code.class,
                     souther.compiler.publish.WeakeningWord.class,
-                    souther.compiler.report.AdequacyOpeningWord.class),
+                    souther.compiler.publish.AdequacyOpeningWord.class),
             // And what a measure nobody made was waiting for. The sources are read off the seal
             // rather than listed: which reasons mean "never started" is `NotMeasuredReason`'s own
             // membership, and a list here would be a second copy of it that the next arm added is

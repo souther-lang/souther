@@ -1,5 +1,9 @@
 package souther.compiler.partition;
 
+import souther.compiler.observe.Incompleteness;
+
+import java.util.Set;
+
 /**
  * Why a generation did not offer everything it might have.
  *
@@ -46,12 +50,11 @@ public sealed interface GenerationReason {
      * rests on and a person holding only the generated block has nowhere else to find it. The
      * decision and the evidence are different things and this keeps them so.
      */
-    record RowsNotRead(String behavior,
-                       java.util.Set<souther.compiler.observe.Incompleteness.Met> because)
+    record RowsNotRead(String behavior, Set<Incompleteness.Met> because)
             implements GenerationReason {
 
         public RowsNotRead {
-            because = java.util.Set.copyOf(because);
+            because = Set.copyOf(because);
         }
     }
 

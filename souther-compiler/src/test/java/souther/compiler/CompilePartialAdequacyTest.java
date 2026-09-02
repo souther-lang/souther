@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.observe.Disposition;
+import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.MeasurementStatus;
 import souther.compiler.query.About;
 import souther.compiler.query.Adequacy;
@@ -563,7 +564,7 @@ class CompilePartialAdequacyTest {
 
         assertEquals(MeasurementStatus.PARTIAL, one.status());
         assertEquals(1, one.modules().get(0).incompleteness().size());
-        assertEquals(souther.compiler.observe.Incompleteness.Code.OBSERVATION_ABSENT,
+        assertEquals(Incompleteness.Code.OBSERVATION_ABSENT,
                 one.modules().get(0).incompleteness().iterator().next().fact().code());
     }
 
@@ -608,10 +609,9 @@ class CompilePartialAdequacyTest {
         assertEquals(MeasurementStatus.PARTIAL, report.modules().get(0).status());
         assertEquals(MeasurementStatus.PARTIAL, report.modules().get(0).behaviors().get(0).status());
 
-        Set<souther.compiler.observe.Incompleteness.Met> why =
-                report.modules().get(0).incompleteness();
+        Set<Incompleteness.Met> why = report.modules().get(0).incompleteness();
         assertEquals(1, why.size(), why.toString());
-        assertEquals(souther.compiler.observe.Incompleteness.Code.VALUE_TRUNCATED,
+        assertEquals(Incompleteness.Code.VALUE_TRUNCATED,
                 why.iterator().next().fact().code());
         assertEquals(Optional.of("take"), why.iterator().next().fact().behavior(),
                 "a position is inside one behavior");
@@ -952,10 +952,10 @@ class CompilePartialAdequacyTest {
      */
     @Test
     void oneReasonIsReportedOnceAndCitedAtEachPlaceItWasMet() {
-        Set<souther.compiler.observe.Incompleteness.Met> gaps =
+        Set<Incompleteness.Met> gaps =
                 AdequacyReport.of(split()).modules().get(0).incompleteness();
 
-        assertEquals(gaps.stream().map(souther.compiler.observe.Incompleteness.Met::fact)
+        assertEquals(gaps.stream().map(Incompleteness.Met::fact)
                         .distinct().count(), gaps.size(), gaps.toString());
         assertFalse(gaps.isEmpty(), "a split model leaves something unread");
     }

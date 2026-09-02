@@ -1,4 +1,4 @@
-package souther.compiler.report;
+package souther.compiler.publish;
 
 /**
  * What a document calls one thing keeping an adequacy verdict open.
@@ -9,7 +9,7 @@ package souther.compiler.report;
  * Written as string literals in the renderer instead, the two spellings were kept in step by hand
  * and nothing stopped either of them moving alone.
  *
- * <p>Not one constant per {@link AdequacyOpening} arm, and not a word for every arm either. An
+ * <p>Not one constant per way a verdict stays open, and not a word for every one of them either. An
  * opening that is a measure going without something writes the word that measure's weakening
  * already has, because that vocabulary exists and a second spelling of it would be a second thing
  * to keep in step. What is here is everything else — the ways a verdict stays open that no

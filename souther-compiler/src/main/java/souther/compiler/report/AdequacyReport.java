@@ -27,8 +27,6 @@ import souther.compiler.partition.RoleAnswer;
 import souther.compiler.partition.UndividedPosition;
 import souther.compiler.diag.Citation;
 import souther.compiler.diag.SourceNameResolver;
-import souther.compiler.diag.QuotedFrom;
-import souther.compiler.diag.SourcePos;
 import souther.compiler.diag.TheCompilerDisagreesWithItself;
 import souther.compiler.inputs.InputQuestion;
 import souther.compiler.meta.ModuleMetadata;
@@ -66,7 +64,12 @@ import souther.compiler.query.ReadingReasons;
 import souther.compiler.query.EstablishmentGap;
 import souther.compiler.query.WritabilityKnowledge;
 import souther.compiler.publish.CanonicalSelection;
+import souther.compiler.publish.AdequacyOpeningWord;
+import souther.compiler.publish.NotMeasuredWord;
 import souther.compiler.publish.PublicationOrders;
+import souther.compiler.publish.PublishedAt;
+import souther.compiler.publish.PublishedIncompleteness;
+import souther.compiler.publish.PublishedOpening;
 import souther.compiler.publish.SourceOrdered;
 import souther.compiler.publish.WeakeningVocabulary;
 import souther.compiler.publish.WeakeningWord;
@@ -91,6 +94,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.Set;
 import java.util.function.BiConsumer;
@@ -2636,22 +2640,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             m.put("module", module.module());
             m.put("status", wire(module.status()));
             weakening(m, module.weakenedBy());
-            ArrayNode gaps = m.putArray("incompleteness");
-            for (Incompleteness.Met gap : module.incompleteness()) {
-                ObjectNode g = gaps.addObject();
-                g.put("code", word(gap.fact().code()));
-                g.put("scope", word(gap.fact().scope()));
-                // What the subject is, is the reason's answer; that this document has now written an
-                // identity down and owes an account of it is this renderer's. The two are asked and
-                // answered in that order, and neither side holds the other's half.
-                g.put("subject", gap.fact().sourceIdentity()
-                        .map(sources::written).orElseGet(gap.fact()::subject));
-                // TEMPORARY. A fact met at more than one place is cited at all of them, and this
-                // field holds one — so which one is written is whichever this happens to reach.
-                // Nothing decides it. Deciding it is the publication crossing's, and this loop goes
-                // when that arrives.
-                gap.citations().stream().findAny().ifPresent(where -> at(g, where, sources));
-            }
+            incompleteness(m, module, sources);
             // What the module's declarations are short of, beside what its bodies are. A line an
             // `invariant` drew is not any behavior's, so publishing it under one would publish it
             // under whichever a walk reached first — and left out, a consumer counting what a build
@@ -2708,21 +2697,75 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * say it the same way.
      */
     private static void at(ObjectNode into, Citation where, DocumentSources sources) {
-        ObjectNode at = into.putObject("at");
-        SourcePos pos = switch (where) {
-            case Citation.Written written -> written.at();
-            case Citation.Reached reached -> reached.at();
-            case Citation.Unplaced _, Citation.UnplacedElsewhere _, Citation.OutOfSight _ ->
-                    throw new NoPlaceToWrite(where);
-        };
-        if (!(pos.quotedFrom() instanceof QuotedFrom.ASourceThisCompileHolds(SourceId file))) {
-            throw new NoPlaceToWrite(where);
+        at(into, PublishedAt.of(where).orElseThrow(() -> new NoPlaceToWrite(where)), sources);
+    }
+
+    /**
+     * What a module could not read, written under its own key.
+     *
+     * <p>Its own method, and it writes this array and no other. The order these come in is one this
+     * compiler decides rather than one the model has, and what says so is that they are written
+     * from a sequence somebody put in order — which is a property of the method that writes them
+     * and is worth nothing if the same method writes an array that has an order already.
+     *
+     * <p>The places chosen and the entries put in order before any of it is written, because
+     * writing is what records which sources this document owes an explanation of — so a comparison
+     * made while writing would decide that table's order by how often it was asked a question.
+     */
+    private static void incompleteness(ObjectNode of, ModuleReport module,
+                                       DocumentSources sources) {
+        ArrayNode gaps = of.putArray("incompleteness");
+        for (PublishedIncompleteness gap : PublicationOrders.WHAT_WENT_UNREAD
+                .arrange(entriesOf(module.incompleteness())).written()) {
+            ObjectNode g = gaps.addObject();
+            g.put("code", word(gap.fact().code()));
+            g.put("scope", word(gap.fact().scope()));
+            // What the subject is, is the reason's answer; that this document has now written an
+            // identity down and owes an account of it is this renderer's. The two are asked and
+            // answered in that order, and neither side holds the other's half.
+            g.put("subject", gap.fact().sourceIdentity()
+                    .map(sources::written).orElseGet(gap.fact()::subject));
+            gap.at().ifPresent(where -> at(g, where, sources));
         }
-        at.put("sourceId", sources.written(file));
-        at.put("line", pos.line());
-        at.put("column", pos.column());
+    }
+
+    /**
+     * What a module could not read, as the entries a document writes, with the place for each
+     * chosen out of everywhere the fact was met.
+     *
+     * <p>A fact met nowhere a reader can be sent has no place, and the schema says a place is
+     * optional — so it is written without one. A fact met only at places none of which names a
+     * file this compile holds is the other thing, and it is refused for the reason
+     * {@link NoPlaceToWrite} gives: the document would otherwise say a reader can be sent
+     * somewhere and leave the fields out.
+     */
+    private static List<PublishedIncompleteness> entriesOf(Set<Incompleteness.Met> gaps) {
+        List<PublishedIncompleteness> out = new ArrayList<>(gaps.size());
+        for (Incompleteness.Met gap : gaps) {
+            Optional<PublishedAt> place = PublicationOrders.placeFor(gap.citations());
+            if (place.isEmpty() && !gap.citations().isEmpty()) {
+                throw new NoPlaceToWrite(gap.citations().iterator().next());
+            }
+            out.add(new PublishedIncompleteness(gap.fact(), place));
+        }
+        return out;
+    }
+
+    /**
+     * The same, of a place already chosen out of the several a fact was met at.
+     *
+     * <p>The one writer of the field, so that a place a document points at is the same shape
+     * wherever it is written. Which place it is has been settled by then: this records the source
+     * as one the document owes an explanation of, and recording it is the last thing that happens
+     * to a place.
+     */
+    private static void at(ObjectNode into, PublishedAt place, DocumentSources sources) {
+        ObjectNode at = into.putObject("at");
+        at.put("sourceId", sources.written(place.source()));
+        at.put("line", place.line());
+        at.put("column", place.column());
         ObjectNode writtenAt = at.putObject("writtenAt");
-        where.writtenAtFields().forEach(writtenAt::put);
+        place.writtenAt().fields().forEach(writtenAt::put);
     }
 
     /**
@@ -3587,15 +3630,20 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      */
     private void keptOpenBy(ObjectNode root) {
         ArrayNode out = root.putArray("keptOpenBy");
+        List<PublishedOpening> said = new ArrayList<>();
         for (AdequacyOpening each : whatKeepsTheVerdictOpen()) {
-            ObjectNode fact = out.addObject();
-            fact.put("kind", kindOf(each));
             // The reason beside it, where the kind is one that has one. A measure nobody made says
             // what it was waiting for, and that word is one this document already writes wherever a
             // measure has no number — so a reader meets one vocabulary and not two.
-            if (each instanceof AdequacyOpening.NotMeasured it) {
-                fact.put("reason", word(it.why()));
-            }
+            Optional<NotMeasuredWord> why = each instanceof AdequacyOpening.NotMeasured it
+                    ? Optional.of(NotMeasuredWord.of(it.why())) : Optional.empty();
+            said.add(new PublishedOpening(kindOf(each), why, each.runSensitivity()));
+        }
+        for (PublishedOpening each : PublicationOrders.WHAT_HOLDS_A_VERDICT_OPEN
+                .arrange(said).written()) {
+            ObjectNode fact = out.addObject();
+            fact.put("kind", kindWord(each.kind()));
+            each.reason().ifPresent(reason -> fact.put("reason", word(reason)));
             fact.put("runSensitivity", word(each.runSensitivity()));
         }
     }
@@ -3613,20 +3661,33 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * against. An opening that is a measure going without something writes that weakening's own
      * word instead, for the reason {@link AdequacyOpeningWord} gives.
      */
-    static String kindOf(AdequacyOpening opening) {
+    static PublishedOpening.Kind kindOf(AdequacyOpening opening) {
         return switch (opening) {
-            case AdequacyOpening.ByWeakening it -> kindOf(it.cause());
-            case AdequacyOpening.NotMeasured _ -> word(AdequacyOpeningWord.NOT_MEASURED);
+            case AdequacyOpening.ByWeakening it ->
+                    new PublishedOpening.Kind.AWeakening(vocabularyOf(it.cause()));
+            case AdequacyOpening.NotMeasured _ ->
+                    new PublishedOpening.Kind.AnOpening(AdequacyOpeningWord.NOT_MEASURED);
             // Two words for the two gaps, rather than one word and a reason beside it. Which of
             // them it was is what a reader acts on and what the sensitivity is read from, so it is
             // the kind: a value read for the point that did not come back, and a composing this
             // compiler declined to do, are not one kind of news.
-            case AdequacyOpening.ShowingStopped it -> word(switch (it.by()) {
-                case EstablishmentGap.Observation _ -> AdequacyOpeningWord.SHOWING_STOPPED;
-                case EstablishmentGap.Composition _ -> AdequacyOpeningWord.NOTHING_WAS_COMPOSED;
-            });
+            case AdequacyOpening.ShowingStopped it ->
+                    new PublishedOpening.Kind.AnOpening(switch (it.by()) {
+                        case EstablishmentGap.Observation _ ->
+                                AdequacyOpeningWord.SHOWING_STOPPED;
+                        case EstablishmentGap.Composition _ ->
+                                AdequacyOpeningWord.NOTHING_WAS_COMPOSED;
+                    });
             case AdequacyOpening.NothingShowedARowCanBeWritten _ ->
-                    word(AdequacyOpeningWord.NOTHING_SHOWED_IT);
+                    new PublishedOpening.Kind.AnOpening(AdequacyOpeningWord.NOTHING_SHOWED_IT);
+        };
+    }
+
+    /** What a document calls one of them, whichever of the two vocabularies it comes from. */
+    private static String kindWord(PublishedOpening.Kind kind) {
+        return switch (kind) {
+            case PublishedOpening.Kind.AWeakening it -> word(it.said());
+            case PublishedOpening.Kind.AnOpening it -> word(it.said());
         };
     }
 

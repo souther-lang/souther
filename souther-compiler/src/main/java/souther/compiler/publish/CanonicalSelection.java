@@ -165,6 +165,28 @@ public final class CanonicalSelection<T> {
         }
 
         /**
+         * Where one member sits in this order.
+         *
+         * <p>For an arrangement that orders by this among other things — what a document says one
+         * measurement went without is ordered by the code first and by what it is about after, and
+         * the code's order is this one. Written out there instead, the same kind would have two
+         * orders, which is what this class exists to stop.
+         *
+         * <p>Kept inside this package for the reason {@link #slots} is: a rank per member is a
+         * comparison anybody could sort by, and sorting by a rank is what {@link #keep} is the
+         * only way to do.
+         */
+        int rankOf(T member) {
+            int at = slots.indexOf(slotOf.apply(Objects.requireNonNull(member,
+                    "a reason that is nothing is not one this compiler met")));
+            if (at < 0) {
+                throw new IllegalArgumentException(
+                        "a reason with no place in the order it is published in: " + member);
+            }
+            return at;
+        }
+
+        /**
          * The places themselves, for the check that the order holds every one there is.
          *
          * <p>The one property a sequence cannot carry for itself. Repeats, pairs out of order and
