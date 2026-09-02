@@ -3,15 +3,15 @@ package souther.compiler.inputs;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.ast.Hir;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
 import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
-import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeView;
 import souther.compiler.core.Core;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
-import souther.compiler.query.Scopes;
 import souther.compiler.query.Shapes;
 import souther.compiler.types.ResolvedCase;
 import souther.compiler.types.TypeSymbol;
@@ -301,10 +301,11 @@ class ANarrowingIsSpelledByTheOneThatOwnsItTest {
     /** What the type at one position divides into. */
     private static List<Case> distinctionsAt(Read read, TermPath at) {
         return Distinctions.ofType(
-                TypeView.of(read.inputs.at(at).view().declared(), read.symbols), read.symbols);
+                TypeView.of(read.inputs.at(at).view().declared(), read.rules.symbols()),
+                read.rules.symbols());
     }
 
-    private record Read(InputDomain inputs, Core body, Symbols symbols) {}
+    private record Read(InputDomain inputs, Core body, RuleReadingSource rules) {}
 
     private static Read read(String source) {
         Compilation compilation =
@@ -313,12 +314,12 @@ class ANarrowingIsSpelledByTheOneThatOwnsItTest {
         String module = compilation.modules().get(0);
         Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
         Map<String, Sig> sigs = compilation.db().ask(new Bodies.Signatures(module)).value();
-        Symbols symbols = Scopes.derived(compilation.db(), module).value();
+        RuleReadingSource rules = RuleReadings.of(compilation, module);
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
         Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().stream()
                 .filter(b -> b.name().equals("visit")).findFirst().orElseThrow();
         return new Read(
-                InputDomain.of(spec, sigs.get("visit"), symbols, ReadAs.THE_COMPILATION_DOES),
-                checked.behaviorBodies().get("visit"), symbols);
+                InputDomain.of(spec, sigs.get("visit"), rules, ReadAs.THE_COMPILATION_DOES),
+                checked.behaviorBodies().get("visit"), rules);
     }
 }

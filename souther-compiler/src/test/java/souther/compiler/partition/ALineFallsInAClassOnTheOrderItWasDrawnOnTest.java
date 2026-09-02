@@ -2,12 +2,12 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
 import souther.compiler.check.Carrier;
-import souther.compiler.check.Symbols;
 import souther.compiler.inputs.Membership;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
-import souther.compiler.query.Scopes;
 
 import java.util.List;
 
@@ -115,11 +115,11 @@ class ALineFallsInAClassOnTheOrderItWasDrawnOnTest {
                 .findFirst().orElse(null);
         assertNotNull(axis, "the model is measured at " + id + ", among "
                 + read.axes().stream().map(each -> each.id().toString()).toList());
-        Symbols symbols = Scopes.derived(compilation.db(), module).value();
+        RuleReadingSource rules = RuleReadings.of(compilation, module);
         souther.compiler.inputs.InputDomain domain = compilation.db()
                 .ask(new Adequacy.Inputs(module)).value().get("gate");
         assertNotNull(domain, "the input of the behavior under test was read");
-        return new Measured(axis, domain.quantities(symbols).ordersOf(axis.term()));
+        return new Measured(axis, domain.quantities(rules).ordersOf(axis.term()));
     }
 
     /** The line the rules drew on a number taken of a location falls in one of that number's runs. */

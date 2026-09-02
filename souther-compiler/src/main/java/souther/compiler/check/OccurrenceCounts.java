@@ -49,9 +49,9 @@ public final class OccurrenceCounts {
      * up to how many values the element has, and each of those is the same reading of the same
      * clauses.
      */
-    public static OccurrenceCounts of(TypeSymbol.AtModule named, Hir.Data data, Symbols symbols,
+    public static OccurrenceCounts of(TypeSymbol.AtModule named, Hir.Data data, RuleReadingSource source,
                                        ReadingPolicy policy) {
-        return of(named, data, symbols, policy, _ -> false);
+        return of(named, data, source, policy, _ -> false);
     }
 
     /**
@@ -61,11 +61,11 @@ public final class OccurrenceCounts {
      * rules are what say it has none — its own, and the ones under whatever it wraps — so supposing
      * it has a value is not reading it at all.
      */
-    static OccurrenceCounts of(TypeSymbol.AtModule named, Hir.Data data, Symbols symbols,
+    static OccurrenceCounts of(TypeSymbol.AtModule named, Hir.Data data, RuleReadingSource source,
                                  ReadingPolicy policy,
                                  java.util.function.Predicate<TypeSymbol> granted) {
         return new OccurrenceCounts(
-                InvariantChecker.seedFields(named, data, symbols, policy, java.util.Map.of(),
+                InvariantChecker.seedFields(named, data, source, policy, java.util.Map.of(),
                         InvariantChecker.Reach.stoppingAt(granted)));
     }
 

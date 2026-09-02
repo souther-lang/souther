@@ -152,9 +152,13 @@ class AStandingQuestionSaysWhatItStandsForTest {
     /**
      * Two conjuncts stopped by one limit are one thing to lift, so the line says it once.
      *
-     * <p>Both halves of the same rule draw the line on {@code x} and neither was read. What a
-     * reader is owed is what to lift, and the two want the same reader written — said twice, an
+     * <p>Both halves of the same rule draw the line on {@code x} and neither number was folded. What
+     * a reader is owed is what to lift, and the two want the same reader written — said twice, an
      * author would be shown their own rule as two things.
+     *
+     * <p>Two products of constants, so that the limit is one. A half whose other side is an
+     * operation on the position is a different thing to lift — what it says about the values there
+     * takes inverting that operation — and two limits are two entries by design.
      *
      * <p>Which is the projection saying they are one thing and not the report dropping one of them:
      * each reason is put into the words the document promises on its own, and the words are made
@@ -166,7 +170,7 @@ class AStandingQuestionSaysWhatItStandsForTest {
                 module probe.line
 
                 data N = { x: Int, y: Int }
-                    invariant said = x <= 10 * 2 && x <= Int.abs(x)
+                    invariant said = x <= 10 * 2 && x <= 3 * 7
 
                 behavior read : (n: N) -> Ok
                 """), "invariant N (said)");

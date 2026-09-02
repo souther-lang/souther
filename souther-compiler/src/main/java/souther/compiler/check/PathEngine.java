@@ -1,7 +1,6 @@
 package souther.compiler.check;
 
 import souther.compiler.semantics.NumericResult;
-import souther.compiler.ast.Hir;
 import souther.compiler.core.Contract;
 import souther.compiler.core.Contract.Guard;
 import souther.compiler.core.Core;
@@ -71,12 +70,12 @@ final class PathEngine {
     /** What each behavior a body may call states about its answer, by the name it is called under. */
     private final Map<ValueName.Behavior, StatedContract> contracts;
 
-    PathEngine(Symbols symbols, Map<TypeSymbol, List<Hir.InvariantClause>> dischargeInvariants,
+    PathEngine(Symbols symbols, AnalysisInvariants dischargeInvariants,
                ReadingPolicy policy) {
         this(symbols, dischargeInvariants, Map.of(), Terms.Of.THE_DISCHARGE_TREE, policy);
     }
 
-    PathEngine(Symbols symbols, Map<TypeSymbol, List<Hir.InvariantClause>> dischargeInvariants,
+    PathEngine(Symbols symbols, AnalysisInvariants dischargeInvariants,
                Map<ValueName.Behavior, StatedContract> contracts, ReadingPolicy policy) {
         this(symbols, dischargeInvariants, contracts, Terms.Of.THE_DISCHARGE_TREE, policy);
     }
@@ -89,12 +88,12 @@ final class PathEngine {
      * recorded the fold as a shape this compiler has no term for would be answering about the
      * representation under the name of a gap.
      */
-    PathEngine(Symbols symbols, Map<TypeSymbol, List<Hir.InvariantClause>> dischargeInvariants,
+    PathEngine(Symbols symbols, AnalysisInvariants dischargeInvariants,
                Terms.Of reading, ReadingPolicy policy) {
         this(symbols, dischargeInvariants, Map.of(), reading, policy);
     }
 
-    PathEngine(Symbols symbols, Map<TypeSymbol, List<Hir.InvariantClause>> dischargeInvariants,
+    PathEngine(Symbols symbols, AnalysisInvariants dischargeInvariants,
                Map<ValueName.Behavior, StatedContract> contracts, Terms.Of reading,
                ReadingPolicy policy) {
         this.symbols = symbols;

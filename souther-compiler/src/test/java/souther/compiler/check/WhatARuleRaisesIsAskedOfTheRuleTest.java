@@ -41,7 +41,8 @@ class WhatARuleRaisesIsAskedOfTheRuleTest {
         TypeSymbol.AtModule named = TypeSymbols.declared(new TypeKey(module, type));
         Hir.Data data = (Hir.Data) symbols.declaredNode(named.key());
         assertNotNull(data, "no `" + type + "` declared");
-        return FieldDomains.of(named, data, symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES).required();
+        return FieldDomains.of(named, data, RuleReadings.of(compilation, module),
+                souther.compiler.query.ReadAs.THE_COMPILATION_DOES).required();
     }
 
     /** What the rule raises, as `obligation at subject`, so a question and its subject are read

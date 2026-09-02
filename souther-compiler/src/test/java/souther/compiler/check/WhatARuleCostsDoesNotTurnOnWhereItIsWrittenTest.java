@@ -78,7 +78,8 @@ class WhatARuleCostsDoesNotTurnOnWhereItIsWrittenTest {
         Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
         TypeSymbol.AtModule name = TypeSymbols.declared(new TypeKey(symbols.module(), "Code"));
         return FieldDomains.of(name,
-                (Hir.Data) symbols.declaredNode(name.key()), symbols,
+                (Hir.Data) symbols.declaredNode(name.key()),
+                RuleReadings.of(compilation, "demo"),
                 souther.compiler.query.ReadAs.THE_COMPILATION_DOES)
                 .admits(RuleKey.THE_VALUE);
     }

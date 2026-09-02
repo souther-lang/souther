@@ -6,6 +6,7 @@ import souther.compiler.ast.Hir;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
 import souther.compiler.query.Scopes;
+import souther.compiler.check.RuleReadings;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeSymbols;
@@ -89,7 +90,8 @@ class WhatARuleRaisesDependsOnTheValueItAppliesToTest {
         Hir.Data data = (Hir.Data) symbols.declaredNode(named.key());
         assertNotNull(data, "no `" + type + "` declared");
         java.util.Collection<Required> raised = FieldDomains
-                .of(named, data, symbols, ReadAs.THE_COMPILATION_DOES).required().values();
+                .of(named, data, RuleReadings.of(compilation, module),
+                        ReadAs.THE_COMPILATION_DOES).required().values();
         assertEquals(1, raised.size(), type + " is held to one rule here");
         return raised.iterator().next();
     }

@@ -29,7 +29,6 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.function.Function;
 
 /**
  * The type-level questions the checker asks, independent of any expression being checked: resolving
@@ -1208,23 +1207,28 @@ public final class TypeOps {
      * <p>A clause keeps the name it was declared with wherever it arrives from, so a spread carries not
      * only the rule but what an attempt on the spreading type calls it.
      */
-    public static List<Hir.InvariantClause> effectiveInvariants(Hir.Data data, Symbols symbols) {
-        return effectiveInvariants(null, data, symbols, _ -> null);
+    public static List<Hir.InvariantClause> settledInvariants(Hir.Data data, Symbols symbols) {
+        List<Hir.InvariantClause> invs = new ArrayList<>();
+        for (Declared one : declaredSettled(data, symbols)) {
+            invs.add(one.clause());
+        }
+        return invs;
     }
 
     /**
-     * The same, reading each declaration's clauses through {@code form} rather than off the
-     * declaration.
+     * The same clauses in the representation a static analysis reads: the language's own operations
+     * left standing ({@link InliningPolicy#DISCHARGE}).
      *
-     * <p>An analysis that reads a representation other than the settled one asks for it by the
-     * declaration's name, and gets the settled one wherever {@code form} has nothing to say — which
-     * is every declaration another module made, since what travels is the settled form.
+     * <p>Which representation is being read is in the name of the method and not in an argument a
+     * caller may leave out. A lookup that may answer nothing cannot be that argument: answering
+     * nothing and asking for the settled form are one value, so a reader that never got its
+     * representation would read the tree the backend emits from with nothing to say so.
      */
-    public static List<Hir.InvariantClause> effectiveInvariants(
+    public static List<Hir.InvariantClause> analysisInvariants(
             TypeSymbol.AtModule named, Hir.Data data, Symbols symbols,
-            Function<TypeSymbol, List<Hir.InvariantClause>> form) {
+            AnalysisInvariants form) {
         List<Hir.InvariantClause> invs = new ArrayList<>();
-        for (Declared one : declaredInvariants(named, data, symbols, form)) {
+        for (Declared one : declaredForAnalysis(named, data, symbols, form)) {
             invs.add(one.clause());
         }
         return invs;
@@ -1249,27 +1253,51 @@ public final class TypeOps {
                            Hir.InvariantClause clause) {}
 
     /**
-     * The same clauses {@link #effectiveInvariants} answers, each with the declaration it was written
+     * The same clauses {@link #settledInvariants} answers, each with the declaration it was written
      * on.
      *
      * <p>Flattening them loses which spread brought which, and what is reported of an unproven clause
      * is the name the author wrote — so what is asked for here is the pair, and the flat list is
      * taken from it rather than walked again.
      */
-    public static List<Declared> declaredInvariants(
+    public static List<Declared> declaredSettled(Hir.Data data, Symbols symbols) {
+        return declared(null, data, symbols, (_, on) -> on.invariants());
+    }
+
+    /**
+     * The same in the representation a static analysis reads, which {@code form} answers for a
+     * declaration of its own module and which is the settled form for every other.
+     *
+     * <p>{@code named} is what the walk reached this declaration by, and a spread whose name is not a
+     * declaration's leaves it null — there is nothing to look the analysis form up under, and the
+     * clauses written on it are what there is.
+     */
+    public static List<Declared> declaredForAnalysis(
+            TypeSymbol.AtModule named, Hir.Data data, Symbols symbols, AnalysisInvariants form) {
+        if (form == null) {
+            throw new IllegalArgumentException(
+                    "reading a declaration's clauses as an analysis takes the representation it reads");
+        }
+        return declared(named, data, symbols, form::clausesOf);
+    }
+
+    /** What a clause of a declaration is, in whichever representation {@code clauses} answers. Not
+     *  public: which representation is read is said by the method a caller names, and a caller able
+     *  to pass this could say one thing and read the other. */
+    private static List<Declared> declared(
             TypeSymbol.AtModule named, Hir.Data data, Symbols symbols,
-            Function<TypeSymbol, List<Hir.InvariantClause>> form) {
+            java.util.function.BiFunction<TypeSymbol.AtModule, Hir.Data,
+                    List<Hir.InvariantClause>> clauses) {
         List<Declared> invs = new ArrayList<>();
         for (Hir.Name inc : data.includes()) {
             Hir.Data id = spreadTarget(inc, symbols);
             if (id != null) {
-                invs.addAll(declaredInvariants(
+                invs.addAll(declared(
                         inc.answered().type() instanceof TypeSymbol.AtModule at ? at : null,
-                        id, symbols, form));
+                        id, symbols, clauses));
             }
         }
-        List<Hir.InvariantClause> own = named == null ? null : form.apply(named);
-        List<Hir.InvariantClause> wrote = own != null ? own : data.invariants();
+        List<Hir.InvariantClause> wrote = clauses.apply(named, data);
         for (int ordinal = 0; ordinal < wrote.size(); ordinal++) {
             invs.add(new Declared(named, ordinal, wrote.get(ordinal)));
         }

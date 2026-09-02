@@ -3,14 +3,14 @@ package souther.compiler.inputs;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.ast.Hir;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
 import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
-import souther.compiler.check.Symbols;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
-import souther.compiler.query.Scopes;
 import souther.compiler.query.Shapes;
 
 import java.util.List;
@@ -111,7 +111,7 @@ class ABoundOnASharedNameReachesTheNumbersItStandsAtTest {
 
     private static NumericDomain.Bounds runsAt(String source, String spelled) {
         InputDomain read = reading(source, "read");
-        return read.quantities(symbolsOf(source))
+        return read.quantities(rulesOf(source))
                 .runsBetween(new NumericTerm.ValueOf(pathOf(read, spelled)));
     }
 
@@ -123,11 +123,11 @@ class ABoundOnASharedNameReachesTheNumbersItStandsAtTest {
                                 .map(Position::path).toList()));
     }
 
-    private static Symbols symbolsOf(String source) {
+    private static RuleReadingSource rulesOf(String source) {
         Compilation compilation =
                 Compilation.ofSources(List.of(source), souther.compiler.meta.ModulePath.EMPTY);
         compilation.answerEverything();
-        return Scopes.derived(compilation.db(), compilation.modules().get(0)).value();
+        return RuleReadings.of(compilation, compilation.modules().get(0));
     }
 
     private static InputDomain reading(String source, String behavior) {
@@ -137,9 +137,9 @@ class ABoundOnASharedNameReachesTheNumbersItStandsAtTest {
         String module = compilation.modules().get(0);
         Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
         Map<String, Sig> sigs = compilation.db().ask(new Bodies.Signatures(module)).value();
-        Symbols symbols = Scopes.derived(compilation.db(), module).value();
+        RuleReadingSource rules = RuleReadings.of(compilation, module);
         Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().stream()
                 .filter(b -> b.name().equals(behavior)).findFirst().orElseThrow();
-        return InputDomain.of(spec, sigs.get(behavior), symbols, ReadAs.THE_COMPILATION_DOES);
+        return InputDomain.of(spec, sigs.get(behavior), rules, ReadAs.THE_COMPILATION_DOES);
     }
 }

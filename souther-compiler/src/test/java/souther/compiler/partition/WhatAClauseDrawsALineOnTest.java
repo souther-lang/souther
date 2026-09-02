@@ -2,12 +2,12 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.query.Scopes;
 import souther.compiler.ast.Hir;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.Prepared;
 import souther.compiler.check.StatedContract;
-import souther.compiler.check.Symbols;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.query.Adequacy;
@@ -45,7 +45,7 @@ class WhatAClauseDrawsALineOnTest {
         compilation.answerEverything();
         String module = compilation.modules().get(0);
         Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
-        Symbols symbols = Scopes.derived(compilation.db(), module).value();
+        RuleReadingSource rules = RuleReadings.of(compilation, module);
         Map<String, StatedContract> stated =
                 compilation.db().ask(new Bodies.StatedContracts(module)).value();
         InputDomain inputs =
@@ -53,7 +53,7 @@ class WhatAClauseDrawsALineOnTest {
         assertTrue(prepared.behaviors().stream()
                         .anyMatch(b -> b instanceof Hir.SpecBehavior && b.name().equals(behavior)),
                 "the behavior under test is declared");
-        return EnsuresThresholds.of(stated == null ? null : stated.get(behavior), inputs, symbols);
+        return EnsuresThresholds.of(stated == null ? null : stated.get(behavior), inputs, rules);
     }
 
     private static List<String> valuesOf(EnsuresThresholds.Clauses clauses) {

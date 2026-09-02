@@ -3,9 +3,10 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.ast.Hir;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
 import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
-import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.ComparisonOutcome;
 import souther.compiler.coverage.ControlClaim;
@@ -16,7 +17,6 @@ import souther.compiler.inputs.InputDomain;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
-import souther.compiler.query.Scopes;
 import souther.compiler.query.Shapes;
 import souther.compiler.reading.CoverageRead;
 import souther.compiler.reading.PathAccess;
@@ -166,7 +166,7 @@ class ARowIsAWitnessForAnArmOnlyByGoingThroughItTest {
             String module = compilation.modules().get(0);
             Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
             Map<String, Sig> sigs = compilation.db().ask(new Bodies.Signatures(module)).value();
-            Symbols symbols = Scopes.derived(compilation.db(), module).value();
+            RuleReadingSource rules = RuleReadings.of(compilation, module);
             Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
             assertNotNull(checked, "the model under test compiles");
             Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().stream()
@@ -186,9 +186,9 @@ class ARowIsAWitnessForAnArmOnlyByGoingThroughItTest {
             assertFalse(partitioning.axes().isEmpty() || partitioning.axes().stream()
                             .allMatch(axis -> axis.classes().isEmpty()),
                     "and divides it into classes a row can be composed at");
-            return new Model(MeasuredInput.of(spec.name(), inputs.reading(symbols),
+            return new Model(MeasuredInput.of(spec.name(), inputs.reading(rules),
                     partitioning),
-                    CoverageRead.of("fee", body, plan, inputs, symbols));
+                    CoverageRead.of("fee", body, plan, inputs, rules));
         }
     }
 }

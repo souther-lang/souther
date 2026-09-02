@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.DefaultStdlib;
+import souther.compiler.query.ReadAs;
 import souther.compiler.types.BindingId;
 
 /**
@@ -17,10 +18,12 @@ final class AsPlaces {
     }
 
     static FactSubject of(BindingId binding) {
-        return new Terms(Symbols.none(DefaultStdlib.get()), souther.compiler.query.ReadAs.THE_COMPILATION_DOES).placeSubject(binding);
+        return RuleReadings.termsOfNoClauseFiled(Symbols.none(DefaultStdlib.get()),
+                ReadAs.THE_COMPILATION_DOES).placeSubject(binding);
     }
 
     static Term term(BindingId binding) {
-        return new Terms(Symbols.none(DefaultStdlib.get()), souther.compiler.query.ReadAs.THE_COMPILATION_DOES).placeTerm(binding);
+        return RuleReadings.termsOfNoClauseFiled(Symbols.none(DefaultStdlib.get()),
+                ReadAs.THE_COMPILATION_DOES).placeTerm(binding);
     }
 }

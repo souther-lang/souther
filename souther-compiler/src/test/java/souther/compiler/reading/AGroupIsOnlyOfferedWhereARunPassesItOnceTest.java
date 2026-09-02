@@ -2,8 +2,8 @@ package souther.compiler.reading;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.query.Scopes;
-import souther.compiler.check.Symbols;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.inputs.InputDomain;
@@ -119,7 +119,7 @@ class AGroupIsOnlyOfferedWhereARunPassesItOnceTest {
         Model model = Model.of(SHIPPING, "shippingFee");
 
         List<Interaction> asIfRepeated = CoverageRead.of(model.behavior(), model.body(),
-                model.planWhereEverythingRepeats(), model.inputs(), model.symbols())
+                model.planWhereEverythingRepeats(), model.inputs(), model.rules())
                 .interactions();
 
         assertTrue(asIfRepeated.isEmpty(),
@@ -128,7 +128,7 @@ class AGroupIsOnlyOfferedWhereARunPassesItOnceTest {
 
     /** One model, read the way the generator reads it. */
     private record Model(String behavior, Core body, CoverageSites.Plan plan, InputDomain inputs,
-                         Symbols symbols) {
+                         RuleReadingSource rules) {
 
         static Model of(String source, String behavior) {
             Compilation compilation = Compilation.ofSource(source, "Main");
@@ -141,11 +141,11 @@ class AGroupIsOnlyOfferedWhereARunPassesItOnceTest {
             return new Model(behavior, body,
                     checked.plan(),
                     compilation.db().ask(new Adequacy.Inputs(module)).value().get(behavior),
-                    Scopes.derived(compilation.db(), module).value());
+                    RuleReadings.of(compilation, module));
         }
 
         List<Interaction> groups() {
-            return CoverageRead.of(behavior, body, plan, inputs, symbols).interactions();
+            return CoverageRead.of(behavior, body, plan, inputs, rules).interactions();
         }
 
         /** The same plan, answering that a run may come back to anywhere. What the walk cannot be
@@ -170,7 +170,7 @@ class AGroupIsOnlyOfferedWhereARunPassesItOnceTest {
             };
             return new CoverageSites.Plan(plan.sites(), plan.guards(), plan.byNode(),
                     plan.byComparison(), plan.armsByNode(), plan.controlByComparison(),
-                    everywhere, plan.forkByNode(), plan.comparisons());
+                    everywhere, plan.forkByNode(), plan.comparisons(), plan.identity());
         }
     }
 }

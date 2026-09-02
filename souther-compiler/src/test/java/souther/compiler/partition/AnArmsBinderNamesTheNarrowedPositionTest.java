@@ -3,16 +3,16 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.ast.Hir;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
 import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
-import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
-import souther.compiler.query.Scopes;
 import souther.compiler.query.Shapes;
 
 import java.util.List;
@@ -60,7 +60,7 @@ class AnArmsBinderNamesTheNarrowedPositionTest {
         compilation.answerEverything();
         String module = compilation.modules().get(0);
         Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
-        Symbols symbols = Scopes.derived(compilation.db(), module).value();
+        RuleReadingSource rules = RuleReadings.of(compilation, module);
         Map<String, Sig> sigs = compilation.db().ask(new Bodies.Signatures(module)).value();
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
         assertNotNull(checked, "the model under test compiles");
@@ -71,13 +71,13 @@ class AnArmsBinderNamesTheNarrowedPositionTest {
         InputDomain inputs = compilation.db().ask(new Adequacy.Inputs(module)).value().get("read");
         GuardThresholds.Guards guards = GuardThresholds.of(body,
                 checked.plan(),
-                inputs, symbols);
-        InputDomain read = InputDomain.of(spec, sigs.get("read"), symbols,
+                inputs, rules);
+        InputDomain read = InputDomain.of(spec, sigs.get("read"), rules,
                 ReadAs.THE_COMPILATION_DOES);
-        Partitions.Partitioning base = Partitions.of(spec.name(), read, symbols,
+        Partitions.Partitioning base = Partitions.of(spec.name(), read, rules,
                 ReadAs.THE_COMPILATION_DOES);
-        return Partitions.withThresholds(base, read.quantities(symbols), guards.thresholds(),
-                symbols, ReadAs.THE_COMPILATION_DOES, guards.noLine(), guards.singled(),
+        return Partitions.withThresholds(base, read.quantities(rules), guards.thresholds(),
+                rules, ReadAs.THE_COMPILATION_DOES, guards.noLine(), guards.singled(),
                 guards.between()).axes();
     }
 

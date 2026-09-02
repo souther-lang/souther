@@ -2,7 +2,7 @@ package souther.compiler.partition;
 
 import souther.compiler.check.ReadingPolicy;
 import souther.compiler.check.Carrier;
-import souther.compiler.check.Symbols;
+import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.TypeOps;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Quantities;
@@ -195,7 +195,7 @@ final class Intervals {
     static List<PartitionClass> classesOf(List<Band> runs, NumericTerm.FromOnePosition of,
                                           Type type, Quantities reading,
                                           ReadingPolicy policy,
-                                          Symbols symbols, Endpoint min, Endpoint max) {
+                                          RuleReadingSource ruleSource, Endpoint min, Endpoint max) {
         TermOrders orders = reading.ordersOf(of);
         // What the counts in a label stand for. A day count is a carrier and never a name for the
         // line, so the class an author reads is spelled in dates where the position holds them.
@@ -215,7 +215,8 @@ final class Intervals {
                         "no value this position can hold lies inside this range"));
                 continue;
             }
-            List<FixtureTemplate> values = standingIn(of, inside, type, policy, carrier, symbols);
+            List<FixtureTemplate> values =
+                    standingIn(of, inside, type, policy, carrier, ruleSource);
             classes.add(values.isEmpty()
                     ? PartitionClass.ungeneratable(id, label, is,
                             "nothing here writes a value whose " + measureOf(of) + " is in this range")
@@ -266,14 +267,15 @@ final class Intervals {
     private static List<FixtureTemplate> standingIn(NumericTerm.FromOnePosition of, Place inside,
                                                     Type type,
                                                     ReadingPolicy policy,
-                                                    Carrier carrier, Symbols symbols) {
+                                                    Carrier carrier, RuleReadingSource ruleSource) {
         // Exhaustive, with no `default`. What a value reading as this number looks like is a
         // different construction per kind of number, so a kind added is one this has to be told
         // how to build for rather than one that falls to whichever branch it was not named in.
         switch (of) {
             case NumericTerm.ValueOf _ -> {
                 FixtureTemplate standing = Witnesses.wrapped(type,
-                        FixtureTemplate.on(carrier, inside, symbols.scope()::reach), symbols);
+                        FixtureTemplate.on(carrier, inside, ruleSource.symbols().scope()::reach),
+                        ruleSource);
                 return standing == null ? List.of() : List.of(standing);
             }
             case NumericTerm.TakenOf _ -> { }
@@ -284,8 +286,9 @@ final class Intervals {
         }
         List<FixtureTemplate> out = new ArrayList<>();
         for (FixtureTemplate each
-                : Witnesses.ofSize(TypeOps.base(type, symbols), size, symbols, policy, Set.of()).values()) {
-            out.add(Witnesses.wrapped(type, each, symbols));
+                : Witnesses.ofSize(TypeOps.base(type, ruleSource.symbols()), size, ruleSource,
+                        policy, Set.of()).values()) {
+            out.add(Witnesses.wrapped(type, each, ruleSource));
         }
         return List.copyOf(out);
     }

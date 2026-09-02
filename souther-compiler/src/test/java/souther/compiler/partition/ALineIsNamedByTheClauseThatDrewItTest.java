@@ -3,16 +3,16 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.ast.Hir;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
 import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
-import souther.compiler.check.Symbols;
 import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.numeric.Count;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
-import souther.compiler.query.Scopes;
 import souther.compiler.query.Shapes;
 import souther.compiler.report.AdequacyReport;
 
@@ -161,8 +161,8 @@ class ALineIsNamedByTheClauseThatDrewItTest {
         assertNotNull(sigs);
         Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().stream()
                 .filter(b -> b.name().equals("price")).findFirst().orElseThrow();
-        Symbols symbols = Scopes.derived(compilation.db(), module).value();
-        return Partitions.of(spec.name(), InputDomain.of(spec, sigs.get("price"), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES)
+        RuleReadingSource rules = RuleReadings.of(compilation, module);
+        return Partitions.of(spec.name(), InputDomain.of(spec, sigs.get("price"), rules, souther.compiler.query.ReadAs.THE_COMPILATION_DOES), rules, souther.compiler.query.ReadAs.THE_COMPILATION_DOES)
                 .axes().stream().filter(a -> a.path().toString().equals("length"))
                 .findFirst().orElseThrow();
     }

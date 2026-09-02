@@ -2,7 +2,7 @@ package souther.compiler.partition;
 
 import souther.compiler.check.Carrier;
 import souther.compiler.check.ReadingPolicy;
-import souther.compiler.check.Symbols;
+import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.TypeOps;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermOrders;
@@ -140,7 +140,7 @@ final class TermRealizations {
      */
     static Realization at(Type sourceType, TermOrders orders,
                           Place answer, souther.compiler.inputs.SearchRegion within,
-                          Symbols symbols, ReadingPolicy policy) {
+                          RuleReadingSource ruleSource, ReadingPolicy policy) {
         if (sourceType == null) {
             return new Realization.None(
                     Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
@@ -156,12 +156,12 @@ final class TermRealizations {
             // row as an `Int`, and the decoder refused it with the report saying only that every
             // value tried had been refused.
             case NumericTerm.ValueOf _ ->
-                    oneValue(FixtureTemplate.on(orders.answered(), answer, symbols.scope()::reach),
-                            sourceType, symbols);
+                    oneValue(FixtureTemplate.on(orders.answered(), answer, ruleSource.symbols().scope()::reach),
+                            sourceType, ruleSource);
             case NumericTerm.TakenOf taken -> taken(taken.takenAs(), sourceType, orders,
-                    answer, within, symbols, policy);
+                    answer, within, ruleSource, policy);
             case NumericTerm.TakenOver over -> overARun(over.takenAs(), sourceType, orders,
-                    answer, within, symbols, policy);
+                    answer, within, ruleSource, policy);
         };
     }
 
@@ -177,25 +177,25 @@ final class TermRealizations {
     private static Realization taken(TakenAs how, Type sourceType,
                                      TermOrders orders, Place answer,
                                      souther.compiler.inputs.SearchRegion within,
-                                     Symbols symbols, ReadingPolicy policy) {
+                                     RuleReadingSource ruleSource, ReadingPolicy policy) {
         return switch (how) {
             // A container has no order of its own and is built out of what it holds, so this arm
             // takes none. That is the arm's own answer and not an order standing in for nothing.
-            case TakenAs.HowManyItHolds _ -> holding(sourceType, answer, symbols, policy);
+            case TakenAs.HowManyItHolds _ -> holding(sourceType, answer, ruleSource, policy);
             // A container whose elements come to the total, which is what a row has to hold for
             // this number to be there. What that takes is choosing how many elements and what each
             // of them holds — one question whether the number is added up out of the container
             // itself or out of a path inside its elements, and answered for both in one place.
             case TakenAs.TheSumOfWhatItHolds _ -> ContainersAddingUp.to(answer, sourceType,
-                    orders, within, symbols, policy);
+                    orders, within, ruleSource, policy);
             // And this one writes on the order the value is written on. Written on the order the
             // answer is measured on, the thirteenth hour would be offered as the thirteenth second —
             // the same mistake the reading makes in the other direction, which is why the pair
             // travels this far and the arm takes the end (#1027).
             case TakenAs.PartOfTime taken ->
-                    atThatPart(taken.part(), sourceType, orders.observed(), answer, symbols);
+                    atThatPart(taken.part(), sourceType, orders.observed(), answer, ruleSource);
             case TakenAs.PartOfDate taken ->
-                    onThatPart(taken.part(), sourceType, orders.observed(), answer, symbols);
+                    onThatPart(taken.part(), sourceType, orders.observed(), answer, ruleSource);
         };
     }
 
@@ -215,10 +215,10 @@ final class TermRealizations {
     private static Realization overARun(TakenAs how, Type sourceType,
                                         TermOrders orders, Place answer,
                                         souther.compiler.inputs.SearchRegion within,
-                                        Symbols symbols, ReadingPolicy policy) {
+                                        RuleReadingSource ruleSource, ReadingPolicy policy) {
         return switch (how) {
             case TakenAs.TheSumOfWhatItHolds _ -> ContainersAddingUp.to(answer, sourceType,
-                    orders, within, symbols, policy);
+                    orders, within, ruleSource, policy);
             case TakenAs.HowManyItHolds _, TakenAs.PartOfTime _, TakenAs.PartOfDate _ ->
                     new Realization.None(
                             Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
@@ -226,15 +226,15 @@ final class TermRealizations {
     }
 
     /** Values of the position holding exactly that many, which is {@link Witnesses}' answer. */
-    private static Realization holding(Type sourceType, Place answer, Symbols symbols,
+    private static Realization holding(Type sourceType, Place answer, RuleReadingSource ruleSource,
                                        ReadingPolicy policy) {
         int many = CountDomain.asCount(answer);
         if (many < 0) {
             return new Realization.None(
                     Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
         }
-        Type holder = TypeOps.base(sourceType, symbols);
-        Witnesses.Sized built = Witnesses.ofSize(holder, many, symbols, policy, Set.of());
+        Type holder = TypeOps.base(sourceType, ruleSource.symbols());
+        Witnesses.Sized built = Witnesses.ofSize(holder, many, ruleSource, policy, Set.of());
         if (built.values().isEmpty()) {
             // Read off the build that was already done. `Witnesses` keeps what it made and why it
             // stopped as two halves of one answer for exactly this, and asking it again would be
@@ -247,7 +247,7 @@ final class TermRealizations {
         }
         List<FixtureTemplate> out = new ArrayList<>();
         for (FixtureTemplate each : built.values()) {
-            out.add(Witnesses.wrapped(sourceType, each, symbols));
+            out.add(Witnesses.wrapped(sourceType, each, ruleSource));
         }
         return new Realization.Built(out, built.heldBack());
     }
@@ -266,7 +266,7 @@ final class TermRealizations {
      * counts, and the two would part the day the first one moved.
      */
     private static Realization atThatPart(TakenAs.TimePart part, Type sourceType, Carrier observed,
-                                          Place answer, Symbols symbols) {
+                                          Place answer, RuleReadingSource ruleSource) {
         if (observed == null || !(answer instanceof Count count) || !count.whole()
                 || count.signum() < 0
                 || count.at().compareTo(java.math.BigDecimal.valueOf(part.many())) >= 0) {
@@ -279,7 +279,7 @@ final class TermRealizations {
         Place seconds = Count.of(count.at()
                 .multiply(java.math.BigDecimal.valueOf(part.seconds())));
         FixtureTemplate standing = Witnesses.wrapped(sourceType,
-                FixtureTemplate.on(observed, seconds, symbols.scope()::reach), symbols);
+                FixtureTemplate.on(observed, seconds, ruleSource.symbols().scope()::reach), ruleSource);
         return standing == null
                 ? new Realization.None(
                         Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE)
@@ -306,7 +306,7 @@ final class TermRealizations {
      * loosened by hand into dates that cannot be written.
      */
     private static Realization onThatPart(TakenAs.DatePart part, Type sourceType, Carrier observed,
-                                          Place answer, Symbols symbols) {
+                                          Place answer, RuleReadingSource ruleSource) {
         if (observed == null || !(answer instanceof Count count) || !count.whole()) {
             return new Realization.None(
                     Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
@@ -319,7 +319,7 @@ final class TermRealizations {
                     Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
         }
         FixtureTemplate standing = Witnesses.wrapped(sourceType,
-                FixtureTemplate.on(observed, Dates.dayOf(on), symbols.scope()::reach), symbols);
+                FixtureTemplate.on(observed, Dates.dayOf(on), ruleSource.symbols().scope()::reach), ruleSource);
         return standing == null
                 ? new Realization.None(
                         Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE)
@@ -382,8 +382,8 @@ final class TermRealizations {
     }
 
     /** One value, wearing every name the position declares, or the reason there is none. */
-    private static Realization oneValue(FixtureTemplate bare, Type sourceType, Symbols symbols) {
-        FixtureTemplate standing = Witnesses.wrapped(sourceType, bare, symbols);
+    private static Realization oneValue(FixtureTemplate bare, Type sourceType, RuleReadingSource ruleSource) {
+        FixtureTemplate standing = Witnesses.wrapped(sourceType, bare, ruleSource);
         return standing == null
                 ? new Realization.None(
                         Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE)

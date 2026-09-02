@@ -2,6 +2,8 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.Compilation;
@@ -392,8 +394,7 @@ class ABorderDebtIsTheLineTheAuthorWroteTest {
         String module = compilation.modules().get(0);
         souther.compiler.check.Prepared prepared =
                 compilation.db().ask(new souther.compiler.query.Shapes.Prepared(module)).value();
-        souther.compiler.check.Symbols symbols =
-                souther.compiler.query.Scopes.derived(compilation.db(), module).value();
+        RuleReadingSource rules = RuleReadings.of(compilation, module);
         Map<String, souther.compiler.check.Sig> sigs = compilation.db()
                 .ask(new souther.compiler.query.Bodies.Signatures(module)).value();
         souther.compiler.ast.Hir.SpecBehavior spec =
@@ -401,13 +402,13 @@ class ABorderDebtIsTheLineTheAuthorWroteTest {
                         .filter(b -> b.name().equals(behavior)).findFirst().orElseThrow();
         assertNotNull(sigs.get(behavior), "the model under test compiles");
         souther.compiler.inputs.InputDomain domain =
-                souther.compiler.inputs.InputDomain.of(spec, sigs.get(behavior), symbols,
+                souther.compiler.inputs.InputDomain.of(spec, sigs.get(behavior), rules,
                         souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
-        Partitions.Partitioning partitioning = Partitions.of(spec.name(), domain, symbols,
+        Partitions.Partitioning partitioning = Partitions.of(spec.name(), domain, rules,
                 souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         Axis axis = partitioning.axes().stream()
                 .filter(a -> a.path().toString().equals(path)).findFirst().orElseThrow();
-        souther.compiler.inputs.Quantities reading = domain.quantities(symbols);
+        souther.compiler.inputs.Quantities reading = domain.quantities(rules);
         return Partitions.bordersOf(axis, reading,
                 reading.runsBetween(axis.term()), new LinesRead());
     }

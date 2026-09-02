@@ -1,6 +1,7 @@
 package souther.compiler.inputs;
 
 import souther.compiler.check.NumberAt;
+import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.ConstraintState;
 import souther.compiler.check.Emptiness;
 import souther.compiler.check.FieldDomains;
@@ -51,7 +52,7 @@ final class ReadQuantities implements Quantities {
     /** What says how the values of a position are spaced, which the arithmetic needs of every
      *  number it is told a bound on. Held rather than asked for per question: the reading of an
      *  input is what a caller has, and where a position's values step is a fact about its type. */
-    private final souther.compiler.check.Symbols symbols;
+    private final RuleReadingSource ruleSource;
     /** How far a declaration is read, which the reading of what a value guarantees is held to. The
      *  reading of this input was made under it, so a question asked of the declarations afterwards
      *  is answered under the same one or it is a second reading of them. */
@@ -135,11 +136,11 @@ final class ReadQuantities implements Quantities {
                            Map<TermPath, Position> byPath, List<CasesRead> cases,
                            java.util.function.Function<TermPath, Type> typeAt,
                            Map<NumericTerm, Fixed> fixed,
-                           souther.compiler.check.Symbols symbols,
+                           RuleReadingSource ruleSource,
                            souther.compiler.check.ReadingPolicy policy, List<Assumed> assumed) {
         this.policy = policy;
         this.cases = List.copyOf(cases);
-        this.symbols = symbols;
+        this.ruleSource = ruleSource;
         this.typeAt = typeAt;
         this.assumed = List.copyOf(assumed);
         // In the order the behavior declares its parameters. A proof of emptiness names one of them
@@ -159,9 +160,9 @@ final class ReadQuantities implements Quantities {
     static ReadQuantities of(Map<TermPath, OpenedRules> byRoot, Set<TermPath> roots,
                              Map<TermPath, Position> byPath, List<CasesRead> cases,
                              java.util.function.Function<TermPath, Type> typeAt,
-                             souther.compiler.check.Symbols symbols,
+                             RuleReadingSource ruleSource,
                              souther.compiler.check.ReadingPolicy policy) {
-        return new ReadQuantities(byRoot, roots, byPath, cases, typeAt, Map.of(), symbols, policy,
+        return new ReadQuantities(byRoot, roots, byPath, cases, typeAt, Map.of(), ruleSource, policy,
                 List.of());
     }
 
@@ -179,7 +180,7 @@ final class ReadQuantities implements Quantities {
         // absent, so a term of another input comes back with an order on one end and nothing on the
         // other — an answer about no reading, wearing this one's name.
         held(term);
-        return TermOrdering.of(term, typeAt.apply(term.subjectPath()), symbols);
+        return TermOrdering.of(term, typeAt.apply(term.subjectPath()), ruleSource.symbols());
     }
 
     @Override
@@ -236,7 +237,7 @@ final class ReadQuantities implements Quantities {
             return null;
         }
         NumericTerm.TakenOf term =
-                NumericTerm.TakenOf.of(operation, at, typeAt.apply(at), symbols);
+                NumericTerm.TakenOf.of(operation, at, typeAt.apply(at), ruleSource.symbols());
         return term != null && term.takenAs() instanceof TakenAs.HowManyItHolds ? term : null;
     }
 
@@ -333,7 +334,8 @@ final class ReadQuantities implements Quantities {
         }
         List<Assumed> both = new ArrayList<>(assumed);
         both.add(taking);
-        return new ReadQuantities(byRoot, roots, byPath, cases, typeAt, fixed, symbols, policy, both);
+        return new ReadQuantities(byRoot, roots, byPath, cases, typeAt, fixed, ruleSource, policy,
+                both);
     }
 
     /**
@@ -718,7 +720,7 @@ final class ReadQuantities implements Quantities {
         if (had != null) {
             return had;
         }
-        if (symbols == null) {
+        if (ruleSource == null) {
             return null;
         }
         // The order this reading measures the term on, which is the same answer every other reader
@@ -814,7 +816,8 @@ final class ReadQuantities implements Quantities {
             both.merge(term, new Fixed(each.getValue(), each.getValue()),
                     (had, one) -> had.and(one.least()));
         }
-        return new ReadQuantities(byRoot, roots, byPath, cases, typeAt, both, symbols, policy, assumed);
+        return new ReadQuantities(byRoot, roots, byPath, cases, typeAt, both, ruleSource, policy,
+                assumed);
     }
 
     /**
@@ -1174,7 +1177,7 @@ final class ReadQuantities implements Quantities {
         return switch (term) {
             case NumericTerm.FromOnePosition one -> ownOf(one);
             case NumericTerm.TakenOver over ->
-                    RunReach.of(over, ordersOf(over), typeAt, symbols, policy);
+                    RunReach.of(over, ordersOf(over), typeAt, ruleSource, policy);
         };
     }
 

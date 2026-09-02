@@ -4,7 +4,8 @@ import souther.compiler.observe.ArmObservation;
 import souther.compiler.Emitted;
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.check.Symbols;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.coverage.Observation;
@@ -16,7 +17,6 @@ import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Output;
 import souther.compiler.jvm.ClassFileImage;
-import souther.compiler.query.Scopes;
 
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
@@ -151,13 +151,13 @@ class AClaimIsWhatARunThatSettledItWouldBeSeenToDoTest {
             // Of the check the emitter reads too, so the numbering below is of the bodies the
             // classes were generated from.
             CoverageSites.Plan plan = checked.plan();
-            Symbols symbols = Scopes.derived(compilation.db(), module).value();
+            RuleReadingSource rules = RuleReadings.of(compilation, module);
             InputDomain inputs =
                     compilation.db().ask(new Adequacy.Inputs(module)).value().get(name);
             souther.compiler.generated.EvaluationArtifact artifact = compilation.db()
                     .ask(new Output.Evaluated(module, ArmObservation.RECORD)).value();
             assertNotNull(artifact, "the model under test emits measured classes");
-            return new Model(CoverageRead.of(name, body, plan, inputs, symbols).interactions(),
+            return new Model(CoverageRead.of(name, body, plan, inputs, rules).interactions(),
                     new Behavior(artifact.classes(), module, name));
         }
 

@@ -2,13 +2,13 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.check.Symbols;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.inputs.RulesWithNoLine;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
-import souther.compiler.query.Scopes;
 
 import java.util.List;
 
@@ -74,7 +74,7 @@ class ARuleInABodyIsFiledAtWhatItsQuantityIsAboutTest {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
         String module = compilation.modules().get(0);
-        Symbols symbols = Scopes.derived(compilation.db(), module).value();
+        RuleReadingSource rules = RuleReadings.of(compilation, module);
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
         assertNotNull(checked, () -> "the model under test compiles: " + condition);
         Core body = checked.behaviorBodies().get("pick");
@@ -82,6 +82,6 @@ class ARuleInABodyIsFiledAtWhatItsQuantityIsAboutTest {
         CoverageSites.Plan plan = checked.plan();
         return GuardThresholds.of(body, plan,
                 compilation.db().ask(new souther.compiler.query.Adequacy.Inputs(module))
-                        .value().get("pick"), symbols).noLine();
+                        .value().get("pick"), rules).noLine();
     }
 }

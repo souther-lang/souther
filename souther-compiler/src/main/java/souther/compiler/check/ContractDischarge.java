@@ -9,7 +9,6 @@ import souther.compiler.types.TypeSymbol;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 
 /**
@@ -50,13 +49,13 @@ public record ContractDischarge(List<RuleDischarge> rules,
      * author is shown and what a caller is given cannot drift apart.
      *
      */
-    public static ContractDischarge of(StatedContract stated, Symbols symbols,
+    public static ContractDischarge of(StatedContract stated, RuleReadingSource source,
                                        ReadingPolicy policy) {
         List<RuleDischarge> classified = new ArrayList<>();
         for (StatedContract.StatedRule rule : stated.rules()) {
-            classified.addAll(of(stated, rule, symbols, policy));
+            classified.addAll(of(stated, rule, source, policy));
         }
-        return new ContractDischarge(classified, unstatedCases(stated, symbols));
+        return new ContractDischarge(classified, unstatedCases(stated, source.symbols()));
     }
 
     /**
@@ -68,7 +67,7 @@ public record ContractDischarge(List<RuleDischarge> rules,
      * it was written as.
      */
     private static List<RuleDischarge> of(StatedContract contract, StatedContract.StatedRule rule,
-                                          Symbols symbols, ReadingPolicy policy) {
+                                          RuleReadingSource source, ReadingPolicy policy) {
         // The parameters and `value` stand for themselves. A caller hands one value per parameter and
         // the behavior answers one value, so a rule naming either names something wherever it is read
         // — entered as locations, and nothing is seeded of them, since what the rule states is the
@@ -78,17 +77,18 @@ public record ContractDischarge(List<RuleDischarge> rules,
             named.add(param.binding());
         }
         named.add(rule.value());
-        // Its own reading, over the clauses every declaration writes: a type another module
-        // declares is read off its declaration either way, and nothing here reads one at all.
-        Terms naming = new Terms(symbols, Terms.Of.THE_DISCHARGE_TREE, policy,
-                new Clauses(symbols, Map.of()));
+        // Its own reading, over the clauses as the analysis reads them. A rule may reach a
+        // declaration through the values it names, and the representation those are read in is the
+        // one every other reader of this module's rules uses.
+        Terms naming = new Terms(source.symbols(), Terms.Of.THE_DISCHARGE_TREE, policy,
+                new Clauses(source.symbols(), source.invariants()));
         Denotations locations =
                 Denotations.none().locations(named, naming::placeSubject, naming::placeTerm);
 
         List<RuleDischarge> out = new ArrayList<>();
         for (StatedContract.Conjunct conjunct : rule.conjuncts()) {
             out.add(new RuleDischarge(rule.id(), InvariantChecker
-                    .capabilityOf(conjunct, locations, symbols, policy,
+                    .capabilityOf(conjunct, locations, source, policy,
                             contract.behavior().name())
                     .named(rule.clause())));
         }

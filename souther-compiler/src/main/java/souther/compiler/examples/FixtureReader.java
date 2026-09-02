@@ -469,7 +469,7 @@ public final class FixtureReader {
      * for a value nobody wrote.
      */
     private void admitsItself(Asserted.Built whole, Hir.NewData nd, TypeSymbol built) {
-        if (TypeOps.effectiveInvariants(declared(built), symbols).isEmpty()
+        if (TypeOps.settledInvariants(declared(built), symbols).isEmpty()
                 || !states(whole, Type.ref(built))) {
             return;
         }

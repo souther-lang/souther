@@ -2,14 +2,14 @@ package souther.compiler.reading;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.check.Symbols;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
-import souther.compiler.query.Scopes;
 
 import java.util.List;
 import java.util.Set;
@@ -252,9 +252,9 @@ class AnArmThePlanNumberedIsToldHowItIsReachedTest {
         String behavior = checked.behaviorBodies().keySet().iterator().next();
         Core body = checked.behaviorBodies().get(behavior);
         assertNotNull(body, "the behavior under test has a body");
-        Symbols symbols = Scopes.derived(compilation.db(), module).value();
+        RuleReadingSource rules = RuleReadings.of(compilation, module);
         InputDomain inputs = compilation.db().ask(new Adequacy.Inputs(module)).value().get(behavior);
         CoverageSites.Plan plan = checked.plan();
-        return new Read(CoverageRead.of(behavior, body, plan, inputs, symbols), plan, behavior);
+        return new Read(CoverageRead.of(behavior, body, plan, inputs, rules), plan, behavior);
     }
 }

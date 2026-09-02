@@ -3,9 +3,10 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.ast.Hir;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
 import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
-import souther.compiler.check.Symbols;
 import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.observe.Classification;
@@ -15,7 +16,6 @@ import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Output;
 import souther.compiler.query.ReadAs;
-import souther.compiler.query.Scopes;
 import souther.compiler.query.Shapes;
 import souther.compiler.types.CaseSelector;
 import souther.compiler.types.TypeKey;
@@ -76,7 +76,7 @@ class ARowAtAnotherCaseStandsNowhereBelowItTest {
         compilation.answerEverything();
         String module = compilation.modules().get(0);
         Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
-        Symbols symbols = Scopes.derived(compilation.db(), module).value();
+        RuleReadingSource rules = RuleReadings.of(compilation, module);
         Map<String, Sig> sigs = compilation.db().ask(new Bodies.Signatures(module)).value();
         assertNotNull(compilation.db().ask(new Bodies.Checked(module)).value(),
                 "the model under test compiles");
@@ -87,10 +87,10 @@ class ARowAtAnotherCaseStandsNowhereBelowItTest {
                         compilation.sourceIds().get(0))).value();
         assertNotNull(observed);
         souther.compiler.inputs.InputDomain domain = souther.compiler.inputs.InputDomain.of(
-                spec, sigs.get("read"), symbols, ReadAs.THE_COMPILATION_DOES);
+                spec, sigs.get("read"), rules, ReadAs.THE_COMPILATION_DOES);
         Partitions.Partitioning partitioning = Partitions.of(spec.name(), domain,
-                symbols, ReadAs.THE_COMPILATION_DOES);
-        return new Read(MeasuredInput.of("read", domain.reading(symbols), partitioning),
+                rules, ReadAs.THE_COMPILATION_DOES);
+        return new Read(MeasuredInput.of("read", domain.reading(rules), partitioning),
                 observed.rows());
     }
 

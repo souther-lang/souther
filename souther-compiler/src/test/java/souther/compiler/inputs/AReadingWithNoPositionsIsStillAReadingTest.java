@@ -2,11 +2,11 @@ package souther.compiler.inputs;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
 import souther.compiler.check.ReadingPolicy;
-import souther.compiler.check.Symbols;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
-import souther.compiler.query.Scopes;
 
 import java.util.List;
 
@@ -38,17 +38,17 @@ class AReadingWithNoPositionsIsStillAReadingTest {
             let size (n) = n
             """;
 
-    private static Symbols symbols() {
+    private static RuleReadingSource rules() {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
         compilation.answerEverything();
-        return Scopes.derived(compilation.db(), compilation.modules().get(0)).value();
+        return RuleReadings.of(compilation, compilation.modules().get(0));
     }
 
     /** Nothing to walk is not nothing walked. */
     @Test
     void aWalkOverNoParametersIsAReadingOfAnInputWithNoPositions() {
         ReadingPolicy policy = ReadAs.THE_COMPILATION_DOES;
-        InputDomain read = InputDomain.of(List.of(), symbols(), policy);
+        InputDomain read = InputDomain.of(List.of(), rules(), policy);
 
         assertNotNull(read, "a walk answers with a reading");
         assertEquals(List.of(), read.positions(), "and it found no positions");
@@ -68,6 +68,6 @@ class AReadingWithNoPositionsIsStillAReadingTest {
     void andItSaysHowItsNamesAreRead() {
         ReadingPolicy policy = ReadAs.THE_COMPILATION_DOES;
 
-        assertSame(policy, InputDomain.of(List.of(), symbols(), policy).policy());
+        assertSame(policy, InputDomain.of(List.of(), rules(), policy).policy());
     }
 }

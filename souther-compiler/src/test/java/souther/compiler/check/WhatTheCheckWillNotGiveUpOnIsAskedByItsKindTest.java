@@ -69,7 +69,7 @@ class WhatTheCheckWillNotGiveUpOnIsAskedByItsKindTest {
      */
     @Test
     void oneAtomRecordedAsTwoPiecesOfArithmeticIsRefused() {
-        Terms terms = new Terms(Symbols.none(DefaultStdlib.get()), souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+        Terms terms = RuleReadings.termsOfNoClauseFiled(Symbols.none(DefaultStdlib.get()), souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         BindingId a = binding(0);
         BindingId b = binding(1);
         Denotations at = Denotations.none().location(a, AsPlaces.of(a), AsPlaces.term(a)).location(b, AsPlaces.of(b), AsPlaces.term(b));
@@ -88,7 +88,7 @@ class WhatTheCheckWillNotGiveUpOnIsAskedByItsKindTest {
      * itself. */
     @Test
     void anAtomComputedFromItselfIsRefused() {
-        Terms terms = new Terms(Symbols.none(DefaultStdlib.get()), souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+        Terms terms = RuleReadings.termsOfNoClauseFiled(Symbols.none(DefaultStdlib.get()), souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         BindingId a = binding(0);
         Denotations at = Denotations.none().location(a, AsPlaces.of(a), AsPlaces.term(a));
         FactSubject atom = terms.atomOf(new Core.Read("a", a, Type.INT, POS), at);

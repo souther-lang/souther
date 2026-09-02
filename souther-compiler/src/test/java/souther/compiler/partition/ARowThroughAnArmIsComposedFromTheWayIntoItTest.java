@@ -3,9 +3,10 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.ast.Hir;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
 import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
-import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.ComparisonOutcome;
 import souther.compiler.coverage.ControlClaim;
@@ -17,7 +18,6 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
-import souther.compiler.query.Scopes;
 import souther.compiler.query.Shapes;
 import souther.compiler.reading.CoverageRead;
 import souther.compiler.reading.PathAccess;
@@ -253,7 +253,7 @@ class ARowThroughAnArmIsComposedFromTheWayIntoItTest {
             String module = compilation.modules().get(0);
             Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
             Map<String, Sig> sigs = compilation.db().ask(new Bodies.Signatures(module)).value();
-            Symbols symbols = Scopes.derived(compilation.db(), module).value();
+            RuleReadingSource rules = RuleReadings.of(compilation, module);
             Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
             assertNotNull(checked, "the model under test compiles");
             Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().stream()
@@ -265,10 +265,10 @@ class ARowThroughAnArmIsComposedFromTheWayIntoItTest {
             assertNotNull(body, "the behavior under test has a body");
             CoverageSites.Plan plan = checked.plan();
             Partitions.Partitioning partitioning =
-                    Partitions.of(spec.name(), inputs, symbols, ReadAs.THE_COMPILATION_DOES);
-            return new Model(MeasuredInput.of(spec.name(), inputs.reading(symbols),
+                    Partitions.of(spec.name(), inputs, rules, ReadAs.THE_COMPILATION_DOES);
+            return new Model(MeasuredInput.of(spec.name(), inputs.reading(rules),
                     partitioning),
-                    CoverageRead.of(spec.name(), body, plan, inputs, symbols));
+                    CoverageRead.of(spec.name(), body, plan, inputs, rules));
         }
     }
 }

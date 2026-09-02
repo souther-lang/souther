@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import souther.compiler.semantics.ConditionJoin;
 import souther.compiler.check.Comparison;
+import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.RuleRef;
 import souther.compiler.check.StatedContract;
@@ -108,8 +109,8 @@ public final class EnsuresThresholds {
      * reads them once and hands the same one to everything that asks, since each of these reading
      * its own is every rule of every parameter read again to arrive at the same answers.
      */
-    public static Clauses of(StatedContract stated, InputDomain inputs, Symbols symbols) {
-        return of(stated, inputs.reading(symbols));
+    public static Clauses of(StatedContract stated, InputDomain inputs, RuleReadingSource source) {
+        return of(stated, inputs.reading(source));
     }
 
     /**

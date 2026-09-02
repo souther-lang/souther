@@ -3,9 +3,10 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.ast.Hir;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
 import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
-import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.inputs.InputDomain;
@@ -15,7 +16,6 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
-import souther.compiler.query.Scopes;
 import souther.compiler.query.Shapes;
 
 import java.util.List;
@@ -83,7 +83,7 @@ class AnAlternativeAssignmentIsAsCompatibleAsTheFirstTest {
         compilation.answerEverything();
         String module = compilation.modules().get(0);
         Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
-        Symbols symbols = Scopes.derived(compilation.db(), module).value();
+        RuleReadingSource rules = RuleReadings.of(compilation, module);
         Map<String, Sig> sigs = compilation.db().ask(new Bodies.Signatures(module)).value();
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
         assertNotNull(checked, "the model under test compiles");
@@ -95,9 +95,9 @@ class AnAlternativeAssignmentIsAsCompatibleAsTheFirstTest {
         assertNotNull(body);
         CoverageSites.Plan plan = checked.plan();
         Partitions.Partitioning axes =
-                Partitions.of(spec.name(), inputs, symbols, ReadAs.THE_COMPILATION_DOES);
-        return new Model(MeasuredInput.of(spec.name(), inputs.reading(symbols), axes),
-                CoverageRead.of(spec.name(), body, plan, inputs, symbols));
+                Partitions.of(spec.name(), inputs, rules, ReadAs.THE_COMPILATION_DOES);
+        return new Model(MeasuredInput.of(spec.name(), inputs.reading(rules), axes),
+                CoverageRead.of(spec.name(), body, plan, inputs, rules));
     }
 
     /** The positions under two cases are both axes, which is what the assignments have to hold. */

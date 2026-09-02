@@ -3,16 +3,16 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.ast.Hir;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
 import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
-import souther.compiler.check.Symbols;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.numeric.Count;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
-import souther.compiler.query.Scopes;
 import souther.compiler.query.Shapes;
 
 import java.util.ArrayList;
@@ -172,7 +172,7 @@ class ARowIsOfferedForAPointOnlyWhereItStandsThereTest {
         compilation.answerEverything();
         String module = compilation.modules().get(0);
         Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
-        Symbols symbols = Scopes.derived(compilation.db(), module).value();
+        RuleReadingSource rules = RuleReadings.of(compilation, module);
         Map<String, Sig> sigs = compilation.db().ask(new Bodies.Signatures(module)).value();
         Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().stream()
                 .filter(each -> each.name().equals(behavior)).findFirst().orElseThrow();
@@ -180,17 +180,17 @@ class ARowIsOfferedForAPointOnlyWhereItStandsThereTest {
                 .ask(new souther.compiler.query.Adequacy.Inputs(module)).value().get(spec.name());
         assertNotNull(domain, "the model under test compiles");
         Partitions.Partitioning partitioning =
-                Partitions.of(spec.name(), domain, symbols, ReadAs.THE_COMPILATION_DOES);
+                Partitions.of(spec.name(), domain, rules, ReadAs.THE_COMPILATION_DOES);
 
         List<String> names = new ArrayList<>();
         spec.params().forEach(each -> names.add(each.name()));
         MeasuredInput subject =
-                MeasuredInput.of(spec.name(), domain.reading(symbols), partitioning);
+                MeasuredInput.of(spec.name(), domain.reading(rules), partitioning);
 
         Axis axis = partitioning.axes().stream()
                 .filter(each -> each.path().toString().equals("r.cost")).findFirst().orElseThrow();
         return Generator.probeFixing(subject, "r.cost = " + at,
                 Map.of(new RealizationTarget.AtOnePosition(axis.term()), at),
-                Reachability.untouched(domain.quantities(symbols).region()), check);
+                Reachability.untouched(domain.quantities(rules).region()), check);
     }
 }

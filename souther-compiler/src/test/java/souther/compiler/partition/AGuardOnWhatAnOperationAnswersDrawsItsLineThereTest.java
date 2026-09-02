@@ -3,16 +3,16 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.ast.Hir;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
 import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
-import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
-import souther.compiler.query.Scopes;
 import souther.compiler.query.Shapes;
 
 import java.util.List;
@@ -65,7 +65,7 @@ class AGuardOnWhatAnOperationAnswersDrawsItsLineThereTest {
         compilation.answerEverything();
         String module = compilation.modules().get(0);
         Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
-        Symbols symbols = Scopes.derived(compilation.db(), module).value();
+        RuleReadingSource rules = RuleReadings.of(compilation, module);
         Map<String, Sig> sigs = compilation.db().ask(new Bodies.Signatures(module)).value();
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
         assertNotNull(checked, "the model under test compiles");
@@ -75,8 +75,8 @@ class AGuardOnWhatAnOperationAnswersDrawsItsLineThereTest {
         CoverageSites.Plan plan = checked.plan();
         Core body = checked.behaviorBodies().get(behavior);
         InputDomain inputs = compilation.db().ask(new Adequacy.Inputs(module)).value().get(behavior);
-        souther.compiler.inputs.Quantities quantities = inputs.quantities(symbols);
-        return GuardThresholds.of(body, plan, inputs, symbols).thresholds().stream()
+        souther.compiler.inputs.Quantities quantities = inputs.quantities(rules);
+        return GuardThresholds.of(body, plan, inputs, rules).thresholds().stream()
                 .<String>map(each -> each.term() + " at "
                         + (each.value() == null ? "nowhere" : each.value().key()) + " on "
                         + quantities.ordersOf(each.term()).answered())

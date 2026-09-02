@@ -1,5 +1,6 @@
 package souther.compiler.inputs;
 
+import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.Symbols;
 
 /**
@@ -27,16 +28,16 @@ public final class InputReading {
 
     private final InputDomain domain;
     private final Quantities quantities;
-    private final Symbols symbols;
+    private final RuleReadingSource rules;
 
-    InputReading(InputDomain domain, Quantities quantities, Symbols symbols) {
+    InputReading(InputDomain domain, Quantities quantities, RuleReadingSource rules) {
         if (domain == null || quantities == null) {
             throw new IllegalArgumentException(
                     "an input is read as its positions and what its rules leave them");
         }
         this.domain = domain;
         this.quantities = quantities;
-        this.symbols = symbols;
+        this.rules = rules;
     }
 
     /** Where this input's positions are and what stands at each of them. */
@@ -49,8 +50,13 @@ public final class InputReading {
         return quantities;
     }
 
+    /** The scope and the clause representation the two were read against. */
+    public RuleReadingSource rules() {
+        return rules;
+    }
+
     /** The names the two were read against. */
     public Symbols symbols() {
-        return symbols;
+        return rules.symbols();
     }
 }

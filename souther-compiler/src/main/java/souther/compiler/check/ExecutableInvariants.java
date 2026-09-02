@@ -53,7 +53,7 @@ public final class ExecutableInvariants {
         Scope reading = DataChecker.fieldScope(data.declares(), data, symbols).reaching(helpers);
         CheckContext ctx = CheckContext.executableInvariant(symbols, data);
         List<ValueShape.Invariant> invariants = new ArrayList<>();
-        for (Hir.InvariantClause clause : TypeOps.effectiveInvariants(data, symbols)) {
+        for (Hir.InvariantClause clause : TypeOps.settledInvariants(data, symbols)) {
             // Desugared first, the way a body is: a clause writing a comprehension states the same
             // condition as the `if` it is derived from, and one of the two reaching the check and
             // the other reaching what runs is the shape this exists to stop.

@@ -6,6 +6,8 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.codegen.Backend;
 import souther.compiler.codegen.Instrumentation;
 import souther.compiler.coverage.CoverageSites;
+import souther.compiler.coverage.NumberingIdentity;
+import souther.compiler.coverage.SiteAddress;
 
 import java.util.List;
 
@@ -99,15 +101,21 @@ class ProbeMappingTest {
         CoverageSites.Plan real = checkedPlanOf(emitting, module);
         assertTrue(real.sites().size() > 0);
 
-        // The same plan with one more arm in it than any body will emit.
+        // The same plan with one more arm in it than any body will emit. The numbering says what
+        // each number it handed out addresses, so the extra number is given an address too: a plan
+        // whose sites and addresses disagree is refused where it is built, and what is under test
+        // here is what the emitter does with an arm no body has.
         CoverageSites.Site extra = real.sites().get(0);
         List<CoverageSites.Site> longer = new java.util.ArrayList<>(real.sites());
         longer.add(new CoverageSites.Site(extra.behavior(), extra.outcome(), extra.at(),
                 real.sites().size(), real.sites().size(), extra.obligation()));
+        List<SiteAddress> addressed = new java.util.ArrayList<>(real.identity().byNumber());
+        addressed.add(real.identity().at(0));
         CoverageSites.Plan overcounted =
                 new CoverageSites.Plan(longer, real.guards(), real.byNode(), real.byComparison(),
                         real.armsByNode(), real.controlByComparison(), real.mayRepeat(),
-                        real.forkByNode(), real.comparisons());
+                        real.forkByNode(), real.comparisons(),
+                        new NumberingIdentity(module, real.identity().executable(), addressed));
 
         IllegalStateException stopped = assertThrows(IllegalStateException.class,
                 () -> Backend.generate(in.lowered(), in.scope(),

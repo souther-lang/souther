@@ -2,6 +2,7 @@ package souther.compiler.codegen;
 
 import souther.compiler.query.Bodies;
 
+import souther.compiler.check.AnalysisInvariants;
 import souther.compiler.check.Boundary;
 import souther.compiler.check.DerivedSymbols;
 import souther.compiler.diag.CompileException;
@@ -150,7 +151,7 @@ public final class Backend {
                                                Map<String, List<BehaviorRequirement>> requirements,
                                                Bodies.Elaborated checked,
                                                Map<ValueName.Behavior, Composition> compositions,
-                                               Map<TypeSymbol, List<Hir.InvariantClause>> dischargeInvariants,
+                                               AnalysisInvariants dischargeInvariants,
                                                Map<TypeSymbol.AtModule, ValueShape> shapes,
                                                Map<ValueName.Behavior, EnsuresEnforcement> checks,
                                                Map<String, Type> standingCalls) {
@@ -182,7 +183,7 @@ public final class Backend {
                                                Map<String, List<BehaviorRequirement>> requirements,
                                                Bodies.Elaborated checked,
                                                Map<ValueName.Behavior, Composition> compositions,
-                                               Map<TypeSymbol, List<Hir.InvariantClause>> dischargeInvariants,
+                                               AnalysisInvariants dischargeInvariants,
                                                Map<TypeSymbol.AtModule, ValueShape> shapes,
                                                Map<ValueName.Behavior, EnsuresEnforcement> checks,
                                                Map<String, Type> standingCalls,
@@ -209,7 +210,7 @@ public final class Backend {
                                                   Map<String, List<BehaviorRequirement>> requirements,
                                                   Bodies.Elaborated checked,
                                                   Map<ValueName.Behavior, Composition> compositions,
-                                                  Map<TypeSymbol, List<Hir.InvariantClause>> dischargeInvariants,
+                                                  AnalysisInvariants dischargeInvariants,
                                                   Map<TypeSymbol.AtModule, ValueShape> shapes,
                                                   Map<ValueName.Behavior, EnsuresEnforcement> checks,
                                                   Map<String, Type> standingCalls,

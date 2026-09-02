@@ -1,6 +1,6 @@
 package souther.compiler.partition;
 
-import souther.compiler.check.Symbols;
+import souther.compiler.check.RuleReadingSource;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.ComparisonOccurrence;
 import souther.compiler.diag.Citation;
@@ -102,7 +102,7 @@ public record ReachingCuts(Map<ComparisonOccurrence, List<OnTheWay>> byCompariso
      * not be carried.
      */
     static List<OnTheWay> stating(Condition node, InputDomain inputs, boolean holding,
-                                  Symbols symbols) {
+                                  RuleReadingSource ruleSource) {
         return switch (node) {
             // Coming out the way that gives both halves, each of them came out that way too. The
             // other composition says a disjunction of things, which is not a list of cuts and is
@@ -110,11 +110,11 @@ public record ReachingCuts(Map<ComparisonOccurrence, List<OnTheWay>> byCompariso
             // neither, and narrowing on either would exclude rows that arrive. So the whole node is
             // declined, at the whole node's place.
             case Condition.Joined joined -> joined.how().under(holding) == ConditionJoin.BOTH
-                    ? and(stating(joined.left(), inputs, holding, symbols),
-                            stating(joined.right(), inputs, holding, symbols))
+                    ? and(stating(joined.left(), inputs, holding, ruleSource),
+                            stating(joined.right(), inputs, holding, ruleSource))
                     : List.of(new OnTheWay.Declined(joined.at(),
                             new OnTheWay.Why.OneOfTwoThings()));
-            case Condition.Compares one -> List.of(of(one, inputs, holding, symbols));
+            case Condition.Compares one -> List.of(of(one, inputs, holding, ruleSource));
             case Condition.NotRead not -> List.of(new OnTheWay.Declined(
                     not.at(), new OnTheWay.Why.NoWordsForTheShape()));
         };
@@ -145,7 +145,7 @@ public record ReachingCuts(Map<ComparisonOccurrence, List<OnTheWay>> byCompariso
      * a silence is both of them.
      */
     static OnTheWay entering(Core.Match match, Core.Case arm, InputDomain inputs, InputReads reads,
-                             Symbols symbols) {
+                             RuleReadingSource ruleSource) {
         Citation at = Citation.of(arm.pos());
         Refinement narrowing = arm.selectedCase().map(Refinement::of).orElse(null);
         if (narrowing == null) {
@@ -154,7 +154,7 @@ public record ReachingCuts(Map<ComparisonOccurrence, List<OnTheWay>> byCompariso
         // The arm is declined for either answer: a search composes against a position read as one
         // of its cases, and there is no position to narrow whether the scrutinee stands at none or
         // this reading did not follow it to one.
-        TermPath scrutinee = switch (reads.pathOf(match.scrutinee(), symbols)) {
+        TermPath scrutinee = switch (reads.pathOf(match.scrutinee(), ruleSource.symbols())) {
             case PathResolution.At(var stands) -> stands;
             case PathResolution.NotAPosition _ -> null;
         };
@@ -188,10 +188,10 @@ public record ReachingCuts(Map<ComparisonOccurrence, List<OnTheWay>> byCompariso
      * not.
      */
     private static OnTheWay of(Condition.Compares comparison, InputDomain inputs, boolean holding,
-                               Symbols symbols) {
+                               RuleReadingSource ruleSource) {
         Citation at = comparison.at();
         AffineReading read = AffineReading.of(
-                comparison.comparison(), inputs, comparison.reads(), symbols);
+                comparison.comparison(), inputs, comparison.reads(), ruleSource);
         if (read == null) {
             return new OnTheWay.Declined(at, new OnTheWay.Why.ComparisonNotRepresentedAsACut());
         }

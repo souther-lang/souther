@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.Carrier;
+import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.Comparison;
 import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.RuleAt;
@@ -130,8 +131,8 @@ public final class GuardThresholds {
      * every parameter read again to arrive at the same answers.
      */
     public static Guards of(Core body, CoverageSites.Plan plan,
-                            InputDomain inputs, Symbols symbols) {
-        return of(body, plan, inputs.reading(symbols),
+                            InputDomain inputs, RuleReadingSource source) {
+        return of(body, plan, inputs.reading(source),
                 souther.compiler.check.ElementBindings.NONE,
                 souther.compiler.check.PathReachability.Answers.NONE);
     }
@@ -589,7 +590,7 @@ public final class GuardThresholds {
      * border nothing could meet (#1018).
      */
     static Named namedBy(Core e, InputReading read, InputReads reads) {
-        NumericTerm term = InputNumber.of(e, read.domain(), reads, read.symbols());
+        NumericTerm term = InputNumber.of(e, read.domain(), reads, read.rules());
         if (term == null) {
             return null;
         }

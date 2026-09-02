@@ -56,7 +56,8 @@ class AnArmSaysWhichCaseAValueIsAndDoesNotMakeASecondOneTest {
 
     private final Hir.Binders binders = new Hir.Binders(OWNER);
     private final PathEngine engine =
-            new PathEngine(Symbols.none(DefaultStdlib.get()), Map.of(), Terms.Of.THE_DISCHARGE_TREE, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+            new PathEngine(Symbols.none(DefaultStdlib.get()),
+                RuleReadings.noClauseFiled(Symbols.none(DefaultStdlib.get())), Terms.Of.THE_DISCHARGE_TREE, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
 
     @Test
     void anArmOverOneCaseIsAboutTheValueItOpened() {
@@ -186,7 +187,8 @@ class AnArmSaysWhichCaseAValueIsAndDoesNotMakeASecondOneTest {
         Core answer = numericAnswer();
         Core.Binder x = CoreBinders.of(binders.binder("x", POS));
         Core.Binder y = CoreBinders.of(binders.binder("y", POS));
-        PathEngine reading = new PathEngine(Symbols.none(DefaultStdlib.get()), Map.of(),
+        PathEngine reading = new PathEngine(Symbols.none(DefaultStdlib.get()),
+                RuleReadings.noClauseFiled(Symbols.none(DefaultStdlib.get())),
                 Map.of(FIND, statesThatTheIntIsPositive()), Terms.Of.THE_DISCHARGE_TREE, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
 
         Denotations outer = reading.enteringArm(
@@ -273,7 +275,8 @@ class AnArmSaysWhichCaseAValueIsAndDoesNotMakeASecondOneTest {
     @Test
     void aRuleHoldsOfAnArmWhoseValuesAreAllOnesItIsAbout() {
         Symbols symbols = symbolsOf(NESTED);
-        PathEngine reading = new PathEngine(symbols, Map.of(), Terms.Of.THE_DISCHARGE_TREE,
+        PathEngine reading = new PathEngine(symbols, RuleReadings.noClauseFiled(symbols),
+                Terms.Of.THE_DISCHARGE_TREE,
                 souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         TypeSymbol once = named(symbols, "OnceKind");
         TypeSymbol station = named(symbols, "Station");
@@ -292,7 +295,8 @@ class AnArmSaysWhichCaseAValueIsAndDoesNotMakeASecondOneTest {
     @Test
     void anArmNamingSeveralTakesARuleThatIsAboutAllOfThem() {
         Symbols symbols = symbolsOf(NESTED);
-        PathEngine reading = new PathEngine(symbols, Map.of(), Terms.Of.THE_DISCHARGE_TREE,
+        PathEngine reading = new PathEngine(symbols, RuleReadings.noClauseFiled(symbols),
+                Terms.Of.THE_DISCHARGE_TREE,
                 souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         TypeSymbol once = named(symbols, "OnceKind");
         TypeSymbol station = named(symbols, "Station");

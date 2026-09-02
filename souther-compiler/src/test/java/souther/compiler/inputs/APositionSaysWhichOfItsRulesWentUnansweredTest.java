@@ -3,13 +3,13 @@ package souther.compiler.inputs;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.ast.Hir;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
 import souther.compiler.check.CoverageObligation;
 import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
-import souther.compiler.check.Symbols;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
-import souther.compiler.query.Scopes;
 import souther.compiler.query.Shapes;
 import souther.compiler.values.AdmissibleSet;
 
@@ -70,8 +70,8 @@ class APositionSaysWhichOfItsRulesWentUnansweredTest {
         assertNotNull(sigs);
         Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().stream()
                 .filter(b -> b.name().equals("price")).findFirst().orElseThrow();
-        Symbols symbols = Scopes.derived(compilation.db(), module).value();
-        return InputDomain.of(spec, sigs.get("price"), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES).positions().stream()
+        RuleReadingSource rules = RuleReadings.of(compilation, module);
+        return InputDomain.of(spec, sigs.get("price"), rules, souther.compiler.query.ReadAs.THE_COMPILATION_DOES).positions().stream()
                 .filter(p -> p.path().toString().equals("length"))
                 .findFirst().orElseThrow();
     }

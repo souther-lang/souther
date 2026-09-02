@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import souther.compiler.check.ReadableFields;
 import souther.compiler.check.Shape;
+import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
 import souther.compiler.check.TypeView;
@@ -36,12 +37,17 @@ import java.util.Map;
  * classes nothing measured at the position it was read by. So {@link #valuesAt} and
  * {@link #occurrencesAt} are this package's, and a reader outside it asks whatever holds both.
  */
-public record BehaviorInputs(List<String> parameters, List<Type> types, Symbols symbols,
+public record BehaviorInputs(List<String> parameters, List<Type> types, RuleReadingSource rules,
                              souther.compiler.check.ReadingPolicy policy) {
 
     public BehaviorInputs {
         parameters = List.copyOf(parameters);
         types = List.copyOf(types);
+    }
+
+    /** The names the reading was made against. */
+    public Symbols symbols() {
+        return rules.symbols();
     }
 
     /**
@@ -58,7 +64,7 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, Symbols 
             parameters.add(each.name());
             types.add(each.type());
         }
-        return new BehaviorInputs(parameters, types, read.symbols(), read.domain().policy());
+        return new BehaviorInputs(parameters, types, read.rules(), read.domain().policy());
     }
 
     /** Which input {@code path} starts at, or -1 where the behavior has no such parameter. */
@@ -168,7 +174,7 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, Symbols 
             List<Standing> next = new ArrayList<>();
             int took = 0;
             for (Standing each : standing) {
-                if (each.step(step, symbols, next)) {
+                if (each.step(step, symbols(), next)) {
                     took++;
                 }
             }
@@ -220,7 +226,7 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, Symbols 
         }
         Type here = types.get(at);
         for (TermPath.Step step : path.steps()) {
-            here = stepWrittenValue(step, here, symbols);
+            here = stepWrittenValue(step, here, symbols());
             if (here == null) {
                 return null;
             }

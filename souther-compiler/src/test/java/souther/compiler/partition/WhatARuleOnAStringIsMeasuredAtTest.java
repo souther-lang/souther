@@ -2,11 +2,11 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.query.Scopes;
 import souther.compiler.ast.Hir;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
 import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
-import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.inputs.InputDomain;
@@ -162,7 +162,7 @@ class WhatARuleOnAStringIsMeasuredAtTest {
         compilation.answerEverything();
         String module = compilation.modules().get(0);
         Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
-        Symbols symbols = Scopes.derived(compilation.db(), module).value();
+        RuleReadingSource rules = RuleReadings.of(compilation, module);
         Map<String, Sig> sigs = compilation.db().ask(new Bodies.Signatures(module)).value();
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
         assertNotNull(checked, "the model under test compiles: " + guard);
@@ -171,14 +171,14 @@ class WhatARuleOnAStringIsMeasuredAtTest {
         CoverageSites.Plan plan = checked.plan();
         Core body = checked.behaviorBodies().get("f");
         GuardThresholds.Guards guards = GuardThresholds.of(body, plan,
-                compilation.db().ask(new souther.compiler.query.Adequacy.Inputs(module)).value().get("f"), symbols);
-        InputDomain read = InputDomain.of(spec, sigs.get("f"), symbols,
+                compilation.db().ask(new souther.compiler.query.Adequacy.Inputs(module)).value().get("f"), rules);
+        InputDomain read = InputDomain.of(spec, sigs.get("f"), rules,
                 souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
-        souther.compiler.inputs.Quantities reading = read.quantities(symbols);
+        souther.compiler.inputs.Quantities reading = read.quantities(rules);
         Partitions.Partitioning p = Partitions.withThresholds(
-                Partitions.of(spec.name(), read, symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
+                Partitions.of(spec.name(), read, rules, souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
                 reading,
-                guards.thresholds(), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES,
+                guards.thresholds(), rules, souther.compiler.query.ReadAs.THE_COMPILATION_DOES,
                 new souther.compiler.inputs.RulesWithNoLine(), guards.singled());
 
         List<String> classes = new ArrayList<>();
@@ -188,7 +188,7 @@ class WhatARuleOnAStringIsMeasuredAtTest {
             for (PartitionClass each : axis.classes()) {
                 classes.add(each.label());
                 List<FixtureTemplate> made =
-                        Partitions.standingFor(each.representatives(), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES, java.util.Set.of());
+                        Partitions.standingFor(each.representatives(), rules, souther.compiler.query.ReadAs.THE_COMPILATION_DOES, java.util.Set.of());
                 stands.add(made.isEmpty() ? "none"
                         : made.stream().map(FixtureTemplate::text)
                                 .map(WhatARuleOnAStringIsMeasuredAtTest::bare).toList().toString());

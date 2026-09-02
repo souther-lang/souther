@@ -448,9 +448,10 @@ public final class SpecChecker {
                 : Elaborator.elaborate(discharge.body(), tenv,
                         new CheckContext(symbols, null, reqSigs).withCallees(calleeSigs)
                                 .withDependencies(dependsOn).forDischarge(), output);
-        InvariantChecker.Findings inv = InvariantChecker.analyze(dischargeBody,
-                discharge == null ? Map.of() : discharge.invariants(),
-                discharge == null ? Map.of() : discharge.contracts(), env, symbols, policy);
+        InvariantChecker.Findings inv = discharge == null
+                ? InvariantChecker.Findings.notRun()
+                : InvariantChecker.analyze(dischargeBody, discharge.invariants(),
+                        discharge.contracts(), env, symbols, policy);
         warnings.addAll(inv.warnings());
         if (!inv.errors().isEmpty()) {
             throw inv.errors().get(0);

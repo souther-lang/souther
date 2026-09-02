@@ -2,9 +2,9 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.query.Scopes;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
 import souther.compiler.check.Prepared;
-import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.inputs.BlockReason;
@@ -62,14 +62,14 @@ class ACallIsAValueOnlyWhenItIsTheConstructionTest {
         compilation.answerEverything();
         String module = compilation.modules().get(0);
         Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
-        Symbols symbols = Scopes.derived(compilation.db(), module).value();
+        RuleReadingSource rules = RuleReadings.of(compilation, module);
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
         assertNotNull(checked, () -> "the model under test compiles: " + primitive);
         Core body = checked.behaviorBodies().get("pick");
         assertNotNull(body);
         CoverageSites.Plan plan = checked.plan();
         return GuardThresholds.of(body, plan, compilation.db()
-                .ask(new souther.compiler.query.Adequacy.Inputs(module)).value().get("pick"), symbols);
+                .ask(new souther.compiler.query.Adequacy.Inputs(module)).value().get("pick"), rules);
     }
 
     /** The one this branch could have introduced, and the two it would have introduced it beside. */
