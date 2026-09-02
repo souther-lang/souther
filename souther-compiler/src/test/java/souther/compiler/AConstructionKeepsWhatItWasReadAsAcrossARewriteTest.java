@@ -17,10 +17,15 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
  * (spec §example-evaluable, <<e1005>>). The reading settles which of the two a construction is held
  * to, and it is settled where the source is read.
  *
- * <p>The row here applies a helper inside its construction, which is what puts the construction
- * through a rewrite before the check reads it: expanding the call rebuilds the node the call stands
- * in. A rebuild that answered for the construction instead of carrying its answer would hold the row
- * to what a body is held to, and the omitted field would be reported as missing.
+ * <p>Every construction is rebuilt between the two: the newtype desugaring walks each one and puts
+ * back what it found, so nothing has to be arranged for the answer to have crossed a rewrite by the
+ * time the check reads it. A rebuild that answered for the construction instead of carrying what it
+ * was handed would hold the row to what a body is held to, and the omitted field would be reported
+ * as missing.
+ *
+ * <p>The pair is what this holds, and it is one declaration and one field: the same omission, read
+ * two ways. That a rebuild carries the answer at all is held wherever a fixture omits an optional,
+ * which is not this test's to say again.
  */
 class AConstructionKeepsWhatItWasReadAsAcrossARewriteTest {
 
@@ -37,12 +42,10 @@ class AConstructionKeepsWhatItWasReadAsAcrossARewriteTest {
             let keep (n) = Note { body = same(n.body), tag = n.tag }
             """;
 
-    /**
-     * The construction the row writes holds an application, so the expansion rebuilds it. What it
-     * was read as is what decides the omitted {@code tag}, and it crossed the rebuild to get here.
-     */
+    /** What the fixture was read as is what decides the omitted {@code tag}, and it is read off the
+     *  construction after every rewrite between the reading and the check. */
     @Test
-    void aFixtureRebuiltByAnExpansionStillLeavesAnOptionalOut() {
+    void aFixtureRebuiltOnItsWayToTheCheckStillLeavesAnOptionalOut() {
         assertDoesNotThrow(() -> Compiler.compile(MODEL + """
                 example keep
                   | "an omitted optional survives the expansion"

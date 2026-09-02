@@ -1590,7 +1590,8 @@ public interface Hir {
      * and a construction a row spreads in was read as the model's own however it stands now — so the
      * position a node is found at says neither, and asking the node is what is left.
      *
-     * <p>So there is no way to make one that says what it was not read as. A construction is either
+     * <p>So a pass has no way to make one that says what it was not read as — the components are of
+     * types only this package can name, and every way in is here. A construction is either
      * read from the source that spells it ({@link #read}), translated from the form that already
      * answered for it ({@link #fromApply}), rebuilt from one that has the answers ({@link #with}),
      * moved across a crossing that changes where it came from ({@link #publishedBy},
