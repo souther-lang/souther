@@ -12,7 +12,6 @@ import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.check.RuleCitation;
 import souther.compiler.check.RuleRef;
-import souther.compiler.inputs.RuleWithoutALine;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Shapes;
@@ -84,7 +83,7 @@ class AComparisonThisDoesNotReadIsStillNoticedTest {
         GuardThresholds.Guards guards = read("n.value <= 5");
 
         assertEquals(1, guards.thresholds().size());
-        assertEquals(List.of(), guards.rulesWithoutALine());
+        nothingWasLeft(guards);
     }
 
     /** A comparison inside a conjunction is read, so it is not one this did not read. */
@@ -93,7 +92,7 @@ class AComparisonThisDoesNotReadIsStillNoticedTest {
         GuardThresholds.Guards guards = read("n.value >= 1 && n.value <= 5");
 
         assertEquals(2, guards.thresholds().size(), guards.thresholds().toString());
-        assertEquals(List.of(), guards.rulesWithoutALine());
+        nothingWasLeft(guards);
     }
 
     /**
@@ -106,7 +105,7 @@ class AComparisonThisDoesNotReadIsStillNoticedTest {
     void anEqualityIsReadRatherThanNamed() {
         GuardThresholds.Guards guards = read("n.value == 3");
 
-        assertEquals(List.of(), guards.rulesWithoutALine());
+        nothingWasLeft(guards);
         assertEquals(1, guards.singled().size(), guards.singled().toString());
     }
 
@@ -122,7 +121,7 @@ class AComparisonThisDoesNotReadIsStillNoticedTest {
     void aLineDrawnOnAStringIsRead() {
         GuardThresholds.Guards guards = read("at: String", "at < \"2026-01\"");
 
-        assertEquals(List.of(), guards.rulesWithoutALine());
+        nothingWasLeft(guards);
         assertEquals(1, guards.thresholds().size(), guards.thresholds().toString());
     }
 
@@ -137,7 +136,7 @@ class AComparisonThisDoesNotReadIsStillNoticedTest {
         GuardThresholds.Guards guards =
                 read("at: DateTime", "at < DateTime(\"2026-01-01T00:00:00\")");
 
-        assertEquals(List.of(), guards.rulesWithoutALine());
+        nothingWasLeft(guards);
         assertEquals(1, guards.thresholds().size(), guards.thresholds().toString());
     }
 
@@ -152,7 +151,7 @@ class AComparisonThisDoesNotReadIsStillNoticedTest {
     void aLineDrawnOnATimeIsRead() {
         GuardThresholds.Guards guards = read("at: Time", "at < Time(\"16:00:00\")");
 
-        assertEquals(List.of(), guards.rulesWithoutALine());
+        nothingWasLeft(guards);
         assertEquals(1, guards.thresholds().size(), guards.thresholds().toString());
     }
 
@@ -162,7 +161,7 @@ class AComparisonThisDoesNotReadIsStillNoticedTest {
         GuardThresholds.Guards guards =
                 read("at: Instant", "at < Instant(\"2026-01-01T00:00:00Z\")");
 
-        assertEquals(List.of(), guards.rulesWithoutALine());
+        nothingWasLeft(guards);
         assertEquals(1, guards.thresholds().size(), guards.thresholds().toString());
     }
 
@@ -176,13 +175,18 @@ class AComparisonThisDoesNotReadIsStillNoticedTest {
      */
     @Test
     void twoComparisonsAboutOnePositionAreTwoFindings() {
-        List<RuleWithoutALine> unread = read("at: Int",
-                "Int.multiply(at, at) < 4 || Int.multiply(at, at) > 9").rulesWithoutALine();
+        GuardThresholds.Guards guards = read("at: Int",
+                "Int.multiply(at, at) < 4 || Int.multiply(at, at) > 9");
+        List<souther.compiler.inputs.StandingQuestion.Unclassified> unread =
+                guards.noLine().unclassified();
 
         assertEquals(List.of(new Said(TermPath.of("at"), new BlockReason.UnreadComparisonForm()),
                         new Said(TermPath.of("at"), new BlockReason.UnreadComparisonForm())),
-                said(unread));
-        assertEquals(2, unread.stream().map(RuleWithoutALine::rule).distinct().count(),
+                said(guards));
+        assertEquals(2, unread.stream()
+                        .map(souther.compiler.inputs.StandingQuestion
+                                .Unclassified::rule)
+                        .distinct().count(),
                 () -> "two comparisons are two rules: " + unread);
     }
 
@@ -197,7 +201,8 @@ class AComparisonThisDoesNotReadIsStillNoticedTest {
      */
     @Test
     void aFindingNamesTheComparisonThatWentUnread() {
-        RuleWithoutALine said = read("p: Pair", "Int.multiply(p.x, p.x) < 10").rulesWithoutALine().getFirst();
+        souther.compiler.inputs.StandingQuestion.Unclassified said =
+                read("p: Pair", "Int.multiply(p.x, p.x) < 10").noLine().unclassified().getFirst();
 
         assertInstanceOf(RuleRef.Comparison.class, said.rule());
         RuleCitation.WrittenAt cited = said.cited().stream()
@@ -232,7 +237,7 @@ class AComparisonThisDoesNotReadIsStillNoticedTest {
     void aPositionNamedInsideAnExpressionIsStillNoticed() {
         assertEquals(List.of(new Said(TermPath.of("p").then("x"),
                         new BlockReason.UnreadComparisonForm())),
-                said(read("p: Pair", "Int.multiply(p.x, p.x) < 10").rulesWithoutALine()));
+                said(read("p: Pair", "Int.multiply(p.x, p.x) < 10")));
     }
 
     /**
@@ -250,7 +255,7 @@ class AComparisonThisDoesNotReadIsStillNoticedTest {
                                 new BlockReason.ComparisonBetweenPositions()),
                         Said.named(TermPath.of("p").then("y"),
                                 new BlockReason.ComparisonBetweenPositions())),
-                said(read("p: Pair", "p.x < p.y").rulesWithoutALine()));
+                said(read("p: Pair", "p.x < p.y")));
     }
 
     /**
@@ -269,7 +274,7 @@ class AComparisonThisDoesNotReadIsStillNoticedTest {
         assertEquals(1, guards.thresholds().size(), guards.thresholds().toString());
         assertEquals(List.of(new Said(TermPath.of("p").then("x"),
                         new BlockReason.UnreadComparisonForm())),
-                said(guards.rulesWithoutALine()));
+                said(guards));
     }
 
     /**
@@ -299,7 +304,7 @@ class AComparisonThisDoesNotReadIsStillNoticedTest {
                                 new BlockReason.UnreadComparisonForm()),
                         new Said(TermPath.of("p").then("y"),
                                 new BlockReason.UnreadComparisonForm())),
-                said(read("p: Pair", "p.x < Int.multiply(p.y, p.y)").rulesWithoutALine()));
+                said(read("p: Pair", "p.x < Int.multiply(p.y, p.y)")));
     }
 
     /**
@@ -314,7 +319,7 @@ class AComparisonThisDoesNotReadIsStillNoticedTest {
     void aReadableCarrierAgainstAnUnreadableSideIsNotACarrierProblem() {
         assertEquals(List.of(Said.named(TermPath.of("p").then("x"),
                         new BlockReason.UnreadComparisonForm())),
-                said(read("p: Pair", "p.x < Int.min(1, 2)").rulesWithoutALine()));
+                said(read("p: Pair", "p.x < Int.min(1, 2)")));
     }
 
     /**
@@ -339,7 +344,25 @@ class AComparisonThisDoesNotReadIsStillNoticedTest {
         }
     }
 
-    private static List<Said> said(List<RuleWithoutALine> unread) {
-        return unread.stream().map(each -> new Said(each.at(), each.why())).toList();
+    /**
+     * Everything a reading of the body left about a rule, whichever half it is in.
+     *
+     * <p>Both, because what is being asked here is what the reading of a comparison leaves and
+     * where, and how far it got is the other question. A rule read to the end that draws no line is
+     * a finding about the model; one whose reading did not finish is a question about the rule; and
+     * this reads them alike so that a word moving between the two halves is visible as the word
+     * moving rather than as a finding disappearing.
+     */
+    private static List<Said> said(GuardThresholds.Guards guards) {
+        List<Said> out = new java.util.ArrayList<>();
+        guards.noLine().stated().forEach(each -> out.add(new Said(each.at(), each.why())));
+        guards.noLine().unclassified().forEach(each -> out.add(new Said(each.at(), each.why())));
+        return List.copyOf(out);
+    }
+
+    /** Nothing at all: neither a finding about the model nor a question about a rule. */
+    private static void nothingWasLeft(GuardThresholds.Guards guards) {
+        assertEquals(List.of(), guards.noLine().stated());
+        assertEquals(List.of(), guards.noLine().unclassified());
     }
 }

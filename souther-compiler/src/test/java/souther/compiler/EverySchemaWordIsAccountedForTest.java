@@ -291,9 +291,12 @@ class EverySchemaWordIsAccountedForTest {
             // partition's own geometry and never a question standing against an answer, so the
             // compiler stopped raising them. Retired rather than gone: reports of this version were
             // written carrying them.
+            // Not an enum's own names any more: a question that asks something says what its
+            // obligation is called, and one nothing classified says that instead. So the words are
+            // asked of the writer, arm by arm, rather than copied from either type.
             new Vocabulary("coverageQuestion", List.of("$defs", "coverageQuestion"),
-                    Set.of("singleton", "partition"),
-                    souther.compiler.check.CoverageObligation.class),
+                    List.of(souther.compiler.inputs.StandingQuestion.class),
+                    questionWords(), Set.of("singleton", "partition")),
             // `no_axis_derived` is what `the_reading_did_not_run_out` was called while it also
             // stood for a reading that ran out and found nothing to divide. Retired rather than
             // gone: reports of this version were written carrying it.
@@ -748,7 +751,8 @@ class EverySchemaWordIsAccountedForTest {
      *
      * <p>Both arms of {@code Owed} say `position` — a position of an input, or a number of one — and
      * they are still asked of the writer rather than assumed, so an arm added and not given a word
-     * stops the compile.
+     * stops the compile. A question nothing classified says `filedAt` instead, which is a place and
+     * not a subject.
      *
      * <p>`comparison` is beside them and is retired. It was to have been the place a comparison of
      * two moving things draws; nothing ever raised such a question, because a comparison this
@@ -761,16 +765,57 @@ class EverySchemaWordIsAccountedForTest {
         // stand at a position and where a line on a number of it falls are both about the position,
         // and a document says so once.
         Set<String> written = new LinkedHashSet<>();
-        written.add(AdequacyReport.subjectWord(new souther.compiler.inputs.InputQuestion
-                .AboutAPosition(souther.compiler.inputs.TermPath.of("x"))));
-        written.add(AdequacyReport.subjectWord(new souther.compiler.inputs.InputQuestion
+        written.add(AdequacyReport.subjectWord(asking(new souther.compiler.inputs.InputQuestion
+                .AboutAPosition(souther.compiler.inputs.TermPath.of("x")))));
+        written.add(AdequacyReport.subjectWord(asking(new souther.compiler.inputs.InputQuestion
                 .AboutANumber(souther.compiler.check.NumberAt.valueOf(
-                        souther.compiler.inputs.TermPath.of("x")))));
+                        souther.compiler.inputs.TermPath.of("x"))))));
+        written.add(AdequacyReport.subjectWord(unclassified()));
         written.add("comparison");
 
         assertEquals(written,
                 allowedAt(schema(), List.of("$defs", "partition", "properties", "unanswered",
                         "items", "properties", "subject", "properties", "kind")));
+    }
+
+    /** What a document calls each thing a rule can leave open, asked of the writer of the word. */
+    private static Set<String> questionWords() {
+        Set<String> out = new LinkedHashSet<>();
+        out.add(AdequacyReport.questionWord(asking(new souther.compiler.inputs.InputQuestion
+                .AboutAPosition(souther.compiler.inputs.TermPath.of("x")))));
+        out.add(AdequacyReport.questionWord(asking(new souther.compiler.inputs.InputQuestion
+                .AboutANumber(souther.compiler.check.NumberAt.valueOf(
+                        souther.compiler.inputs.TermPath.of("x"))))));
+        out.add(AdequacyReport.questionWord(unclassified()));
+        return out;
+    }
+
+    /** A rule this compiler did not read far enough to classify. */
+    private static souther.compiler.inputs.StandingQuestion unclassified() {
+        return souther.compiler.inputs.StandingQuestion.NothingClassifiesIt.of(
+                new souther.compiler.check.RuleRef.Comparison("f",
+                        new souther.compiler.types.CoverageOrigin("m", 0, 0,
+                                souther.compiler.types.CoverageConstruct.IF)),
+                new souther.compiler.check.RuleCitation.WrittenAt(
+                        souther.compiler.diag.Citation.of(
+                                new souther.compiler.diag.SourcePos(1, 1))),
+                souther.compiler.inputs.FilingCoordinate.at(
+                        souther.compiler.inputs.TermPath.of("x")),
+                new souther.compiler.inputs.BlockReason.UnreadComparisonForm());
+    }
+
+    /** A question that asks {@code about}, made the one way there is to make one. */
+    private static souther.compiler.inputs.StandingQuestion asking(
+            souther.compiler.inputs.InputQuestion about) {
+        return souther.compiler.inputs.StandingQuestion.Exact.of(
+                new souther.compiler.check.RuleRef.Comparison("f",
+                        new souther.compiler.types.CoverageOrigin("m", 0, 0,
+                                souther.compiler.types.CoverageConstruct.IF)),
+                new souther.compiler.check.RuleCitation.WrittenAt(
+                        souther.compiler.diag.Citation.of(
+                                new souther.compiler.diag.SourcePos(1, 1))),
+                about,
+                List.of(new souther.compiler.inputs.BlockReason.UnreadComparisonForm()));
     }
 
     /**

@@ -18,7 +18,10 @@ import souther.compiler.inputs.Position;
 import souther.compiler.inputs.StructuralInspection;
 import souther.compiler.inputs.TypeBounds;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.FilingCoordinate;
 import souther.compiler.inputs.RuleWithoutALine;
+import souther.compiler.inputs.RulesWithNoLine;
+import souther.compiler.inputs.StandingQuestion;
 import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
@@ -90,7 +93,7 @@ public final class Partitions {
      *                of emptiness has no proof of is not the opposite claim
      */
     public record Partitioning(List<PositionMeasurements> measurements,
-                               List<souther.compiler.inputs.StandingQuestion> unanswered,
+                               List<StandingQuestion> unanswered,
                                java.util.Set<NumericTerm> uncertain,
                                List<RuleWithoutALine> rulesWithoutALine,
                                List<souther.compiler.inputs.PositionValuesNotSeparated> notSeparated,
@@ -315,13 +318,13 @@ public final class Partitions {
         Quantities quantities = input.quantities();
         Symbols symbols = input.symbols();
         java.util.Set<NumericTerm> uncertain = new java.util.LinkedHashSet<>();
-        RuleWithoutALine.Gathered rulesWithoutALine = new RuleWithoutALine.Gathered();
+        RulesWithNoLine rulesWithoutALine = new RulesWithNoLine();
         // What the reading could not hold together, asked of every position it read rather than of
         // the ones left pending. This qualifies the classes and does not stand in for them: a
         // position with classes read from a product wider than the rules admit is exactly where it
         // has something to say, and a position with none is no more affected than any other.
         List<souther.compiler.inputs.PositionValuesNotSeparated> notSeparated = new ArrayList<>();
-        List<souther.compiler.inputs.StandingQuestion> standing = new ArrayList<>();
+        List<StandingQuestion> standing = new ArrayList<>();
         // The positions this phase answers for, each with what measures it, as they are made. A
         // position is what a reader of a stop or an absence is asking about, and a measure is what
         // a reader of a class or a line is; holding the second under the first is what keeps which
@@ -365,15 +368,20 @@ public final class Partitions {
         // the rules came to is whether either happened, and which of the two it was — settled
         // beside each axis, as it is once a body has spoken.
         List<PositionMeasurements> settled = new ArrayList<>();
-        List<RuleWithoutALine> refused = rulesWithoutALine.all();
+        // What every position's rules came to, the findings and the questions together. A location
+        // is asked what its rules came to, and a rule nothing could classify is one of them: read
+        // off the findings alone, a position whose only rule was one nothing worked out came back
+        // as one no rule was written about.
+        unclassifiedIn(standing, rulesWithoutALine);
+        List<RuleWithoutALine> refused = rulesWithoutALine.stated();
         for (Drawn at : drawn) {
             BodyCutInspection came = null;
             for (Axis axis : at.axes()) {
                 came = BodyCutInspection.combined(came,
-                        cameTo(axis.term(), axis.path(), refused));
+                        cameTo(axis.term(), axis.path(), rulesWithoutALine));
             }
             if (came == null) {
-                came = cameTo(null, at.at().path(), refused);
+                came = cameTo(null, at.at().path(), rulesWithoutALine);
             }
             settled.add(new PositionMeasurements(at.at(), at.axes(), came));
         }
@@ -385,8 +393,7 @@ public final class Partitions {
         LinesRead read = new LinesRead();
         java.util.Map<AxisId, List<Border>> lines = linesAlong(kept, quantities, symbols, read);
         read.returning(lines.values().stream().flatMap(List::stream).toList());
-        MeasureClosure.Both closed =
-                MeasureClosure.of(positions, standing, refused, read);
+        MeasureClosure.Both closed = MeasureClosure.of(positions, standing, read);
         return new Partitioning(List.copyOf(settled), standing, uncertain,
                 refused,
                 List.copyOf(notSeparated),
@@ -435,27 +442,44 @@ public final class Partitions {
      */
     private static BodyCutInspection cameTo(NumericTerm.FromOnePosition term,
                                             souther.compiler.inputs.TermPath path,
-                                            List<RuleWithoutALine> rules) {
-        List<RuleWithoutALine> here = rules.stream().filter(one -> term == null
-                ? one.at().path().equals(path)
-                : switch (one.at()) {
-                    case souther.compiler.inputs.FilingCoordinate.OfTerm it ->
-                            it.term().equals(term);
-                    case souther.compiler.inputs.FilingCoordinate.AtPosition it ->
-                            it.path().equals(path);
-                }).toList();
-        if (here.isEmpty()) {
+                                            RulesWithNoLine found) {
+        boolean stated = found.stated().stream().anyMatch(one -> filedHere(one.at(), term, path));
+        boolean stopped = found.unclassified().stream()
+                .anyMatch(one -> filedHere(one.at(), term, path));
+        if (!stated && !stopped) {
             return new BodyCutInspection.Exhausted();
         }
         // What the rules came to, asked of each of them and kept apart. A reading that stopped on
         // one rule is not answered for by another read from end to end, and a rule read from end to
         // end is the model stating something whatever became of the reading beside it.
-        return new BodyCutInspection.NoLine(
-                here.stream().anyMatch(one ->
-                        one.why() instanceof souther.compiler.inputs.BlockReason.RuleReadingStopped),
-                here.stream().anyMatch(one ->
-                        one.why() instanceof souther.compiler.inputs.BlockReason
-                                .ReadToEndWithoutLine));
+        return new BodyCutInspection.NoLine(stopped, stated);
+    }
+
+    /**
+     * The questions about rules nothing classified, put where a location's own account is read.
+     *
+     * <p>They are questions and they are also what one of this location's rules came to, and the
+     * two readers of them want different things: one asks what holds a measure open and the other
+     * asks what became of the rules written here. Neither is read off the other.
+     */
+    private static void unclassifiedIn(List<StandingQuestion> asked, RulesWithNoLine into) {
+        for (StandingQuestion each : asked) {
+            if (each instanceof StandingQuestion.Unclassified it) {
+                into.asked(it);
+            }
+        }
+    }
+
+    /** Whether a finding filed at {@code at} is one about this measure of this location. */
+    private static boolean filedHere(FilingCoordinate at, NumericTerm.FromOnePosition term,
+                                     TermPath path) {
+        if (term == null) {
+            return at.path().equals(path);
+        }
+        return switch (at) {
+            case FilingCoordinate.OfTerm it -> it.term().equals(term);
+            case FilingCoordinate.AtPosition it -> it.path().equals(path);
+        };
     }
 
     /**
@@ -511,7 +535,7 @@ public final class Partitions {
                                   NumericTerm.FromOnePosition term, List<LineEvidence> evidence,
                                   Quantities reading, Symbols symbols,
                                   ReadingPolicy policy,
-                                  List<RuleWithoutALine> rules, EvidenceAccount account) {
+                                  RulesWithNoLine rules, EvidenceAccount account) {
         String behavior = at.position().behavior();
         // What a report calls this measure, which is what its number is called under this
         // behavior. Read the same way the measure itself takes its name, so that a piece of
@@ -607,7 +631,7 @@ public final class Partitions {
                                           NumericTerm.FromOnePosition term,
                                           List<PartitionClass> classes, List<Cut> cuts,
                                           List<Parting> parted, NarrowedBounds narrowed,
-                                          BodyCutInspection drew, List<RuleWithoutALine> rules) {
+                                          BodyCutInspection drew, RulesWithNoLine rules) {
         if (classes.isEmpty() && cuts.isEmpty() && parted.isEmpty()) {
             return cameTo(term, at.position().path(), rules);
         }
@@ -673,7 +697,7 @@ public final class Partitions {
                                        Quantities reading,
                                        List<Threshold> thresholds,
                                        Symbols symbols, ReadingPolicy policy) {
-        return withThresholds(base, reading, thresholds, symbols, policy, List.of());
+        return withThresholds(base, reading, thresholds, symbols, policy, new RulesWithNoLine());
     }
 
     /**
@@ -688,7 +712,7 @@ public final class Partitions {
                                        Quantities reading,
                                        List<Threshold> thresholds,
                                        Symbols symbols, ReadingPolicy policy,
-                                       List<RuleWithoutALine> rulesWithoutALine) {
+                                       RulesWithNoLine rulesWithoutALine) {
         return withThresholds(base, reading, thresholds, symbols, policy, rulesWithoutALine, List.of());
     }
 
@@ -705,7 +729,7 @@ public final class Partitions {
                                        Quantities reading,
                                        List<Threshold> thresholds,
                                        Symbols symbols, ReadingPolicy policy,
-                                       List<RuleWithoutALine> rulesWithoutALine,
+                                       RulesWithNoLine rulesWithoutALine,
                                        List<GuardThresholds.Guards.Singled> singled) {
         return withThresholds(base, reading, thresholds, symbols, policy, rulesWithoutALine, singled, List.of());
     }
@@ -722,7 +746,7 @@ public final class Partitions {
                                        Quantities reading,
                                        List<Threshold> thresholds,
                                        Symbols symbols, ReadingPolicy policy,
-                                       List<RuleWithoutALine> rulesWithoutALine,
+                                       RulesWithNoLine rulesWithoutALine,
                                        List<GuardThresholds.Guards.Singled> singled,
                                        List<LineDrawn> between) {
         return withThresholds(base, reading, thresholds, symbols, policy, rulesWithoutALine, singled, between,
@@ -741,7 +765,7 @@ public final class Partitions {
                                        Quantities reading,
                                        List<Threshold> thresholds,
                                        Symbols symbols, ReadingPolicy policy,
-                                       List<RuleWithoutALine> rulesWithoutALine,
+                                       RulesWithNoLine rulesWithoutALine,
                                        List<GuardThresholds.Guards.Singled> singled,
                                        List<LineDrawn> between,
                                        ReachingCuts reaching) {
@@ -766,16 +790,21 @@ public final class Partitions {
                                             Quantities reading,
                                             List<LineEvidence> evidence,
                                             Symbols symbols, ReadingPolicy policy,
-                                            List<RuleWithoutALine> rulesWithoutALine,
+                                            RulesWithNoLine rulesWithoutALine,
                                             List<LineDrawn> between,
                                             ReachingCuts reaching) {
         // Both producers of one kind of evidence. What a body compared and what a type's own rules
         // bound are read by different readers and answer the same question, so a position either of
         // them wrote about and neither could turn into a line is named once, whichever wrote it.
-        RuleWithoutALine.Gathered gathered =
-                new RuleWithoutALine.Gathered(base.rulesWithoutALine());
+        RulesWithNoLine gathered = new RulesWithNoLine();
+        gathered.addAll(base.rulesWithoutALine());
         gathered.addAll(rulesWithoutALine);
-        List<RuleWithoutALine> rules = gathered.all();
+        unclassifiedIn(base.unanswered(), gathered);
+        List<RuleWithoutALine> rules = gathered.stated();
+        // And what these readers could not classify, beside the questions the base reading already
+        // had. One list of what holds a measure open, for the one reader of it.
+        List<StandingQuestion> asked = new ArrayList<>(base.unanswered());
+        asked.addAll(rulesWithoutALine.unclassified());
         List<PositionMeasurements> measurements = new ArrayList<>();
         EvidenceAccount account = new EvidenceAccount(evidence);
         // A position at a time, so that what a body's rules add is added where the position already
@@ -797,7 +826,7 @@ public final class Partitions {
                         .filter(each -> each.term().equals(term)).findFirst().orElse(null);
                 came = BodyCutInspection.combined(came,
                         measureAt(here, at, measured, term, evidence, reading,
-                                symbols, policy, rules, account));
+                                symbols, policy, gathered, account));
             }
             // The measures nothing new was said about, kept as they are, and what they were left
             // with folded in beside the rest.
@@ -807,10 +836,10 @@ public final class Partitions {
                 }
                 here.add(axis);
                 came = BodyCutInspection.combined(came,
-                        cameTo(axis.term(), axis.path(), rules));
+                        cameTo(axis.term(), axis.path(), gathered));
             }
             if (came == null) {
-                came = cameTo(null, at.position().path(), rules);
+                came = cameTo(null, at.position().path(), gathered);
             }
             measurements.add(at.measuredAt(here, came));
         }
@@ -824,9 +853,8 @@ public final class Partitions {
         List<Border> across = Border.allOf(between, partedByQuantity(out), read);
         read.returning(lines.values().stream().flatMap(List::stream).toList());
         read.returning(across);
-        MeasureClosure.Both closed =
-                MeasureClosure.of(base.positions(), base.unanswered(), rules, read);
-        return new Partitioning(measurements, base.unanswered(), base.uncertain(),
+        MeasureClosure.Both closed = MeasureClosure.of(base.positions(), asked, read);
+        return new Partitioning(measurements, asked, base.uncertain(),
                 List.copyOf(rules),
                 // Carried across: what a reading could not hold together is a fact about the
                 // declarations, and a body drawing a line on a position does not make the product
@@ -1101,7 +1129,7 @@ public final class Partitions {
                                ReadingPolicy policy,
                                List<Drawn> drawn,
                                java.util.Set<NumericTerm> uncertain,
-                               RuleWithoutALine.Gathered rulesWithoutALine) {
+                               RulesWithNoLine rulesWithoutALine) {
         rulesWithoutALine.addAll(position.rulesWithoutALine());
         NumericTerm.FromOnePosition term = position.term();
         AxisId id = AxisId.of(behavior, term);

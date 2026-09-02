@@ -58,12 +58,19 @@ class AComparisonIsAccountedForWhereverItIsWrittenTest {
      * on, so this is the answer that separates "the model draws a line here this could not read"
      * from "the model draws none". Written under a fork, the reading already gave it; written as the
      * answer, it gave nothing.
+     *
+     * <p>Said as a question and not as a finding about the model, which is what the reading of it
+     * came to: nothing worked out what such a rule states here, so what it raises is unknown rather
+     * than nothing.
      */
     @Test
     void aComparisonAnsweredWithIsNoticedEvenWhereNoLineCameOfIt() {
         GuardThresholds.Guards guards = read("Int.multiply(p.x, p.x) < 10");
 
         assertEquals(List.of(), guards.thresholds());
-        assertEquals(1, guards.rulesWithoutALine().size(), guards.rulesWithoutALine().toString());
+        assertEquals(List.of(), guards.noLine().stated(),
+                "the reading of it did not finish, so nothing is said about what the model states");
+        assertEquals(1, guards.noLine().unclassified().size(),
+                guards.noLine().unclassified().toString());
     }
 }

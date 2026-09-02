@@ -1,5 +1,7 @@
 package souther.compiler.check;
 
+import souther.compiler.inputs.BlockReason;
+
 import java.util.List;
 import java.util.Set;
 
@@ -102,13 +104,21 @@ sealed interface ClauseStates {
      * to stop: the question is raised by the model, and whether anything answered it is asked
      * afterwards.
      *
-     * @param named the ones the clause writes, which may be none. A rule cannot cost a name it does
-     *              not write, so these and not every name of the value — and a clause writing none
-     *              of them raises no question about one, which is what
+     * @param named the ones the clause states something about, which may be none. A rule cannot
+     *              cost a name it does not write, so these and not every name of the value — and a
+     *              clause writing none of them raises no question about one, which is what
      *              {@link Required#ofInvariant} makes of an empty set. Filed at the value instead,
      *              {@code invariant t = 1 >= 0} was a rule nothing had accounted for
+     * @param unread where the reading of the clause stopped, or null where it ran to the end. A
+     *              clause that states an order and whose form nothing took apart may put a line at
+     *              a name it writes and may not, and which of those is what reading further would
+     *              answer; one read to the end that draws no line draws none, and that is the
+     *              model. Both are this arm because what the clause raises about the values at a
+     *              name is the same either way — a rule about them is a rule about them whether or
+     *              not this compiler can say which ones
      */
-    record SomethingElse(Set<RuleKey> named) implements ClauseStates {
+    record SomethingElse(Set<RuleKey> named, BlockReason.RuleReadingStopped unread)
+            implements ClauseStates {
 
         public SomethingElse {
             // Insertion order: `Set.of` and `Set.copyOf` iterate in an order salted once per JVM
@@ -118,11 +128,16 @@ sealed interface ClauseStates {
         }
 
         static SomethingElse naming(List<RuleKey> found) {
-            return new SomethingElse(new java.util.LinkedHashSet<>(found));
+            return new SomethingElse(new java.util.LinkedHashSet<>(found), null);
+        }
+
+        /** The same, said of a clause whose reading stopped on the form it is written in. */
+        SomethingElse unread(BlockReason.RuleReadingStopped why) {
+            return why == null ? this : new SomethingElse(named, why);
         }
     }
 
-    /** The names this clause is about, by which a rule can cost one. */
+    /** The names this clause states something about, by which a rule can cost one. */
     default Set<RuleKey> about() {
         return switch (this) {
             case ABound bound -> bound.named();

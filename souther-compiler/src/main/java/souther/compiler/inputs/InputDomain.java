@@ -3,6 +3,7 @@ package souther.compiler.inputs;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.NumberAt;
 import souther.compiler.check.Carrier;
+import souther.compiler.check.CoverageObligation;
 import souther.compiler.check.DeclaredBounds;
 import souther.compiler.check.DeclaredSubjects;
 import souther.compiler.check.RuleKey;
@@ -1334,9 +1335,9 @@ public final class InputDomain {
         // off the spelling of a side answers nothing for `String.length(value) * 2 >= 4`, whose
         // sides are neither a name nor a measure of one.
         Set<NumberAt.OfWhatNumber> written = DeclaredSubjects.of(type, symbols, policy);
-        List<RuleWithoutALine> competing = List.of();
+        RulesWithNoLine found = new RulesWithNoLine();
         if (undecidable(written, stated, taken, carried)) {
-            competing = competingCoordinates(stated, path, type, symbols);
+            found = competingCoordinates(stated, path, type, symbols);
             stated = List.of();
         }
         boolean bySize = measuredHere(written, stated, taken);
@@ -1385,11 +1386,11 @@ public final class InputDomain {
         // own type draws a line, because a clause relating two fields is not a partition of one.
         NumericDomain.Bounds admissible = nothingExists ? null
                 : TypeBounds.admissible(own, projected.bounds(), term);
-        List<RuleWithoutALine> withoutALine =
-                rulesWithoutALineAt(placed, path, type, symbols, competing);
+        RulesWithNoLine noLine = rulesWithoutALineAt(placed, path, type, symbols, found);
+        List<RuleWithoutALine> withoutALine = noLine.stated();
 
         ReadingResult reading = crossed(declared, view, admissible, admitted, symbols,
-                withoutALine,
+                placed.unclassified(path),
                 nothingExists, type);
         return new ReadPosition(path, view, term, admissible, own, projected,
                 // Where the position actually stops, which the ends as written do not say: a clause
@@ -1399,10 +1400,13 @@ public final class InputDomain {
                 placed.projection(path), declared, reading,
                 ObligationDomain.of(reading, declared), admitted.completeness(),
                 withoutALine,
-                // What the rules of this position raise that nothing answered. Asked of the
-                // accounting rather than read off the completeness beside it: one reading being
-                // short of a position's rules is that reading's business, and a rule another
-                // reading took in is not a rule left unread.
+                // What the rules of this position leave open. Asked of the accounting rather than
+                // read off the completeness beside it: one reading being short of a position's
+                // rules is that reading's business, and a rule another reading took in is not a
+                // rule left unread.
+                //
+                // And beside those, the rules this reading did not get far enough through to say
+                // what they raise, which the accounting holds at the same granularity.
                 standingAt(placed, path),
                 // And whether the rules were reached at all, asked of the gathering that knows.
                 // No question is raised where nothing was seen, so an empty list beside it would
@@ -1432,13 +1436,13 @@ public final class InputDomain {
     private static ReadingResult crossed(List<Case> declared, TypeView view,
                                          NumericDomain.Bounds admissible, AdmissibleSet admitted,
                                          Symbols symbols,
-                                         List<RuleWithoutALine> withoutALine,
+                                         List<PlacedRules.RuleUnclassifiedAt> unclassified,
                                          boolean nothingExists, Type type) {
         BlockReason.AboutThePosition unreadable = Distinctions.unreadableAt(view);
         if (unreadable != null) {
             return new ReadingResult.Unsupported(unreadable);
         }
-        BlockReason.RuleReadingStopped here = stoppedOn(withoutALine);
+        BlockReason.RuleReadingStopped here = stoppedOn(unclassified);
         if (!declared.isEmpty()) {
             return Crossing.of(declared, view, admissible, admitted, symbols, here);
         }
@@ -1473,13 +1477,9 @@ public final class InputDomain {
      * the values are an upper bound and there is no more or less of that — and which rule to go and
      * look at is the finding's to say, one per rule, where they are all named.
      */
-    private static BlockReason.RuleReadingStopped stoppedOn(List<RuleWithoutALine> rules) {
-        for (RuleWithoutALine each : rules) {
-            if (each.why() instanceof BlockReason.RuleReadingStopped stopped) {
-                return stopped;
-            }
-        }
-        return null;
+    private static BlockReason.RuleReadingStopped stoppedOn(
+            List<PlacedRules.RuleUnclassifiedAt> rules) {
+        return rules.isEmpty() ? null : rules.getFirst().at().why();
     }
 
     /**
@@ -1521,21 +1521,25 @@ public final class InputDomain {
      * their clauses are in the way. A rule placing two ends is one rule and one finding, which is
      * what the key settles.
      */
-    private static List<RuleWithoutALine> competingCoordinates(List<FieldDomains.Placed> stated,
+    private static RulesWithNoLine competingCoordinates(List<FieldDomains.Placed> stated,
                                                          TermPath path, Type type,
                                                          Symbols symbols) {
-        RuleWithoutALine.Gathered out = new RuleWithoutALine.Gathered();
+        RulesWithNoLine out = new RulesWithNoLine();
         for (FieldDomains.Placed each : stated) {
-            out.add(RuleWithoutALine.of(each.from(),
+            out.undetermined(each.from(),
                     souther.compiler.check.RuleCitation.named(each.from()),
                     // Each rule at the coordinate that rule is about, which is what makes the two
                     // two. What is undecided is which of them the position is measured at, and that
                     // is a fact about the position rather than about either rule — this reading has
                     // chosen no term for the position, and each rule chose one for itself.
                     filedAt(path, each.at(), type, symbols),
-                    new BlockReason.CompetingCoordinates()));
+                    // And what that leaves undecided is the end each of them places. Which values
+                    // may stand there is what the rules say and nothing about the choice of number
+                    // touches it.
+                    CoverageObligation.BOUNDARY,
+                    new BlockReason.CompetingCoordinates());
         }
-        return out.all();
+        return out;
     }
 
     /**
@@ -1612,19 +1616,26 @@ public final class InputDomain {
     }
 
     /**
-     * The questions the rules of this position raise that nothing answered, crossed into this
-     * input's vocabulary.
+     * What the rules of this position leave open, in this input's vocabulary.
      *
-     * <p>Here, where the root the walk started at and the type standing at the position both are.
-     * The reading that raised them knows its positions by a key relative to the value its clauses
-     * are written on; what everything past here compares is a term path. Which number of a position
-     * a question is about crosses unchanged — it is a resolved name, and no capability of either
-     * side is asked about it.
+     * <p>The questions crossed here, where the root the walk started at and the type standing at
+     * the position both are. The reading that raised them knows its positions by a key relative to
+     * the value its clauses are written on; what everything past here compares is a term path.
+     * Which number of a position a question is about crosses unchanged — it is a resolved name, and
+     * no capability of either side is asked about it.
+     *
+     * <p><b>And the rules nothing classified, which cross without any of that.</b> What such a rule
+     * raises is the part that was not read, so there is no subject to translate and none is made:
+     * the place crosses as where a reader is sent to look, which is not what the rule is about.
      */
     private static List<StandingQuestion> standingAt(PlacedRules placed, TermPath path) {
         List<StandingQuestion> out = new ArrayList<>();
+        for (PlacedRules.RuleUnclassifiedAt each : placed.unclassified(path)) {
+            out.add(StandingQuestion.ObligationUndetermined.of(each.rule(), each.cited(),
+                    FilingCoordinate.at(path), each.at().which(), each.at().why()));
+        }
         for (souther.compiler.check.RuleAccounting.Unanswered each : placed.unanswered(path)) {
-            out.add(StandingQuestion.of(each.rule(), each.cited(),
+            out.add(StandingQuestion.Exact.of(each.rule(), each.cited(),
                     switch (each.owed()) {
                         case souther.compiler.check.Owed.AdmittedValues _ ->
                                 new InputQuestion.AboutAPosition(path);
@@ -1690,9 +1701,8 @@ public final class InputDomain {
      * to rewrite is what an author acts on, and a position is not it. Kept per reason, the second
      * of them was dropped as a repeat of the first.
      */
-    private static List<RuleWithoutALine> rulesWithoutALineAt(PlacedRules placed, TermPath path, Type type,
-                                                  Symbols symbols, List<RuleWithoutALine> competing) {
-        RuleWithoutALine.Gathered out = new RuleWithoutALine.Gathered(competing);
+    private static RulesWithNoLine rulesWithoutALineAt(PlacedRules placed, TermPath path, Type type,
+                                                  Symbols symbols, RulesWithNoLine out) {
         for (FieldDomains.NoLine each : placed.noLineAt(path)) {
             // The rule the reading of ends was holding when it gave up, carried rather than left
             // behind. It is a clause of an invariant, so it has a name and the handle is that name.
@@ -1700,11 +1710,11 @@ public final class InputDomain {
             // At the number that rule is about, which the rule itself says. Nothing is missing here
             // for the position to stand in for: a clause was read far enough to be about one number
             // or the other, and it is only the line that nothing came of.
-            out.add(RuleWithoutALine.of(each.from(),
+            out.add(each.from(),
                     souther.compiler.check.RuleCitation.named(each.from()),
                     filedAt(path, each.at(), type, symbols),
-                    each.why()));
+                    each.why());
         }
-        return out.all();
+        return out;
     }
 }

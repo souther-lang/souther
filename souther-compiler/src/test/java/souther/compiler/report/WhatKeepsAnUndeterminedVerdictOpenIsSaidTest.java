@@ -10,7 +10,7 @@ import souther.compiler.check.RuleRef;
 import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.FilingCoordinate;
-import souther.compiler.inputs.RuleWithoutALine;
+import souther.compiler.inputs.StandingQuestion;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.partition.ClosureGap;
 import souther.compiler.query.Adequacy;
@@ -121,8 +121,10 @@ class WhatKeepsAnUndeterminedVerdictOpenIsSaidTest {
         Weakening only = ((AdequacyOpening.ByWeakening) open).cause();
 
         assertTrue(only instanceof Weakening.ModelReadingIncomplete it
-                        && it.cause() instanceof ClosureGap.RuleUnread rule
-                        && rule.finding().why() instanceof BlockReason.RuleAboutADerivedValue,
+                        && it.cause() instanceof ClosureGap.QuestionUnanswered asked
+                        && asked.question() instanceof StandingQuestion
+                                .NothingClassifiesIt rule
+                        && rule.why() instanceof BlockReason.RuleAboutADerivedValue,
                 () -> "the comparison in `List.isEmpty` is about a value made from the position: "
                         + only);
     }
@@ -366,8 +368,8 @@ class WhatKeepsAnUndeterminedVerdictOpenIsSaidTest {
 
     /** One rule this compiler stopped on, at {@code term}. */
     private static Weakening ruleUnread(BlockReason.RuleReadingStopped why, String term) {
-        return new Weakening.ModelReadingIncomplete(ClosureGap.RuleUnread.of(
-                RuleWithoutALine.of(
+        return new Weakening.ModelReadingIncomplete(ClosureGap.QuestionUnanswered.of(
+                StandingQuestion.NothingClassifiesIt.of(
                         new RuleRef.Comparison("go",
                                 new CoverageOrigin("m", 0, 0, CoverageConstruct.IF)),
                         new RuleCitation.Named(term),

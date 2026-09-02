@@ -19,7 +19,7 @@ import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.ReadMeaning;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.inputs.FilingCoordinate;
-import souther.compiler.inputs.RuleWithoutALine;
+import souther.compiler.inputs.RulesWithNoLine;
 import souther.compiler.numeric.Place;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
@@ -70,16 +70,15 @@ public final class GuardThresholds {
      * operator is still in hand, and which values arrive is asked of the reading of the whole body.
      */
     public record Guards(List<LineEvidence> evidence,
-                         List<RuleWithoutALine> rulesWithoutALine,
+                         RulesWithNoLine noLine,
                          List<LineDrawn> between,
                          ReachingCuts reaching) {
 
         public static final Guards NONE =
-                new Guards(List.of(), List.of(), List.of(), ReachingCuts.NONE);
+                new Guards(List.of(), new RulesWithNoLine(), List.of(), ReachingCuts.NONE);
 
         public Guards {
             evidence = List.copyOf(evidence);
-            rulesWithoutALine = List.copyOf(rulesWithoutALine);
             between = List.copyOf(between);
         }
 
@@ -149,7 +148,7 @@ public final class GuardThresholds {
         InputDomain inputs = read.domain();
         Symbols symbols = read.symbols();
         List<LineEvidence> found = new ArrayList<>();
-        RuleWithoutALine.Gathered withoutALine = new RuleWithoutALine.Gathered();
+        RulesWithNoLine withoutALine = new RulesWithNoLine();
         List<LineDrawn> between = new ArrayList<>();
         // One reading of the body, and everything below is that reading asked something. Where a
         // comparison is written, what its names point at, what a row had satisfied to get there,
@@ -168,7 +167,7 @@ public final class GuardThresholds {
                 case BoundaryPolicy.Standing.Refused _ -> { }
             }
         }
-        return new Guards(found, withoutALine.all(), between, comparisons.reaching(plan));
+        return new Guards(found, withoutALine, between, comparisons.reaching(plan));
     }
 
     /**
@@ -425,7 +424,7 @@ public final class GuardThresholds {
                                Symbols symbols, ComparisonAssessment read,
                                List<LineEvidence> out,
                                List<LineDrawn> between,
-                               RuleWithoutALine.Gathered withoutALine) {
+                               RulesWithNoLine withoutALine) {
         publish(each, read, withoutALine);
         switch (read) {
             case ComparisonAssessment.AtAPosition at -> {
@@ -506,7 +505,7 @@ public final class GuardThresholds {
      * missing a border.
      */
     private static void publish(ComparisonCatalog.Catalogued comparison,
-                                ComparisonAssessment read, RuleWithoutALine.Gathered out) {
+                                ComparisonAssessment read, RulesWithNoLine out) {
         // Whose body it is, from the name the catalog issued. Taken from a caller beside it, the
         // rule this reports and the comparison it is read off would be free to be of two behaviors,
         // and the occurrence being one this plan holds would not refuse it.
@@ -518,8 +517,17 @@ public final class GuardThresholds {
         // answer. A rule that was read is filed at its quantity's coordinates and says one thing
         // there, because the quantity is one subject; a reading that stopped has none, and each
         // place says what stopped it there.
-        read.whatEachPlaceIsLeftWith().forEach((at, why) ->
-                out.add(RuleWithoutALine.of(rule, cited, at, why)));
+        // And what each of them leaves a measure of coverage, which for a comparison turns on
+        // nothing but whether its reading finished. There is no reading that says what a body's
+        // comparison raises — a line it comes to owes its rows by having been read — so where the
+        // reading stopped there is nothing that was determined and nothing that could have been.
+        read.whatEachPlaceIsLeftWith().forEach((at, why) -> {
+            if (why instanceof BlockReason.RuleReadingStopped stopped) {
+                out.unclassified(rule, cited, at, stopped);
+            } else {
+                out.add(rule, cited, at, why);
+            }
+        });
     }
 
     /** How a row meets a line a body's condition drew, which is a guard's own answer: what it takes

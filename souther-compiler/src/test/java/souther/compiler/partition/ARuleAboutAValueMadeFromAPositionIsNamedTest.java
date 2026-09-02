@@ -77,7 +77,8 @@ class ARuleAboutAValueMadeFromAPositionIsNamedTest {
         assertTrue(measured().notRead().stream()
                         .filter(each -> each.reason()
                                 == UndividedPosition.Reason.RULE_ABOUT_A_DERIVED_VALUE)
-                        .allMatch(each -> each instanceof PartitionEvidence.NotRead.ARule),
+                        .allMatch(each -> each instanceof PartitionEvidence.NotRead
+                                .AnUnclassifiedRule),
                 () -> "a rule was read, so the finding has one to name: " + measured().notRead());
     }
 

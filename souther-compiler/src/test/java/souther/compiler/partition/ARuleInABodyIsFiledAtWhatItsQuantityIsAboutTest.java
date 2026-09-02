@@ -5,7 +5,7 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.CoverageSites;
-import souther.compiler.inputs.RuleWithoutALine;
+import souther.compiler.inputs.RulesWithNoLine;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Scopes;
@@ -25,11 +25,21 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
  */
 class ARuleInABodyIsFiledAtWhatItsQuantityIsAboutTest {
 
-    /** Where each rule this drew no line from was filed, spelled as a report names it. */
+    /**
+     * Where each rule this drew no line from was filed, spelled as a report names it.
+     *
+     * <p>Both of what a reading leaves, because where a rule is filed is one question and how far
+     * the reading of it got is another: a walk that stopped is filed at the places it met, and this
+     * is about which places those are.
+     */
     private static List<String> filedAt(String condition) {
-        return read(condition).stream()
-                .map(each -> each.at() + "/" + each.why().getClass().getSimpleName())
-                .toList();
+        RulesWithNoLine found = read(condition);
+        List<String> out = new java.util.ArrayList<>();
+        found.stated().forEach(each ->
+                out.add(each.at() + "/" + each.why().getClass().getSimpleName()));
+        found.unclassified().forEach(each ->
+                out.add(each.at() + "/" + each.why().getClass().getSimpleName()));
+        return List.copyOf(out);
     }
 
     /**
@@ -45,7 +55,7 @@ class ARuleInABodyIsFiledAtWhatItsQuantityIsAboutTest {
                 filedAt("t.x + t.y - t.y + t.z <= 10"));
     }
 
-    private static List<RuleWithoutALine> read(String condition) {
+    private static RulesWithNoLine read(String condition) {
         String source = """
                 module example.guarded
 
@@ -72,6 +82,6 @@ class ARuleInABodyIsFiledAtWhatItsQuantityIsAboutTest {
         CoverageSites.Plan plan = checked.plan();
         return GuardThresholds.of(body, plan,
                 compilation.db().ask(new souther.compiler.query.Adequacy.Inputs(module))
-                        .value().get("pick"), symbols).rulesWithoutALine();
+                        .value().get("pick"), symbols).noLine();
     }
 }

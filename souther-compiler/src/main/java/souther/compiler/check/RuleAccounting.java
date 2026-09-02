@@ -61,8 +61,13 @@ public final class RuleAccounting {
                 answers(rule, required, answered));
     }
 
-    /** {@code answered} asked once for each question the rule raises, and nothing else. Apart from
-     *  the citation, which the two ways in do not find the same way. */
+    /**
+     * {@code answered} asked once for each question the rule raises, and nothing else.
+     *
+     * <p>A place nothing classified is asked nothing. There is no question there for a reading to
+     * have answered, so asking would be handing a reader a subject this compiler never worked out
+     * and taking whatever came back as an answer about it.
+     */
     private static Map<Owed, Outcome> answers(RuleRef rule, Required required,
                                               Function<Owed, Outcome> answered) {
         Map<Owed, Outcome> answers = new LinkedHashMap<>();
@@ -113,6 +118,18 @@ public final class RuleAccounting {
     /** What answered each question, keyed by the question. */
     public Map<Owed, Outcome> answers() {
         return answers;
+    }
+
+    /**
+     * The places nothing worked out what this rule raises at, which is not a question nobody
+     * answered.
+     *
+     * <p>Read off what the rule leaves rather than kept beside it. Nothing was asked about these —
+     * there is no question to ask — so they are not among the answers, and a reader that counted
+     * the answers would be counting what this compiler managed to classify.
+     */
+    public Set<Requirement.Undetermined> undetermined() {
+        return required.undetermined();
     }
 
     /** The questions nothing answered, which is what a report is about. */

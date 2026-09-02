@@ -178,7 +178,8 @@ class WhatARuleOnAStringIsMeasuredAtTest {
         Partitions.Partitioning p = Partitions.withThresholds(
                 Partitions.of(spec.name(), read, symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
                 reading,
-                guards.thresholds(), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES, List.of(), guards.singled());
+                guards.thresholds(), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES,
+                new souther.compiler.inputs.RulesWithNoLine(), guards.singled());
 
         List<String> classes = new ArrayList<>();
         List<String> stands = new ArrayList<>();

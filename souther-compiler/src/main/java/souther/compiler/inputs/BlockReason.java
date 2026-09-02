@@ -1,6 +1,5 @@
 package souther.compiler.inputs;
 
-import souther.compiler.check.CoverageObligation;
 import souther.compiler.observe.RunSensitivity;
 
 /**
@@ -102,17 +101,6 @@ public sealed interface BlockReason {
      * observable predicate — this rule has no line here — and that is what the name says.
      */
     sealed interface RuleWithoutLineReason extends BlockReason {
-
-        /**
-         * Whether {@code measure} is thereby short of something.
-         *
-         * <p>Which of the two halves the reason is in answers most of it. A reading that stopped
-         * leaves what the rule states unknown, and what it would have divided or bounded is exactly
-         * the part that was not read; a rule read to the end that divided no position states what
-         * it states, and nothing is missing. So the second half answers alike and the first is asked
-         * per reason.
-         */
-        boolean leavesShort(CoverageObligation.Measure measure);
     }
 
     /**
@@ -150,8 +138,9 @@ public sealed interface BlockReason {
      *
      * <p>Which is why a reading's own answer for having stopped may only be one of these. What such
      * a rule would have raised is exactly the part that was not read, so an obligation cannot be
-     * built from it; that the model is thereby short of something is what {@link #leavesShort} says
-     * instead.
+     * built from it — and a rule filed under one of these travels as
+     * {@link StandingQuestion.Unclassified}, which says which question nothing worked out and names
+     * no subject for it.
      *
      * <p><b>The one reason in all three capabilities.</b> A rule this got partway through is a rule
      * with no line here, it is this compiler having fallen short, and it is about a rule — so it is
@@ -162,44 +151,7 @@ public sealed interface BlockReason {
             AboutARule {
 
         /**
-         * <p><b>Two switches and no {@code default} on either.</b> Asked per measure rather than
-         * answered with a set of them: a set is open at the measure end, so a third measure would
-         * be one every reason had silently answered "not short of" — which is the shape this whole
-         * arrangement is against, a new measure inheriting what two others happened to share. This
-         * way a reason added fails the inner switch and a measure added fails the outer, and
-         * whichever axis grows has to be answered for.
-         */
-        @Override
-        default boolean leavesShort(CoverageObligation.Measure measure) {
-            return switch (measure) {
-                // A comparison in a form no reader takes apart may have divided the position or
-                // bounded it, and nothing knows which — so both.
-                // And a pattern whose machine was not made is a rule that leaves no line, which is
-                // what every other reason here is. What the position holds is wider than the rule
-                // says, so a division the rule implies is not made and an end it states is not
-                // found — short of both, and short of them because of this rule.
-                //
-                // What is not here is the answer nobody could work out. That leaves the position
-                // short of the same two things and is not a rule without a line, because it is not
-                // about a rule at all — a caller asking which of an author's rules has no line
-                // would be handed one that is not the matter.
-                case PARTITION -> switch (this) {
-                    case UnreadComparisonForm _, UnreadComparisonDomain _, RuleAboutADerivedValue _,
-                         UnreadValueRule _, ValueRuleRelatingTwoPositions _, PatternTooCostly _,
-                         PatternTooDeeplyNested _,
-                         CompetingCoordinates _, CasePairingNotDetermined _ -> true;
-                };
-                case BOUNDARY -> switch (this) {
-                    case UnreadComparisonForm _, UnreadComparisonDomain _, RuleAboutADerivedValue _,
-                         UnreadValueRule _, ValueRuleRelatingTwoPositions _, PatternTooCostly _,
-                         PatternTooDeeplyNested _,
-                         CompetingCoordinates _, CasePairingNotDetermined _ -> true;
-                };
-            };
-        }
-
-        /**
-         * The same switch, and the same reason for it being one: a division of these nine into two
+         * One switch over the nine, and the reason for it being one: a division of these into two
          * is only reviewable where all nine answers are visible together.
          */
         @Override
@@ -249,11 +201,6 @@ public sealed interface BlockReason {
      * type stood for both halves.
      */
     sealed interface ReadToEndWithoutLine extends RuleWithoutLineReason {
-
-        @Override
-        default boolean leavesShort(CoverageObligation.Measure measure) {
-            return false;
-        }
     }
 
 

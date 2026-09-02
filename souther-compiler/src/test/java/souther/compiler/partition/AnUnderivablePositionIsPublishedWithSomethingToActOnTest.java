@@ -153,17 +153,20 @@ class AnUnderivablePositionIsPublishedWithSomethingToActOnTest {
      */
     private static TermPath shortAt(Adequacy.Finding finding) {
         return switch (finding.about()) {
-            case About.AQuestionNothingAnswered asked -> asked.asked().asked().asks().path();
+            case About.AQuestionNothingAnswered asked -> switch (asked.asked().asked()) {
+                case souther.compiler.inputs.StandingQuestion.Exact it -> it.asks().path();
+                case souther.compiler.inputs.StandingQuestion.Unclassified it ->
+                        it.at().path();
+            };
             case About.APositionThisCouldNotRead read -> read.finding().finding().at();
             case About.APositionWhoseRulesWereNotReached gap -> gap.gap().at().at();
-            // A rule filed at the position, which counts where the reading of it did not finish.
-            // Such a rule raises no question a caller is told about where a body wrote it, so this
-            // finding is the only thing that says the position is short of anything.
-            case About.ARuleWithoutALine rule ->
-                    rule.finding().finding().why()
-                            instanceof souther.compiler.inputs.BlockReason.RuleReadingStopped
-                            ? rule.finding().finding().at().path() : null;
+            // A rule filed at the position that nothing worked out the questions of, which counts:
+            // it is the position being short of whatever the rule states there.
+            case About.ARuleNothingClassified rule -> rule.finding().finding().at().path();
             case
+            // A rule filed at the position and read from end to end, which is the model stating
+            // something rather than the position being short of anything.
+                 About.ARuleWithoutALine _,
             // The values the position was read as, wider than its rules leave them: a fact about
             // the set and about no rule, and about a position that may well be measured.
                  About.APositionReadWiderThanItsRules _,

@@ -97,7 +97,7 @@ class AClassThatNarrowsStatesTheNarrowingAndNotAValueTest {
                     checked.plan(),
                     compilation.db().ask(new Adequacy.Inputs(module)).value().get("use"), symbols);
             axes = Partitions.withThresholds(axes, domain.quantities(symbols), guards.thresholds(),
-                    symbols, ReadAs.THE_COMPILATION_DOES, guards.rulesWithoutALine(), guards.singled(),
+                    symbols, ReadAs.THE_COMPILATION_DOES, guards.noLine(), guards.singled(),
                     guards.between());
         }
         FillResult filled = Generator.fill(

@@ -1,6 +1,9 @@
 package souther.compiler.partition;
 
+import souther.compiler.check.CoverageObligation;
 import souther.compiler.check.Symbols;
+import souther.compiler.inputs.BlockReason;
+import souther.compiler.inputs.FilingCoordinate;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.NumericTerm;
@@ -9,7 +12,7 @@ import souther.compiler.inputs.PlacementFiling;
 import souther.compiler.inputs.PlacementSeed;
 import souther.compiler.inputs.Position;
 import souther.compiler.inputs.PositionId;
-import souther.compiler.inputs.RuleWithoutALine;
+import souther.compiler.inputs.RulesWithNoLine;
 import souther.compiler.inputs.TermPath;
 
 import java.util.ArrayList;
@@ -55,12 +58,11 @@ public final class LinesWhereTheyFall {
      * rule, and a reader is told what actually happened to it.
      */
     public record Filed(List<LineEvidence> evidence, List<LineDrawn> between,
-                        List<RuleWithoutALine> notPlaced) {
+                        RulesWithNoLine notPlaced) {
 
         public Filed {
             evidence = List.copyOf(evidence);
             between = List.copyOf(between);
-            notPlaced = List.copyOf(notPlaced);
         }
 
         /** The lines, for a reader that wants only those. Read off the one list and not kept
@@ -83,7 +85,7 @@ public final class LinesWhereTheyFall {
         Symbols symbols = read.symbols();
         List<LineEvidence> out = new ArrayList<>();
         List<LineDrawn> outBetween = new ArrayList<>();
-        List<RuleWithoutALine> notPlaced = new ArrayList<>();
+        RulesWithNoLine notPlaced = new RulesWithNoLine();
         // One pass in the order the rules were read, so what comes out is in that order too. A pass
         // per kind of thing a rule can say puts every range before every equality, whatever order a
         // body wrote them in, and every reader downstream takes the numbers in that order.
@@ -151,7 +153,7 @@ public final class LinesWhereTheyFall {
      * name left where it was written would be the same answer.
      */
     private static void place(InputReading read, LineDrawn line,
-                              List<LineDrawn> out, List<RuleWithoutALine> notPlaced) {
+                              List<LineDrawn> out, RulesWithNoLine notPlaced) {
         InputDomain inputs = read.domain();
         Quantities quantities = read.quantities();
         Symbols symbols = read.symbols();
@@ -167,9 +169,12 @@ public final class LinesWhereTheyFall {
             // Not passed on. A line at a name no row is written at reaches the generator, which
             // says it could not build a value there — a reason nobody established, about a place
             // nobody meant. What an author is owed is the pairing, and it is said here.
-            notPlaced.add(RuleWithoutALine.of(line.by().rule(), line.by().cited(),
-                    new souther.compiler.inputs.FilingCoordinate.OfTerm(filed.getFirst().name()),
-                    new souther.compiler.inputs.BlockReason.CasePairingNotDetermined()));
+            notPlaced.undetermined(line.by().rule(), line.by().cited(),
+                    new FilingCoordinate.OfTerm(filed.getFirst().name()),
+                    // The line is what has nowhere to go: the rule was read, an end came out of it,
+                    // and which of the positions it runs between is what nothing worked out.
+                    CoverageObligation.BOUNDARY,
+                    new BlockReason.CasePairingNotDetermined());
             return;
         }
         if (filed.isEmpty()) {

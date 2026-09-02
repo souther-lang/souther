@@ -5,8 +5,8 @@ import java.util.LinkedHashSet;
 import java.util.Set;
 
 /**
- * Which coverage obligations one rule raises where it applies to one value, in that value's
- * vocabulary.
+ * What one rule leaves where it applies to one value, in that value's vocabulary: the coverage
+ * obligations it raises, and the places nothing worked out what it raises at.
  *
  * <p><b>Not a property of the rule alone.</b> What is raised is {@link Owed} over a
  * {@link RuleKey}, and a key is relative to the value whose clauses are being read. So one rule
@@ -32,11 +32,44 @@ import java.util.Set;
  * <p>No verdict here. What is raised and what answered it are different questions asked at different
  * times, and a rule that raises an obligation nothing answers is exactly what a report is for — so
  * an obligation is a node and whether it was discharged is written beside it, never into it.
+ *
+ * <p><b>And how far the reading got is per place, not per rule.</b> A rule states something about
+ * the values at one of the places it names and nothing anybody here can name about another
+ * ({@link Requirement}), so both travel together. Answered for the rule as a whole, the place that
+ * was read would lose the obligation it raises because the place beside it was not.
  */
 public sealed interface Required {
 
-    /** The questions, which is empty exactly where the rule raises none. */
-    Set<Owed> obligations();
+    /** What the rule leaves, place by place. Empty exactly where it leaves nothing. */
+    Set<Requirement> requirements();
+
+    /**
+     * The questions among them, for a reader whose business is only what has to be answered.
+     *
+     * <p>A projection and not the whole: a place nothing classified is not among these, and a
+     * caller that counts them is counting what this compiler worked out rather than what the rule
+     * leaves. Which is why the places are reachable beside them rather than through them.
+     */
+    default Set<Owed> obligations() {
+        Set<Owed> out = new LinkedHashSet<>();
+        for (Requirement each : requirements()) {
+            if (each instanceof Requirement.Determined it) {
+                out.add(it.owed());
+            }
+        }
+        return Collections.unmodifiableSet(out);
+    }
+
+    /** And the places it does not, which are where the reading of the rule stopped. */
+    default Set<Requirement.Undetermined> undetermined() {
+        Set<Requirement.Undetermined> out = new LinkedHashSet<>();
+        for (Requirement each : requirements()) {
+            if (each instanceof Requirement.Undetermined it) {
+                out.add(it);
+            }
+        }
+        return Collections.unmodifiableSet(out);
+    }
 
     /**
      * The rule raises these, and there is at least one.
@@ -47,34 +80,34 @@ public sealed interface Required {
      */
     final class Some implements Required {
 
-        private final Set<Owed> obligations;
+        private final Set<Requirement> requirements;
 
-        private Some(Set<Owed> obligations) {
-            if (obligations.isEmpty()) {
+        private Some(Set<Requirement> requirements) {
+            if (requirements.isEmpty()) {
                 throw new IllegalArgumentException(
-                        "a rule that raises nothing is a different answer");
+                        "a rule that leaves nothing is a different answer");
             }
-            this.obligations = Collections.unmodifiableSet(new LinkedHashSet<>(obligations));
+            this.requirements = Collections.unmodifiableSet(new LinkedHashSet<>(requirements));
         }
 
         @Override
-        public Set<Owed> obligations() {
-            return obligations;
+        public Set<Requirement> requirements() {
+            return requirements;
         }
 
         @Override
         public boolean equals(Object other) {
-            return other instanceof Some some && obligations.equals(some.obligations);
+            return other instanceof Some some && requirements.equals(some.requirements);
         }
 
         @Override
         public int hashCode() {
-            return obligations.hashCode();
+            return requirements.hashCode();
         }
 
         @Override
         public String toString() {
-            return obligations.toString();
+            return requirements.toString();
         }
     }
 
@@ -108,7 +141,7 @@ public sealed interface Required {
         }
 
         @Override
-        public Set<Owed> obligations() {
+        public Set<Requirement> requirements() {
             return Set.of();
         }
 
@@ -199,22 +232,70 @@ public sealed interface Required {
             // two are about different subjects, which is why they are carried apart.
             // A `LinkedHashSet` and not `Set.of`, which iterates in an order salted once per JVM
             // run — the questions reach a document in the order they are written here.
-            case ClauseStates.ABound bound -> {
-                Set<Owed> owed = bound.named().stream().map(Owed.AdmittedValues::new)
-                        .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
-                owed.add(new Owed.Boundary(bound.line()));
-                yield new Some(owed);
-            }
+            case ClauseStates.ABound bound -> new Some(over(bound.named(), bound, states));
             // A clause writing no name of this value raises no question about one. Not a rule
             // that went unread: what it says was read, and what it says is about nothing here.
             case ClauseStates.SomethingElse other -> other.named().isEmpty()
                     ? new Irrelevant(Set.of(Because.IT_NAMES_NO_POSITION))
-                    : new Some(other.named().stream()
-                            .map(Owed.AdmittedValues::new).collect(java.util.stream.Collectors
-                                    .toCollection(LinkedHashSet::new)));
+                    : new Some(over(other.named(), null, states));
             case ClauseStates.ARelation _ -> new Irrelevant(Set.of(Because.IT_RELATES_TWO_POSITIONS));
             case ClauseStates.NoRestriction _ ->
                     new Irrelevant(Set.of(Because.IT_CONSTRAINS_NO_VALUE));
+        };
+    }
+
+    /**
+     * Every question, asked at every place the clause writes, and each answered three ways.
+     *
+     * <p>Both loops and neither of them a filter. A question is raised at a place, is not raised
+     * there, or nothing worked out which — and a place a rule writes is asked all three about every
+     * question there is, so a question added is one this has to be given an answer for rather than
+     * one every place silently answers "not raised" about.
+     */
+    private static Set<Requirement> over(Set<RuleKey> named, ClauseStates.ABound bound,
+                                         ClauseStates states) {
+        Set<Requirement> out = new LinkedHashSet<>();
+        for (RuleKey at : named) {
+            for (CoverageObligation kind : CoverageObligation.values()) {
+                switch (presenceOf(kind, at, bound, states)) {
+                    case Presence.Raised it -> out.add(new Requirement.Determined(it.owed()));
+                    case Presence.Undetermined it ->
+                            out.add(new Requirement.Undetermined(at, kind, it.why()));
+                    // Nothing to carry: the rule does not raise it, which is what the classification
+                    // came to and not what is left when nobody said anything.
+                    case Presence.NotRaised _ -> { }
+                }
+            }
+        }
+        return out;
+    }
+
+    /**
+     * Whether the rule raises {@code kind} at {@code at}, said of the clause as a reader found it.
+     *
+     * <p>One switch over the questions and no {@code default}, which is where a question added to
+     * the vocabulary has to be answered. What decides each of them is the clause's own shape and
+     * nothing about what any reading afterwards managed: a bound whose number nobody could fold
+     * still states where the values stop, and a form nobody took apart still states which values
+     * may stand at the names it writes.
+     */
+    private static Presence presenceOf(CoverageObligation kind, RuleKey at,
+                                       ClauseStates.ABound bound, ClauseStates states) {
+        return switch (kind) {
+            // A rule about the values at a name is a rule about them whether or not this compiler
+            // can say which ones. The question is the model's and the answer is a reading's.
+            case ADMITTED_VALUES -> new Presence.Raised(new Owed.AdmittedValues(at));
+            // And where the values stop, which only a clause read far enough to be a bound states.
+            // A clause read to the end that is no bound places no end anywhere; one whose form
+            // nothing took apart may place one at any name it writes, and which of those it is,
+            // is what reading further would answer.
+            case BOUNDARY -> {
+                if (bound != null) {
+                    yield new Presence.Raised(new Owed.Boundary(bound.line()));
+                }
+                yield states instanceof ClauseStates.SomethingElse it && it.unread() != null
+                        ? new Presence.Undetermined(it.unread()) : new Presence.NotRaised();
+            }
         };
     }
 
@@ -239,8 +320,8 @@ public sealed interface Required {
         if (one instanceof Irrelevant) {
             return had;
         }
-        Set<Owed> both = new LinkedHashSet<>(had.obligations());
-        both.addAll(one.obligations());
+        Set<Requirement> both = new LinkedHashSet<>(had.requirements());
+        both.addAll(one.requirements());
         return new Some(both);
     }
 }

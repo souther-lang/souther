@@ -4,8 +4,8 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.ast.Hir;
 import souther.compiler.check.Prepared;
-import souther.compiler.inputs.BlockReason;
-import souther.compiler.inputs.RuleWithoutALine;
+import souther.compiler.check.RuleRef;
+import souther.compiler.inputs.StandingQuestion;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Shapes;
@@ -21,17 +21,16 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * A rule a body wrote that no reading got through leaves the position short, and every reader says
  * so.
  *
- * <p>The one shape an accounting of questions cannot answer for. A question is raised by a rule of
- * a declaration and is answered by whichever reading took the rule in; a comparison a body writes
- * raises what it asks and answers it in the same breath, so a reading that stopped on one leaves no
- * question standing anywhere. What says the position is short of anything is the finding the reader
- * that stopped made, and nothing else.
+ * <p>Where a body's comparison is read to a line, the line answers what it raised and there is
+ * nothing outstanding. Where the reading of one stopped, what the comparison raises is the part
+ * that was not read — so what stands is a question about that rule, naming neither an obligation
+ * nor a subject, and it is the same thing a clause of a declaration leaves under the same
+ * circumstances.
  *
- * <p>So a verdict read off the accounting alone had nothing to go on here, and a phase that carried
- * only "a rule is filed at this position" gave the same answer for this and for a rule read from
- * end to end — which is the model stating something. The two are held apart, and this holds every
- * reader of them to the same answer at once: what the position comes to, what stands at it, what
- * the measure's closure says, and what a document names.
+ * <p>A phase that carried only "a rule is filed at this position" gave the same answer for this and
+ * for a rule read from end to end, which is the model stating something. The two are held apart,
+ * and this holds every reader of them to the same answer at once: what the position comes to, what
+ * stands at it, what the measure's closure says, and what a document names.
  */
 class ARuleABodyWroteThatNoReadingGotThroughLeavesThePositionShortTest {
 
@@ -68,12 +67,18 @@ class ARuleABodyWroteThatNoReadingGotThroughLeavesThePositionShortTest {
         assertInstanceOf(UndividedPosition.Why.CannotDerive.class, said.why(), said.toString());
     }
 
-    /** And no question of a rule stands at it, which is what makes this its own shape. */
+    /** And what stands at it is a question about the rule, naming no obligation and no subject. */
     @Test
-    void noQuestionStandsAtIt() {
-        assertEquals(List.of(), divided().unanswered().stream()
-                        .filter(each -> each.asks().path().toString().equals(AT)).toList(),
-                "a comparison a body writes raises and answers in one breath");
+    void aQuestionAboutTheRuleStandsAtIt() {
+        List<StandingQuestion.Unclassified> here = divided().unanswered().stream()
+                .filter(StandingQuestion.Unclassified.class::isInstance)
+                .map(StandingQuestion.Unclassified.class::cast)
+                .filter(each -> each.at().path().toString().equals(AT)).toList();
+
+        assertFalse(here.isEmpty(),
+                () -> "nothing stands at the position: " + divided().unanswered());
+        assertTrue(here.stream().anyMatch(each -> each.rule() instanceof RuleRef.Comparison),
+                () -> "and it names the comparison the body wrote: " + here);
     }
 
     /** And the reading got to the position, so what is short of it is not the walk. */
@@ -85,16 +90,12 @@ class ARuleABodyWroteThatNoReadingGotThroughLeavesThePositionShortTest {
         assertEquals(null, at.notReachedInto(), "the walk read into the position");
     }
 
-    /** What says it is short is the finding the reader that stopped made, naming the rule. */
+    /** And nothing says the model states something here, which is the other half's sentence. */
     @Test
-    void theRuleThatStoppedIsPublishedWithTheRule() {
-        List<RuleWithoutALine> here = divided().rulesWithoutALine().stream()
-                .filter(each -> each.at().path().toString().equals(AT)).toList();
-
-        assertFalse(here.isEmpty(), "nothing was published about the position at all");
-        assertTrue(here.stream().anyMatch(each ->
-                        each.why() instanceof BlockReason.RuleReadingStopped),
-                () -> "no reading is said to have stopped here: " + here);
+    void nothingSaysTheModelStatesSomethingHere() {
+        assertEquals(List.of(), divided().rulesWithoutALine().stream()
+                        .filter(each -> each.at().path().toString().equals(AT)).toList(),
+                "no rule here was read from end to end");
     }
 
     /**
