@@ -11,12 +11,18 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * The order every kind of reason is published in, written down once each.
+ * The order a kind of reason is published in, for the kinds that arrive without one.
  *
- * <p>One kind, one order. A kind said in two places — an observation's code is said of a reading
- * that stopped short and again of a value nothing could read back — has one order all the same, or
- * the two lines of one block would put the same pair of reasons in two orders and nothing would say
- * which was meant.
+ * <p>Not every kind. Where a plurality comes with the order the model has — the reasons a question
+ * stands are the parts of the rule that raised it, and a document promises that order — nothing
+ * here has anything to decide, and an order written for such a kind would answer by a precedence
+ * nothing in the model decides ({@link SourceOrdered}). What is written here is for the kinds that
+ * cross saying which of them hold and nothing more.
+ *
+ * <p>Of those, one kind, one order. A kind said in two places — an observation's code is said of a
+ * reading that stopped short and again of a value nothing could read back — has one order all the
+ * same, or the two lines of one block would put the same pair of reasons in two orders and nothing
+ * would say which was meant.
  *
  * <p>Written here rather than read off how the constants are declared. A declaration is arranged
  * for whoever reads the code, and moving one is a change nobody expects to see in a document; read

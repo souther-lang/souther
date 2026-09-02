@@ -25,7 +25,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  *
  * <p>That the order holds every ground there is, is not asked here. It is one of the things a
  * publication order can be wrong about and it is asked of every one of them at once, in
- * {@link souther.compiler.publish.EveryKindSaidInOneOrderTest}.
+ * {@code ACanonicalPublicationOrderIsCompleteAndOnePerKindTest}.
  */
 class AGroundIsSpelledAndOrderedByTheDocumentTest {
 

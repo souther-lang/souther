@@ -1,7 +1,6 @@
 package souther.compiler.publish;
 
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.List;
 
 /**
@@ -41,8 +40,13 @@ public final class SourceOrdered<T> {
      * <p>The caller says by calling this that the order it hands over is the model's own. Where it
      * is this compiler's, the order belongs to {@link PublicationOrders} and the value is a
      * {@link CanonicalSelection}.
+     *
+     * <p>A list and not a collection, which is the opposite of what {@link CanonicalSelection.Order}
+     * takes. That one throws the order away and reads membership, so anything holding the members
+     * will do; this one keeps the order, so what it is handed has to have one — a set handed over
+     * as written would be an order claimed for something that has none.</p>
      */
-    public static <T> SourceOrdered<T> asWritten(Collection<? extends T> reasons) {
+    public static <T> SourceOrdered<T> asWritten(List<? extends T> reasons) {
         List<T> out = new ArrayList<>();
         for (T each : reasons) {
             if (!out.contains(each)) {

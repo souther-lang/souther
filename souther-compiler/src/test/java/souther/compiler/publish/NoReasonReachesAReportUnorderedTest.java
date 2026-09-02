@@ -8,6 +8,7 @@ import souther.compiler.report.AdequacyReport;
 
 import java.io.File;
 import java.lang.reflect.Field;
+import java.lang.reflect.GenericArrayType;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.lang.reflect.ParameterizedType;
@@ -55,18 +56,19 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class NoReasonReachesAReportUnorderedTest {
 
     /**
-     * Nothing a report can reach holds a kind of reason as a set.
+     * Nothing a report can reach holds a kind of reason in a bare plurality.
      *
      * <p>Walked rather than listed: from everything that writes a report, through what its values
      * hold and what they answer, into every arm of every sum on the way. A value added between the
      * two arrives here without anybody adding a line.
      *
-     * <p>A set and not any collection. A list was put in an order by whoever built it — the modules
-     * of a compilation are answered in the order their sources were given — and a set was not, so a
-     * set is where an order gets invented at the far end.
+     * <p>Bare is any of them that does not say which order it is in — a set, a list, an array. What
+     * a reader may do with the order turns on where the order came from, and only two types say:
+     * a {@link CanonicalSelection} is in the order this compiler publishes the kind in, and a
+     * {@link SourceOrdered} is in the order the model has.
      */
     @Test
-    void nothingAReportReachesHoldsAKindAsASet() throws Exception {
+    void nothingAReportReachesHoldsAKindInABarePlurality() throws Exception {
         List<String> found = new ArrayList<>();
         Set<Class<?>> seen = new LinkedHashSet<>();
         Deque<Class<?>> left = new ArrayDeque<>(everyReport());
@@ -79,12 +81,10 @@ class NoReasonReachesAReportUnorderedTest {
                 left.addLast(arm);
             }
             for (Member each : membersOf(here)) {
-                if (each.type() instanceof ParameterizedType held
-                        && Collection.class.isAssignableFrom(rawOf(held.getRawType()))
-                        && isAKind(held.getActualTypeArguments()[0])) {
-                    found.add(here.getSimpleName() + "." + each.name() + " holds "
-                            + held.getActualTypeArguments()[0].getTypeName()
-                            + " as a set, so what a report says them in is what it iterates in");
+                String held = bareKindIn(each.type());
+                if (held != null) {
+                    found.add(here.getSimpleName() + "." + each.name() + " holds " + held
+                            + " without saying which order it is in");
                 }
                 for (Class<?> reached : typesIn(each.type())) {
                     if (reached.getPackageName().startsWith("souther.compiler")) {
@@ -105,37 +105,41 @@ class NoReasonReachesAReportUnorderedTest {
     }
 
     /**
-     * Nothing a report writes takes or answers with a plurality of a kind in a bare collection.
+     * Nothing a report writes takes or answers with a kind of reason in a bare plurality.
      *
      * <p>The shape the defect had, and the one the walk above cannot see: what a report hands its
      * own writers. A method taking the budgets as a set joined them in whatever the set iterated
      * in, and no type anywhere held that.
      *
-     * <p><b>Any collection, a list included.</b> A list says somebody put it in an order and does
+     * <p><b>A list is one, and so is an array.</b> A list says somebody put it in an order and does
      * not say who — the walk that met the reasons, or the person who wrote what raised them — and
-     * those are the two things a reader may not be left to tell apart. So a plurality of a kind
-     * crosses as a {@link CanonicalSelection}, where the order is this compiler's decision about
-     * what a reader is shown, or as a {@link SourceOrdered}, where it is the model's own; a bare
-     * collection is neither claim made.
+     * those are the two things a reader may not be left to tell apart. An array is the same and
+     * arrives more easily than either: {@code values()} answers with one, in the order the
+     * constants are declared. So a plurality of a kind crosses as a {@link CanonicalSelection},
+     * where the order is this compiler's decision about what a reader is shown, or as a
+     * {@link SourceOrdered}, where it is the model's own.
      *
      * <p>Read off every method a report declares, private ones included. What a document says is
      * built by the ones nobody outside calls.
      */
     @Test
-    void nothingAReportWritesTakesOrAnswersWithAPluralityOfAKindInABareCollection() throws Exception {
+    void nothingAReportWritesTakesOrAnswersWithAKindInABarePlurality() throws Exception {
         List<String> found = new ArrayList<>();
         for (Class<?> each : everyReport()) {
+            if (each.isEnum()) {
+                // What an enum declares is the language's — `values()` answers with an array of
+                // itself, and reading that as a report writing something would be reading a
+                // constant's own declaration as a sentence.
+                continue;
+            }
             for (Method method : each.getDeclaredMethods()) {
                 List<Type> said = new ArrayList<>(List.of(method.getGenericParameterTypes()));
                 said.add(method.getGenericReturnType());
                 for (Type type : said) {
-                    if (type instanceof ParameterizedType held
-                            && (Collection.class.isAssignableFrom(rawOf(held.getRawType()))
-                                    || rawOf(held.getRawType()).equals(Iterable.class))
-                            && isAKind(held.getActualTypeArguments()[0])) {
+                    String held = bareKindIn(type);
+                    if (held != null) {
                         found.add(each.getSimpleName() + "." + method.getName() + " takes or"
-                                + " answers with a bare collection of "
-                                + held.getActualTypeArguments()[0].getTypeName());
+                                + " answers with a bare plurality of " + held);
                     }
                 }
             }
@@ -191,6 +195,38 @@ class NoReasonReachesAReportUnorderedTest {
             }
         }
         return false;
+    }
+
+    /**
+     * Which kind this type is a bare plurality of, or nothing where it is none.
+     *
+     * <p>Asked of what a type holds many of rather than of the containers somebody thought of. An
+     * array is one — {@code values()} answers with one, in the order the constants are declared —
+     * and so is a collection inside something else. What is not one is a
+     * {@link CanonicalSelection} or a {@link SourceOrdered}: those are pluralities that say which
+     * order they are in, which is the whole of what is asked here.
+     */
+    private static String bareKindIn(Type type) {
+        if (type instanceof Class<?> it && it.isArray() && isAKind(it.getComponentType())) {
+            return it.getComponentType().getTypeName();
+        }
+        if (type instanceof GenericArrayType it && isAKind(it.getGenericComponentType())) {
+            return it.getGenericComponentType().getTypeName();
+        }
+        if (type instanceof ParameterizedType it) {
+            Class<?> raw = rawOf(it.getRawType());
+            if ((Collection.class.isAssignableFrom(raw) || raw.equals(Iterable.class))
+                    && isAKind(it.getActualTypeArguments()[0])) {
+                return it.getActualTypeArguments()[0].getTypeName();
+            }
+            for (Type each : it.getActualTypeArguments()) {
+                String held = bareKindIn(each);
+                if (held != null) {
+                    return held;
+                }
+            }
+        }
+        return null;
     }
 
     /** What a type is bounded by, which is what a wildcard or a parameter says about its values. */

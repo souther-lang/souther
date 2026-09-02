@@ -778,11 +778,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             for (BehaviorReport behavior : module.behaviors()) {
                 // The cases of the signature, which every bar refuses over.
                 if (behavior.signature() != null
-                        && refusesAny(Adequacy.Kind.OUTPUT_CASE_UNSPECIFIED,
-                                Adequacy.Kind.INPUT_CASE_UNSPECIFIED)) {
+                        && (refuses(Adequacy.Kind.OUTPUT_CASE_UNSPECIFIED)
+                                || refuses(Adequacy.Kind.INPUT_CASE_UNSPECIFIED))) {
                     add(measures, behavior.signature().counted());
                 }
-                if (behavior.branch() != null && refusesAny(Adequacy.Kind.ARM_UNREACHED)) {
+                if (behavior.branch() != null && refuses(Adequacy.Kind.ARM_UNREACHED)) {
                     add(measures, behavior.branch().measured());
                 }
                 if (behavior.partition() == null) {
@@ -798,8 +798,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 // ordinary shape whose boundary measure is made in full, and holding the verdict
                 // open for it would say a model was unmeasured on the strength of the one measure
                 // that was.
-                if (refusesAny(Adequacy.Kind.BOUNDARY_UNMET,
-                        Adequacy.Kind.DOMAIN_POINT_UNCOVERED)) {
+                if (refuses(Adequacy.Kind.BOUNDARY_UNMET)
+                        || refuses(Adequacy.Kind.DOMAIN_POINT_UNCOVERED)) {
                     add(measures, behavior.boundaryReadings());
                 }
                 // What the rows reach of each position, which finds a class no row is in — a gap
@@ -815,7 +815,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 // was satisfied by the classes nobody had found yet. A behavior the reading proved
                 // divides nothing answers {@code NotApplicable} and is dropped below, so this holds
                 // nothing open that was never going to be measured.
-                if (refusesAny(Adequacy.Kind.AXIS_CLASS_UNCOVERED)) {
+                if (refuses(Adequacy.Kind.AXIS_CLASS_UNCOVERED)) {
                     add(measures, behavior.partition().partitioned());
                     behavior.partition().axes().forEach(axis -> add(measures, axis.reached()));
                 }
@@ -884,13 +884,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
 
     /** Whether the bar refuses over any of {@code kinds}, which is what puts the measure that finds
      *  them among the answers a verdict needs. */
-    private boolean refusesAny(Adequacy.Kind... kinds) {
-        for (Adequacy.Kind kind : kinds) {
-            if (held.refuses(kind)) {
-                return true;
-            }
-        }
-        return false;
+    private boolean refuses(Adequacy.Kind kind) {
+        return held.refuses(kind);
     }
 
     /**

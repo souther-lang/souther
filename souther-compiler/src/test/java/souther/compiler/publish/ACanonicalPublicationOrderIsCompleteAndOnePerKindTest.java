@@ -22,7 +22,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
 /**
- * What a report says a kind of reason in the order of, and that there is one such order per kind.
+ * Every canonical publication order holds all of its kind, and no kind has two of them.
+ *
+ * <p>Of the orders that are written down, and not of every kind of reason there is. A kind that
+ * arrives in the order the model has is published in that one ({@link SourceOrdered}) and has
+ * nothing written for it here.
  *
  * <p>An order is a sequence, so repeats, pairs out of order and two members in one place are all
  * things a sequence cannot hold. What a sequence can be wrong about is holding fewer members than
@@ -38,7 +42,7 @@ import static org.junit.jupiter.api.Assertions.fail;
  * factories rather than about what any class holds, and it is asked of the compiled code in
  * {@code OnlyOnePlaceDeclaresAPublicationOrderTest}.
  */
-class EveryKindSaidInOneOrderTest {
+class ACanonicalPublicationOrderIsCompleteAndOnePerKindTest {
 
     /**
      * Every order holds every member of its kind, once each.
