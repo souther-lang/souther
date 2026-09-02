@@ -138,6 +138,36 @@ public record Incompleteness(Code code, Target target, Optional<Citation> at) {
         public boolean leftNoRowRead() {
             return leftNoRowRead;
         }
+
+        /**
+         * Whether a run that allows more could come to a different answer about this.
+         *
+         * <p>Answered here because every producer of a code agrees about it, which is what lets the
+         * code answer at all. Where they did not, the code was split: a row a figure stopped and a
+         * row the evaluation had no answer for were one word, and no answer to this could have been
+         * right at both.
+         *
+         * <p>One switch and no {@code default}, rather than a flag beside {@link #leftNoRowRead}.
+         * The two questions are asked the same way for different reasons: that one is a fact about
+         * one code and reads as one, and this one is a division of the whole vocabulary into two,
+         * which is only reviewable where every answer is visible at once.
+         */
+        public RunSensitivity runSensitivity() {
+            return switch (this) {
+                // The observation walked as far as its nodes, its depth and its text allowed, and
+                // an observation allowed more keeps what it stopped at.
+                case VALUE_TRUNCATED -> RunSensitivity.MAY_CHANGE;
+                // And the row was stopped by the steps, the depth or the clock it is evaluated
+                // under, each of which a run may allow more of.
+                case ROW_EVALUATION_LIMIT_REACHED -> RunSensitivity.MAY_CHANGE;
+                // Nothing here compared anything against a figure. A value nothing could read back,
+                // a row the evaluation had no answer for, a row nothing could establish an answerer
+                // for, classes that would not link or were never made, and a source nothing was
+                // observed from are all met again by a run that allows more.
+                case VALUE_UNREADABLE, ROW_UNDECIDED, ANSWERER_NOT_ESTABLISHED, LINKAGE_FAILED,
+                     OBSERVATION_ABSENT, INSTRUMENTATION_ABSENT -> RunSensitivity.UNAFFECTED;
+            };
+        }
     }
 
     public Incompleteness {

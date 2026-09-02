@@ -70,7 +70,13 @@ public final class ReportedReason {
             // form that was seen, and one wants the gathering to reach the rules at all. Collapsed
             // together, a position whose rules nothing had looked at was reported as an expression
             // the terms do not name, which is a cause it was never observed to have.
-            case BlockReason.ValueRulesNotReached _ ->
+            // One word for the two, and on purpose. Which figure stopped a walk is this compiler's
+            // business: a document promises a reader the hole under the position and not the route
+            // this took to it, and a depth it could not afford is a route. The two are apart inside
+            // because a reader of a measure asks whether a wider run would get past it, and that is
+            // a question a published word does not answer.
+            case BlockReason.ValueRulesNotReached _,
+                 BlockReason.ValueRulesNotReachedPastDepthLimit _ ->
                     UndividedPosition.Reason.RULES_NOT_READ_AT_ALL;
             case BlockReason.UnreadComparisonDomain _ ->
                     UndividedPosition.Reason.UNSUPPORTED_DOMAIN;

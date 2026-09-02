@@ -1090,7 +1090,7 @@ public final class FieldDomains {
         // would settle this reading's completeness by a reading that is not this one.
         if (!everyRuleReachedAt(path)) {
             return AdmissibleSet.wider(values, with(spread,
-                    List.of(new AdmissibleSet.Widening.RuleUnread(UnreadReason.NOT_REACHED))));
+                    List.of(new AdmissibleSet.Widening.RuleUnread(whyNothingReached(path)))));
         }
         return spread.isEmpty() ? AdmissibleSet.complete(values)
                 : AdmissibleSet.wider(values, spread);
@@ -1127,6 +1127,48 @@ public final class FieldDomains {
      */
     public boolean everyRuleReachedAt(RuleKey path) {
         return reaches(notGathered.keySet(), path);
+    }
+
+    /**
+     * Which of the two ways of never reaching a position's rules this one is.
+     *
+     * <p>Every stop that reaches the position is read and not the first of them. A stop past the
+     * depth this reading could afford is one a run allowed to read further would go past; every
+     * other stop is met again however much a run allows — so a position two stops reach is short
+     * after the depth is raised, and saying otherwise would send a person to measure the same thing
+     * twice. Which makes the depth answer the one that has to hold of all of them.
+     *
+     * <p>Asked only where {@link #everyRuleReachedAt} has already said something stopped, so the
+     * set walked here is never empty and the answer is never the depth by vacuity.
+     */
+    private UnreadReason whyNothingReached(RuleKey path) {
+        Set<RulesMissed> reaching = new LinkedHashSet<>();
+        notGathered.forEach((stopped, why) -> {
+            if (path.isAtOrUnder(stopped)) {
+                reaching.addAll(why);
+            }
+        });
+        return whyNothingReached(reaching);
+    }
+
+    /**
+     * The same, of the stops themselves, which is where the answer is decided.
+     *
+     * <p>Taken apart from the walk over the paths so that what the coarsening is can be held to a
+     * table. Which stops reach a position is arithmetic on paths; which reason a set of stops comes
+     * to is the decision, and it is the one worth writing down.
+     */
+    static UnreadReason whyNothingReached(Set<RulesMissed> stops) {
+        boolean depth = false;
+        for (RulesMissed why : stops) {
+            if (why instanceof RulesMissed.WalkStopped(GuaranteeWalk.Stop stop)
+                    && stop == GuaranteeWalk.Stop.PAST_THE_DEPTH) {
+                depth = true;
+            } else {
+                return UnreadReason.NOT_REACHED;
+            }
+        }
+        return depth ? UnreadReason.NOT_REACHED_PAST_DEPTH_LIMIT : UnreadReason.NOT_REACHED;
     }
 
     /**
