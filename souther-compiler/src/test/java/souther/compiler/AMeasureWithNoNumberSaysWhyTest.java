@@ -376,11 +376,39 @@ class AMeasureWithNoNumberSaysWhyTest {
                 notAsked.get("sift").measured().why());
     }
 
+    /**
+     * And which of the two reasons it is decides whether the line is printed at all.
+     *
+     * <p>The two states of one reason, held apart on one behavior. What a build asked for is an
+     * input to the whole run, so a line repeating it under every behavior says one fact as many
+     * times as the module has behaviors; a behavior no row names is short of something of its own
+     * and says so. Read for one of the two — the line is printed unless the reason is the other —
+     * the second reason added to that enum is printed as neither.
+     */
+    @Test
+    void theArmsNobodyAskedForSayNothingUnderTheBehaviorAndTheArmsNoRowNamesSayWhy() {
+        String notAsked = behaviorBlock(humanAt(Adequacy.Level.WITNESS), "sift");
+        assertFalse(notAsked.contains("branch"),
+                () -> "what a build asked for is not said behavior by behavior:\n" + notAsked);
+
+        String noRows = behaviorBlock(human(), "sift");
+        assertTrue(noRows.contains("branch      not measured (no row names this behavior)"),
+                () -> "and what this behavior is short of is:\n" + noRows);
+    }
+
+    private static String humanAt(Adequacy.Level level) {
+        return AdequacyReport.of(compiledAt(level)).human(SourceNameResolver.identity());
+    }
+
     private static Map<String, Adequacy.BranchEvidence> branchesAt(Adequacy.Level level) {
+        return compiledAt(level).db().ask(new Adequacy.BranchCoverage("example.repro")).value();
+    }
+
+    private static Compilation compiledAt(Adequacy.Level level) {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
         compilation.measure(Adequacy.Asked.reportOnly(level));
         compilation.answerEverything();
-        return compilation.db().ask(new Adequacy.BranchCoverage("example.repro")).value();
+        return compilation;
     }
 
     /** A line an invariant drew is met by writing the value, so it is never waiting on the arms.
