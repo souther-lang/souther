@@ -1,7 +1,8 @@
 package souther.compiler.check;
 
 import souther.compiler.core.Core;
-import souther.compiler.regex.PatternSyntax;
+import souther.compiler.regex.PatternPlan;
+import souther.compiler.regex.PatternRead;
 import souther.compiler.types.Type;
 import souther.compiler.values.AdmittedPlan;
 import souther.compiler.values.Allowance;
@@ -164,26 +165,54 @@ final class AdmissibleReading implements ClauseReading<PlannedValues<FactSubject
         if (position == null) {
             return null;
         }
-        PatternSyntax syntax = stated.accepts();
-        if (syntax == null) {
-            // A pattern written more deeply than this reads is a limit of the reading and not a
-            // shape it has no word for, so it is said as itself. Left to fall through, it would go
-            // out as a form nothing here takes apart — and an author would go looking for the
-            // construct that was the trouble, when every construct in it is one this reads.
-            return StringPredicates.readTooLittleOf(e, symbols)
-                    ? PlannedValues.unreadable(Set.of(position),
-                            UnreadReason.PATTERN_TOO_DEEPLY_NESTED)
-                    : null;
-        }
-        // Named and not built. What the position finally admits is met out of every rule that
-        // reached it, and a pattern met with three written strings is a question about three
-        // strings — built here, it would be a machine nobody needed and the position would have
-        // that much less for the meet it does need. So what is said is which machine would answer
-        // this rule, and whether one is ever made of it is settled where the position's plan is
-        // worked out under its allowance.
-        return PlannedValues.at(position, new AdmittedPlan.Pattern(
-                states ? souther.compiler.regex.PatternPlan.of(syntax)
-                        : souther.compiler.regex.PatternPlan.notMatching(syntax)));
+        return switch (stated.reading()) {
+            // Named and not built. What the position finally admits is met out of every rule that
+            // reached it, and a pattern met with three written strings is a question about three
+            // strings — built here, it would be a machine nobody needed and the position would have
+            // that much less for the meet it does need. So what is said is which machine would
+            // answer this rule, and whether one is ever made of it is settled where the position's
+            // plan is worked out under its allowance.
+            case StringPredicates.Reading.Accepting it -> PlannedValues.at(position,
+                    new AdmittedPlan.Pattern(states ? PatternPlan.of(it.accepts())
+                            : PatternPlan.notMatching(it.accepts())));
+            case StringPredicates.Reading.PatternNotRead it -> stoppedBy(it.why(), position);
+            // A rule whose text this could not work out is a rule this did not read, and what that
+            // costs is the leaf's to say — over every position the clause names, which is more than
+            // this one wherever the text is written out of another.
+            case StringPredicates.Reading.WrittenArgumentNotKnown _ -> null;
+        };
+    }
+
+    /**
+     * What a pattern this reading stopped short of costs, or nothing where the leaf says it.
+     *
+     * <p>Only the one this reading is itself the limit of. A pattern written more deeply than this
+     * reads is a limit of the reading and not a shape it has no word for, so it is said as itself —
+     * left to fall through, it would go out as a form nothing here takes apart, and an author would
+     * go looking for the construct that was the trouble when every construct in it is one this
+     * reads. Every other construct is one the subset does not hold, which is a rule this could not
+     * read like any other, and what that costs is worked out once at the leaf over every position
+     * the clause names.
+     *
+     * <p>No {@code default}: a construct the subset learns to stop at is one somebody decides about
+     * here, rather than one that quietly joins the eleven.
+     */
+    private PlannedValues<FactSubject> stoppedBy(PatternRead.Unsupported why, FactSubject position) {
+        return switch (why) {
+            case NESTED_TOO_DEEPLY -> PlannedValues.unreadable(Set.of(position),
+                    UnreadReason.PATTERN_TOO_DEEPLY_NESTED);
+            case A_GROUP_ABOUT_THE_MATCH,
+                 A_BACK_REFERENCE,
+                 A_CHARACTER_PROPERTY,
+                 A_BOUNDARY,
+                 A_QUOTATION,
+                 A_CLASS_OF_CLASSES,
+                 A_COUNT_THIS_CANNOT_READ,
+                 SOMETHING_UNCLOSED,
+                 AN_ESCAPE_THIS_DOES_NOT_READ,
+                 AN_ANCHOR_THIS_CANNOT_PLACE,
+                 A_POSSESSIVE_REPETITION -> null;
+        };
     }
 
     /** What one comparison of a position with a value says, or nothing where it is not one. */

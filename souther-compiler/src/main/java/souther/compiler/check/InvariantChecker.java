@@ -1783,7 +1783,7 @@ public final class InvariantChecker {
      *
      * <p>Which calls those are is {@link StringPredicates}' and is asked rather than spelled: the
      * same table says what such a call means about the strings at a position, and a second list of
-     * spellings here would be a second answer to which rules this compiler reads (issue #1249).
+     * spellings here would be a second answer to which rules this compiler reads.
      *
      * <p>Only where the position is one this reading names. A predicate about something deeper than
      * the coordinates in hand states nothing this walk can file, and filing it against the position
@@ -1810,19 +1810,31 @@ public final class InvariantChecker {
         if (stated == null) {
             return null;
         }
-        return switch (StringPredicates.divides(atom, symbols)) {
-            case StringPredicates.Divides.IntoTwo _ -> byName.get(nameOf(stated.subject(), at));
+        return switch (stated.reading()) {
+            case StringPredicates.Reading.Accepting accepting ->
+                    dividedBy(accepting, stated.subject(), at, byName);
+            // A rule this did not read says nothing here: the reading that stopped is the one that
+            // reports being stopped, and a second account of it from this side would be a limit
+            // filed as a fact about the model.
+            case StringPredicates.Reading.PatternNotRead _ -> null;
+            case StringPredicates.Reading.WrittenArgumentNotKnown _ -> null;
+        };
+    }
+
+    /** The same, off the strings the rule was read as. */
+    private Coordinate dividedBy(StringPredicates.Reading.Accepting accepting, Core subject,
+                                 Denotations at, Map<FactSubject, Coordinate> byName) {
+        return switch (StringPredicates.divides(accepting)) {
+            case StringPredicates.Divides.IntoTwo _ -> byName.get(nameOf(subject, at));
             // Every string, so the rule tells no value here from another and the position is one
             // the model divides no way — which is what it comes back as when nothing is filed.
             case StringPredicates.Divides.NothingIsRuledOut _ -> null;
             // No string, so the rules leave no value here. That is a fact about the values and is
             // said where emptiness is, not as a division with no line through it.
             case StringPredicates.Divides.NothingIsLeft _ -> null;
-            // And where this compiler could not tell, it says nothing here: the reading that spent
-            // the allowance is the one that reports being stopped, and a second account of it from
-            // this side would be a limit filed as a fact about the model.
-            case StringPredicates.Divides.CouldNotTell _ -> null;
-            case null -> null;
+            // And where a limit stopped the machine, the same as above: what it cost is reported by
+            // whoever spent it.
+            case StringPredicates.Divides.StoppedByLimit _ -> null;
         };
     }
 
