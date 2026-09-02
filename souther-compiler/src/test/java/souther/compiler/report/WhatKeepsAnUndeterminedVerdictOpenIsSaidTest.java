@@ -24,6 +24,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -101,7 +102,7 @@ class WhatKeepsAnUndeterminedVerdictOpenIsSaidTest {
         AdequacyReport report = measured();
 
         assertEquals(new AdequacyReport.UnderAWiderRun(0, 1), report.underAWiderRun(),
-                () -> "what keeps it open: " + report.whatKeepsTheVerdictOpen().causes());
+                () -> "what keeps it open: " + report.whatKeepsTheVerdictOpen());
     }
 
     /**
@@ -113,7 +114,8 @@ class WhatKeepsAnUndeterminedVerdictOpenIsSaidTest {
      */
     @Test
     void andItIsTheRuleAboutTheValueTheListWasMadeFrom() {
-        Weakening only = measured().whatKeepsTheVerdictOpen().causes().iterator().next();
+        AdequacyOpening open = measured().whatKeepsTheVerdictOpen().get(0);
+        Weakening only = ((AdequacyOpening.ByWeakening) open).cause();
 
         assertTrue(only instanceof Weakening.ModelReadingIncomplete it
                         && it.cause() instanceof souther.compiler.partition.ClosureGap.RuleUnread
@@ -151,6 +153,50 @@ class WhatKeepsAnUndeterminedVerdictOpenIsSaidTest {
     }
 
     /**
+     * A model nobody has written rows for is open on the measures nobody made.
+     *
+     * <p>The other half of what {@code undetermined} covers, and the half a list of what fell short
+     * says nothing about. Nothing here fell short: the measures were never started, so they weaken
+     * nothing and a verdict read off the weakenings alone came back open on nothing at all.
+     *
+     * <p>{@code unaffected} is right and means what it says. Allowing more does not make a
+     * measurement nobody asked for; what does is a row, and a row is a change to the model rather
+     * than a wider run of this compiler over it. What a person may go on to do is what the reason
+     * says, which is why the reason travels beside it.
+     */
+    @Test
+    void aModelWithNoRowsIsOpenOnTheMeasuresNobodyMade() {
+        AdequacyReport report = noRows();
+        JsonNode open = JSON.readTree(report.json(SourceNameResolver.identity())).get("keptOpenBy");
+
+        assertEquals(AdequacyReport.AdequacyStatus.UNDETERMINED, report.adequacy(),
+                () -> report.human(SourceNameResolver.identity()));
+        assertFalse(open.isEmpty(),
+                "a verdict nobody could settle is open on the measures nobody made");
+        for (JsonNode each : open) {
+            assertEquals("not_measured", each.get("kind").asString(), each.toString());
+            assertEquals("no_rows", each.get("reason").asString(), each.toString());
+            assertEquals("unaffected", each.get("runSensitivity").asString(), each.toString());
+        }
+    }
+
+    /**
+     * And the invariant the two halves are for: an open verdict is open on something.
+     *
+     * <p>What the conformance corpus found a counterexample to, before a measure nobody made was
+     * one of these. Held over the three models here rather than as a sentence: a settled verdict is
+     * open on nothing, and an unsettled one names what it is unsettled by.
+     */
+    @Test
+    void anOpenVerdictIsOpenOnSomethingAndASettledOneIsNot() {
+        for (AdequacyReport each : List.of(measured(), settled(), noRows())) {
+            assertEquals(each.adequacy() == AdequacyReport.AdequacyStatus.UNDETERMINED,
+                    !each.whatKeepsTheVerdictOpen().isEmpty(),
+                    () -> each.human(SourceNameResolver.identity()));
+        }
+    }
+
+    /**
      * A settled verdict is open on nothing, whichever way it settled.
      *
      * <p>The field is written all the same, so a consumer reads an array rather than asking whether
@@ -160,7 +206,17 @@ class WhatKeepsAnUndeterminedVerdictOpenIsSaidTest {
      */
     @Test
     void aSettledVerdictIsOpenOnNothing() {
-        Compilation compilation = Compilation.ofSource("""
+        AdequacyReport report = settled();
+        JsonNode root = JSON.readTree(report.json(SourceNameResolver.identity()));
+
+        assertNotEquals(AdequacyReport.AdequacyStatus.UNDETERMINED, report.adequacy(),
+                () -> report.human(SourceNameResolver.identity()));
+        assertTrue(root.get("keptOpenBy").isEmpty(), root.get("keptOpenBy").toString());
+    }
+
+    /** A model whose one behavior is measured in full, which settles the verdict either way. */
+    private static AdequacyReport settled() {
+        return reportOf("""
                 module probe.settled
 
                 data In = { n: Int }
@@ -173,15 +229,40 @@ class WhatKeepsAnUndeterminedVerdictOpenIsSaidTest {
 
                 example go
                     | "one" : (In { n = 1 }) -> Out { n = 1 }
-                """, "Main");
+                """);
+    }
+
+    /**
+     * And one nobody has written a row for, whose rules draw a line a row is owed at.
+     *
+     * <p>The invariant is what makes this the case it is for. Without a line there is nothing the
+     * bar refuses over, every measure answers that it was never going to be made, and the verdict
+     * is settled by having nothing to answer for. With one, a measure that could have found a gap
+     * was not made — and that is a verdict held open by no weakening at all.
+     */
+    private static AdequacyReport noRows() {
+        return reportOf("""
+                module probe.norows
+
+                data Days = Int
+                    invariant value >= 1 && value <= 20
+
+                data Grant = { days: Days }
+                data NotEntitled
+
+                behavior go : (worked: Int) -> Grant | NotEntitled
+                    constructs Grant, Days
+
+                let go (worked) =
+                    if worked >= 5 then Grant { days = Days(10) } else NotEntitled
+                """);
+    }
+
+    private static AdequacyReport reportOf(String model) {
+        Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
-        AdequacyReport report = AdequacyReport.of(compilation);
-        JsonNode root = JSON.readTree(report.json(SourceNameResolver.identity()));
-
-        assertNotEquals(AdequacyReport.AdequacyStatus.UNDETERMINED, report.adequacy(),
-                () -> report.human(SourceNameResolver.identity()));
-        assertTrue(root.get("keptOpenBy").isEmpty(), root.get("keptOpenBy").toString());
+        return AdequacyReport.of(compilation);
     }
 
     /**

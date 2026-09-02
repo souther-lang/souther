@@ -3,7 +3,23 @@
   "compilerVersion" : "<version>",
   "status" : "complete",
   "adequacy" : "undetermined",
-  "keptOpenBy" : [ ],
+  "keptOpenBy" : [ {
+    "kind" : "not_measured",
+    "reason" : "no_rows",
+    "runSensitivity" : "unaffected"
+  }, {
+    "kind" : "not_measured",
+    "reason" : "no_rows",
+    "runSensitivity" : "unaffected"
+  }, {
+    "kind" : "not_measured",
+    "reason" : "no_rows",
+    "runSensitivity" : "unaffected"
+  }, {
+    "kind" : "not_measured",
+    "reason" : "no_rows",
+    "runSensitivity" : "unaffected"
+  } ],
   "modules" : [ {
     "module" : "conformance.staffing",
     "status" : "complete",

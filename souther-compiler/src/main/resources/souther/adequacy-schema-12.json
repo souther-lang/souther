@@ -64,26 +64,70 @@
         "may_change",
         "unaffected"
       ],
-      "description": "Whether a wider run of this compiler could come to a different answer about one thing it fell short of. A wider run is the same sources, the same compiler build, the same dependencies and the same host, with one or more of the allowances this compiler stops under widened and none of them narrowed — an allowance being a figure it compared something against and stopped on: the steps a row is evaluated for, the depth a recursion may reach, the clock it is held to, the nodes an observation keeps, the combinations a measure walks, the states a pattern is built into. Whether a caller can set the figure today is not the question; several of them are constants, and which knobs exist is a fact about this month rather than about the stop. `may_change` does not promise that a wider run finishes the measure — a reading past one figure may be stopped by the next — it says the stop that produced this need not happen again. `unaffected` is the stronger of the two and the one to act on: no allowance widens it, so measuring the same model again with more allowed finds the same thing. Neither says anything about what a later version of this compiler could read, or about writing the model another way; both are outside what a run is.",
-      "$comment": "The host is not an allowance: a stack that ran out and classes that would not link are met again by a wider run on the same machine, and a run on another machine is a different host."
+      "description": "Whether a wider run of this compiler could come to a different answer about one thing it fell short of. A wider run is the same sources, the same compiler build, the same dependencies and the same host, with one or more of the allowances this compiler stops under widened and none of them narrowed — an allowance being a figure it compared something against and stopped on: the steps a row is evaluated for, the depth a recursion may reach, the clock it is held to, the nodes an observation keeps, the combinations a measure walks, the states a pattern is built into. Whether a caller can set the figure today is not the question; several of them are constants, and which knobs exist is a fact about this month rather than about the stop. `may_change` does not promise that a wider run finishes the measure — a reading past one figure may be stopped by the next — it says the stop that produced this need not happen again. `unaffected` is the stronger of the two and the one to act on: no allowance widens it, so measuring the same model again with more allowed finds the same thing. Neither says anything about what a later version of this compiler could read, or about writing the model another way; both are outside what a run is. The host is not an allowance either: a stack that ran out and classes that would not link are met again by a wider run on the same machine, and a run on another machine is a different host rather than a wider run of this one."
     },
     "adequacyOpening": {
       "type": "object",
-      "description": "One fact keeping the adequacy verdict undetermined, projected to what a document may say of it: the kind it is, and whether a wider run could answer it.",
+      "description": "One thing keeping the adequacy verdict undetermined, projected to what a document may say of it: the kind it is, and whether a wider run could answer it. Two kinds of thing hold a verdict open and they are not one — a measure that was made and went without something, and a measure that could have found a gap and was never made. The second weakens nothing, so a list of what fell short said nothing at all about a model nobody has written rows for while the verdict over it stayed open.",
       "required": [
         "kind",
         "runSensitivity"
       ],
       "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "not_measured"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "then": {
+            "required": [
+              "reason"
+            ]
+          },
+          "else": {
+            "not": {
+              "required": [
+                "reason"
+              ]
+            }
+          }
+        }
+      ],
       "properties": {
         "kind": {
-          "$ref": "#/$defs/weakening/items",
-          "description": "The published word for what fell short, which is the vocabulary `weakening` writes. One word covers more than one thing this compiler can meet — a pattern too large to build and a rule about a value made from another are both `rule_unread` — so this says which kind of thing it was and not which of them, and two entries alike are two facts rather than one said twice."
+          "anyOf": [
+            {
+              "$ref": "#/$defs/weakening/items"
+            },
+            {
+              "const": "not_measured",
+              "description": "A measure the verdict rests on was never made, so a gap it could have found is one nobody looked for. Nothing fell short here, which is why it is not one of the words above: those say what a measurement went without, and this says there was no measurement."
+            }
+          ],
+          "description": "What kind of thing this is. Everything but `not_measured` is the vocabulary `weakening` writes, where one word covers more than one thing this compiler can meet — a pattern too large to build and a rule about a value made from another are both `rule_unread` — so this says which kind it was and not which of them, and two entries alike are two things rather than one said twice."
+        },
+        "reason": {
+          "$ref": "#/$defs/notMeasuredReason"
         },
         "runSensitivity": {
           "$ref": "#/$defs/runSensitivity"
         }
       }
+    },
+    "notMeasuredReason": {
+      "enum": [
+        "no_rows",
+        "not_asked",
+        "arms_not_asked"
+      ],
+      "description": "What a measure nobody made was waiting for, in the words this document already writes wherever a measure has no number. Written only beside `not_measured`, and one entry per measure rather than one per reason: two measures both waiting on rows are two measures nobody made, and a model with one behavior unmeasured is not the same news as a model with forty."
     },
     "weakening": {
       "type": "array",

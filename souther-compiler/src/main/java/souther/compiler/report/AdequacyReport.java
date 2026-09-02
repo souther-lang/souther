@@ -728,18 +728,38 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * measured, so a refused build's verdict says nothing about what was also unmeasured — and what
      * was unmeasured is still true and still worth being able to ask for.
      */
-    public WeakeningSet whatKeepsTheVerdictOpen() {
-        WeakeningSet out = WeakeningSet.none();
+    public List<AdequacyOpening> whatKeepsTheVerdictOpen() {
+        // The facts first, folded once. Two measures that went without the same thing went without
+        // one thing, and putting them together is what says so.
+        WeakeningSet facts = WeakeningSet.none();
         for (Measurement<?> each : requiredSupport()) {
-            out = out.union(each.weakening());
+            facts = facts.union(each.weakening());
         }
         for (Measure<?> each : requiredEvidence()) {
-            out = out.union(each.weakening());
+            facts = facts.union(each.weakening());
         }
         for (ObligationAssessment each : requiredObligations()) {
-            out = out.union(each.weakening());
+            facts = facts.union(each.weakening());
+        }
+        List<AdequacyOpening> out = new ArrayList<>();
+        facts.causes().forEach(each -> out.add(new AdequacyOpening.ByWeakening(each)));
+        // And the measures nobody made, one entry each and not folded on the reason. Two measures
+        // both waiting on rows are two measures nobody made, and a fold on `no_rows` would say a
+        // model with one behavior unmeasured and a model with forty were the same news.
+        for (Measurement<?> each : requiredSupport()) {
+            notMeasured(out, each);
+        }
+        for (Measure<?> each : requiredEvidence()) {
+            notMeasured(out, each);
         }
         return out;
+    }
+
+    /** {@code measure} as what it contributes to the verdict being open, where it was never made. */
+    private static void notMeasured(List<AdequacyOpening> out, Measure<?> measure) {
+        if (measure instanceof Measurement.NotMeasured<?> never) {
+            out.add(new AdequacyOpening.NotMeasured(never.why()));
+        }
     }
 
     /**
@@ -772,7 +792,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
     public UnderAWiderRun underAWiderRun() {
         int mayChange = 0;
         int unaffected = 0;
-        for (Weakening each : whatKeepsTheVerdictOpen().causes()) {
+        for (AdequacyOpening each : whatKeepsTheVerdictOpen()) {
             if (each.runSensitivity() == RunSensitivity.MAY_CHANGE) {
                 mayChange++;
             } else {
@@ -3497,9 +3517,18 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         if (adequacy() != AdequacyStatus.UNDETERMINED) {
             return;
         }
-        for (Weakening each : whatKeepsTheVerdictOpen().causes()) {
+        for (AdequacyOpening each : whatKeepsTheVerdictOpen()) {
             ObjectNode fact = out.addObject();
-            fact.put("kind", kindOf(each));
+            switch (each) {
+                case AdequacyOpening.ByWeakening it -> fact.put("kind", kindOf(it.cause()));
+                // Its own word, and the reason beside it. A measure nobody made says what it was
+                // waiting for, and that word is one this document already writes wherever a measure
+                // has no number — so a reader meets one vocabulary and not two.
+                case AdequacyOpening.NotMeasured it -> {
+                    fact.put("kind", "not_measured");
+                    fact.put("reason", word(it.why()));
+                }
+            }
             fact.put("runSensitivity", word(each.runSensitivity()));
         }
     }
