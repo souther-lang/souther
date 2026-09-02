@@ -150,7 +150,7 @@ public record DecisionSources(Map<CoverageOrigin, DecisionSource> byFork, boolea
             // fork nothing wrote and every copy of it is counted as one.
             case Hir.ListComp comp -> {
                 for (int i = 0; i < comp.guards().size(); i++) {
-                    said(comp.origin().lowered(i), comp.guards().get(i), declaration, rules,
+                    said(comp.forkOfGuard(i), comp.guards().get(i), declaration, rules,
                             answersOn, bound, named, out);
                 }
             }

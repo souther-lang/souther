@@ -1463,10 +1463,36 @@ public interface Hir {
      * every guard holds, giving a 0-or-1 element list (spec §stdlib-list, conditional accumulation).
      *
      * <p>{@code origin} names the comprehension, and the fork each guard lowers to is derived from it
-     * ({@link CoverageOrigin#lowered}) rather than minted where the lowering runs — so a comprehension
+     * ({@link #forkOfGuard}) rather than minted where the lowering runs — so a comprehension
      * inside a helper answers the same whichever call site expanded it. */
     record ListComp(Expr element, List<Expr> guards, CoverageOrigin origin, SourcePos pos,
-                    Region region) implements Expr {}
+                    Region region) implements Expr {
+
+        /**
+         * The fork the guard at {@code at} lowers to — asked of the comprehension, which is what
+         * holds the construct they are forks of.
+         *
+         * <p>Two readers want it and they see the comprehension at different times: the lowering
+         * builds the forks, and the reading that decides what a coverage obligation is about runs
+         * before the lowering, where a rule is still a parameter. Written once here so that the two
+         * cannot come to number the guards differently — the numbering is what makes an obligation
+         * name a fork that exists, and it held only while both spelled the same arithmetic.
+         *
+         * @throws IndexOutOfBoundsException where {@code at} is not a guard of this comprehension.
+         *                                   A fork is one of the guards and nothing else is one:
+         *                                   the fork before the first would be the comprehension's
+         *                                   own origin, which is a different obligation and would
+         *                                   pass for this one, and the fork after the last is a
+         *                                   branch the lowering does not build
+         */
+        public CoverageOrigin forkOfGuard(int at) {
+            if (at < 0 || at >= guards.size()) {
+                throw new IndexOutOfBoundsException(
+                        "a fork is one of the guards written: " + at + " of " + guards.size());
+            }
+            return origin.lowered(at);
+        }
+    }
 
     /** A tuple {@code (e1, e2, ...)} of two or more values (ADR-0036), an expression-level value
      * that never crosses the data/behavior boundary. Opened with a {@code let (x, y) = t} destructure. */
