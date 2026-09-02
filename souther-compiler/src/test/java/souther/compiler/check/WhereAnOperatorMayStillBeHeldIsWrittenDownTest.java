@@ -56,6 +56,14 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
  * what a comparison places is taken from a relation without an operator in between
  * ({@link ComparisonClaim#stating}), so a relation never becomes one.
  *
+ * <p><b>And no line here is one a reader has because it holds a comparison.</b> Every reader below
+ * a recognition once had the node it was recognised from, which is one call from the operator, and
+ * what kept it out of this list was that nobody had made that call yet — a fact about the code and
+ * not about the type. {@link souther.compiler.check.Comparison} holds no node now: what it carries
+ * is what the operator placed and the two sides it placed it on, and which comparison a reader is
+ * talking about is a name of its own. So a line arriving here for that reason is a reader that has
+ * gone back to the tree, and that is what it would have to say.
+ *
  * <p><b>One list, and the rule it comes from is the machine's.</b> A method that has an operator
  * names the type: to use a value as one, the type has to be established, and a symbolic reference
  * is how that is written down. Which instructions can carry one is a closed set the class file
