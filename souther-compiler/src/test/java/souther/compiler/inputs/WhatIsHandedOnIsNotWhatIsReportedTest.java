@@ -83,6 +83,36 @@ class WhatIsHandedOnIsNotWhatIsReportedTest {
                         .map(each -> named(each.rule())).distinct().toList());
     }
 
+    /**
+     * A number taken of the value is handed on as the value's own is.
+     *
+     * <p>Which of a position's numbers a rule is about is no part of whether anything was settled
+     * about it. Read off the findings, a rule naming a length reached the drawing reading only
+     * where something else had already reported it, so whether such a rule was ever read again
+     * turned on what a report happened to have a sentence for.
+     */
+    @Test
+    void aRuleAboutANumberTakenOfTheValueIsHandedOnToo() {
+        assertEquals(List.of("notBlank", "exactlyFive"),
+                read(MEASURED, "n").clausesWithoutAnEnd().stream()
+                        .map(each -> named(each.rule())).distinct().toList());
+    }
+
+    /** A newtype measured by the length of what stands at it, with both shapes of rule that name a
+     *  value of that length. */
+    private static final String MEASURED = """
+            module example.handover
+
+            data Subject = String
+                invariant notBlank = String.length(value) /= 0
+                invariant exactlyFive = String.length(value) == 5
+
+            data Taken
+
+            behavior take : (n: Subject) -> Taken
+            let take (n) = Taken
+            """;
+
     private static List<String> handedOn() {
         return read().bounds().withoutAnEnd().stream()
                 .map(each -> named(each.from()))
@@ -102,7 +132,11 @@ class WhatIsHandedOnIsNotWhatIsReportedTest {
     }
 
     private static PlacedRules read() {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
+        return read(MODEL, "r");
+    }
+
+    private static PlacedRules read(String source, String parameter) {
+        Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
         String module = compilation.modules().get(0);
         Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
@@ -112,6 +146,6 @@ class WhatIsHandedOnIsNotWhatIsReportedTest {
             throw new AssertionError("the model under test compiles");
         }
         Type type = sigs.get("take").inputTypes().get(0);
-        return PlacedRules.of(TermPath.of("r"), type, symbols, ReadAs.THE_COMPILATION_DOES);
+        return PlacedRules.of(TermPath.of(parameter), type, symbols, ReadAs.THE_COMPILATION_DOES);
     }
 }
