@@ -34,7 +34,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 class NoAxesByItselfIsNotAGenerationReasonTest {
 
     private static final RuleReadingSource SYMBOLS =
-            RuleReadings.ofNothingDeclared(Symbols.none(DefaultStdlib.get()));
+            RuleReadings.ofNoClauseFiled(Symbols.none(DefaultStdlib.get()));
 
     private static final PathAccess NOT_ENUMERABLE =
             new PathAccess.Unsupported(PathAccess.Unsupported.Why.WAYS_NOT_ENUMERABLE);

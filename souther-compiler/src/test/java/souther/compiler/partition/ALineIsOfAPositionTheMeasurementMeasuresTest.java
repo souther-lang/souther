@@ -51,7 +51,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class ALineIsOfAPositionTheMeasurementMeasuresTest {
 
     private static final RuleReadingSource SYMBOLS =
-            RuleReadings.ofNothingDeclared(Symbols.none(DefaultStdlib.get()));
+            RuleReadings.ofNoClauseFiled(Symbols.none(DefaultStdlib.get()));
 
     private static final Carrier WHOLE = new Carrier.Whole();
 

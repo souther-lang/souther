@@ -931,7 +931,7 @@ class EveryFindingHasAGenerationDispositionTest {
     }
 
     private static souther.compiler.partition.MeasuredInput nothingIsDivided() {
-        RuleReadingSource rules = RuleReadings.ofNothingDeclared(
+        RuleReadingSource rules = RuleReadings.ofNoClauseFiled(
                 souther.compiler.check.Symbols.none(DefaultStdlib.get()));
         return souther.compiler.partition.MeasuredInput.of("pick",
                 souther.compiler.inputs.InputDomain.of(List.of(), rules,

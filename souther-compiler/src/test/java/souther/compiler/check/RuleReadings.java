@@ -37,15 +37,15 @@ public final class RuleReadings {
         return source;
     }
 
-    /** A reading over a scope that declares nothing, for a test that writes no model. There is no
-     *  declaration for a clause to be read off, so asking this for one is asking about a
-     *  declaration that is not there. */
-    public static RuleReadingSource ofNothingDeclared(Symbols symbols) {
-        return new RuleReadingSource(symbols, nothingDeclared(symbols));
+    /** A reading over a scope no declaration of which wrote a clause, for a test whose model states
+     *  no rules. Asking it for a declaration that did write one is asking for a reading this never
+     *  had, and is refused rather than answered off the settled form. */
+    public static RuleReadingSource ofNoClauseFiled(Symbols symbols) {
+        return new RuleReadingSource(symbols, noClauseFiled(symbols));
     }
 
-    /** The clause representation of a scope that declares nothing. */
-    public static AnalysisInvariants nothingDeclared(Symbols symbols) {
+    /** The clause representation of a scope no declaration of which wrote a clause. */
+    public static AnalysisInvariants noClauseFiled(Symbols symbols) {
         return new AnalysisInvariants(symbols.module(), java.util.Map.of());
     }
 
@@ -53,5 +53,14 @@ public final class RuleReadings {
      *  own beside it. */
     public static AnalysisInvariants declaredBy(Db db, String module) {
         return of(db, module).invariants();
+    }
+
+    /** A reading over the discharge tree of a scope no declaration of which wrote a clause, for a
+     *  test that reads terms and states no rules. Named here and not offered by {@link Terms}, so
+     *  that a reading of a module's declarations is built by saying which representation it reads
+     *  and never by handing over a scope alone. */
+    static Terms termsOfNoClauseFiled(Symbols symbols, ReadingPolicy policy) {
+        return new Terms(symbols, Terms.Of.THE_DISCHARGE_TREE, policy,
+                new Clauses(symbols, noClauseFiled(symbols)));
     }
 }

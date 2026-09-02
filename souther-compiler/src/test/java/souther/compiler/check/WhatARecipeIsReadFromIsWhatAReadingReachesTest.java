@@ -62,7 +62,7 @@ class WhatARecipeIsReadFromIsWhatAReadingReachesTest {
      */
     @Test
     void aReadingReachesWhatTheRecipesUnderItAreReadFrom() {
-        Terms terms = new Terms(Symbols.none(DefaultStdlib.get()), souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+        Terms terms = RuleReadings.termsOfNoClauseFiled(Symbols.none(DefaultStdlib.get()), souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         FactSubject left = marker();
         FactSubject right = marker();
         FactSubject product = marker();
@@ -93,7 +93,7 @@ class WhatARecipeIsReadFromIsWhatAReadingReachesTest {
      */
     @Test
     void aReadingReachesWhatDecidedAnArmAndNotOnlyWhatTheArmsAnswer() {
-        Terms terms = new Terms(Symbols.none(DefaultStdlib.get()), souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+        Terms terms = RuleReadings.termsOfNoClauseFiled(Symbols.none(DefaultStdlib.get()), souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         FactSubject answered = marker();
         FactSubject askedAbout = marker();
         FactSubject choice = marker();
@@ -111,7 +111,7 @@ class WhatARecipeIsReadFromIsWhatAReadingReachesTest {
      * recipes' doing and not something every subject gets. */
     @Test
     void aFormOverANameNothingWasRecordedAgainstReachesOnlyItself() {
-        Terms terms = new Terms(Symbols.none(DefaultStdlib.get()), souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+        Terms terms = RuleReadings.termsOfNoClauseFiled(Symbols.none(DefaultStdlib.get()), souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         FactSubject named = marker();
 
         assertEquals(Set.of(named), terms.reached(LinearForm.atom(named)),
@@ -135,7 +135,7 @@ class WhatARecipeIsReadFromIsWhatAReadingReachesTest {
      */
     @Test
     void twoChoicesDifferingOnlyInWhichArmStatesTheRelationAreNotOneRecipe() {
-        Terms terms = new Terms(Symbols.none(DefaultStdlib.get()), souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+        Terms terms = RuleReadings.termsOfNoClauseFiled(Symbols.none(DefaultStdlib.get()), souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         FactSubject answered = marker();
         FactSubject other = marker();
         FactSubject atom = marker();

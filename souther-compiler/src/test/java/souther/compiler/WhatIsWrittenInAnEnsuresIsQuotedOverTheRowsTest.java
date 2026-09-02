@@ -267,7 +267,7 @@ class WhatIsWrittenInAnEnsuresIsQuotedOverTheRowsTest {
 
     /** A behavior nothing was asked for and nothing composed for, which is what an empty offer is. */
     private static Adequacy.Filling nothingOffered() {
-        RuleReadingSource rules = RuleReadings.ofNothingDeclared(
+        RuleReadingSource rules = RuleReadings.ofNoClauseFiled(
                 souther.compiler.check.Symbols.none(DefaultStdlib.get()));
         souther.compiler.partition.MeasuredInput subject =
                 souther.compiler.partition.MeasuredInput.of("findTodo",

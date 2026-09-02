@@ -42,7 +42,7 @@ class EveryQuestionAReadingAnswersIsAboutItsOwnInputTest {
 
     private static final Symbols SYMBOLS = Symbols.none(DefaultStdlib.get());
 
-    private static final RuleReadingSource RULES = RuleReadings.ofNothingDeclared(SYMBOLS);
+    private static final RuleReadingSource RULES = RuleReadings.ofNoClauseFiled(SYMBOLS);
 
     /** The questions that are about the reading itself and name no place in it. */
     private static final List<String> ABOUT_THE_WHOLE_READING = List.of("region", "emptiness");

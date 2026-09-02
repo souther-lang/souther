@@ -28,7 +28,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class WhatBuildsASizeSaysWhatItCouldNotBuildTest {
 
     private static final RuleReadingSource NONE =
-            RuleReadings.ofNothingDeclared(Symbols.none(DefaultStdlib.get()));
+            RuleReadings.ofNoClauseFiled(Symbols.none(DefaultStdlib.get()));
 
     @Test
     void aStringOfTheSizeAskedForIsBuilt() {

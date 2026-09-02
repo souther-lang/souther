@@ -33,7 +33,7 @@ class AReadingAnswersAboutItsOwnTermsAndNoOthersTest {
 
     private static final Symbols SYMBOLS = Symbols.none(DefaultStdlib.get());
 
-    private static final RuleReadingSource RULES = RuleReadings.ofNothingDeclared(SYMBOLS);
+    private static final RuleReadingSource RULES = RuleReadings.ofNoClauseFiled(SYMBOLS);
 
     /** A reading of one behavior's input, which takes a string called {@code s}. */
     private static Quantities readingOfAString() {

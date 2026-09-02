@@ -316,25 +316,6 @@ final class Terms {
     }
 
     /**
-     * A reading over the discharge tree, reading every declaration's clauses off the declaration.
-     *
-     * <p>Which is what a type another module declares is read by either way (spec
-     * §invariant-discharge-representation). A reading of the module being checked has its clauses in
-     * the representation the discharge rules are written at and passes them.
-     */
-    Terms(Symbols symbols, ReadingPolicy policy) {
-        this(symbols, Of.THE_DISCHARGE_TREE, policy);
-    }
-
-    /** The same, over {@code reading}'s tree, where the scope declares nothing — so there is no
-     *  declaration for a clause of this module to be read off, and a reading that asked for one
-     *  would be asking about a declaration that is not there. */
-    Terms(Symbols symbols, Of reading, ReadingPolicy policy) {
-        this(symbols, reading, policy,
-                new Clauses(symbols, new AnalysisInvariants(symbols.module(), Map.of())));
-    }
-
-    /**
      * A reading over {@code reading}'s tree, told where the declarations' invariants are.
      *
      * <p>{@code clauses} is what lets a recipe say what choosing an arm settles where the arm binds

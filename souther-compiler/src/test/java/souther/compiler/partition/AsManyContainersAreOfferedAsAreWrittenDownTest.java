@@ -38,7 +38,7 @@ class AsManyContainersAreOfferedAsAreWrittenDownTest {
 
     private static final Symbols SYMBOLS = Symbols.none(DefaultStdlib.get());
 
-    private static final RuleReadingSource RULES = RuleReadings.ofNothingDeclared(SYMBOLS);
+    private static final RuleReadingSource RULES = RuleReadings.ofNoClauseFiled(SYMBOLS);
 
     private static final ReadingPolicy POLICY = new ReadingPolicy(64, 12);
 

@@ -33,7 +33,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 class AFillIsTotalOverThePlanItWasAskedWithTest {
 
     private static final RuleReadingSource SYMBOLS =
-            RuleReadings.ofNothingDeclared(Symbols.none(DefaultStdlib.get()));
+            RuleReadings.ofNoClauseFiled(Symbols.none(DefaultStdlib.get()));
 
     private static final Generator.ClassOwed A_CLASS =
             new Generator.ClassOwed(new AxisId("fee", "days"), "days/low");

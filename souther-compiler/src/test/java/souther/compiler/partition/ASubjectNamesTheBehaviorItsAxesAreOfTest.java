@@ -31,7 +31,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 class ASubjectNamesTheBehaviorItsAxesAreOfTest {
 
     private static final RuleReadingSource SYMBOLS =
-            RuleReadings.ofNothingDeclared(Symbols.none(DefaultStdlib.get()));
+            RuleReadings.ofNoClauseFiled(Symbols.none(DefaultStdlib.get()));
 
     /** The reading of an input of one parameter, which is what a subject is asked its numbers
      *  through. */
