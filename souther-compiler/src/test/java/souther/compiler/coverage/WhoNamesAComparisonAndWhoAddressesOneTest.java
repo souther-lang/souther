@@ -38,9 +38,14 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
  * reading of the sources makes of it — a call written inside a lambda belongs to the lambda, and
  * this says so.
  *
- * <p>What this does not see is the tests, which are not in {@code target/classes}. A fixture that
- * writes a report about a comparison nothing compiled makes one of these by hand, and that is a
- * fixture standing in for a catalog rather than a second answer inside the compiler.
+ * <p><b>What it does not see, said rather than left to be found.</b> The tests are not in
+ * {@code target/classes}: a fixture that writes a report about a comparison nothing compiled makes
+ * one of these by hand, and that is a fixture standing in for a catalog rather than a second answer
+ * inside the compiler. And what is read is this module's classes — a maker written in the CLI or
+ * the language server would not be counted here. Widening it is not free: those modules are built
+ * after this one, so a walk over their output would read whatever the last build left and would say
+ * nothing at all on a clean one. Both are things to be told about rather than things this can be
+ * widened to cover.
  */
 class WhoNamesAComparisonAndWhoAddressesOneTest {
 
@@ -52,9 +57,11 @@ class WhoNamesAComparisonAndWhoAddressesOneTest {
     private record Licence(String who, int calls, String why) { }
 
     private static final List<Licence> MAY_NAME = List.of(
-            new Licence("souther.compiler.coverage.ComparisonCatalog.of", 1,
+            new Licence("souther.compiler.coverage.ComparisonCatalog.lambda$walk$0", 1,
                     "the one enumeration of what the bodies of a module hold, which is where a"
-                            + " comparison first exists to be talked about"));
+                            + " comparison first exists to be talked about — inside the walk,"
+                            + " where a node is recognised and named in one step, so a name and"
+                            + " what it is a name of are made together"));
 
     private static final List<Licence> MAY_ADDRESS = List.of(
             new Licence("souther.compiler.coverage.CoverageSites.Plan.emissionSiteOf", 1,

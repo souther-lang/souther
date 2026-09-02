@@ -5,7 +5,6 @@ import souther.compiler.core.Core;
 import souther.compiler.diag.Citation;
 import souther.compiler.types.CoverageOrigin;
 
-import java.util.ArrayList;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -90,25 +89,23 @@ public final class ComparisonCatalog {
         IdentityHashMap<Core, ComparisonOccurrence> occurrenceAtNode = new IdentityHashMap<>();
         Map<ComparisonOccurrence, Catalogued> byOccurrence = new LinkedHashMap<>();
         for (Map.Entry<String, Core> body : behaviorBodies.entrySet()) {
-            // The nodes in the order the source wrote them, each with what recognising it
-            // established. Recognised once and here: gathered as nodes and recognised again where
-            // the name is made, this would be the same question asked twice about one binary, with
-            // a case to answer for the second answer being different.
-            List<Map.Entry<Core.Binary, Comparison>> found = new ArrayList<>();
-            walk(body.getValue(), found);
-            for (int ordinal = 0; ordinal < found.size(); ordinal++) {
-                Core.Binary binary = found.get(ordinal).getKey();
-                ComparisonOccurrence which =
-                        new ComparisonOccurrence(body.getKey(), ordinal);
-                occurrenceAtNode.put(binary, which);
-                byOccurrence.put(which, new Catalogued(which, found.get(ordinal).getValue(),
-                        Citation.of(binary.pos()), binary.origin()));
-            }
+            walk(body.getValue(), body.getKey(), new int[] {0}, occurrenceAtNode, byOccurrence);
         }
         return new ComparisonCatalog(occurrenceAtNode, byOccurrence);
     }
 
-    private static void walk(Core e, List<Map.Entry<Core.Binary, Comparison>> found) {
+    /**
+     * Every comparison of one body, named in the order the source wrote them.
+     *
+     * <p>One name per node and not one per visit. A node this walk arrives at twice is one
+     * comparison written once — which is what the numbering beside this says of the same trees — so
+     * the second arrival is passed over. Counted per arrival instead, a shared node would take two
+     * names, one of them reachable from nothing, and every comparison after it in the body would be
+     * called by a number one out from what a second walk of the same body would call it.
+     */
+    private static void walk(Core e, String behavior, int[] ordinal,
+                             IdentityHashMap<Core, ComparisonOccurrence> occurrenceAtNode,
+                             Map<ComparisonOccurrence, Catalogued> byOccurrence) {
         // What a representation kept standing for an analysis to read. What a run does is measured
         // over the tree that runs, which keeps none of these, so reaching one would mean this
         // enumeration was taken over a tree nothing executes.
@@ -116,11 +113,20 @@ public final class ComparisonCatalog {
             throw preserved.unexpectedIn("the comparisons of a body");
         }
         if (e instanceof Core.Binary binary && binary.origin() != null
-                && binary.origin().isWritten()) {
-            Comparison.of(binary).ifPresent(
-                    comparison -> found.add(Map.entry(binary, comparison)));
+                && binary.origin().isWritten() && !occurrenceAtNode.containsKey(binary)) {
+            // Recognised once and here, so what a name is given to and what it carries are one
+            // answer. Gathered as nodes and recognised again where the name is made, this would be
+            // the same question asked twice about one binary, with a case to answer for the second
+            // answer being different.
+            Comparison.of(binary).ifPresent(comparison -> {
+                ComparisonOccurrence which = new ComparisonOccurrence(behavior, ordinal[0]++);
+                occurrenceAtNode.put(binary, which);
+                byOccurrence.put(which, new Catalogued(which, comparison,
+                        Citation.of(binary.pos()), binary.origin()));
+            });
         }
-        Core.forEachChild(e, child -> walk(child, found));
+        Core.forEachChild(e, child ->
+                walk(child, behavior, ordinal, occurrenceAtNode, byOccurrence));
     }
 
     /**
@@ -138,23 +144,6 @@ public final class ComparisonCatalog {
     /** The same, together with what was recognised there and where it is written. */
     public Optional<Catalogued> at(Core node) {
         return occurrenceAt(node).map(byOccurrence::get);
-    }
-
-    /**
-     * What {@code which} names.
-     *
-     * <p>Total for an occurrence this catalog issued, which is the only kind a reader of the
-     * compiler is handed. So there is no answer for one of those not to have, and an occurrence
-     * made anywhere else — another module's catalog, or a fixture — is a mistake this says out loud
-     * rather than an empty a caller writes a branch for.
-     */
-    public Catalogued of(ComparisonOccurrence which) {
-        Catalogued held = byOccurrence.get(which);
-        if (held == null) {
-            throw new IllegalArgumentException(
-                    "no comparison of this module is " + which);
-        }
-        return held;
     }
 
     /** Every comparison the module holds, in the order the bodies were walked. */

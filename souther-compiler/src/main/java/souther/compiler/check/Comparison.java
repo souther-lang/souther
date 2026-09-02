@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import souther.compiler.core.Core;
 
+import java.util.Objects;
 import java.util.Optional;
 
 /**
@@ -77,7 +78,7 @@ public final class Comparison {
 
     @Override
     public int hashCode() {
-        return java.util.Objects.hash(claim, left, right);
+        return Objects.hash(claim, left, right);
     }
 
     @Override

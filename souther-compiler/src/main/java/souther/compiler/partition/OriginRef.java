@@ -150,7 +150,16 @@ public sealed interface OriginRef {
          */
         public record Read(souther.compiler.coverage.ComparisonOccurrence comparison,
                            souther.compiler.check.RuleCitation.WrittenAt written,
-                           souther.compiler.coverage.ComparisonEmissionSite recordedAt) {}
+                           souther.compiler.coverage.ComparisonEmissionSite recordedAt) {
+
+            public Read {
+                if (comparison == null || written == null || recordedAt == null) {
+                    throw new IllegalArgumentException(
+                            "a rule read off a comparison names one, cites it and says where a run"
+                                    + " through it is recorded");
+                }
+            }
+        }
 
     }
 
