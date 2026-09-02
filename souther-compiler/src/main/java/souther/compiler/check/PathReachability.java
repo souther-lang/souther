@@ -24,6 +24,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * What the model's own rules say arrives at each place in a behavior's body.
@@ -170,9 +171,14 @@ public final class PathReachability {
      * position and stopping at the business parameters — which is the rule the check that types the
      * body reads them by, asked here rather than worked out a second way. A trailing parameter
      * stands for a behavior this one depends on and guarantees nothing about a value.
+     *
+     * <p><b>The reading is required.</b> What a caller has where a module's could not be made is no
+     * reading, and a walk of a body against one made up says about this compilation having stopped
+     * what it would say about the model. A caller without one measures nothing here.
      */
     public static Answers of(Core body, ReadingPolicy policy, Hir.SpecBehavior spec, Hir.FnDef fn,
                              CoverageSites.Plan plan, InputDomain read, Symbols symbols) {
+        Objects.requireNonNull(read, "a reachability reading is made against an input that was read");
         if (fn == null || spec == null) {
             return Answers.NONE;
         }
@@ -193,6 +199,7 @@ public final class PathReachability {
      */
     public static Answers of(Core body, Scope params, CoverageSites.Plan plan, InputDomain read,
                              Symbols symbols, ReadingPolicy policy) {
+        Objects.requireNonNull(read, "a reachability reading is made against an input that was read");
         if (body == null) {
             return Answers.NONE;
         }
@@ -208,16 +215,12 @@ public final class PathReachability {
                 in = engine.enter(new Core.Read(p.getValue().name(), p.getKey(),
                         p.getValue().type(), body.pos()), in.known(), in.at());
             }
-            // A behavior with no reading reads as one whose declarations leave nothing said, which
-            // is what every question below is answered against. Settled once here, since the walk
-            // and the environment it walks with are both about the same reading.
-            InputDomain of = read == null ? InputDomain.NONE : read;
             PathReachability reading =
-                    new PathReachability(engine, plan, of, symbols, out, arriving);
+                    new PathReachability(engine, plan, read, symbols, out, arriving);
             reading.entry = in.known();
             reading.entered = in.at();
             reading.walk(body, in.known(), in.at(),
-                            InputReads.ofParameters(of.parameterReads(), ElementBindings.NONE),
+                            InputReads.ofParameters(read.parameterReads(), ElementBindings.NONE),
                             List.of(), true);
             walked = true;
         } catch (RuntimeException why) {
@@ -314,7 +317,9 @@ public final class PathReachability {
                                      souther.compiler.reach.ComparisonArrival> arriving) {
         this.engine = engine;
         this.plan = plan;
-        this.read = read;
+        // Here as well as at the ways in, so that nothing inside this class is written against a
+        // reading that might not be one.
+        this.read = Objects.requireNonNull(read);
         this.symbols = symbols;
         this.out = out;
         this.arriving = arriving;
