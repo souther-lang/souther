@@ -3,7 +3,6 @@ package souther.compiler.ast;
 import souther.compiler.diag.Region;
 import souther.compiler.observe.RowIdentity;
 import souther.compiler.diag.SourcePos;
-import souther.compiler.types.ConstructionOrigin;
 import souther.compiler.types.CoverageOrigin;
 import souther.compiler.types.TypeKey;
 
@@ -1048,28 +1047,12 @@ public interface Ast {
      * binding in force wins over a declaration here as everywhere else, and a reader downstream must
      * not go back to matching the spelling against the module's own definitions.
      *
-     * <p>{@code origin} says where the construction came from: written here, or carried in by a
-     * published body or by a value this body named.
-     *
-     * <p>Expansion makes the two look alike: a construction spliced in from another body is the same
-     * node the reader's own would be, and the permission check reading that body would ask the
-     * reader to answer for it. So the construction says where it came from. Every rebuild of this
-     * node carries it — the component has no default, which is what stops a pass from quietly
-     * dropping it and turning a carried construction back into the reader's own.
+     * <p>Where the construction came from is not said here. A construction stands somewhere other
+     * than where it was written only after a body has been spliced into a reader, and that is
+     * {@link Hir.NewData}'s to say: nothing this tree holds arrived from another body.
      */
-    record NewData(Name typeName, List<FieldInit> inits, List<Var> spreads,
-                   ConstructionOrigin origin, SourcePos pos, Region region) implements Expr {
-
-        /** The same construction, carried into a reader by {@code module}'s published body. */
-        public NewData publishedBy(String module) {
-            return new NewData(typeName, inits, spreads, origin.publishedIn(module), pos, region);
-        }
-
-        /** The same construction, carried into a body by a value that body named. */
-        public NewData carriedByValue() {
-            return new NewData(typeName, inits, spreads, origin.carriedByValue(), pos, region);
-        }
-    }
+    record NewData(Name typeName, List<FieldInit> inits, List<Var> spreads, SourcePos pos,
+                   Region region) implements Expr {}
 
     record IntLit(long value, SourcePos pos, Region region) implements Expr {}
 
@@ -1195,14 +1178,13 @@ public interface Ast {
      * carries what it denotes — a helper, a library function, an injected behavior, a function-typed
      * binding, or the type a newtype construction wraps — answered once during resolution.
      */
-    record Apply(Expr function, List<Expr> args, ConstructionOrigin origin, String appliedAs,
-                 SourcePos pos, Region region) implements Expr {
+    record Apply(Expr function, List<Expr> args, String appliedAs, SourcePos pos, Region region)
+            implements Expr {
 
         /** Applying whatever {@code function} is, with nothing standing in for what the source
          * wrote — every application but one a lowering rewrote. */
-        public Apply(Expr function, List<Expr> args, ConstructionOrigin origin, SourcePos pos,
-                     Region region) {
-            this(function, args, origin, null, pos, region);
+        public Apply(Expr function, List<Expr> args, SourcePos pos, Region region) {
+            this(function, args, null, pos, region);
         }
 
 
@@ -1257,21 +1239,11 @@ public interface Ast {
             return written != null ? written : name().reportedAt();
         }
 
-
-
-        /** The same application, carried into a body by a value that body named. A recursive helper
-         * is lowered to a method rather than expanded, so a value reaching one leaves an application
-         * where its constructions would otherwise stand, and it is what has to say where it came
-         * from. */
-        public Apply carriedByValue() {
-            return new Apply(function, args, origin.carriedByValue(), appliedAs, pos, region);
-        }
-
         /** The same application over rewritten arguments — a pass that touches only the arguments
          *  says so here rather than listing the slots it is not changing, which is how
          *  {@link #appliedAs} would be dropped by a rewrite that has no opinion about it. */
         public Apply withArgs(List<Expr> args) {
-            return new Apply(function, args, origin, appliedAs, pos, region);
+            return new Apply(function, args, appliedAs, pos, region);
         }
     }
 
@@ -1308,8 +1280,7 @@ public interface Ast {
             case Neg x -> new Neg(x.operand(), x.pos(), region);
             case FieldAccess x -> new FieldAccess(x.target(), x.name(), x.pos(), region);
             case Binary x -> new Binary(x.op(), x.left(), x.right(), x.origin(), x.pos(), region);
-            case Apply x -> new Apply(x.function(), x.args(), x.origin(), x.appliedAs(), x.pos(),
-                    region);
+            case Apply x -> new Apply(x.function(), x.args(), x.appliedAs(), x.pos(), region);
             case If x -> new If(x.cond(), x.then(), x.els(), x.origin(), x.pos(), region);
             case IfConstructed x ->
                     new IfConstructed(x.construct(), x.binder(), x.then(), x.els(), x.origin(), x.pos(),
@@ -1322,7 +1293,7 @@ public interface Ast {
             case Tuple x -> new Tuple(x.elements(), x.pos(), region);
             case TupleGet x -> new TupleGet(x.tuple(), x.index(), x.arity(), x.pos(), region);
             case NewData x ->
-                    new NewData(x.typeName(), x.inits(), x.spreads(), x.origin(), x.pos(), region);
+                    new NewData(x.typeName(), x.inits(), x.spreads(), x.pos(), region);
             case Match x -> new Match(x.scrutinee(), x.cases(), x.origin(), x.pos(), region);
         };
     }
