@@ -161,23 +161,51 @@ public final class PublicationOrders {
      */
     private static final Comparator<RuleCitation> HANDLES = Comparator
             .comparingInt(PublicationOrders::handleRank)
-            .thenComparing(PublicationOrders::handleWords);
+            .thenComparing(PublicationOrders::handleName)
+            .thenComparing(PublicationOrders::handlePlace,
+                    Comparator.nullsFirst(PLACES))
+            .thenComparing(PublicationOrders::handleOtherwise);
 
+    /**
+     * Which of three a handle is: a name the author gave, a place a reader can be sent to, or a
+     * place there is no sending anybody to.
+     *
+     * <p>The third is its own rank and not a place that failed to be one. A rule written where
+     * this compile holds no file is still cited — a report says where the code came from — and a
+     * reader who can be sent somewhere is better served than one who cannot, so the two are not
+     * compared as though they were the same kind of answer.
+     */
     private static int handleRank(RuleCitation handle) {
         return switch (handle) {
             case RuleCitation.Named _ -> 0;
-            case RuleCitation.WrittenAt _ -> 1;
+            case RuleCitation.WrittenAt it -> PublishedAt.of(it.at()).isPresent() ? 1 : 2;
         };
     }
 
-    /** What a document writes of one handle, which is what tells two of one kind apart. */
-    private static String handleWords(RuleCitation handle) {
-        return switch (handle) {
-            case RuleCitation.Named it -> it.name();
-            case RuleCitation.WrittenAt it -> PublishedAt.of(it.at())
-                    .map(at -> at.source().value() + ":" + at.line() + ":" + at.column())
-                    .orElseGet(() -> it.at().toString());
-        };
+    /** The name a handle gives, where it gives one, so two names are told apart by the words. */
+    private static String handleName(RuleCitation handle) {
+        return handle instanceof RuleCitation.Named it ? it.name() : "";
+    }
+
+    /**
+     * The place a handle sends a reader to, where it sends them to one.
+     *
+     * <p>Compared by the order over places and not by a second one written here. A place is a
+     * source, a line and a column, and two of them are told apart by {@link #PLACES} — asked again
+     * in another shape, the line and the column came out compared as text, so a handle at line ten
+     * came before one at line nine while the place at line nine came first, and the two orders over
+     * one thing disagreed.
+     */
+    private static PublishedAt handlePlace(RuleCitation handle) {
+        return handle instanceof RuleCitation.WrittenAt it
+                ? PublishedAt.of(it.at()).orElse(null) : null;
+    }
+
+    /** And a citation that is neither a name nor a place a reader can be sent to is told from
+     *  another by what it is, because that is all there is of it. */
+    private static String handleOtherwise(RuleCitation handle) {
+        return handle instanceof RuleCitation.WrittenAt it && handlePlace(handle) == null
+                ? it.at().toString() : "";
     }
 
     /**

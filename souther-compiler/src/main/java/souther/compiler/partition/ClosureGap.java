@@ -53,7 +53,11 @@ public sealed interface ClosureGap {
     Object fact();
 
     /**
-     * Two of these under one fact, as one, with what evidenced them accumulated.
+     * Two of these under one fact, as one.
+     *
+     * <p>What each arm does with what it holds beside the fact is that arm's own: a handle joins,
+     * because two of them are two ways to one place; what an author wrote is held to, because two
+     * accounts of it that differ are two accounts one of which is wrong.
      *
      * <p>Commutative, so which of the two a walk met first decides nothing about the result. A
      * {@code switch} with no {@code default}, so an arm added later has to say whether it carries
@@ -90,6 +94,10 @@ public sealed interface ClosureGap {
                         "a rule read to the end leaves no measure short: " + rule.why());
             }
             cited = cited == null ? Set.of() : Set.copyOf(cited);
+            if (cited.isEmpty()) {
+                throw new IllegalArgumentException(
+                        "a rule with no line here is one a reader can be sent to look at");
+            }
         }
 
         /** One reader's finding, as that reader produced it: the rule it stopped on, and the handle
@@ -143,6 +151,10 @@ public sealed interface ClosureGap {
 
         public QuestionUnanswered {
             cited = cited == null ? Set.of() : Set.copyOf(cited);
+            if (cited.isEmpty()) {
+                throw new IllegalArgumentException(
+                        "a question names a rule a reader can be sent to");
+            }
             // In the order the author wrote the parts of the rule that raised it, carried and not
             // gathered into a set. A document says these in that order, so a set here would be the
             // same testimony in a second shape, and whichever shape reached a reader first would
@@ -158,9 +170,10 @@ public sealed interface ClosureGap {
          * One reading's account of it: the question, the handle for the rule that raised it, and
          * what that reading was short of.
          *
-         * <p>What it was short of arrives as a set. A question stands until every reason it stands
-         * for is gone, so the reasons are what a reader has to see away and neither how many parts
-         * met one nor which part was read first is any of that.
+         * <p>What it was short of arrives as the author wrote it and is carried that way. A
+         * document says these in that order, so a shape of this compiler's own here would be the
+         * same testimony twice and whichever reached a reader first would decide what they were
+         * told the author wrote.
          */
         public static QuestionUnanswered of(StandingQuestion asked) {
             return new QuestionUnanswered(asked.fact(), asked.cited(), asked.stopped());
@@ -183,13 +196,17 @@ public sealed interface ClosureGap {
                     + " are filed under one fact");
         }
 
-        /** Both readings' accounts, as one: the question, with every handle and everything either
-         *  of them was short of. */
+        /**
+         * Both readings' accounts, as one: the question, with every handle either offered.
+         *
+         * <p>What each was short of is neither joined nor chosen between. It is one answer about
+         * the model in the order the author wrote it, so two accounts that disagree about it are
+         * two accounts one of which is wrong, and this compiler has contradicted itself.
+         */
         public QuestionUnanswered mergedWith(QuestionUnanswered other) {
             if (!stopped.equals(other.stopped)) {
-                throw new IllegalArgumentException("two accounts of one question disagree about"
-                        + " what the author wrote it short of: " + stopped + " and "
-                        + other.stopped);
+                throw new souther.compiler.inputs.TwoAccountsOfOneQuestion(
+                        question, stopped, other.stopped);
             }
             Set<RuleCitation> handles = new HashSet<>(cited);
             handles.addAll(other.cited);

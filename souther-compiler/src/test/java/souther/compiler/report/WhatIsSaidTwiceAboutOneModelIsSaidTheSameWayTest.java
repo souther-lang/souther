@@ -68,7 +68,7 @@ class WhatIsSaidTwiceAboutOneModelIsSaidTheSameWayTest {
     /** Two facts, so that an order over them is something rather than nothing. */
     @Test
     void theModelLeavesMoreThanOneThingUnread() {
-        List<PublishedIncompleteness> said = report().modules().get(0).incompleteness();
+        List<PublishedIncompleteness> said = report().modules().get(0).incompleteness().written();
 
         assertTrue(said.size() > 1,
                 () -> "one fact or none says nothing about an order: " + said);
@@ -77,7 +77,7 @@ class WhatIsSaidTwiceAboutOneModelIsSaidTheSameWayTest {
     /** And the page names them in the order the document writes them in. */
     @Test
     void thePageNamesThemInTheOrderTheDocumentWritesThem() {
-        List<String> written = report().modules().get(0).incompleteness().stream()
+        List<String> written = report().modules().get(0).incompleteness().written().stream()
                 .map(each -> each.fact().subject()).toList();
 
         assertEquals(written, namedOnThePage(report().human(SourceNameResolver.identity())),

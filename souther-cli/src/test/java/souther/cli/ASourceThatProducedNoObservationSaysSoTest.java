@@ -102,7 +102,7 @@ class ASourceThatProducedNoObservationSaysSoTest {
         compilation.answerEverything();
 
         List<PublishedIncompleteness> gaps =
-                AdequacyReport.of(compilation).modules().get(0).incompleteness();
+                AdequacyReport.of(compilation).modules().get(0).incompleteness().written();
 
         assertEquals(1, gaps.size(), gaps.toString());
         Incompleteness.Fact only = gaps.get(0).fact();

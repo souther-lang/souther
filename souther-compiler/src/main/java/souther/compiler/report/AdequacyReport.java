@@ -64,6 +64,7 @@ import souther.compiler.query.EstablishmentGap;
 import souther.compiler.query.WritabilityKnowledge;
 import souther.compiler.publish.CanonicalSelection;
 import souther.compiler.publish.AdequacyOpeningWord;
+import souther.compiler.publish.CanonicalArrangement;
 import souther.compiler.publish.NoPlaceToWrite;
 import souther.compiler.publish.NotMeasuredWord;
 import souther.compiler.publish.PublicationOrders;
@@ -227,9 +228,14 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
          * publishing whatever it iterated in — and three surfaces publish these: this document,
          * the page a person reads, and the block a generator writes. Handing over the sequence
          * rather than the set is what makes the order one thing rather than three.
+         *
+         * <p>As the arrangement and not as the list inside it, so that a surface asks for the
+         * order where it writes. What that costs is one call; what it buys is that the check over
+         * a writer of a canonically ordered field asks of that writer, and can be held to a
+         * control that asks the same thing of an array whose order is somebody else's.
          */
-        public List<PublishedIncompleteness> incompleteness() {
-            return PublishedIncompleteness.everyOne(weakenedBy().observationCauses()).written();
+        public CanonicalArrangement<PublishedIncompleteness> incompleteness() {
+            return PublishedIncompleteness.everyOne(weakenedBy().observationCauses());
         }
 
         /**
@@ -1098,13 +1104,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 // Under the behavior it names, because a reason printed at the module's foot is
                 // read as belonging to whichever behavior came last. That was survivable while the
                 // only reasons naming one were rare; a position that could not be read is not.
-                said(out, module.incompleteness().stream()
+                said(out, module.incompleteness().written().stream()
                         .filter(gap -> gap.fact().behavior()
                                 .map(behavior.name()::equals).orElse(false))
                         .toList(), names);
             }
             declared(out, module, names);
-            said(out, module.incompleteness().stream()
+            said(out, module.incompleteness().written().stream()
                     .filter(gap -> gap.fact().behavior().isEmpty()).toList(), names);
         }
         int total = counted.values().stream().mapToInt(Integer::intValue).sum();
@@ -2721,7 +2727,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
     private static void incompleteness(ObjectNode of, ModuleReport module,
                                        DocumentSources sources) {
         ArrayNode gaps = of.putArray("incompleteness");
-        for (PublishedIncompleteness gap : module.incompleteness()) {
+        for (PublishedIncompleteness gap : module.incompleteness().written()) {
             ObjectNode g = gaps.addObject();
             g.put("code", word(gap.fact().code()));
             g.put("scope", word(gap.fact().scope()));

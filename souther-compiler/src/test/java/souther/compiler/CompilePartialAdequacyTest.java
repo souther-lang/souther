@@ -444,12 +444,12 @@ class CompilePartialAdequacyTest {
         // behavior may have more than one that did not — and the position of its guard whose value
         // that row was the only one to write.
         assertEquals(List.of("cancel/0/#1", "cancel/request.n"),
-                whole.modules().get(0).incompleteness().stream()
+                whole.modules().get(0).incompleteness().written().stream()
                         .map(gap -> gap.fact().subject()).toList());
 
         AdequacyReport one = whole.only(null, "submit");
         assertEquals(MeasurementStatus.COMPLETE, one.status());
-        assertEquals(List.of(), one.modules().get(0).incompleteness());
+        assertEquals(List.of(), one.modules().get(0).incompleteness().written());
         assertTrue(one.modules().get(0).behaviors().stream()
                 .allMatch(b -> b.name().equals("submit")));
     }
@@ -561,9 +561,9 @@ class CompilePartialAdequacyTest {
         AdequacyReport one = AdequacyReport.of(split()).only(null, "take");
 
         assertEquals(MeasurementStatus.PARTIAL, one.status());
-        assertEquals(1, one.modules().get(0).incompleteness().size());
+        assertEquals(1, one.modules().get(0).incompleteness().written().size());
         assertEquals(Incompleteness.Code.OBSERVATION_ABSENT,
-                one.modules().get(0).incompleteness().iterator().next().fact().code());
+                one.modules().get(0).incompleteness().written().iterator().next().fact().code());
     }
 
     /**
@@ -607,7 +607,7 @@ class CompilePartialAdequacyTest {
         assertEquals(MeasurementStatus.PARTIAL, report.modules().get(0).status());
         assertEquals(MeasurementStatus.PARTIAL, report.modules().get(0).behaviors().get(0).status());
 
-        List<PublishedIncompleteness> why = report.modules().get(0).incompleteness();
+        List<PublishedIncompleteness> why = report.modules().get(0).incompleteness().written();
         assertEquals(1, why.size(), why.toString());
         assertEquals(Incompleteness.Code.VALUE_TRUNCATED, why.get(0).fact().code());
         assertEquals(Optional.of("take"), why.get(0).fact().behavior(),
@@ -947,7 +947,7 @@ class CompilePartialAdequacyTest {
     @Test
     void oneReasonIsReportedOnce() {
         List<PublishedIncompleteness> gaps =
-                AdequacyReport.of(split()).modules().get(0).incompleteness();
+                AdequacyReport.of(split()).modules().get(0).incompleteness().written();
 
         assertFalse(gaps.isEmpty(), "a split model leaves something unread");
         assertEquals(gaps.stream().map(PublishedIncompleteness::fact).distinct().count(),

@@ -99,12 +99,12 @@ class AModuleEveryMeasureOfWhichDoesNotApplyStillSaysWhatItWentWithoutTest {
         AdequacyReport.ModuleReport module = report.modules().get(0);
 
         assertEquals(MeasurementStatus.PARTIAL, module.status(),
-                () -> "a row of this module did not come back: " + module.incompleteness());
+                () -> "a row of this module did not come back: " + module.incompleteness().written());
         assertEquals(MeasurementStatus.PARTIAL, report.status());
         assertEquals(AdequacyReport.AdequacyStatus.UNDETERMINED, report.adequacy(),
                 "which the verdict already said, from a list the status could not see");
         assertEquals(List.of(Incompleteness.Code.ROW_EVALUATION_LIMIT_REACHED),
-                module.incompleteness().stream().map(gap -> gap.fact().code()).toList());
+                module.incompleteness().written().stream().map(gap -> gap.fact().code()).toList());
     }
 
     /** And the document a build reads says it too. */

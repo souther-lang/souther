@@ -91,7 +91,8 @@ class EverySurfaceThatSaysWhatWentUnreadTakesOneSequenceTest {
         assertEquals(Set.of("souther.compiler.report.AdequacyReport$ModuleReport",
                         "souther.compiler.report.GeneratedRows"),
                 reaching,
-                "the surfaces that say what a module could not read are the page, the document and"
-                        + " the generated block, and they take the sequence from one place");
+                "what reaches the crossing is not what says these facts: the page and the document"
+                        + " are both written from the report's answer for one module, and the"
+                        + " generated block asks for itself");
     }
 }

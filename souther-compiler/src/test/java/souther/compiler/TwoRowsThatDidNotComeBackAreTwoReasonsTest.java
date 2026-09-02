@@ -34,7 +34,7 @@ class TwoRowsThatDidNotComeBackAreTwoReasonsTest {
     private static List<PublishedIncompleteness> reasonsOf(Compilation compilation, String module) {
         for (AdequacyReport.ModuleReport each : AdequacyReport.of(compilation).modules()) {
             if (each.module().equals(module)) {
-                return each.incompleteness();
+                return each.incompleteness().written();
             }
         }
         throw new AssertionError("no module called " + module);

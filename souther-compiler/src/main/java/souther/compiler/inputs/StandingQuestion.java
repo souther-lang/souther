@@ -21,9 +21,12 @@ import java.util.Set;
  * downstream had two answers to choose between. That choice is what the crossing exists to take
  * away.
  *
- * @param rule    which rule of the model raised it, which is what tells one question from another
- * @param cited   how a reader finds that rule, which is not what tells it from another
- * @param asks    what it asks and what it asks it about, together
+ * @param fact    which rule raised it and what it asks, which is what tells one question from
+ *                another ({@link Fact})
+ * @param cited   how a reader finds that rule, which is not what tells it from another. Every
+ *                handle offered, because a question raised once and found by two readers is one
+ *                question each of them says how to reach; which of them a document writes is that
+ *                document's to decide
  * @param stopped what this compiler was short of, which is why the question stands. In its own
  *                terms and not a document's, so a reader out here is told what was missing without
  *                a published word reaching back into what a reading may record; which word a
@@ -33,10 +36,10 @@ import java.util.Set;
  *                what it is short of is short of that rule — a reason about the position it stands
  *                at answers a different question and belongs to whoever asks that one.
  *
- *                <p>Every one of them, in the order the parts of the clause were met. A question is
- *                answered when every part that asked it has been read, so a part standing behind
- *                another is a second thing to lift — and which of them a reader met would otherwise
- *                turn on the order their author wrote them in.
+ *                <p>Every one of them, in the order the author wrote the parts of the rule that
+ *                raised it. A question is answered when every part that asked it has been read, so
+ *                a part standing behind another is a second thing to lift; and the order is part of
+ *                what this says, so it is neither joined with another reading's nor chosen between.
  *
  *                <p>Never empty. A question that nothing answered was left standing by something,
  *                and an empty list here would say a rule went unaccounted for with nothing to act
@@ -89,8 +92,7 @@ public record StandingQuestion(Fact fact, Set<RuleCitation> cited,
                     + fact + " and " + other.fact);
         }
         if (!stopped.equals(other.stopped)) {
-            throw new IllegalArgumentException("two accounts of one question disagree about what"
-                    + " the author wrote it short of: " + stopped + " and " + other.stopped);
+            throw new TwoAccountsOfOneQuestion(fact, stopped, other.stopped);
         }
         Set<RuleCitation> both = new HashSet<>(cited);
         both.addAll(other.cited);

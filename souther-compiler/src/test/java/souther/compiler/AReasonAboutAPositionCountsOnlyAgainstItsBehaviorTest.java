@@ -80,7 +80,7 @@ class AReasonAboutAPositionCountsOnlyAgainstItsBehaviorTest {
 
     @Test
     void theReasonNamesTheBehaviorThePositionIsIn() {
-        List<PublishedIncompleteness> why = report().modules().get(0).incompleteness();
+        List<PublishedIncompleteness> why = report().modules().get(0).incompleteness().written();
 
         assertFalse(why.isEmpty(), "the position that could not be read is said");
         assertTrue(why.stream().allMatch(gap -> gap.fact().behavior()
@@ -105,7 +105,7 @@ class AReasonAboutAPositionCountsOnlyAgainstItsBehaviorTest {
     void filteringToItDropsAReasonAboutAnotherBehaviorsPosition() {
         AdequacyReport only = AdequacyReport.of(compilationOf()).only(null, "cancel");
 
-        assertEquals(List.of(), only.modules().get(0).incompleteness());
+        assertEquals(List.of(), only.modules().get(0).incompleteness().written());
         assertEquals(MeasurementStatus.COMPLETE, only.status());
     }
 

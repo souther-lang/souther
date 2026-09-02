@@ -81,8 +81,7 @@ class AFieldWhoseOrderIsThisCompilersIsWrittenThroughACrossingTest {
 
         assertFalse(writers.isEmpty(), "nothing writes the behaviors of a module");
         assertTrue(writers.stream().noneMatch(
-                        AFieldWhoseOrderIsThisCompilersIsWrittenThroughACrossingTest
-                                ::crossesItself),
+                        AFieldWhoseOrderIsThisCompilersIsWrittenThroughACrossingTest::crossesIn),
                 () -> "the behaviors of a module are written in the order they were declared in,"
                         + " and something is now putting them in an order of this compiler's:"
                         + " " + writers);
@@ -116,26 +115,13 @@ class AFieldWhoseOrderIsThisCompilersIsWrittenThroughACrossingTest {
     /**
      * Whether that method takes what it writes from a sequence somebody put in order.
      *
-     * <p>Itself or one thing it asks, because a method that hands the sequence over already in
-     * order is the stronger arrangement: there is then no set for a writer to reach past. What it
-     * is not is a walk of everything reachable — a method that called anything at all would answer
-     * yes, and this would be holding nothing.
+     * <p>The method itself and nothing it goes on to call. Asked a level deeper, a method that
+     * called anything that had ever crossed would answer yes — and the array whose order is
+     * somebody else's is written by a method that calls plenty, so the control below could no
+     * longer ask the same question the rule does. What makes that affordable is that the sequence
+     * is handed over as the arrangement: a writer that wants it in order says so where it writes.
      */
     private static boolean crossesIn(String method) {
-        if (crossesItself(method)) {
-            return true;
-        }
-        for (Compiled.Site site : compiled()) {
-            if (site.at().equals(method) && site.owner().startsWith("souther.compiler.report.")
-                    && crossesItself(site.owner() + "#" + site.member())) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    /** Whether that one method reaches a crossing, whatever it goes on to call. */
-    private static boolean crossesItself(String method) {
         for (Compiled.Site site : compiled()) {
             if (CROSSINGS.contains(site.owner()) && site.member().equals("written")
                     && (site.at().equals(method) || site.at().startsWith(method + "("))) {

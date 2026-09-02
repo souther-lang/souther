@@ -12,7 +12,6 @@ import souther.compiler.report.AdequacyReport;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -85,10 +84,11 @@ class AGuardsQuestionIsCitedByWhereItIsWrittenTest {
     void itIsCitedByThePlaceAndNamedByNothing() {
         PartitionEvidence.NotRead.ARule one = writtenComparisons().getFirst();
 
-        assertEquals(1, one.cited().size(),
-                () -> "one reader found it, so it is offered one way: " + one.cited());
-        RuleCitation.WrittenAt written = assertInstanceOf(RuleCitation.WrittenAt.class,
-                one.cited().iterator().next());
+        RuleCitation.WrittenAt written = one.cited().stream()
+                .filter(RuleCitation.WrittenAt.class::isInstance)
+                .map(RuleCitation.WrittenAt.class::cast).findFirst()
+                .orElseThrow(() -> new AssertionError("a comparison has no name, so it is cited by"
+                        + " where it is written: " + one.cited()));
         assertTrue(written.said(SourceNameResolver.identity(), null).startsWith("comparison@"),
                 () -> "what the rule is and where it is written: "
                         + written.said(SourceNameResolver.identity(), null));
@@ -114,8 +114,11 @@ class AGuardsQuestionIsCitedByWhereItIsWrittenTest {
         PartitionEvidence evidence = AdequacyReport.of(compilation)
                 .modules().get(0).behaviors().get(0).partition();
 
-        RuleCitation.Named named = assertInstanceOf(RuleCitation.Named.class,
-                evidence.unanswered().get(0).cited().iterator().next());
+        RuleCitation.Named named = evidence.unanswered().get(0).cited().stream()
+                .filter(RuleCitation.Named.class::isInstance)
+                .map(RuleCitation.Named.class::cast).findFirst()
+                .orElseThrow(() -> new AssertionError("an invariant is cited by the name the"
+                        + " author gave it: " + evidence.unanswered().get(0).cited()));
         assertEquals("invariant Length (square)", named.name());
     }
 }
