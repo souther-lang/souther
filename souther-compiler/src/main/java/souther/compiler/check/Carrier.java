@@ -449,8 +449,8 @@ public sealed interface Carrier {
      */
     default Place literalOf(Hir.Expr e) {
         return switch (this) {
-            case Whole _ -> Count.of(InvariantBound.wholeLiteral(e));
-            case Dense _ -> Count.of(InvariantBound.literalOf(e));
+            case Whole _ -> Count.of(NumericLiterals.wholeLiteralOf(e));
+            case Dense _ -> Count.of(NumericLiterals.literalOf(e));
             case Days _ -> temporal(e, Dates::dayOf);
             case Seconds _ -> temporal(e, DateTimes::secondOf);
             case SecondsOfDay _ -> temporal(e, Times::secondOf);
