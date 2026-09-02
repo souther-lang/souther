@@ -1,6 +1,7 @@
 package souther.compiler.query;
 
 import souther.compiler.observe.Incompleteness;
+import souther.compiler.observe.RunSensitivity;
 import souther.compiler.partition.ClosureGap;
 import souther.compiler.types.CoverageOrigin;
 
@@ -47,7 +48,7 @@ public sealed interface Weakening {
      * Whether a run of this compiler that allows more could come to a different answer about this.
      *
      * <p>What a wider run is, is written where the answer is
-     * ({@link souther.compiler.observe.RunSensitivity}). What matters here is which arms decide and
+     * ({@link RunSensitivity}). What matters here is which arms decide and
      * which pass the question on: an arm that holds what stopped it asks that, and only an arm that
      * <em>is</em> the first place the fact exists answers for itself. Written the other way round —
      * a switch over the arms with an answer per arm — this would be the reconstruction the type
@@ -58,7 +59,7 @@ public sealed interface Weakening {
      * {@link ModelReadingIncomplete}, and the border ones through their reading) and the rest
      * answer, because for the rest there is nothing further in to ask.
      */
-    souther.compiler.observe.RunSensitivity runSensitivity();
+    RunSensitivity runSensitivity();
 
     /**
      * Something the rows were to be measured from was not observed.
@@ -72,7 +73,7 @@ public sealed interface Weakening {
         /** The code's own answer, which is the code's to give because every producer of one agrees
          *  about it. */
         @Override
-        public souther.compiler.observe.RunSensitivity runSensitivity() {
+        public RunSensitivity runSensitivity() {
             return cause.code().runSensitivity();
         }
     }
@@ -89,8 +90,8 @@ public sealed interface Weakening {
         /** The row ran and came back, and what it answered with could not be read as a case. A run
          *  that allows more reads it exactly as well. */
         @Override
-        public souther.compiler.observe.RunSensitivity runSensitivity() {
-            return souther.compiler.observe.RunSensitivity.UNAFFECTED;
+        public RunSensitivity runSensitivity() {
+            return RunSensitivity.UNAFFECTED;
         }
     }
 
@@ -99,8 +100,8 @@ public sealed interface Weakening {
 
         /** The same, for the same reason. */
         @Override
-        public souther.compiler.observe.RunSensitivity runSensitivity() {
-            return souther.compiler.observe.RunSensitivity.UNAFFECTED;
+        public RunSensitivity runSensitivity() {
+            return RunSensitivity.UNAFFECTED;
         }
     }
 
@@ -122,7 +123,7 @@ public sealed interface Weakening {
         /** The reading's own answer, which is the whole of why the reason travels rather than being
          *  folded here. */
         @Override
-        public souther.compiler.observe.RunSensitivity runSensitivity() {
+        public RunSensitivity runSensitivity() {
             return why.runSensitivity();
         }
     }
@@ -132,7 +133,7 @@ public sealed interface Weakening {
 
         /** What was still open when it stopped is what says whether a wider run closes it. */
         @Override
-        public souther.compiler.observe.RunSensitivity runSensitivity() {
+        public RunSensitivity runSensitivity() {
             return cause.runSensitivity();
         }
     }
@@ -159,8 +160,8 @@ public sealed interface Weakening {
          *  wider allowances does not get further — a build that compiles is a different run's
          *  input, not a wider run of this one. */
         @Override
-        public souther.compiler.observe.RunSensitivity runSensitivity() {
-            return souther.compiler.observe.RunSensitivity.UNAFFECTED;
+        public RunSensitivity runSensitivity() {
+            return RunSensitivity.UNAFFECTED;
         }
     }
 
@@ -181,8 +182,8 @@ public sealed interface Weakening {
         /** There was no boundary to work out, which a wider run does not change: what a name
          *  resolves to is not a figure anything was compared against. */
         @Override
-        public souther.compiler.observe.RunSensitivity runSensitivity() {
-            return souther.compiler.observe.RunSensitivity.UNAFFECTED;
+        public RunSensitivity runSensitivity() {
+            return RunSensitivity.UNAFFECTED;
         }
     }
 
@@ -203,8 +204,8 @@ public sealed interface Weakening {
         /** A hole in the module refused the reading, which is not a figure anything was compared
          *  against: a run that allows more meets the same hole. */
         @Override
-        public souther.compiler.observe.RunSensitivity runSensitivity() {
-            return souther.compiler.observe.RunSensitivity.UNAFFECTED;
+        public RunSensitivity runSensitivity() {
+            return RunSensitivity.UNAFFECTED;
         }
     }
 
@@ -222,8 +223,8 @@ public sealed interface Weakening {
          *  against, and it is a number the query graph hands the analysis, so a run under a wider
          *  {@code AdequacyPolicy} walks further. */
         @Override
-        public souther.compiler.observe.RunSensitivity runSensitivity() {
-            return souther.compiler.observe.RunSensitivity.MAY_CHANGE;
+        public RunSensitivity runSensitivity() {
+            return RunSensitivity.MAY_CHANGE;
         }
     }
 
@@ -238,8 +239,8 @@ public sealed interface Weakening {
 
         /** An analysis that does not hold is one that does not hold however much a run allows. */
         @Override
-        public souther.compiler.observe.RunSensitivity runSensitivity() {
-            return souther.compiler.observe.RunSensitivity.UNAFFECTED;
+        public RunSensitivity runSensitivity() {
+            return RunSensitivity.UNAFFECTED;
         }
     }
 
@@ -254,8 +255,8 @@ public sealed interface Weakening {
 
         /** Two decisions that could not be told apart are not told apart by allowing more. */
         @Override
-        public souther.compiler.observe.RunSensitivity runSensitivity() {
-            return souther.compiler.observe.RunSensitivity.UNAFFECTED;
+        public RunSensitivity runSensitivity() {
+            return RunSensitivity.UNAFFECTED;
         }
     }
 }

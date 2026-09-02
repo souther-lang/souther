@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.values.UnreadReason;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -127,7 +128,7 @@ class WhatEachWayOfMissingARuleComesToIsWrittenDownOnceTest {
      * would have said one thing about all three.
      */
     private static List<RulesMissed> everyWay() {
-        List<RulesMissed> out = new java.util.ArrayList<>();
+        List<RulesMissed> out = new ArrayList<>();
         for (GuaranteeWalk.Stop stop : GuaranteeWalk.Stop.values()) {
             out.add(new RulesMissed.WalkStopped(stop));
         }

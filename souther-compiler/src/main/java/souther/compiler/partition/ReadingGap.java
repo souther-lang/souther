@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.observe.Incompleteness;
+import souther.compiler.observe.RunSensitivity;
 
 /**
  * Why a reading of a number came to none.
@@ -27,7 +28,7 @@ public sealed interface ReadingGap {
      * whatever holds the fact rather than answering for it: an observation that stopped carries the
      * code, and the code is what every producer of it agrees about.
      */
-    souther.compiler.observe.RunSensitivity runSensitivity();
+    RunSensitivity runSensitivity();
 
     /** The observation of a value did not come back whole, and this is what it met. */
     record Observation(Incompleteness.Code code) implements ReadingGap {
@@ -39,7 +40,7 @@ public sealed interface ReadingGap {
         }
 
         @Override
-        public souther.compiler.observe.RunSensitivity runSensitivity() {
+        public RunSensitivity runSensitivity() {
             return code.runSensitivity();
         }
     }
@@ -50,8 +51,8 @@ public sealed interface ReadingGap {
         /** Nothing was compared against a figure: the walk met no value, and it meets none however
          *  much a run is allowed. */
         @Override
-        public souther.compiler.observe.RunSensitivity runSensitivity() {
-            return souther.compiler.observe.RunSensitivity.UNAFFECTED;
+        public RunSensitivity runSensitivity() {
+            return RunSensitivity.UNAFFECTED;
         }
     }
 

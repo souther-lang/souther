@@ -22,6 +22,7 @@ import souther.compiler.types.CoverageOrigin;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -118,11 +119,8 @@ class WhatKeepsAnUndeterminedVerdictOpenIsSaidTest {
         Weakening only = ((AdequacyOpening.ByWeakening) open).cause();
 
         assertTrue(only instanceof Weakening.ModelReadingIncomplete it
-                        && it.cause() instanceof souther.compiler.partition.ClosureGap.RuleUnread
-                                rule
-                        && rule.rule().why()
-                                instanceof souther.compiler.inputs.BlockReason
-                                        .RuleAboutADerivedValue,
+                        && it.cause() instanceof ClosureGap.RuleUnread rule
+                        && rule.rule().why() instanceof BlockReason.RuleAboutADerivedValue,
                 () -> "the comparison in `List.isEmpty` is about a value made from the position: "
                         + only);
     }
@@ -311,7 +309,7 @@ class WhatKeepsAnUndeterminedVerdictOpenIsSaidTest {
         List<String> out = new ArrayList<>();
         for (Weakening each : open.causes()) {
             out.add(AdequacyReport.kindOf(each) + "/"
-                    + each.runSensitivity().name().toLowerCase(java.util.Locale.ROOT));
+                    + each.runSensitivity().name().toLowerCase(Locale.ROOT));
         }
         return out;
     }

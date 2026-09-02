@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.RuleWithoutALine;
+import souther.compiler.observe.RunSensitivity;
 
 /**
  * One thing that stopped a measure's reading of the model from running out.
@@ -30,7 +31,7 @@ public sealed interface ClosureGap {
      * fourth holds no reason on purpose and answers from what can reach it, which
      * {@code WhatEachClosureGapSaysAboutAWiderRunTest} holds to the reasons that do.
      */
-    souther.compiler.observe.RunSensitivity runSensitivity();
+    RunSensitivity runSensitivity();
 
     /**
      * A rule of the model a reader stopped on. The rule says which measures that costs
@@ -54,7 +55,7 @@ public sealed interface ClosureGap {
         /** The rule's own answer, which the constructor above has already made sure there is one
          *  of: only a reading that stopped is admitted here, and a stop answers this. */
         @Override
-        public souther.compiler.observe.RunSensitivity runSensitivity() {
+        public RunSensitivity runSensitivity() {
             return ((BlockReason.RuleReadingStopped) rule.why()).runSensitivity();
         }
     }
@@ -78,19 +79,19 @@ public sealed interface ClosureGap {
          * them was", a question short for a figure and for a form nothing reads would send a person
          * to allow more and leave the form exactly as unread.
          *
-         * <p>Empty is {@link souther.compiler.observe.RunSensitivity#UNAFFECTED} for the same
+         * <p>Empty is {@link RunSensitivity#UNAFFECTED} for the same
          * reason it is not {@code MAY_CHANGE}: nothing here is a figure a run may allow more of.
          */
         @Override
-        public souther.compiler.observe.RunSensitivity runSensitivity() {
+        public RunSensitivity runSensitivity() {
             if (question.stopped().isEmpty()) {
-                return souther.compiler.observe.RunSensitivity.UNAFFECTED;
+                return RunSensitivity.UNAFFECTED;
             }
             return question.stopped().stream()
                     .allMatch(each -> each.runSensitivity()
-                            == souther.compiler.observe.RunSensitivity.MAY_CHANGE)
-                    ? souther.compiler.observe.RunSensitivity.MAY_CHANGE
-                    : souther.compiler.observe.RunSensitivity.UNAFFECTED;
+                            == RunSensitivity.MAY_CHANGE)
+                    ? RunSensitivity.MAY_CHANGE
+                    : RunSensitivity.UNAFFECTED;
         }
     }
 
@@ -136,8 +137,8 @@ public sealed interface ClosureGap {
          * {@code WhatEachClosureGapSaysAboutAWiderRunTest} asks every arm of that type.
          */
         @Override
-        public souther.compiler.observe.RunSensitivity runSensitivity() {
-            return souther.compiler.observe.RunSensitivity.UNAFFECTED;
+        public RunSensitivity runSensitivity() {
+            return RunSensitivity.UNAFFECTED;
         }
     }
 
@@ -170,7 +171,7 @@ public sealed interface ClosureGap {
 
         /** The stop's own answer. */
         @Override
-        public souther.compiler.observe.RunSensitivity runSensitivity() {
+        public RunSensitivity runSensitivity() {
             return why.runSensitivity();
         }
     }

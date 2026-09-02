@@ -452,14 +452,14 @@ public final class InvariantChecker {
             // reading met them.
             Map<RuleKey, Set<RulesMissed>> missed = new LinkedHashMap<>();
             notGathered.forEach((path, why) -> missed.put(path,
-                    java.util.Collections.unmodifiableSet(new LinkedHashSet<>(why))));
-            notGathered = java.util.Collections.unmodifiableMap(missed);
+                    Collections.unmodifiableSet(new LinkedHashSet<>(why))));
+            notGathered = Collections.unmodifiableMap(missed);
             unreadOfEveryValue = Set.copyOf(unreadOfEveryValue);
             handedOn = Set.copyOf(handedOn);
             // Insertion order, which is the order the declarations write their clauses. `Map.copyOf`
             // iterates in an order salted once per JVM run, and what is read off these is a list of
             // causes a report prints.
-            readBy = java.util.Collections.unmodifiableMap(new LinkedHashMap<>(readBy));
+            readBy = Collections.unmodifiableMap(new LinkedHashMap<>(readBy));
         }
 
         /** What a walk that fell over comes to: no position named, no rule read, and saying so of
@@ -1282,9 +1282,9 @@ public final class InvariantChecker {
         // Insertion order, kept: `Map.copyOf` iterates in an order salted once per JVM run, and
         // what a report prints for a position is these in the order the declaration writes them.
         return new Reading(List.copyOf(out), List.copyOf(noLines), Map.copyOf(narrowers),
-                java.util.Collections.unmodifiableMap(new LinkedHashMap<>(raised)),
-                java.util.Collections.unmodifiableMap(new LinkedHashMap<>(raisedByPart)),
-                java.util.Collections.unmodifiableMap(new LinkedHashMap<>(standing)));
+                Collections.unmodifiableMap(new LinkedHashMap<>(raised)),
+                Collections.unmodifiableMap(new LinkedHashMap<>(raisedByPart)),
+                Collections.unmodifiableMap(new LinkedHashMap<>(standing)));
     }
 
     /** What {@code clause} raises, taken together with whatever its other conjuncts raised. */
