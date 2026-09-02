@@ -2006,7 +2006,7 @@ When the discriminator key or tag is business-specific (reading `+"status"+` and
 
 [[a-custom-codec-agrees-with-its-type]]A codec written by hand MUST be a codec for the type it is declared on: a decoder for `+T+` constructs a `+T+`, an encoder for a sum writes every case, an element encoder matches the element type, and a source-shaped encoder is given that shape. What is derived agrees with the type because it was read off it; what is written has to be checked against it.
 
-[[a-codec-reached-for-exists]]`+T.decoder+` and `+T.encode+` MAY be written only where `+T+` has one. Every declaration a compilation carries has one: a product's is derived from its declared shape, a sum's from what its cases are, and a unit is read and written as the single value it is.
+[[a-codec-reached-for-exists]]`+T.decoder+` and `+T.encode+` MAY be written only where `+T+` has one. Every declaration of a program that compiles has one: a product's is derived from its declared shape, a sum's from what its cases are, and a unit is read and written as the single value it is.
 
 When the default derivation is insufficient (a different key name, normalization, default filling, a business-specific discriminator, persistence version branching), write a Decoder on the Java side that assembles the external representation and calls the data's (invariant-checking) construction. The `+JdbcFindMember+` calling `+Member.decoder()+` in <<java-example>> is this form. External-representation conversion stays confined to the boundary and is not brought into domain definitions.
 
