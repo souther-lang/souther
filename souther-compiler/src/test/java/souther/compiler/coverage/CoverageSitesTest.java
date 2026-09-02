@@ -62,7 +62,8 @@ class CoverageSitesTest {
      *  not matter to anything here — every question asked below is of one plan, and a name only
      *  has to tell one module's comparisons from another's. */
     private static CoverageSites.Plan planOf(Map<String, Core> bodies) {
-        return CoverageSites.of(new ModuleBodies("example", bodies),
+        return CoverageSites.of(
+                new ModuleBodies("example", new java.util.LinkedHashMap<>(bodies)),
                 souther.compiler.coverage.DecisionSources.NONE,
                 souther.compiler.coverage.SuppliedRules.NONE);
     }

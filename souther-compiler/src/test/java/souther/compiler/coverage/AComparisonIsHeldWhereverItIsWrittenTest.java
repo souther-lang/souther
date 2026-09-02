@@ -7,6 +7,8 @@ import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 
 import java.util.ArrayList;
+import java.util.IdentityHashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -57,12 +59,12 @@ class AComparisonIsHeldWhereverItIsWrittenTest {
      *  does not matter here: every question below is of one catalog, and a name only has to tell
      *  one module's comparisons from another's. */
     private static ComparisonCatalog catalogOf(Map<String, Core> bodies) {
-        return ComparisonCatalog.of(new ModuleBodies("example", bodies));
+        return ComparisonCatalog.of(new ModuleBodies("example", new LinkedHashMap<>(bodies)));
     }
 
     /** The plan of the same, under the same name. */
     private static CoverageSites.Plan planOf(Map<String, Core> bodies) {
-        return CoverageSites.of(new ModuleBodies("example", bodies),
+        return CoverageSites.of(new ModuleBodies("example", new LinkedHashMap<>(bodies)),
                 DecisionSources.NONE, SuppliedRules.NONE);
     }
 
@@ -261,10 +263,10 @@ class AComparisonIsHeldWhereverItIsWrittenTest {
 
                 let check (a) = if a > 10 then 1 else 2
                 """;
-        ComparisonCatalog here =
-                ComparisonCatalog.of(new ModuleBodies("one", bodiesOf(body.formatted("one"))));
-        ComparisonCatalog there =
-                ComparisonCatalog.of(new ModuleBodies("two", bodiesOf(body.formatted("two"))));
+        ComparisonCatalog here = ComparisonCatalog.of(
+                new ModuleBodies("one", new LinkedHashMap<>(bodiesOf(body.formatted("one")))));
+        ComparisonCatalog there = ComparisonCatalog.of(
+                new ModuleBodies("two", new LinkedHashMap<>(bodiesOf(body.formatted("two")))));
 
         assertEquals(1, here.all().size(), "each module writes one comparison");
         assertEquals(1, there.all().size(), "each module writes one comparison");
@@ -290,14 +292,39 @@ class AComparisonIsHeldWhereverItIsWrittenTest {
                 let check (a) = if a > 10 then 1 else 2
                 """;
         CoverageSites.Plan here = CoverageSites.of(
-                new ModuleBodies("one", bodiesOf(body.formatted("one"))),
+                new ModuleBodies("one", new LinkedHashMap<>(bodiesOf(body.formatted("one")))),
                 DecisionSources.NONE, SuppliedRules.NONE);
-        ComparisonOccurrence there = ComparisonCatalog.of(
-                new ModuleBodies("two", bodiesOf(body.formatted("two")))).all().get(0).which();
+        ComparisonOccurrence there = ComparisonCatalog.of(new ModuleBodies(
+                "two", new LinkedHashMap<>(bodiesOf(body.formatted("two"))))).all().get(0).which();
 
         IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
                 () -> here.instruments(there));
         assertTrue(refused.getMessage().contains("not about"), refused.getMessage());
+    }
+
+    /**
+     * A plan numbering a comparison its own catalog never held is refused where it is made.
+     *
+     * <p>Beside the reading above and a different contract. That one is a plan built properly and
+     * asked about somewhere else's comparison; this is a plan assembled out of parts, which is what
+     * a caller holding the maps and a catalog can do. The key closes half of what a numbering can
+     * get wrong — an occurrence names a comparison and nothing else, so there is no number to put
+     * on an {@code &&} — and it closes nothing about whose comparison it is, because an occurrence
+     * is a module, a behavior and a number, which anyone can write down.
+     */
+    @Test
+    void aPlanCannotNumberAComparisonItsCatalogNeverHeld() {
+        Map<String, Core> bodies = bodiesOf(NAMED_BEFORE_THE_FORK);
+        ComparisonOccurrence elsewhere = new ComparisonOccurrence("nowhere", "fee", 0);
+        Map<ComparisonOccurrence, Integer> numbered = new LinkedHashMap<>();
+        numbered.put(elsewhere, 0);
+
+        IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
+                () -> new CoverageSites.Plan(List.of(), List.of(), new IdentityHashMap<>(),
+                        numbered, new IdentityHashMap<>(), new LinkedHashMap<>(),
+                        java.util.Set.of(), new IdentityHashMap<>(), catalogOf(bodies)));
+        assertTrue(refused.getMessage().contains("one answer or they are two"),
+                refused.getMessage());
     }
 
     /** Every binary of {@code e} the language reads as a comparison, in the order it is written. */

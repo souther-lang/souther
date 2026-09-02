@@ -133,6 +133,18 @@ public final class ComparisonCatalog {
         if (e instanceof Core.PreservedCall preserved) {
             throw preserved.unexpectedIn("the comparisons of a body");
         }
+        // A node this walk has already named, met again while walking somebody else's body. Which
+        // comparison of which body a node is has to be one answer — the index from nodes is of the
+        // module and the number counts within a body — so a node standing in two bodies is a node
+        // with two names, of which the index could hold one. Refused rather than passed over: what
+        // it would do quietly is number every comparison after it in the second body one low,
+        // against a walk of that body alone.
+        if (e instanceof Core.Binary shared && occurrenceAtNode.containsKey(shared)
+                && !occurrenceAtNode.get(shared).behavior().equals(behavior)) {
+            throw new IllegalStateException("one comparison of two bodies: " + shared.pos()
+                    + " stands in " + occurrenceAtNode.get(shared).behavior()
+                    + " and in " + behavior);
+        }
         if (e instanceof Core.Binary binary && binary.origin() != null
                 && binary.origin().isWritten() && !occurrenceAtNode.containsKey(binary)) {
             // Recognised once and here, so what a name is given to and what it carries are one

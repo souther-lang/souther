@@ -293,7 +293,8 @@ class AnOutcomeIsNamedByWhatWasWrittenTest {
                 CoverageOrigin.unwritten(), souther.compiler.types.Type.INT, at, java.util.List.of());
 
         IllegalStateException refused = assertThrows(IllegalStateException.class,
-                () -> CoverageSites.of(new ModuleBodies("demo", Map.of("b", fork)),
+                () -> CoverageSites.of(
+                        new ModuleBodies("demo", new java.util.LinkedHashMap<>(Map.of("b", fork))),
                         souther.compiler.coverage.DecisionSources.NONE,
                         souther.compiler.coverage.SuppliedRules.NONE));
 
@@ -370,7 +371,8 @@ class AnOutcomeIsNamedByWhatWasWrittenTest {
     }
 
     private static CoverageSites.Plan planOf(String source) {
-        return CoverageSites.of(new ModuleBodies("demo", bodiesOf(source)),
+        return CoverageSites.of(
+                new ModuleBodies("demo", new java.util.LinkedHashMap<>(bodiesOf(source))),
                 souther.compiler.coverage.DecisionSources.NONE,
                 souther.compiler.coverage.SuppliedRules.NONE);
     }
