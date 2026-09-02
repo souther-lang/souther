@@ -19,6 +19,16 @@ import souther.compiler.observe.Incompleteness;
  */
 public sealed interface ReadingGap {
 
+    /**
+     * Whether a run of this compiler that allows more could come to a different answer here.
+     *
+     * <p>Which is the difference this type's own comment already states — one is something a wider
+     * budget keeps and the other is not — said as a value rather than as prose. Each arm asks
+     * whatever holds the fact rather than answering for it: an observation that stopped carries the
+     * code, and the code is what every producer of it agrees about.
+     */
+    souther.compiler.observe.RunSensitivity runSensitivity();
+
     /** The observation of a value did not come back whole, and this is what it met. */
     record Observation(Incompleteness.Code code) implements ReadingGap {
 
@@ -27,10 +37,23 @@ public sealed interface ReadingGap {
                 throw new IllegalArgumentException("an observation that stopped says what it met");
             }
         }
+
+        @Override
+        public souther.compiler.observe.RunSensitivity runSensitivity() {
+            return code.runSensitivity();
+        }
     }
 
     /** The walk arrived at no value, so there was none to observe. */
-    record NoValue() implements ReadingGap {}
+    record NoValue() implements ReadingGap {
+
+        /** Nothing was compared against a figure: the walk met no value, and it meets none however
+         *  much a run is allowed. */
+        @Override
+        public souther.compiler.observe.RunSensitivity runSensitivity() {
+            return souther.compiler.observe.RunSensitivity.UNAFFECTED;
+        }
+    }
 
     ReadingGap NO_VALUE = new NoValue();
 

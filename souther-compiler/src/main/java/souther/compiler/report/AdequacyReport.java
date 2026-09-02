@@ -40,6 +40,7 @@ import souther.compiler.observe.MeasureReason;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.FindingSubject;
 import souther.compiler.query.InputCaseEvidence;
+import souther.compiler.observe.RunSensitivity;
 import souther.compiler.query.Measure;
 import souther.compiler.query.Measurement;
 import souther.compiler.query.SearchOutcomes;
@@ -711,6 +712,77 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
     }
 
     /**
+     * What the verdict is open on: the facts the three things it rests on went without.
+     *
+     * <p>Read from the same three lists {@link #adequacy()} is decided by, and never from
+     * {@code weakenedBy}. What left this whole report weaker than it looks and what holds this
+     * verdict open are not one set: a measure this build is not held to may be as partial as it
+     * likes without a bar being any less settled by it, and the report says so of itself either
+     * way. Taken from the wider list, a reader would be shown causes that no answer here rests on.
+     *
+     * <p>A set and so counted once per fact, however many measures went without it. One rule this
+     * compiler could not read is one thing to tell a person whichever measure noticed, and counting
+     * the measures would be counting the paths a fact arrived by ({@link WeakeningSet}).
+     *
+     * <p>Not only where the verdict is undetermined. A gap outranks everything about how much was
+     * measured, so a refused build's verdict says nothing about what was also unmeasured — and what
+     * was unmeasured is still true and still worth being able to ask for.
+     */
+    public WeakeningSet whatKeepsTheVerdictOpen() {
+        WeakeningSet out = WeakeningSet.none();
+        for (Measurement<?> each : requiredSupport()) {
+            out = out.union(each.weakening());
+        }
+        for (Measure<?> each : requiredEvidence()) {
+            out = out.union(each.weakening());
+        }
+        for (ObligationAssessment each : requiredObligations()) {
+            out = out.union(each.weakening());
+        }
+        return out;
+    }
+
+    /**
+     * How much of that a run of this compiler allowed more could answer, and how much it could not.
+     *
+     * <p>The question a reader of {@code undetermined} has and the report could not answer. The
+     * word means a measure that could have found a gap and was not made, which is as true of a
+     * space too large to walk as of a rule this compiler has no reading for — and the first is a
+     * number away while nothing anybody writes reaches the second. Told apart nowhere, a person
+     * reading a model that forks on a list it computed was left to work out for themselves that
+     * measuring again would find exactly the same thing.
+     *
+     * <p>Counted over the facts and not over the words a document writes for them. Two facts a
+     * document calls the same thing can differ here — a pattern too large to build and a rule about
+     * a value made from this one are both {@code rule_unread} — so a count taken off the printed
+     * words would be a count of something else.
+     *
+     * @param mayChange how many of them an allowance of this compiler's stopped
+     * @param unaffected how many it had no reading for, which is what no allowance changes
+     */
+    public record UnderAWiderRun(int mayChange, int unaffected) {
+
+        /** Whether there is anything to say, which is whether anything is open at all. */
+        public boolean isEmpty() {
+            return mayChange == 0 && unaffected == 0;
+        }
+    }
+
+    /** {@link #whatKeepsTheVerdictOpen()}, split by whether a wider run could answer it. */
+    public UnderAWiderRun underAWiderRun() {
+        int mayChange = 0;
+        int unaffected = 0;
+        for (Weakening each : whatKeepsTheVerdictOpen().causes()) {
+            if (each.runSensitivity() == RunSensitivity.MAY_CHANGE) {
+                mayChange++;
+            } else {
+                unaffected++;
+            }
+        }
+        return new UnderAWiderRun(mayChange, unaffected);
+    }
+
+    /**
      * What the verdict rests on that is not a measure of the model: the reading of the rows.
      *
      * <p>Every domain measure below is counted over the rows, so how far they were read is what
@@ -962,6 +1034,20 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         // other question, and the two were one word until they disagreed in front of a reader.
         out.append(String.format("adequacy: %s%n",
                 adequacy().name().toLowerCase(Locale.ROOT).replace('_', ' ')));
+        // And what it is open on, split by the one thing a reader of `undetermined` wants to know:
+        // whether measuring again allowing more would answer any of it. The word covers a space too
+        // large to walk and a rule this compiler has no reading for alike, and the first is a number
+        // away while nothing anybody writes reaches the second.
+        //
+        // Under the verdict and not under the measurement line above, because it is read from what
+        // that verdict rests on. What left the whole report weaker than it looks is the other
+        // question and is said per module, where the measures are.
+        UnderAWiderRun open = underAWiderRun();
+        if (adequacy() == AdequacyStatus.UNDETERMINED && !open.isEmpty()) {
+            out.append("  what keeps it open\n");
+            out.append(String.format("    may change in a wider run   %3d%n", open.mayChange()));
+            out.append(String.format("    unaffected by a wider run   %3d%n", open.unaffected()));
+        }
         // What the mark above means, said by the report that wrote it. The count was said only by
         // `--strict`, on standard error, in a run a reader had to ask for — so a reader of the report
         // alone had a mark with nothing to read it by, and one who did ask got a number pointing at a

@@ -44,13 +44,38 @@ import souther.compiler.types.CoverageOrigin;
 public sealed interface Weakening {
 
     /**
+     * Whether a run of this compiler that allows more could come to a different answer about this.
+     *
+     * <p>What a wider run is, is written where the answer is
+     * ({@link souther.compiler.observe.RunSensitivity}). What matters here is which arms decide and
+     * which pass the question on: an arm that holds what stopped it asks that, and only an arm that
+     * <em>is</em> the first place the fact exists answers for itself. Written the other way round —
+     * a switch over the arms with an answer per arm — this would be the reconstruction the type
+     * exists to stop, one level up: an observation's code already knows, and a second reading of it
+     * here is a second thing to keep in step.
+     *
+     * <p>So four ask ({@link ObservationIncomplete}, {@link BorderValueUnreadable},
+     * {@link ModelReadingIncomplete}, and the border ones through their reading) and the rest
+     * answer, because for the rest there is nothing further in to ask.
+     */
+    souther.compiler.observe.RunSensitivity runSensitivity();
+
+    /**
      * Something the rows were to be measured from was not observed.
      *
      * <p>The vocabulary already existed and was already collected, a list at a time, beside the
      * measures rather than inside them — which is why the report had to join the two by hand and
      * why a behavior's status was decided from a list its measures never saw.
      */
-    record ObservationIncomplete(Incompleteness cause) implements Weakening {}
+    record ObservationIncomplete(Incompleteness cause) implements Weakening {
+
+        /** The code's own answer, which is the code's to give because every producer of one agrees
+         *  about it. */
+        @Override
+        public souther.compiler.observe.RunSensitivity runSensitivity() {
+            return cause.code().runSensitivity();
+        }
+    }
 
     /**
      * Rows were observed and what a behavior answered with could not be read back as a case.
@@ -59,10 +84,25 @@ public sealed interface Weakening {
      * measurement's own count, and is not repeated here — this says which position could not be
      * read, which is what nothing else says.
      */
-    record OutputCasesUnreadable(String behavior) implements Weakening {}
+    record OutputCasesUnreadable(String behavior) implements Weakening {
+
+        /** The row ran and came back, and what it answered with could not be read as a case. A run
+         *  that allows more reads it exactly as well. */
+        @Override
+        public souther.compiler.observe.RunSensitivity runSensitivity() {
+            return souther.compiler.observe.RunSensitivity.UNAFFECTED;
+        }
+    }
 
     /** The same at one of a behavior's inputs, counted from zero. */
-    record InputCasesUnreadable(String behavior, int at) implements Weakening {}
+    record InputCasesUnreadable(String behavior, int at) implements Weakening {
+
+        /** The same, for the same reason. */
+        @Override
+        public souther.compiler.observe.RunSensitivity runSensitivity() {
+            return souther.compiler.observe.RunSensitivity.UNAFFECTED;
+        }
+    }
 
     /**
      * A row's value at one border could not be read, so what is not found at that border is
@@ -77,10 +117,25 @@ public sealed interface Weakening {
      */
     record BorderValueUnreadable(souther.compiler.partition.Border border,
                                  souther.compiler.partition.ReadingGap why)
-            implements Weakening {}
+            implements Weakening {
+
+        /** The reading's own answer, which is the whole of why the reason travels rather than being
+         *  folded here. */
+        @Override
+        public souther.compiler.observe.RunSensitivity runSensitivity() {
+            return why.runSensitivity();
+        }
+    }
 
     /** The reading of the model that a measure depends on did not run out. */
-    record ModelReadingIncomplete(ClosureGap cause) implements Weakening {}
+    record ModelReadingIncomplete(ClosureGap cause) implements Weakening {
+
+        /** What was still open when it stopped is what says whether a wider run closes it. */
+        @Override
+        public souther.compiler.observe.RunSensitivity runSensitivity() {
+            return cause.runSensitivity();
+        }
+    }
 
     /**
      * The elaborated bodies a measure counts inside were not made, so what they hold was not read.
@@ -98,7 +153,16 @@ public sealed interface Weakening {
      * false, and is contradicted by the {@code implemented} on the line above it in the same
      * report.
      */
-    record BodiesNotElaborated(String module) implements Weakening {}
+    record BodiesNotElaborated(String module) implements Weakening {
+
+        /** Nothing was compared against a figure. The compile did not get that far, and a run under
+         *  wider allowances does not get further — a build that compiles is a different run's
+         *  input, not a wider run of this one. */
+        @Override
+        public souther.compiler.observe.RunSensitivity runSensitivity() {
+            return souther.compiler.observe.RunSensitivity.UNAFFECTED;
+        }
+    }
 
     /**
      * The boundary of one behavior could not be worked out, so every measure that reads one is
@@ -112,7 +176,15 @@ public sealed interface Weakening {
      * <p>Not the reason there is no boundary. A name that resolved to nothing is reported where it
      * was written, and this says only what that left unmeasurable.
      */
-    record BoundaryNotDerived(String behavior) implements Weakening {}
+    record BoundaryNotDerived(String behavior) implements Weakening {
+
+        /** There was no boundary to work out, which a wider run does not change: what a name
+         *  resolves to is not a figure anything was compared against. */
+        @Override
+        public souther.compiler.observe.RunSensitivity runSensitivity() {
+            return souther.compiler.observe.RunSensitivity.UNAFFECTED;
+        }
+    }
 
     /**
      * The input of the behavior was not read, so no measure that reads a position of it could be
@@ -126,7 +198,15 @@ public sealed interface Weakening {
      * <p>Named by the behavior for the reason the one above is: every measure that reads a position
      * is short of this one thing, and which of them was asking is not part of the fact.
      */
-    record InputNotRead(String behavior) implements Weakening {}
+    record InputNotRead(String behavior) implements Weakening {
+
+        /** A hole in the module refused the reading, which is not a figure anything was compared
+         *  against: a run that allows more meets the same hole. */
+        @Override
+        public souther.compiler.observe.RunSensitivity runSensitivity() {
+            return souther.compiler.observe.RunSensitivity.UNAFFECTED;
+        }
+    }
 
     /**
      * The space of two-class combinations was too large to walk, so the counts describe part of it.
@@ -136,7 +216,16 @@ public sealed interface Weakening {
      * the one warrant a measure did carry — a {@code truncated} flag beside the status, which #951
      * had to add a constructor check to keep the two in step.
      */
-    record PairSpaceTruncated(String behavior, long total, int limit) implements Weakening {}
+    record PairSpaceTruncated(String behavior, long total, int limit) implements Weakening {
+
+        /** The one arm that is a figure of its own. {@code limit} is what the walk was compared
+         *  against, and it is a number the query graph hands the analysis, so a run under a wider
+         *  {@code AdequacyPolicy} walks further. */
+        @Override
+        public souther.compiler.observe.RunSensitivity runSensitivity() {
+            return souther.compiler.observe.RunSensitivity.MAY_CHANGE;
+        }
+    }
 
     /**
      * A row went through an arm this compiler had proven nothing arrives at.
@@ -145,7 +234,14 @@ public sealed interface Weakening {
      * is evidence that an analysis the numbers were computed with does not hold, which is why it is
      * an arm of its own and never one of {@link ObservationIncomplete}.
      */
-    record ProofContradicted(String behavior, int probe) implements Weakening {}
+    record ProofContradicted(String behavior, int probe) implements Weakening {
+
+        /** An analysis that does not hold is one that does not hold however much a run allows. */
+        @Override
+        public souther.compiler.observe.RunSensitivity runSensitivity() {
+            return souther.compiler.observe.RunSensitivity.UNAFFECTED;
+        }
+    }
 
     /**
      * Two decisions of one body could not be told apart, so the arms counted as one arm are more
@@ -154,5 +250,12 @@ public sealed interface Weakening {
      * <p>What the numbers then hold is more than they say. {@link CoverageOrigin} names the fork
      * within its module, so this needs nothing beside it to be a fact.
      */
-    record ArmsUnsettled(CoverageOrigin fork) implements Weakening {}
+    record ArmsUnsettled(CoverageOrigin fork) implements Weakening {
+
+        /** Two decisions that could not be told apart are not told apart by allowing more. */
+        @Override
+        public souther.compiler.observe.RunSensitivity runSensitivity() {
+            return souther.compiler.observe.RunSensitivity.UNAFFECTED;
+        }
+    }
 }
