@@ -255,20 +255,52 @@ class ABehaviorWithNoBoundaryIsMeasuredAsOneNobodyCouldMeasureTest {
      * And the line a person reads says which of the ways it has no number, rather than the words
      * of another.
      *
-     * <p>Both halves are held. The sentence a reason is given is worth nothing on its own — the
-     * line said {@code no row names this behavior} for every reason nobody had written a word for,
-     * which is a sentence about a state this behavior is not in — so what this fixes is fixed by
-     * the second assertion.
+     * <p>Held per behavior and not over the report. The two states reach this line from one
+     * behavior each, so a sentence found anywhere in the text is a sentence some behavior may not
+     * have been given: the report said the signature could not be read under {@code receipt}, whose
+     * signature was read, and the assertion that the sentence appears passed on {@code issue}.
+     *
+     * <p>The last assertion holds the other half. The sentence a reason is given is worth nothing on
+     * its own — the line said {@code no row names this behavior} for every reason nobody had written
+     * a word for, which is a sentence about a state none of these behaviors is in.
      */
     @Test
     void theLineSaysWhichOfTheWaysItHasNoNumber() {
         String text = AdequacyReport.of(measured())
                 .human(souther.compiler.diag.SourceNameResolver.identity());
-        assertTrue(text.contains("signature   not measured (this behavior's signature could not be"
-                        + " read)"),
-                () -> "the line names the state it is in:\n" + text);
+        assertEquals("not measured (this behavior's signature could not be read)",
+                signatureLineOf(text, "issue"),
+                () -> "a name in its own declaration resolved to nothing:\n" + text);
+        assertEquals("not measured (what this behavior takes was not read)",
+                signatureLineOf(text, "receipt"),
+                () -> "its signature was read and its input was not, so the author is not sent"
+                        + " back to this declaration:\n" + text);
         assertFalse(text.contains("no row names this behavior"),
-                () -> "and not the state of a behavior nobody wrote a row for:\n" + text);
+                () -> "and neither is the state of a behavior nobody wrote a row for:\n" + text);
+    }
+
+    /**
+     * What the signature line of one behavior says, which is not what the report says somewhere.
+     *
+     * <p>The behavior's own block: a measure is printed under the behavior it is of, so a sentence
+     * is that behavior's only where it is found under its name.
+     */
+    private static String signatureLineOf(String report, String behavior) {
+        String opening = "    signature   ";
+        List<String> lines = List.of(report.split("\n"));
+        for (int i = 0; i < lines.size(); i++) {
+            if (!lines.get(i).startsWith("  " + behavior + " ")) {
+                continue;
+            }
+            for (int j = i + 1; j < lines.size() && lines.get(j).startsWith("    "); j++) {
+                if (lines.get(j).startsWith(opening)) {
+                    return lines.get(j).substring(opening.length());
+                }
+            }
+            throw new AssertionError("`" + behavior + "` says nothing about its signature:\n"
+                    + report);
+        }
+        throw new AssertionError("no behavior `" + behavior + "` in:\n" + report);
     }
 
     /** And no measure the bar rests on could be finished, so the verdict is undetermined. Not a

@@ -314,7 +314,8 @@ class ARuleReadToTheEndIsNotOneThisCouldNotReadTest {
     void aProvedEmptyInputOutranksWhatAReadingOfItManaged() {
         Measured measured = of("    invariant String.length(name) <= 0 - 1");
 
-        assertTrue(measured.says("no_feasible_input"), measured.human());
+        assertTrue(measured.says("the rules reaching this behavior's input leave it no value"),
+                measured.human());
         assertFalse(measured.weakening().contains("rule_unread"),
                 "the measurement is not weaker, it is not there: " + measured.weakening());
         assertFalse(measured.weakening().contains("question_unanswered"),

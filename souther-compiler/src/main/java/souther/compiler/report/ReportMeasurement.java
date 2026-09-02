@@ -8,6 +8,7 @@ import souther.compiler.query.ObligationCoverage;
 import souther.compiler.query.WeakeningSet;
 
 import java.util.Optional;
+import java.util.function.Consumer;
 
 /**
  * One measurement as a document says it.
@@ -87,7 +88,7 @@ final class ReportMeasurement<T> {
     }
 
     /** What the measure made, handed over only where it made anything. */
-    void ifMade(java.util.function.Consumer<? super T> then) {
+    void ifMade(Consumer<? super T> then) {
         value.ifPresent(then);
     }
 
