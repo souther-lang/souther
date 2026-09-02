@@ -65,8 +65,7 @@ class AComparisonIsNumberedWhereverItIsWrittenTest {
         Map<CoverageOrigin, ComparisonOccurrence> out = new LinkedHashMap<>();
         for (Core each : comparisonsIn(body)) {
             Core.Binary comparison = (Core.Binary) each;
-            plan.comparisons().occurrenceAt(comparison)
-                    .filter(which -> plan.emissionSiteOf(which).isPresent())
+            plan.comparisons().occurrenceAt(comparison).filter(plan::instruments)
                     .ifPresent(site -> out.put(comparison.origin(), site));
         }
         return out;

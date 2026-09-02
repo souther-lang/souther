@@ -320,6 +320,19 @@ public final class CoverageSites {
         }
 
         /**
+         * Whether this plan instruments {@code which}, which is what a reader asking about runs
+         * wants to know before it asks anything else.
+         *
+         * <p>Named here rather than spelled as "it has a site" wherever it is wanted. Every reader
+         * that files something under a comparison a run could be observed at asks this, and four of
+         * them working it out from the site each time are four places that can come to ask it
+         * differently — which is the shape this whole reading was written against.
+         */
+        public boolean instruments(ComparisonOccurrence which) {
+            return byComparison.containsKey(which);
+        }
+
+        /**
          * The same, where the caller's own construction says there is one.
          *
          * <p>A boundary is read off a comparison this plan numbers, so the site was planned before

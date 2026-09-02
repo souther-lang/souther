@@ -245,9 +245,7 @@ public final class PathReachability {
      * about a place a run can be observed at, so both have to answer.
      */
     private static ComparisonOccurrence numbered(Core.Binary node, CoverageSites.Plan plan) {
-        return plan.comparisons().occurrenceAt(node)
-                .filter(which -> plan.emissionSiteOf(which).isPresent())
-                .orElse(null);
+        return plan.comparisons().occurrenceAt(node).filter(plan::instruments).orElse(null);
     }
 
     /**

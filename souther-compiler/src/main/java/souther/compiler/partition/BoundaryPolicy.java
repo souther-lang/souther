@@ -126,7 +126,7 @@ final class BoundaryPolicy {
         // Meeting a line takes getting the comparison to answer, and whether it answered is what a
         // site records — and the plan numbers no site where the expression the comparison decides
         // never answers, so a comparison with no site is one no run answers through.
-        if (plan.emissionSiteOf(comparison).isEmpty()) {
+        if (!plan.instruments(comparison)) {
             return Optional.of(NotABoundary.NO_RUN_ANSWERS_THROUGH_IT);
         }
         return Optional.empty();

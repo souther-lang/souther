@@ -151,21 +151,9 @@ class AComparisonIsHeldWhereverItIsWrittenTest {
         List<ComparisonOccurrence> held = catalog.all().stream()
                 .map(ComparisonCatalog.Catalogued::which).toList();
         assertEquals(2, held.size(), "the body holds two comparisons");
-        assertEquals(1, held.stream().filter(each -> plan.emissionSiteOf(each).isPresent()).count(),
+        assertEquals(1, held.stream().filter(plan::instruments).count(),
                 () -> "and one of them stands where nothing answers, so nothing records a run"
                         + " through it: " + held);
-    }
-
-    private static Core sumIn(Map<String, Core> bodies) {
-        Core body = bodies.get("total");
-        while (!(body instanceof Core.Binary)) {
-            body = switch (body) {
-                case Core.LetIn let -> let.body();
-                case Core.Block block -> block.body();
-                default -> throw new AssertionError("no binary in this body: " + body);
-            };
-        }
-        return body;
     }
 
     /**
@@ -188,8 +176,8 @@ class AComparisonIsHeldWhereverItIsWrittenTest {
         CoverageSites.Plan plan = CoverageSites.of(bodies, souther.compiler.coverage.DecisionSources.NONE, souther.compiler.coverage.SuppliedRules.NONE);
         Core.Binary comparison = comparisonsIn(bodies).get(0);
 
-        assertTrue(plan.comparisons().occurrenceAt(comparison)
-                        .flatMap(plan::emissionSiteOf).isPresent(), "it is numbered");
+        assertTrue(plan.comparisons().occurrenceAt(comparison).filter(plan::instruments)
+                        .isPresent(), "it is numbered");
         assertTrue(plan.mayRepeat(comparison), "and one run may pass it once per element");
     }
 

@@ -66,9 +66,9 @@ public final class ComparisonCatalog {
                              CoverageOrigin origin) {
 
         public Catalogued {
-            if (which == null || comparison == null || at == null) {
+            if (which == null || comparison == null || at == null || origin == null) {
                 throw new IllegalArgumentException(
-                        "a catalogued comparison is one comparison, named and placed");
+                        "a catalogued comparison is one comparison, named, placed and attributed");
             }
         }
     }
@@ -90,23 +90,25 @@ public final class ComparisonCatalog {
         IdentityHashMap<Core, ComparisonOccurrence> occurrenceAtNode = new IdentityHashMap<>();
         Map<ComparisonOccurrence, Catalogued> byOccurrence = new LinkedHashMap<>();
         for (Map.Entry<String, Core> body : behaviorBodies.entrySet()) {
-            List<Core.Binary> found = new ArrayList<>();
+            // The nodes in the order the source wrote them, each with what recognising it
+            // established. Recognised once and here: gathered as nodes and recognised again where
+            // the name is made, this would be the same question asked twice about one binary, with
+            // a case to answer for the second answer being different.
+            List<Map.Entry<Core.Binary, Comparison>> found = new ArrayList<>();
             walk(body.getValue(), found);
             for (int ordinal = 0; ordinal < found.size(); ordinal++) {
-                Core.Binary binary = found.get(ordinal);
+                Core.Binary binary = found.get(ordinal).getKey();
                 ComparisonOccurrence which =
                         new ComparisonOccurrence(body.getKey(), ordinal);
                 occurrenceAtNode.put(binary, which);
-                byOccurrence.put(which, new Catalogued(which,
-                        Comparison.of(binary).orElseThrow(() -> new IllegalStateException(
-                                "a comparison was gathered that compares no values: " + binary)),
+                byOccurrence.put(which, new Catalogued(which, found.get(ordinal).getValue(),
                         Citation.of(binary.pos()), binary.origin()));
             }
         }
         return new ComparisonCatalog(occurrenceAtNode, byOccurrence);
     }
 
-    private static void walk(Core e, List<Core.Binary> found) {
+    private static void walk(Core e, List<Map.Entry<Core.Binary, Comparison>> found) {
         // What a representation kept standing for an analysis to read. What a run does is measured
         // over the tree that runs, which keeps none of these, so reaching one would mean this
         // enumeration was taken over a tree nothing executes.
@@ -114,8 +116,9 @@ public final class ComparisonCatalog {
             throw preserved.unexpectedIn("the comparisons of a body");
         }
         if (e instanceof Core.Binary binary && binary.origin() != null
-                && binary.origin().isWritten() && Comparison.of(binary).isPresent()) {
-            found.add(binary);
+                && binary.origin().isWritten()) {
+            Comparison.of(binary).ifPresent(
+                    comparison -> found.add(Map.entry(binary, comparison)));
         }
         Core.forEachChild(e, child -> walk(child, found));
     }

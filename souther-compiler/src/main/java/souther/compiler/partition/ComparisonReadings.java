@@ -92,7 +92,7 @@ final class ComparisonReadings {
             // Only where a run through it is written down. What stands on the way to a comparison
             // nothing records is a fact about the body all the same, and there is no run for a
             // reader of this to hold it against.
-            if (plan.emissionSiteOf(each.at()).isPresent()) {
+            if (plan.instruments(each.at())) {
                 cuts.reached(each.at(), each.assumed());
             }
         }
