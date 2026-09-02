@@ -45,7 +45,7 @@ class WhichDeclarationWorldAReaderGetsIsWhichQuestionItAskedTest {
     }
 
     private static Hir.Expr clauseOf(Symbols symbols) {
-        Hir.Def def = symbols.declarations().declaration(new TypeKey("m", "Amount"));
+        Hir.Def def = symbols.declaredNode(new TypeKey("m", "Amount"));
         return ((Hir.Data) def).invariants().get(0).expr();
     }
 

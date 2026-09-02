@@ -340,7 +340,7 @@ public final class HelperTyping {
         // nothing for the author to supply, so that call is what is reported.
         if (open.stream().anyMatch(idx -> !env.holds(h.params().get(idx).binder().id()))) {
             callToABehavior(body).ifPresent(call -> {
-                throw CallElaborator.noCallee(call);
+                throw CallElaborator.noCallee(call, symbols);
             });
         }
         for (int idx : open) {

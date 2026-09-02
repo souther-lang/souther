@@ -66,7 +66,7 @@ class AComparisonIsLitWhereverItIsWrittenTest {
         Compilation compilation = compiled();
         CoverageSites.Plan plan =
                 Output.Evaluated.planOf(compilation.db(), compilation.modules().get(0));
-        ComparisonOccurrence perElement = comparisonAt(plan, "fee", 9);
+        ComparisonEmissionSite perElement = comparisonAt(plan, "fee", 9);
         Map<String, ClassFileImage> classes = probed(compilation);
 
         Observation mixed = new Behavior(classes, "fee").observing(20L, List.of(1L, -1L));
@@ -90,7 +90,7 @@ class AComparisonIsLitWhereverItIsWrittenTest {
         Compilation compilation = compiled();
         CoverageSites.Plan plan =
                 Output.Evaluated.planOf(compilation.db(), compilation.modules().get(0));
-        ComparisonOccurrence named = comparisonAt(plan, "fee", 7);
+        ComparisonEmissionSite named = comparisonAt(plan, "fee", 7);
         Map<String, ClassFileImage> classes = probed(compilation);
 
         assertEquals(List.of(true),
@@ -105,7 +105,7 @@ class AComparisonIsLitWhereverItIsWrittenTest {
         Compilation compilation = compiled();
         CoverageSites.Plan plan =
                 Output.Evaluated.planOf(compilation.db(), compilation.modules().get(0));
-        ComparisonOccurrence answered = comparisonAt(plan, "positive", 12);
+        ComparisonEmissionSite answered = comparisonAt(plan, "positive", 12);
         Map<String, ClassFileImage> classes = probed(compilation);
 
         assertEquals(List.of(true),
@@ -115,7 +115,7 @@ class AComparisonIsLitWhereverItIsWrittenTest {
     }
 
     /** The ways {@code seen} records out of {@code comparison}, held true first. */
-    private static List<Boolean> waysOut(Observation seen, ComparisonOccurrence comparison) {
+    private static List<Boolean> waysOut(Observation seen, ComparisonEmissionSite comparison) {
         List<Boolean> out = new ArrayList<>();
         for (boolean held : new boolean[] {true, false}) {
             if (seen.saw(new ComparisonOutcome(comparison, held))) {
@@ -126,7 +126,7 @@ class AComparisonIsLitWhereverItIsWrittenTest {
     }
 
     /** The comparison {@code behavior} writes on {@code line}, which is what a run is asked about. */
-    private static ComparisonOccurrence comparisonAt(CoverageSites.Plan plan, String behavior,
+    private static ComparisonEmissionSite comparisonAt(CoverageSites.Plan plan, String behavior,
                                                      int line) {
         List<CoverageSites.Site> found = plan.sites().stream()
                 .filter(site -> site.behavior().equals(behavior))
@@ -136,7 +136,7 @@ class AComparisonIsLitWhereverItIsWrittenTest {
                 .toList();
         assertEquals(1, found.size(),
                 () -> "one comparison of " + behavior + " on line " + line + ": " + plan.sites());
-        return new ComparisonOccurrence(found.get(0).index());
+        return new ComparisonEmissionSite(found.get(0).index());
     }
 
     private static Compilation compiled() {

@@ -13,19 +13,26 @@ import souther.compiler.inputs.TermPath;
  *
  * <p>So the absence is a value that has to be produced rather than the default reading of an empty
  * result. {@link Why.Absent} is produced by {@link PendingPosition#complete} and nowhere else, from
- * a position whose structural reading did not stop and whose rules were all read and drew nothing —
- * which is what the word means.
+ * a position the reading got to the rules of, every question of which was answered, and which no
+ * rule is filed at — which is what the word means.
  *
  * <p>The other two are the two ways of not being that, and they are opposite sentences about this
- * compiler. Where a reading stopped, {@link Why.CannotDerive} says something is written here that
- * this did not read. Where every reading ran to the end and a rule states something that draws no
- * line — a relation between two positions, a quantity the position cancels out of —
- * {@link Why.StatedWithoutALine} says that instead: nothing is missing, and a reader sent after a
- * limit would be looking for one that is not there. Held as one, the second went out as the first.
+ * compiler. {@link Why.CannotDerive} says the readings did not get far enough for anything about
+ * the model to follow; what leaves a position in that state is enumerated where the verdict is
+ * made ({@link PendingPosition#complete}) and is not counted again here.
+ * {@link Why.StatedWithoutALine} says the other thing — a rule is filed here and came to no line,
+ * with nothing outstanding about it, so a reader sent after a limit would be looking for one that
+ * is not there.
+ *
+ * <p><b>All three are a projection and none is a reading's own account of itself.</b> Whether a
+ * question stands is asked of the accounting that holds every question a rule raises against
+ * whatever answered it, so a reading short of a rule that another reading took in leaves nothing
+ * standing. Read instead off what one reading was left with, a rule the reading of ends read from
+ * end to end and the reading of values did not take in came out as a position nothing could read.
  *
  * @param at  the position, spelled the way a report names it
- * @param why whether the model draws nothing here, this could not read what it draws, or a rule
- *            read from end to end states something that is no line
+ * @param why whether the model draws nothing here, the readings did not get far enough to say, or
+ *            a rule filed here came to no line
  */
 public record UndividedPosition(TermPath at, Why why) {
 
@@ -33,8 +40,8 @@ public record UndividedPosition(TermPath at, Why why) {
     public sealed interface Why {
 
         /**
-         * Every reading ran to the end, none of them stopped, and none of them divided the
-         * position: the model divides it no way at all.
+         * The readings got to the rules of the position, every question those rules raise was
+         * answered, and no rule is filed here: the model divides it no way at all.
          *
          * <p>A class with no way to make one rather than a record, because what it says is a
          * conclusion about a model and the only thing entitled to draw it is the completion of a
@@ -66,18 +73,21 @@ public record UndividedPosition(TermPath at, Why why) {
         }
 
         /**
-         * Something is written here that this did not read, so nothing is established either way.
+         * The readings did not get far enough for anything about the model to follow.
          *
-         * <p>What stopped it is not here. A verdict says whether anything divides the position; the
-         * findings beside it say what was not read and by whose account, and each of those is made
-         * by the reader that has the fact — with the rule where there is one. Carried here too, a
-         * report read the cause back off the verdict, which is where the rule had already been
-         * lost.
+         * <p>However many ways there are of that being so, one word. Which of them, and what was
+         * short of it, is not here — the list is where the verdict is made
+         * ({@link PendingPosition#complete}), so that a way added is added in one place rather than
+         * in every sentence that describes this one. A verdict says whether anything divides the position;
+         * the findings beside it say what was not read and by whose account, and each of those is
+         * made by the reader that has the fact — with the rule where there is one. Carried here
+         * too, a report read the cause back off the verdict, which is where the rule had already
+         * been lost.
          */
         record CannotDerive() implements Why {}
 
         /**
-         * Every reading ran to the end, and a rule states something here that draws no line.
+         * A rule is filed here that came to no line, with nothing about it outstanding.
          *
          * <p>Neither of the two above. Not an absence — the model states something at this position,
          * and a verdict saying it divides the position no way would deny the declaration two tokens

@@ -456,8 +456,8 @@ public final class Scoping {
         }
 
         /** The same over a stage of the declarations something has resolved. */
-        public Symbols symbolsOver(Registry<Hir.Def> registry, Stdlib stdlib) {
-            return Symbols.of(module, registry, denoting(), stdlib);
+        public ResolvedSymbols symbolsOver(Registry<Hir.Def> registry, Stdlib stdlib) {
+            return ResolvedSymbols.over(module, registry, denoting(), stdlib);
         }
 
         /** These meanings as the operations a scope performs on them — what a reader that already

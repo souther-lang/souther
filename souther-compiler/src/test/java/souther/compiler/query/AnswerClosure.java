@@ -548,9 +548,17 @@ final class AnswerClosure {
                     part("souther.compiler.check.Scoping$Scoped", "values"),
                     part("souther.compiler.check.Resolve$Values", "elsewhere")), A_STORE,
                     Traversal.Why.NOTHING_CLOSES_IT),
-            generationReader("souther.compiler.check.Symbols",
+            // The way of asking is declared as the reader that does not name a stage, so the two
+            // worlds under it are two places rather than one. Both for the same reason: what is
+            // held is how to go on asking, not an answer that has to compare as one.
+            generationReader("souther.compiler.check.ResolvedSymbols",
                     part("souther.compiler.partition.MeasuredInput", "written"),
-                    part("souther.compiler.partition.BehaviorInputs", "symbols")),
+                    part("souther.compiler.partition.BehaviorInputs", "symbols"),
+                    arm("souther.compiler.check.ResolvedSymbols")),
+            generationReader("souther.compiler.check.DerivedSymbols",
+                    part("souther.compiler.partition.MeasuredInput", "written"),
+                    part("souther.compiler.partition.BehaviorInputs", "symbols"),
+                    arm("souther.compiler.check.DerivedSymbols")),
             generationReader("souther.compiler.inputs.ReadQuantities",
                     part("souther.compiler.partition.MeasuredInput", "quantities"),
                     arm("souther.compiler.inputs.ReadQuantities")),
@@ -654,7 +662,17 @@ final class AnswerClosure {
                 operandMethodsOf("IdentityHashMap#entrySet", Scenario.VALID_CORPUS),
                 operandMethodsOf("IdentityHashMap#entrySet", Scenario.A_MODULE_SPOKEN_ABOUT),
                 operandMethodsOf("IdentityHashMap#table", Scenario.VALID_CORPUS),
-                operandMethodsOf("IdentityHashMap#table", Scenario.A_MODULE_SPOKEN_ABOUT));
+                operandMethodsOf("IdentityHashMap#table", Scenario.A_MODULE_SPOKEN_ABOUT),
+                operandMethodsUnderPrepared("AbstractMap#keySet", Scenario.VALID_CORPUS),
+                operandMethodsUnderPrepared("AbstractMap#keySet", Scenario.A_MODULE_SPOKEN_ABOUT),
+                operandMethodsUnderPrepared("AbstractMap#values", Scenario.VALID_CORPUS),
+                operandMethodsUnderPrepared("AbstractMap#values", Scenario.A_MODULE_SPOKEN_ABOUT),
+                operandMethodsUnderPrepared("IdentityHashMap#entrySet", Scenario.VALID_CORPUS),
+                operandMethodsUnderPrepared("IdentityHashMap#entrySet",
+                        Scenario.A_MODULE_SPOKEN_ABOUT),
+                operandMethodsUnderPrepared("IdentityHashMap#table", Scenario.VALID_CORPUS),
+                operandMethodsUnderPrepared("IdentityHashMap#table",
+                        Scenario.A_MODULE_SPOKEN_ABOUT));
     }
 
     /**
@@ -671,8 +689,14 @@ final class AnswerClosure {
 
     /** And the same, under the correspondence a prepared module keeps. */
     private static String operandMethodsOf(String named, Scenario scenario) {
+        return "A_FIELD_THAT_WOULD_NOT_OPEN " + Q + "Shapes$CheckSurface.Answer#value"
+                + ".CheckSurface#operandMethods." + named + " in " + scenario;
+    }
+
+    /** The same table, reached through the state the assembly is half of. */
+    private static String operandMethodsUnderPrepared(String named, Scenario scenario) {
         return "A_FIELD_THAT_WOULD_NOT_OPEN " + Q + "Shapes$Prepared.Answer#value"
-                + ".Prepared#operandMethods." + named + " in " + scenario;
+                + ".Prepared#surface.CheckSurface#operandMethods." + named + " in " + scenario;
     }
 
     /** Every place written down here, whichever detector or scenario meets it. */

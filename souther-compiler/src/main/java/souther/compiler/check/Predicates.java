@@ -806,10 +806,10 @@ final class Predicates {
      *
      * <p>Folded from the two sides and what the comparison places, because a statement has no node
      * to fold. Which is the whole of what folding a comparison is either way — an expression folds a
-     * side at a time and puts the two together under its operator ({@link ConstEval}) — and it is
-     * what lets a composed comparison be decided at all: {@code Int.compare(1, 2) >= 0} folds
-     * through nothing the library declares, and the order it states of {@code 1} and {@code 2} is
-     * settled here.
+     * side at a time and puts the two together under the relation its operator placed
+     * ({@link ConstEval#stands}) — and it is what lets a composed comparison be decided at all:
+     * {@code Int.compare(1, 2) >= 0} folds through nothing the library declares, and the order it
+     * states of {@code 1} and {@code 2} is settled here.
      */
     private Boolean decidedAt(StatedComparison stated) {
         Object left = Terms.folded(stated.left(), terms.symbols());

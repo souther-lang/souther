@@ -50,12 +50,12 @@ final class LocalInspection {
         List<Cut> cuts = position.nothingExists() ? List.of()
                 : cutsOf(axis, position.ownEnds(), position.narrowedEnds());
         if (classes.isEmpty() && cuts.isEmpty()) {
-            // Nothing divides the position, and what may be concluded from that is what the reading
-            // knows about itself. A set of values arrived at from part of the rules names no
-            // division; a rule that went unread can divide the position as easily as one that was
-            // read, so an absence does not follow from this reading having found none.
-            return position.valuesUnread() == null ? new LocalPartition.Open()
-                    : new LocalPartition.Blocked(position.valuesUnread());
+            // Nothing this reading found divides the position, which is all this says. Whether an
+            // absence follows is answered where the position's standing questions and the body's
+            // rules are, and a widening this reading recorded about its own set is no part of it —
+            // read here, one reader being short of a rule another reader took in was written down
+            // as the position being one nothing could read.
+            return new LocalPartition.Open();
         }
         // Whether a row can be written at an edge is a question about the whole value the position
         // sits in, so it is answered once for the parameter. A rule this could not read is a way

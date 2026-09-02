@@ -2,12 +2,10 @@ package souther.compiler.coverage;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.core.Core;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 
 import java.util.List;
-import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -103,8 +101,7 @@ class AComparisonBelongsToWhoWroteItNotToTheForkTestingItTest {
         Bodies.Elaborated checked = compilation.db()
                 .ask(new Bodies.Checked(compilation.modules().get(0))).value();
         assertNotNull(checked, "the model under test compiles");
-        Map<String, Core> bodies = checked.behaviorBodies();
-        CoverageSites.Plan plan = CoverageSites.of(bodies, souther.compiler.coverage.DecisionSources.NONE, souther.compiler.coverage.SuppliedRules.NONE);
+        CoverageSites.Plan plan = checked.plan();
         return plan.sites().stream()
                 .filter(site -> site.outcome() instanceof SourceOutcome.Compared)
                 .map(CoverageSites.Site::obligation)

@@ -1759,7 +1759,7 @@ public final class ExampleVerifier {
         return switch (stated) {
             case Expectation.TheValue _ -> new Evidence.Answer(expected.live());
             case Expectation.TheCase(TypeSymbol only) ->
-                    symbols.declarations().declaration(only) instanceof Hir.UnitData
+                    symbols.declaredNode(only) instanceof Hir.UnitData
                             ? new Evidence.Answer(
                                     fixtures.buildFixture(row.expected(), sig.out()).value())
                             : new Evidence.Case(only);

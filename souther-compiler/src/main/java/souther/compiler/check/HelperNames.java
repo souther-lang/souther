@@ -143,7 +143,7 @@ public final class HelperNames {
             defs.add(def instanceof Hir.Data d && !d.invariants().isEmpty()
                     ? new Hir.Data(d.written(), d.declares(), d.newtype(), d.includes(), d.fields(),
                             Hir.mapClauses(d.invariants(), inv -> qualifyForeign(inv, m.name())),
-                            d.decoder(), d.encoder(), d.pos())
+                            d.pos())
                     : def);
         }
         return defs;

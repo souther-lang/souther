@@ -362,7 +362,7 @@ class WhatIsFixedIsAskedTogetherHoweverItArrivedTest {
         souther.compiler.types.TypeSymbol.AtModule name =
                 souther.compiler.types.TypeSymbols.declared(
                 new souther.compiler.types.TypeKey(read.symbols().module(), "P"));
-        Hir.Data data = (Hir.Data) read.symbols().declarations().declaration(name.key());
+        Hir.Data data = (Hir.Data) read.symbols().declaredNode(name.key());
         souther.compiler.check.FieldDomains whole = souther.compiler.check.FieldDomains.of(
                 name, data, read.symbols(), ReadAs.THE_COMPILATION_DOES);
 
@@ -372,12 +372,12 @@ class WhatIsFixedIsAskedTogetherHoweverItArrivedTest {
             souther.compiler.check.FieldDomains readIn = souther.compiler.check.FieldDomains.of(
                     name, data, read.symbols(), ReadAs.THE_COMPILATION_DOES, settled);
             souther.compiler.check.FieldDomains.Carried<String> taken = whole.given(Map.of(
-                    souther.compiler.check.FieldDomains.Coordinate
-                            .value(souther.compiler.check.RuleKey.of("x")), count(at)))
-                    .constraintsOver(coordinate -> coordinate.kind()
-                                    instanceof souther.compiler.check.FieldDomains
-                                            .CoordinateKind.OfWhatAnOperationAnswers
-                                    ? "#" + coordinate.path() : coordinate.path().toString(),
+                    souther.compiler.check.NumberAt
+                            .valueOf(souther.compiler.check.RuleKey.of("x")), count(at)))
+                    .constraintsOver(claim -> claim.of()
+                                    instanceof souther.compiler.check.NumberAt
+                                            .OfWhatNumber.OfWhatAnOperationAnswers
+                                    ? "#" + claim.position() : claim.position().toString(),
                             subject -> "?" + subject);
             java.util.SequencedMap<String, Emptiness.AtAField.Where> where =
                     new LinkedHashMap<>();
@@ -388,7 +388,7 @@ class WhatIsFixedIsAskedTogetherHoweverItArrivedTest {
                     taken.constraints().holdsNothing(where).isPresent(),
                     "whether anything is left, with x at " + at);
             assertEquals(readIn.leftAt(souther.compiler.check.RuleKey.of("y"),
-                            new souther.compiler.check.FieldDomains.CoordinateKind.OfItsOwnValue()),
+                            new souther.compiler.check.NumberAt.OfWhatNumber.OfItsOwnValue()),
                     taken.constraints().numbers().boundsOf(
                             NumericDomain.LinearForm.<String>atom("y")),
                     "where y runs, with x at " + at);

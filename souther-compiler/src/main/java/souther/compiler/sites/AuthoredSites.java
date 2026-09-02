@@ -193,8 +193,6 @@ public final class AuthoredSites {
                     for (Hir.InvariantClause clause : data.invariants()) {
                         expr(clause.expr());
                     }
-                    data.decoder().ifPresent(this::decoder);
-                    data.encoder().ifPresent(this::encoder);
                 }
                 case Hir.SumData _, Hir.UnitData _ -> { }
             }
@@ -245,51 +243,6 @@ public final class AuthoredSites {
                     expr(input);
                 }
                 expr(row.output());
-            }
-        }
-
-        private void decoder(Hir.DecoderDef decoder) {
-            switch (decoder) {
-                case Hir.PrimDecoder _ -> { }
-                case Hir.ObjectDecoder object -> construct(object.result());
-                case Hir.NewtypeDecoder newtype -> construct(newtype.result());
-            }
-        }
-
-        private void construct(Hir.Construct construct) {
-            if (construct == null) {
-                return;
-            }
-            for (Hir.FieldInit init : construct.inits()) {
-                expr(init.value());
-            }
-        }
-
-        private void encoder(Hir.EncoderDef encoder) {
-            raw(encoder.result());
-        }
-
-        private void raw(Hir.RawExpr raw) {
-            switch (raw) {
-                case null -> { }
-                case Hir.TextRaw text -> expr(text.arg());
-                case Hir.IntRaw n -> expr(n.arg());
-                case Hir.BoolRaw b -> expr(b.arg());
-                case Hir.DecimalRaw d -> expr(d.arg());
-                case Hir.IsoTextRaw iso -> expr(iso.arg());
-                case Hir.EncodeRaw encode -> expr(encode.arg());
-                case Hir.ListEnc list -> expr(list.source());
-                case Hir.SetEnc set -> expr(set.source());
-                case Hir.MapEnc map -> expr(map.source());
-                case Hir.OptionRaw option -> {
-                    expr(option.access());
-                    raw(option.inner());
-                }
-                case Hir.ObjectRaw object -> {
-                    for (Hir.RawEntry entry : object.entries()) {
-                        raw(entry.value());
-                    }
-                }
             }
         }
 

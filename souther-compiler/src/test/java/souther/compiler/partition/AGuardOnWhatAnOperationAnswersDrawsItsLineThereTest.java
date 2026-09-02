@@ -72,12 +72,11 @@ class AGuardOnWhatAnOperationAnswersDrawsItsLineThereTest {
         Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().stream()
                 .filter(b -> b.name().equals(behavior)).findFirst().orElseThrow();
         assertNotNull(sigs.get(behavior), "and its signature is read");
-        CoverageSites.Plan plan = CoverageSites.of(checked.behaviorBodies(), checked.decisions(),
-                checked.supplied());
+        CoverageSites.Plan plan = checked.plan();
         Core body = checked.behaviorBodies().get(behavior);
         InputDomain inputs = compilation.db().ask(new Adequacy.Inputs(module)).value().get(behavior);
         souther.compiler.inputs.Quantities quantities = inputs.quantities(symbols);
-        return GuardThresholds.of(behavior, body, plan, inputs, symbols).thresholds().stream()
+        return GuardThresholds.of(body, plan, inputs, symbols).thresholds().stream()
                 .<String>map(each -> each.term() + " at "
                         + (each.value() == null ? "nowhere" : each.value().key()) + " on "
                         + quantities.ordersOf(each.term()).answered())

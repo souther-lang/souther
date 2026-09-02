@@ -56,6 +56,14 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
  * what a comparison places is taken from a relation without an operator in between
  * ({@link ComparisonClaim#stating}), so a relation never becomes one.
  *
+ * <p><b>And no line here is one a reader has because it holds a comparison.</b> Every reader below
+ * a recognition once had the node it was recognised from, which is one call from the operator, and
+ * what kept it out of this list was that nobody had made that call yet — a fact about the code and
+ * not about the type. {@link souther.compiler.check.Comparison} holds no node now: what it carries
+ * is what the operator placed and the two sides it placed it on, and which comparison a reader is
+ * talking about is a name of its own. So a line arriving here for that reason is a reader that has
+ * gone back to the tree, and that is what it would have to say.
+ *
  * <p><b>One list, and the rule it comes from is the machine's.</b> A method that has an operator
  * names the type: to use a value as one, the type has to be established, and a symbolic reference
  * is how that is written down. Which instructions can carry one is a closed set the class file
@@ -116,7 +124,6 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                     "types an operand under the operator it stands beside"),
             new Held("souther.compiler.check.ConstEval.arith",
                     "what the operator computes of two constants"),
-            new Held("souther.compiler.check.ConstEval.compare", "the same for a comparison"),
             new Held("souther.compiler.reading.Meetings.run",
                     "walks the operands under the operator they are written with"),
 
@@ -214,7 +221,7 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                     "writes the operator into the words a report shows for an arm"),
             new Held("souther.compiler.reading.Meetings.run",
                     "gathers the operands one operator reaches, which is what it is asked about"),
-            new Held("souther.compiler.check.PathReachability.unanswered",
+            new Held("souther.compiler.check.PathReachability.unansweredAt",
                     "names the operator in what it says went unanswered"),
             new Held("souther.compiler.check.TheOtherCase.conditionAt",
                     "composes the comparison a library fact states its other case by, out of the"
@@ -278,8 +285,9 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                     "asks whether the operator joins two conditions, which is the one thing an"
                             + " operand can be held to before the one beside it has been read"),
             new Held("souther.compiler.check.ConstEval.binary",
-                    "what the operator computes of two constants, and which operand it needs to"
-                            + " compute it"),
+                    "what the operator computes of two constants, which operand it needs to compute"
+                            + " it, and — for the six that compare — what it placed, which is what"
+                            + " the fold is asked for instead of the operator"),
             new Held("souther.compiler.check.DischargeRules.noSmallerThan",
                     "which operands a string joined by another is no shorter than"),
             new Held("souther.compiler.core.GrowingFold.appended",
@@ -291,10 +299,6 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                             + " comparison for — the recognition everything below it holds"),
             new Held("souther.compiler.codegen.BodyGen.lambda$binary$0",
                     "names the operator in what it says of a comparison that placed nothing"),
-            new Held("souther.compiler.codegen.BodyGen.ordered",
-                    "names the operator in what it says of an order the checker admitted and the"
-                            + " types turn out not to have: the emission itself is off what the"
-                            + " comparison stated"),
 
             // And whether it compares at all, asked of the one place that says so — by a reader
             // recognising a comparison, and by no reader below one.

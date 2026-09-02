@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.check.NumberAt;
 import souther.compiler.check.NarrowedBounds;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Requirements;
@@ -147,6 +148,27 @@ public record Axis(AxisId id, NumericTerm.FromOnePosition term,
      * is the one that tells them apart. */
     public TermPath path() {
         return term.position();
+    }
+
+    /**
+     * Which number this axis is a measure of, said the way a question names one.
+     *
+     * <p>The projection runs this way and only this way. A subject is a place and which of the
+     * numbers there it is; a term is what this compiler managed to make of one, and it carries how
+     * the number is measured, where it runs and how it is read off a row besides. So an answer can
+     * say which question it is an answer to, and no question is built out of an answer — asked the
+     * other way round, a question about a number no term could be made of would have had no axis to
+     * compare against and no way to be recognised as this axis's.
+     *
+     * <p>Here rather than beside {@link NumberAt}, so that the question vocabulary names nothing a
+     * reading produces. A converter written over there would be that dependency with the arrow
+     * drawn the other way.
+     */
+    public NumberAt<TermPath> subject() {
+        return switch (term) {
+            case NumericTerm.ValueOf it -> NumberAt.valueOf(it.position());
+            case NumericTerm.TakenOf it -> NumberAt.takenOf(it.position(), it.operation());
+        };
     }
 
     /**

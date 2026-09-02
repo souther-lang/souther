@@ -112,11 +112,11 @@ public record ReachingCuts(Map<ComparisonOccurrence, List<OnTheWay>> byCompariso
             case Condition.Joined joined -> joined.how().under(holding) == ConditionJoin.BOTH
                     ? and(stating(joined.left(), inputs, holding, symbols),
                             stating(joined.right(), inputs, holding, symbols))
-                    : List.of(new OnTheWay.Declined(Citation.of(joined.at().pos()),
+                    : List.of(new OnTheWay.Declined(joined.at(),
                             new OnTheWay.Why.OneOfTwoThings()));
             case Condition.Compares one -> List.of(of(one, inputs, holding, symbols));
             case Condition.NotRead not -> List.of(new OnTheWay.Declined(
-                    Citation.of(not.at().pos()), new OnTheWay.Why.NoWordsForTheShape()));
+                    not.at(), new OnTheWay.Why.NoWordsForTheShape()));
         };
     }
 
@@ -189,7 +189,7 @@ public record ReachingCuts(Map<ComparisonOccurrence, List<OnTheWay>> byCompariso
      */
     private static OnTheWay of(Condition.Compares comparison, InputDomain inputs, boolean holding,
                                Symbols symbols) {
-        Citation at = Citation.of(comparison.at().pos());
+        Citation at = comparison.at();
         AffineReading read = AffineReading.of(
                 comparison.comparison(), inputs, comparison.reads(), symbols);
         if (read == null) {

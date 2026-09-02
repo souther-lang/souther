@@ -2006,7 +2006,7 @@ When the discriminator key or tag is business-specific (reading `+"status"+` and
 
 [[a-custom-codec-agrees-with-its-type]]A codec written by hand MUST be a codec for the type it is declared on: a decoder for `+T+` constructs a `+T+`, an encoder for a sum writes every case, an element encoder matches the element type, and a source-shaped encoder is given that shape. What is derived agrees with the type because it was read off it; what is written has to be checked against it.
 
-[[a-codec-reached-for-exists]]`+T.decoder+` and `+T.encode+` MAY be written only where `+T+` has one. A type whose representation was never derived and never given has neither to reach for.
+[[a-codec-reached-for-exists]]`+T.decoder+` and `+T.encode+` MAY be written only where `+T+` has one. Every declaration of a program that compiles has one: a product's is derived from its declared shape, a sum's from what its cases are, and a unit is read and written as the single value it is.
 
 When the default derivation is insufficient (a different key name, normalization, default filling, a business-specific discriminator, persistence version branching), write a Decoder on the Java side that assembles the external representation and calls the data's (invariant-checking) construction. The `+JdbcFindMember+` calling `+Member.decoder()+` in <<java-example>> is this form. External-representation conversion stays confined to the boundary and is not brought into domain definitions.
 
@@ -6883,16 +6883,6 @@ The decoder for `Amount` must construct `Amount`, but constructs `Level`.
 ----
 
 Reported where a hand-written codec is not a codec for the type it is declared on (<<a-custom-codec-agrees-with-its-type>>): a decoder constructing something else, an encoder missing a case of its sum, an element encoder against a different element type, a source-shaped encoder given another shape. A derived codec agrees because it was read off the type; a written one is held to the same agreement.
-
-[#e2202]
-=== A codec is reached for where there is none
-
-[,text]
-----
-`Wide` has no decoder, so `Wide.decoder` cannot be called.
-----
-
-Reported at the reference (<<a-codec-reached-for-exists>>). Derivation covers what has an external representation (<<external-representation>>), and where it did not run and nothing was written by hand there is nothing to name.
 
 [#e2301]
 === A declaration is not written in its form

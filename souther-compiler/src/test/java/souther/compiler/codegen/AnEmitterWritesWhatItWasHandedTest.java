@@ -2,12 +2,9 @@ package souther.compiler.codegen;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.DefaultStdlib;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.Boundary;
-import souther.compiler.check.Symbols;
-import souther.compiler.check.TypeChecker;
-import souther.compiler.derive.Deriver;
+import souther.compiler.check.DerivedSymbols;
 import souther.compiler.jvm.GeneratedClass;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Compilation;
@@ -17,7 +14,6 @@ import souther.compiler.types.TypeSymbol;
 
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -59,8 +55,12 @@ class AnEmitterWritesWhatItWasHandedTest {
             data Stage = Prospecting | Negotiation | Won
             """;
 
-    private final Hir.Module module = derive(MODULE);
-    private final Symbols symbols = TypeChecker.symbols(module, DefaultStdlib.get());
+    private final Compilation compilation = Compilation.ofSources(List.of(MODULE), ModulePath.EMPTY);
+    private final Hir.Module module =
+            compilation.db().ask(new Names.Resolved("m")).value();
+    /** The world an emitter reads against, which is the derived one. */
+    private final DerivedSymbols symbols =
+            souther.compiler.query.Scopes.derived(compilation.db(), "m").value();
     private final CodecGen codec = codecGen();
 
     @Test
@@ -148,10 +148,4 @@ class AnEmitterWritesWhatItWasHandedTest {
                 caseToSums, Map.of(), true, Set.of(), Map.of()));
     }
 
-    private static Hir.Module derive(String source) {
-        Map<String, String> byId = new LinkedHashMap<>();
-        byId.put("m.sou", source);
-        return Deriver.derive(Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY)
-                .db().ask(new Names.Resolved("m")).value(), DefaultStdlib.get());
-    }
 }

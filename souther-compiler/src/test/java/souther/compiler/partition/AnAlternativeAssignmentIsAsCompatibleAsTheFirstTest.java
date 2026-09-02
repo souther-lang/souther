@@ -93,8 +93,7 @@ class AnAlternativeAssignmentIsAsCompatibleAsTheFirstTest {
         InputDomain inputs = compilation.db().ask(new Adequacy.Inputs(module)).value().get("fee");
         Core body = checked.behaviorBodies().get("fee");
         assertNotNull(body);
-        CoverageSites.Plan plan = CoverageSites.of(checked.behaviorBodies(), checked.decisions(),
-                checked.supplied());
+        CoverageSites.Plan plan = checked.plan();
         Partitions.Partitioning axes =
                 Partitions.of(spec.name(), inputs, symbols, ReadAs.THE_COMPILATION_DOES);
         return new Model(MeasuredInput.of(spec.name(), inputs.reading(symbols), axes),

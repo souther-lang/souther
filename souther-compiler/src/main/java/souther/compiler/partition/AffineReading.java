@@ -114,7 +114,7 @@ record AffineReading(LinearForm<NumericTerm> form, BigDecimal cut, ComparisonCla
         java.util.Set<NumericTerm> named = new java.util.LinkedHashSet<>();
         // The left first where both stop, which is the side a threshold would be read off.
         LinearForm<NumericTerm> left = null;
-        for (Core side : java.util.List.of(comparison.at().left(), comparison.at().right())) {
+        for (Core side : java.util.List.of(comparison.left(), comparison.right())) {
             AffineForms.Outcome<NumericTerm, InputReads> read =
                     AffineForms.outcome(side, reads, reading(inputs, symbols, named));
             if (read instanceof AffineForms.Outcome.StoppedAt<NumericTerm, InputReads> stopped) {
@@ -136,7 +136,7 @@ record AffineReading(LinearForm<NumericTerm> form, BigDecimal cut, ComparisonCla
                 // `-3a - 6b` — the same four points under a name no author wrote, and a different
                 // line from the rule written the other way.
                 return new OfAComparison.Cuts(
-                        here.facesTheOtherWay(subjectOf(comparison.at(), left, reads, symbols))
+                        here.facesTheOtherWay(subjectOf(comparison.left(), left, reads, symbols))
                                 ? here.mirrored() : here);
             }
         }
@@ -323,13 +323,13 @@ record AffineReading(LinearForm<NumericTerm> form, BigDecimal cut, ComparisonCla
 
     /** The position the comparison's left side names first, or null where it names none. Handed the
      *  reading of that side rather than walking it again: one comparison is read once. */
-    private static NumericTerm subjectOf(Core.Binary comparison, LinearForm<NumericTerm> left,
+    private static NumericTerm subjectOf(Core leftSide, LinearForm<NumericTerm> left,
                                          InputReads reads, Symbols symbols) {
         if (left == null || left.coefs().isEmpty()) {
             return null;
         }
         for (souther.compiler.inputs.TermPath named
-                : GuardThresholds.mentionedIn(comparison.left(), reads, symbols)) {
+                : GuardThresholds.mentionedIn(leftSide, reads, symbols)) {
             for (NumericTerm atom : left.coefs().keySet()) {
                 if (atom.subjectPath().equals(named)) {
                     return atom;

@@ -3,7 +3,7 @@ package souther.compiler.inputs;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.ast.Hir;
-import souther.compiler.check.FieldDomains;
+import souther.compiler.check.NumberAt;
 import souther.compiler.check.Owed;
 import souther.compiler.check.Prepared;
 import souther.compiler.check.RuleKey;
@@ -97,13 +97,13 @@ class ANameIsReadOnceHoweverTheRuleSpelledItTest {
         PlacementSeed values = PlacementSeed.of(root,
                 new Owed.AdmittedValues(RuleKey.of("name")), rule, someCitation(rule));
         PlacementSeed line = PlacementSeed.of(root,
-                new Owed.Boundary(FieldDomains.Coordinate.value(RuleKey.of("name"))), rule,
+                new Owed.Boundary(NumberAt.valueOf(RuleKey.of("name"))), rule,
                 someCitation(rule));
 
         assertEquals(values.address(), line.address());
         assertEquals(new PlacementSeed.Placed.TheValuesThere(), values.placed());
         assertEquals(new PlacementSeed.Placed.ANumberOfIt(
-                        new FieldDomains.CoordinateKind.OfItsOwnValue()), line.placed());
+                        new NumberAt.OfWhatNumber.OfItsOwnValue()), line.placed());
     }
 
     /**

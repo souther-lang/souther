@@ -19,7 +19,7 @@ class AnObservationHoldsWhatItSaysAboutItselfTest {
 
     @Test
     void awayOutOfAComparisonMeansTheComparisonWasReached() {
-        ComparisonOutcome held = new ComparisonOutcome(new ComparisonOccurrence(7), true);
+        ComparisonOutcome held = new ComparisonOutcome(new ComparisonEmissionSite(7), true);
 
         assertThrows(IllegalArgumentException.class,
                 () -> new Observation(Set.of(), Set.of(held)),
@@ -37,7 +37,7 @@ class AnObservationHoldsWhatItSaysAboutItselfTest {
      */
     @Test
     void bothWaysOutOfOneComparisonAreARunThatCameBackToIt() {
-        ComparisonOccurrence twice = new ComparisonOccurrence(3);
+        ComparisonEmissionSite twice = new ComparisonEmissionSite(3);
         Observation seen = new Observation(Set.of(3),
                 Set.of(new ComparisonOutcome(twice, true), new ComparisonOutcome(twice, false)));
 

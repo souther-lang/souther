@@ -9,7 +9,8 @@ import souther.compiler.check.ExecutableInvariants;
 import souther.compiler.check.InliningPolicy;
 import souther.compiler.check.Unanswerable;
 import souther.compiler.check.InvariantChecker;
-import souther.compiler.check.Symbols;
+import souther.compiler.check.DerivedSymbols;
+import souther.compiler.check.ResolvedSymbols;
 import souther.compiler.core.ValueShape;
 import souther.compiler.diag.CompileException;
 import souther.compiler.types.BindingOwner;
@@ -22,13 +23,20 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * What each declaration becomes before anything is checked against it: its codecs derived, the
- * clauses it wrote expanded to the rules they state, and its newtype constructors turned into
- * constructions.
+ * What each declaration becomes before anything is checked against it, one achievement to a rung:
+ * the clauses it wrote expanded to the rules they state ({@link Settling}), the constructions in
+ * those clauses written as constructions ({@link NormalizedDeclarations}), and a product's boundary
+ * representation read off its declared shape ({@link DerivedDeclarations}).
  *
- * <p>These used to be three passes over a whole module in a fixed order, and getting that order
- * wrong was its own class of defect. Here the order is not written anywhere: each answer names what
- * it reads, and reading it is what makes it happen first.
+ * <p>Three rungs and not one, because the three have different preconditions and a reader wants
+ * different ones. Normalizing is declaration-local and is answered for every declaration a module
+ * writes; deriving a representation reads what the fields name, and a product one of whose fields
+ * names no type has none. So a declaration is read as the normalized one whether or not a
+ * representation came out — the answers a reader gets do not turn on a question it did not ask.
+ *
+ * <p>These used to be passes over a whole module in a fixed order, and getting that order wrong was
+ * its own class of defect. Here the order is not written anywhere: each answer names what it reads,
+ * and reading it is what makes it happen first.
  */
 public final class Shapes {
 
@@ -36,15 +44,14 @@ public final class Shapes {
 
 
     /**
-     * A module with its codecs derived and every invariant clause saying the rule it states — the
-     * form each declaration is read from, before what one of them wrote is normalized.
+     * A module with every invariant clause saying the rule it states — the form each declaration is
+     * read from, before what one of them wrote is normalized.
      *
-     * <p>Not what a later stage reads. This is how {@link DerivedDeclarations} works its answers
-     * out, and a mistake reached here is a mistake in the module rather than in any one
-     * declaration: the derive and the settling read every declaration to answer about each.
+     * <p>Not what a later stage reads. This is what {@link NormalizedDeclarations} works its answers
+     * out from, and a mistake reached here is a mistake in the module rather than in any one
+     * declaration: the settling reads every declaration to answer about each.
      *
-     * <p>The two go together because the settling reads a clause through the symbols the derive
-     * produced. Which clauses govern a declaration is a separate question and is not answered here:
+     * <p>Which clauses govern a declaration is a separate question and is not answered here:
      * a clause of a type this one spreads stays that type's, and
      * {@link souther.compiler.check.TypeOps#declaredInvariants} composes them where one is asked
      * for.
@@ -68,7 +75,7 @@ public final class Shapes {
             if (!expandable.present()) {
                 return Answer.absent();
             }
-            Answer<Symbols> scope = Names.resolvedSymbols(db, name);
+            Answer<ResolvedSymbols> scope = Names.resolvedSymbols(db, name);
             if (!scope.present()) {
                 return Answer.absent();
             }
@@ -137,13 +144,15 @@ public final class Shapes {
     }
 
     /**
-     * One declaration with its codecs derived and its clauses expanded — what every later stage
-     * resolves a type to.
+     * One declaration with the boundary representation derived for it.
      *
      * <p>Its own question, so its failure is the named declaration's and not the ones beside it: a
-     * clause that cannot be read costs the declaration that wrote it this answer and costs the rest
-     * nothing. A module still derives its declarations together, and this is read through that, so
-     * what it depends on is still the module — what it is about is the one declaration.
+     * product whose field names no type costs itself this answer and costs the rest nothing. A
+     * module still derives its declarations together, and this is read through that, so what it
+     * depends on is still the module — what it is about is the one declaration.
+     *
+     * <p>What a later stage resolves a type to is {@link NormalizedDef}, which is answered for every
+     * declaration. This is what a reader asking how a value of one crosses is answered from.
      */
     public record DerivedDef(TypeKey named) implements Key<souther.compiler.check.Derived.Def> {
         @Override
@@ -164,18 +173,79 @@ public final class Shapes {
     }
 
     /**
-     * A module's declarations by name, each in the form every later stage resolves a type against,
-     * and only the ones that came out.
+     * A module's declarations by name, each with the constructions in its clauses written as
+     * constructions.
      *
      * <p>This is where a newtype construction written {@code 金額(500)} becomes the construction it
      * is. A construction reaching an invariant through a helper is written in that helper's body,
      * which this module has not desugared yet, so normalizing here rather than with the bodies is
      * what leaves one spelling for every check over an invariant to read.
      *
+     * <p><b>The one producer of the normalized form.</b> What reads a declaration and what derives a
+     * representation for one are both answered from this, so a declaration is written one way
+     * whichever of them is asking. Worked out again by either, the two would be two producers of one
+     * form and a declaration could come back from them differently.
+     *
      * <p>A declaration at a time, so what is wrong with one clause is wrong with the declaration
      * that wrote it. Every declaration is worked out whether or not the one before it came out —
      * stopping at the first would leave the declarations after it without an answer, and each of
      * them owns what it has to say.
+     */
+    public record NormalizedDeclarations(String name)
+            implements Key<Map<String, souther.compiler.check.Normalized.Def>> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Map<String, souther.compiler.check.Normalized.Def>> compute(Db db) {
+            Answer<InvariantSettled> settling = db.ask(new Settling(name));
+            Answer<ResolvedSymbols> scope = Names.resolvedSymbols(db, name);
+            if (!settling.present() || !scope.present()) {
+                return Answer.absent();
+            }
+            Map<String, souther.compiler.check.Normalized.Def> out = new LinkedHashMap<>();
+            for (InvariantSettled.Def def : settling.value().defs()) {
+                out.put(def.name(), souther.compiler.check.Normalized.Def.of(def, scope.value()));
+            }
+            return Answer.of(Map.copyOf(out));
+        }
+    }
+
+    /**
+     * One normalized declaration, asked for by name.
+     *
+     * <p>What the registry a reader of declarations is answered from reads. Its own key so that a
+     * reader wanting one declaration depends on that declaration, the way {@link DerivedDef} does.
+     */
+    public record NormalizedDef(TypeKey named)
+            implements Key<souther.compiler.check.Normalized.Def> {
+        @Override
+        public String module() {
+            return named.module();
+        }
+
+        @Override
+        public Answer<souther.compiler.check.Normalized.Def> compute(Db db) {
+            Answer<Map<String, souther.compiler.check.Normalized.Def>> defs =
+                    db.ask(new NormalizedDeclarations(named.module()));
+            if (!defs.present()) {
+                return Answer.absent();
+            }
+            souther.compiler.check.Normalized.Def def = defs.value().get(named.name());
+            return def == null ? Answer.absent() : Answer.of(def);
+        }
+    }
+
+    /**
+     * The same declarations with a boundary representation derived for each, and only the ones that
+     * came out.
+     *
+     * <p>Read off the normalized declarations rather than worked out from the settled ones, so the
+     * one thing this adds is the representation. A declaration missing here is missing for that
+     * reason alone, and what reads a declaration is answered from the rung above whether or not this
+     * could answer for it.
      */
     public record DerivedDeclarations(String name)
             implements Key<Map<String, souther.compiler.check.Derived.Def>> {
@@ -186,22 +256,26 @@ public final class Shapes {
 
         @Override
         public Answer<Map<String, souther.compiler.check.Derived.Def>> compute(Db db) {
-            Answer<InvariantSettled> settling = db.ask(new Settling(name));
-            Answer<Symbols> scope = Names.resolvedSymbols(db, name);
-            if (!settling.present() || !scope.present()) {
+            Answer<Map<String, souther.compiler.check.Normalized.Def>> declarations =
+                    db.ask(new NormalizedDeclarations(name));
+            Answer<ResolvedSymbols> scope = Names.resolvedSymbols(db, name);
+            if (!declarations.present() || !scope.present()) {
                 return Answer.absent();
             }
             Map<String, souther.compiler.check.Derived.Def> out = new LinkedHashMap<>();
-            List<Report> reports = new ArrayList<>();
-            for (InvariantSettled.Def def : settling.value().defs()) {
-                try {
-                    out.put(def.name(),
-                            souther.compiler.check.Derived.Def.derive(def, scope.value()));
-                } catch (CompileException e) {
-                    reports.addAll(Report.of(e));
+            declarations.value().forEach((declared, def) -> {
+                // A product a field of which does not name a type has no representation to read off
+                // its shape, and it is left out rather than entered as one with nothing in it. What
+                // that costs is the readers that ask how a value of it crosses; what the declaration
+                // says about itself is read from the normalized declarations and is there either
+                // way.
+                souther.compiler.check.Derived.Def derived =
+                        souther.compiler.check.Derived.Def.derive(def, scope.value());
+                if (derived != null) {
+                    out.put(declared, derived);
                 }
-            }
-            return Answer.of(Map.copyOf(out), reports);
+            });
+            return Answer.of(Map.copyOf(out));
         }
     }
 
@@ -262,12 +336,12 @@ public final class Shapes {
 
     /**
      * A module's definitions by name, each with the newtype constructions written in its body
-     * rewritten to the constructions they are, and only the ones that came out.
+     * rewritten to the constructions they are.
      *
-     * <p>A definition at a time, and every one of them worked out whether or not the one before it
-     * came out. What it reads about the declarations it names is asked for a declaration at a time
-     * too, so a declaration that did not come out leaves the definitions that do not name it with
-     * their answers.
+     * <p>Every one of them. The rewrite writes what is a construction as one and leaves what is not
+     * as it was, so there is no body it comes back with nothing for — and the module above is
+     * assembled from all of them, so one that came back with nothing would take the reading away
+     * from the definitions beside it.
      */
     public record DesugaredFns(String name)
             implements Key<Map<String, souther.compiler.check.Desugared.Fn>> {
@@ -279,36 +353,75 @@ public final class Shapes {
         @Override
         public Answer<Map<String, souther.compiler.check.Desugared.Fn>> compute(Db db) {
             Answer<InvariantSettled> settling = db.ask(new Settling(name));
-            Answer<Symbols> scope = Names.derivedSymbols(db, name);
+            Answer<DerivedSymbols> scope = Names.derivedSymbols(db, name);
             if (!settling.present() || !scope.present()) {
                 return Answer.absent();
             }
             Map<String, souther.compiler.check.Desugared.Fn> out = new LinkedHashMap<>();
-            List<Report> reports = new ArrayList<>();
             for (Hir.FnDef fn : settling.value().fns()) {
-                try {
-                    out.put(fn.name(),
-                            souther.compiler.check.Desugared.Fn.desugar(fn, scope.value()));
-                } catch (CompileException e) {
-                    reports.addAll(Report.of(e));
-                }
+                out.put(fn.name(),
+                        souther.compiler.check.Desugared.Fn.desugar(fn, scope.value()));
             }
-            return Answer.of(Map.copyOf(out), reports);
+            return Answer.of(Map.copyOf(out));
         }
     }
 
     /**
-     * The module a check and a codegen actually run over: the desugared one with every imported name
-     * written as the definition it denotes, plus the recursive helpers it reaches, as its own fns
-     * under those names.
+     * The module a best-effort reading runs over: the parts joined, and no claim that every
+     * declaration came out.
      *
-     * <p>A recursive helper cannot be inlined — it would expand forever — so it is emitted as one of
-     * this module's methods. That holds whoever declared it: a prelude {@code List.foldFrom}, and a
-     * helper another module published or published something else that calls. The declaring module is
-     * the helper's identity and not where the method goes; the method goes on the {@code $Fns} of
-     * whichever module is being compiled, which is what keeps that class package-private and leaves no
-     * new way to reach a construction from Java. Only the reached ones are added; a module that never
-     * folds gets none.
+     * <p>What a diagnostic or a measurement is given. A module one of whose declarations has no
+     * representation still has definitions of its own, and what is wrong with the one costs the
+     * readers that name it and no others — so this is answered where {@link Prepared} is not, and
+     * the reading goes on.
+     *
+     * <p>Its declarations are every one the module writes, as {@link NormalizedDeclarations}
+     * answered for them, so a declaration no representation could be derived for is here in the same
+     * spelling as the ones beside it.
+     */
+    public record CheckSurface(String name) implements Key<souther.compiler.check.CheckSurface> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<souther.compiler.check.CheckSurface> compute(Db db) {
+            Answer<InvariantSettled> settling = db.ask(new Settling(name));
+            Answer<Map<String, souther.compiler.check.Normalized.Def>> normalized =
+                    db.ask(new NormalizedDeclarations(name));
+            Answer<ResolvedSymbols> resolved = Names.resolvedSymbols(db, name);
+            Answer<DerivedSymbols> scope = Names.derivedSymbols(db, name);
+            Answer<Map<String, souther.compiler.check.Desugared.Fn>> fns =
+                    db.ask(new DesugaredFns(name));
+            Answer<Map<souther.compiler.types.ValueName.Behavior, souther.compiler.check.Sig>>
+                    signatures = db.ask(new Bodies.Reachable(name));
+            if (!settling.present() || !normalized.present() || !resolved.present()
+                    || !scope.present() || !fns.present()) {
+                return Answer.absent();
+            }
+            try {
+                souther.compiler.check.CheckSurface assembled =
+                        souther.compiler.check.CheckSurface.assemble(
+                                settling.value(), normalized.value(), fns.value(), scope.value(),
+                                signatures.present() ? signatures.value() : Map.of());
+                // A definition that did not desugar is missing from what was handed in, and a
+                // surface without it would be this module read as one that does not write it.
+                return assembled == null ? Answer.absent() : Answer.of(assembled);
+            } catch (CompileException e) {
+                return Answer.absent(e);
+            }
+        }
+    }
+
+    /**
+     * The module a codegen and everything that needs a whole one run over: the same assembly a
+     * check reads, beside the witness that every declaration the module writes came out.
+     *
+     * <p>Absent where one did not. There is nothing to emit for a module holding a declaration with
+     * no boundary representation, and an example run over it would be running against classes that
+     * were never written — while the diagnostics and the measurements that read
+     * {@link CheckSurface} go on saying what they can.
      */
     public record Prepared(String name) implements Key<souther.compiler.check.Prepared> {
         @Override
@@ -319,27 +432,12 @@ public final class Shapes {
         @Override
         public Answer<souther.compiler.check.Prepared> compute(Db db) {
             Answer<souther.compiler.check.Desugared.Module> desugared = db.ask(new Desugared(name));
-            Answer<Symbols> scope = Names.derivedSymbols(db, name);
-            Answer<Map<String, Hir.FnDef>> imported = db.ask(new Bodies.ImportedDefinitions(name));
-            // What each behavior takes and answers with, from the one place that settles it: a
-            // composition's shape is worked out there and nowhere else, and a dependency another
-            // module declares is in it too. Where they could not be made, a row's positions
-            // contribute nothing rather than being guessed at from the forms written here.
-            Answer<Map<souther.compiler.types.ValueName.Behavior, souther.compiler.check.Sig>>
-                    signatures = db.ask(new Bodies.Reachable(name));
-            if (!desugared.present() || !scope.present()) {
+            Answer<souther.compiler.check.CheckSurface> surface = db.ask(new CheckSurface(name));
+            if (!desugared.present() || !surface.present()) {
                 return Answer.absent();
             }
-            // A module whose imports form a cycle takes nothing from them — the cycle is reported
-            // where it is found, and this module is not compiled either way.
-            Map<String, Hir.FnDef> published = imported.present() ? imported.value() : Map.of();
-            try {
-                return Answer.of(souther.compiler.check.Prepared.prepare(
-                        desugared.value(), scope.value(), published,
-                        signatures.present() ? signatures.value() : Map.of()));
-            } catch (CompileException e) {
-                return Answer.absent(e);
-            }
+            return Answer.of(souther.compiler.check.Prepared.prepare(
+                    desugared.value(), surface.value()));
         }
     }
 
@@ -360,7 +458,7 @@ public final class Shapes {
         @Override
         public Answer<Map<TypeSymbol, List<ClauseDischarge>>> compute(Db db) {
             Answer<souther.compiler.check.Expandable> expandable = db.ask(new Expandable(name));
-            Answer<Symbols> scope = Names.resolvedSymbols(db, name);
+            Answer<ResolvedSymbols> scope = Names.resolvedSymbols(db, name);
             if (!expandable.present() || !scope.present()) {
                 return Answer.absent();
             }
@@ -419,7 +517,7 @@ public final class Shapes {
         @Override
         public Answer<Map<TypeSymbol, List<Hir.InvariantClause>>> compute(Db db) {
             Answer<souther.compiler.check.Expandable> expandable = db.ask(new Expandable(name));
-            Answer<Symbols> scope = Names.resolvedSymbols(db, name);
+            Answer<ResolvedSymbols> scope = Names.resolvedSymbols(db, name);
             if (!expandable.present() || !scope.present()) {
                 return Answer.absent();
             }
@@ -461,7 +559,7 @@ public final class Shapes {
         @Override
         public Answer<Map<TypeSymbol.AtModule, ValueShape>> compute(Db db) {
             Answer<Hir.Module> settled = db.ask(new Bodies.Settled(name));
-            Answer<Symbols> scope = Names.derivedSymbols(db, name);
+            Answer<DerivedSymbols> scope = Names.derivedSymbols(db, name);
             Answer<Map<String, souther.compiler.types.Type>> helpers =
                     db.ask(new Bodies.RecursiveCallSigs(name, InliningPolicy.FULL));
             if (!settled.present() || !scope.present() || !helpers.present()) {

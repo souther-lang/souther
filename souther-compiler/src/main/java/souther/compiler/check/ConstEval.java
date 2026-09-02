@@ -102,14 +102,17 @@ public final class ConstEval {
         }
         Object a = l.get();
         Object b = r.get();
+        // A comparison folds through what its operator placed, and this is where the operator's
+        // words are left behind: what such an expression comes to is the relation it states of its
+        // two sides, which is the one answer a reading that never had an operator asks for as well.
+        if (ComparisonPlacement.of(bin.op()) instanceof ComparisonClaim placed) {
+            return Optional.ofNullable(stands(placed.statedRelation(), a, b));
+        }
         return switch (bin.op()) {
             case AND -> a instanceof Boolean x && b instanceof Boolean y
                     ? Optional.of(x && y) : Optional.empty();
             case OR -> a instanceof Boolean x && b instanceof Boolean y
                     ? Optional.of(x || y) : Optional.empty();
-            case EQ -> Optional.of(equal(a, b));
-            case NE -> Optional.of(!equal(a, b));
-            case LT, LE, GT, GE -> compare(bin.op(), a, b);
             case ADD, SUB, MUL -> arith(bin.op(), a, b);
             // `++` appends two strings or two lists (spec §an-operator-takes-the-types-it-is-defined-for);
             // the string case folds, and a list is not a constant here to begin with.
@@ -117,6 +120,12 @@ public final class ConstEval {
                     ? Optional.of(x + y) : Optional.empty();
             // `/` is left to the run-time check (it aborts on a zero divisor, and Decimal `/` rounds).
             case DIV -> Optional.empty();
+            // Answered above as what it placed. Written out rather than left to a default, because
+            // what would arrive here is the partition above having admitted a comparison into the
+            // arms that compute a value, and an arm inventing an answer for that is how a fold
+            // comes to disagree with every other reader of the same comparison.
+            case EQ, NE, LT, LE, GT, GE -> throw new IllegalStateException(
+                    "a comparison is folded from what it placed, not from " + bin.op());
         };
     }
 
@@ -124,54 +133,37 @@ public final class ConstEval {
      * Whether {@code rel} holds between two folded constants, or {@code null} where these two
      * cannot answer it.
      *
-     * <p>What a comparison of written values comes to, asked by a relation rather than by the
-     * operator one was written with. A reading that composed a comparison out of what the rules
-     * proved has no operator and no node — it has what the comparison places and its two sides — and
-     * this is where such a statement is folded, over the same order and the same equality the
-     * operators fold through.
+     * <p>The whole of what a comparison of written values comes to, whichever words the caller has
+     * it in. A reading that composed a comparison out of what the rules proved has no operator and
+     * no node — it has what the comparison places and its two sides — and an expression written with
+     * an operator arrives with the relation that operator placed
+     * ({@link ComparisonClaim#statedRelation}). One fold under the crossing, rather than one on
+     * either side of it agreeing about every pair of constants there is until somebody edits one.
      *
      * <p>An ordering answers where the two are of one ordered kind, and an equality answers of any
      * two constants at all: {@code true == true} is decided where {@code true < true} is not
      * something to decide.
+     *
+     * <p><b>Which way the two stand is worked out here and goes nowhere.</b> A sign handed back to a
+     * caller is what a second table of six is written over — {@code c < 0} and the three beside it
+     * are the same table as {@link Rel#holds} in another hand — so the order of two constants is
+     * taken and answered in the one place, and there is nothing to call for the sign alone.
      */
     static Boolean stands(Rel rel, Object a, Object b) {
-        Integer c = order(a, b);
-        if (c != null) {
-            return rel.holds(c);
+        if (a instanceof Long x && b instanceof Long y) {
+            return rel.holds(Long.compare(x, y));
+        }
+        if (a instanceof BigDecimal x && b instanceof BigDecimal y) {
+            return rel.holds(x.compareTo(y));
+        }
+        if (a instanceof String x && b instanceof String y) {
+            return rel.holds(x.compareTo(y));
         }
         return switch (rel) {
             case EQ -> equal(a, b);
             case NE -> !equal(a, b);
             case GE, GT, LE, LT -> null;
         };
-    }
-
-    private static Optional<Object> compare(BinOp op, Object a, Object b) {
-        Integer c = order(a, b);
-        if (c == null) {
-            return Optional.empty();
-        }
-        return Optional.of(switch (op) {
-            case LT -> c < 0;
-            case LE -> c <= 0;
-            case GT -> c > 0;
-            case GE -> c >= 0;
-            default -> throw new IllegalStateException();
-        });
-    }
-
-    /** Total order over two constants of the same ordered kind, or null if they are not comparable. */
-    private static Integer order(Object a, Object b) {
-        if (a instanceof Long x && b instanceof Long y) {
-            return Long.compare(x, y);
-        }
-        if (a instanceof BigDecimal x && b instanceof BigDecimal y) {
-            return x.compareTo(y);
-        }
-        if (a instanceof String x && b instanceof String y) {
-            return x.compareTo(y);
-        }
-        return null;
     }
 
     private static Optional<Object> arith(BinOp op, Object a, Object b) {

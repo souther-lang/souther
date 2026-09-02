@@ -288,7 +288,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             return new Read.Cuts(drawn);
         }
         return new Read.Stopped(GuardThresholds.whatEachPlaceIsLeftWith(
-                comparison.at(), canonical, read, reads));
+                comparison, canonical, read, reads));
     }
 
     /** One position's own values, cut where the reading found the line, or null where that reading
