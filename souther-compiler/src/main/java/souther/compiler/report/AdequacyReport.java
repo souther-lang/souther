@@ -3572,28 +3572,45 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         ArrayNode out = root.putArray("keptOpenBy");
         for (AdequacyOpening each : whatKeepsTheVerdictOpen()) {
             ObjectNode fact = out.addObject();
-            switch (each) {
-                case AdequacyOpening.ByWeakening it -> fact.put("kind", kindOf(it.cause()));
-                // Its own word, and the reason beside it. A measure nobody made says what it was
-                // waiting for, and that word is one this document already writes wherever a measure
-                // has no number — so a reader meets one vocabulary and not two.
-                case AdequacyOpening.NotMeasured it -> {
-                    fact.put("kind", "not_measured");
-                    fact.put("reason", word(it.why()));
-                }
-                // Two words for the two gaps, rather than one word and a reason beside it. Which of
-                // them it was is what a reader acts on and what the sensitivity is read from, so it
-                // is the kind: a value read for the point that did not come back, and a composing
-                // this compiler declined to do, are not one kind of news.
-                case AdequacyOpening.ShowingStopped it -> fact.put("kind", switch (it.by()) {
-                    case EstablishmentGap.Observation _ -> "showing_stopped";
-                    case EstablishmentGap.Composition _ -> "nothing_was_composed";
-                });
-                case AdequacyOpening.NothingShowedARowCanBeWritten _ ->
-                        fact.put("kind", "nothing_showed_it");
+            fact.put("kind", kindOf(each));
+            // The reason beside it, where the kind is one that has one. A measure nobody made says
+            // what it was waiting for, and that word is one this document already writes wherever a
+            // measure has no number — so a reader meets one vocabulary and not two.
+            if (each instanceof AdequacyOpening.NotMeasured it) {
+                fact.put("reason", word(it.why()));
             }
             fact.put("runSensitivity", word(each.runSensitivity()));
         }
+    }
+
+    /**
+     * The published word for one thing keeping the verdict open.
+     *
+     * <p>Here rather than inside the writer, so that the words are a vocabulary and not a set of
+     * literals spelled where they happen to be printed. What is written and what the schema allows
+     * were kept in step by hand until this — the check that holds every other enumerated field of
+     * the document against its enum had nothing to be pointed at.
+     *
+     * <p>A {@code switch} with no {@code default}, so an opening added later has to be given a
+     * word; the word has to be one of {@link AdequacyOpeningWord}, which the schema is held
+     * against. An opening that is a measure going without something writes that weakening's own
+     * word instead, for the reason {@link AdequacyOpeningWord} gives.
+     */
+    static String kindOf(AdequacyOpening opening) {
+        return switch (opening) {
+            case AdequacyOpening.ByWeakening it -> kindOf(it.cause());
+            case AdequacyOpening.NotMeasured _ -> word(AdequacyOpeningWord.NOT_MEASURED);
+            // Two words for the two gaps, rather than one word and a reason beside it. Which of
+            // them it was is what a reader acts on and what the sensitivity is read from, so it is
+            // the kind: a value read for the point that did not come back, and a composing this
+            // compiler declined to do, are not one kind of news.
+            case AdequacyOpening.ShowingStopped it -> word(switch (it.by()) {
+                case EstablishmentGap.Observation _ -> AdequacyOpeningWord.SHOWING_STOPPED;
+                case EstablishmentGap.Composition _ -> AdequacyOpeningWord.NOTHING_WAS_COMPOSED;
+            });
+            case AdequacyOpening.NothingShowedARowCanBeWritten _ ->
+                    word(AdequacyOpeningWord.NOTHING_SHOWED_IT);
+        };
     }
 
     /**

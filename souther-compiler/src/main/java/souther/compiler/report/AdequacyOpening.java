@@ -9,13 +9,14 @@ import souther.compiler.query.Weakening;
  * One thing keeping an adequacy verdict undetermined.
  *
  * <p>Not a {@link Weakening}, and that is the whole of why this type exists. A verdict is settled
- * by every measure it rests on having come to an answer nothing weakened, so it is held open by two
- * different things: a measure that was made and went without something, and a measure that could
- * have found a gap and was never made. The second weakens nothing — {@link
- * souther.compiler.query.Measurement.NotMeasured} carries no {@code WeakeningSet} on purpose, which
- * is what separates it from a measurement that was asked for and could not be finished — so a list
- * of weakenings said nothing at all about a model nobody has written rows for, while the verdict
- * over it was open.
+ * by everything it rests on having come to an answer, and only one of the ways that fails is a
+ * measure going without something. A measure that could have found a gap and was never made weakens
+ * nothing — {@link souther.compiler.query.Measurement.NotMeasured} carries no {@code WeakeningSet}
+ * on purpose, which is what separates it from a measurement that was asked for and could not be
+ * finished. Neither does a point the rows are read out at where nothing could show a row can be
+ * written: whether one can be is a second question, settled from what showed it and not from the
+ * coverage. So a list of weakenings said nothing at all about a model nobody has written rows for,
+ * or about a point nothing promised, while the verdict over each stayed open.
  *
  * <p>Read off the verdict's own predicate rather than assembled beside it. Every arm below is what
  * one of the things {@code adequacy()} walks contributes, so {@code undetermined} and this being

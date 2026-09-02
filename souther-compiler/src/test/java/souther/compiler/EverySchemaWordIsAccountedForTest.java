@@ -218,6 +218,17 @@ class EverySchemaWordIsAccountedForTest {
             // covers facts that answer differently.
             new Vocabulary("keptOpenBy[].runSensitivity", List.of("$defs", "runSensitivity"),
                     RunSensitivity.class),
+            // What kind of thing is keeping the verdict open. Two vocabularies and not one: an
+            // opening that is a measure going without something writes that weakening's own word,
+            // and everything else writes one of its own. Registered against both, so a word added
+            // to either side alone fails here — which is what `keptOpenBy` had instead of, while
+            // the writer spelled its words as literals and nothing could be pointed at them.
+            new Vocabulary("keptOpenBy[].kind",
+                    List.of("$defs", "adequacyOpening", "properties", "kind"),
+                    Set.of("probe_mapping_lost", "row_did_not_finish"),
+                    Incompleteness.Code.class,
+                    souther.compiler.report.WeakeningWord.class,
+                    souther.compiler.report.AdequacyOpeningWord.class),
             // And what a measure nobody made was waiting for. The sources are read off the seal
             // rather than listed: which reasons mean "never started" is `NotMeasuredReason`'s own
             // membership, and a list here would be a second copy of it that the next arm added is

@@ -97,7 +97,7 @@
     },
     "adequacyOpening": {
       "type": "object",
-      "description": "One thing keeping the adequacy verdict undetermined, projected to what a document may say of it: the kind it is, and whether a wider run could answer it. Two kinds of thing hold a verdict open and they are not one — a measure that was made and went without something, and a measure that could have found a gap and was never made. The second weakens nothing, so a list of what fell short said nothing at all about a model nobody has written rows for while the verdict over it stayed open.",
+      "description": "One thing keeping the adequacy verdict undetermined, projected to what a document may say of it: the kind it is, and whether a wider run could answer it. Only one of the ways a verdict stays open is a measure going without something. A measure that could have found a gap and was never made weakens nothing, and neither does a point the rows are read out at where nothing could show a row can be written — whether one can be is a second question, settled from what showed it rather than from what the rows covered. So a list of what fell short says nothing at all about a model nobody has written rows for, or about a point nothing promised, while the verdict over each stays open.",
       "required": [
         "kind",
         "runSensitivity"
@@ -152,7 +152,7 @@
               "description": "The same point again, where nothing was stopped and nothing arrived: no showing was made, so there is no limit to raise and nothing to name. Told apart from the two above because a reader sent after what stopped it would be looking for something nobody met."
             }
           ],
-          "description": "What kind of thing this is. Everything but `not_measured` is the vocabulary `weakening` writes, where one word covers more than one thing this compiler can meet — a pattern too large to build and a rule about a value made from another are both `rule_unread` — so this says which kind it was and not which of them, and two entries alike are two things rather than one said twice."
+          "description": "What kind of thing this is, in two vocabularies. A measure that went without something writes the word `weakening` already has for it, where one word covers more than one thing this compiler can meet — a pattern too large to build and a rule about a value made from another are both `rule_unread` — so this says which kind it was and not which of them. The four beside them are the ways a verdict stays open that no weakening covers. Two entries alike are two things rather than one said twice, whichever vocabulary they are in."
         },
         "reason": {
           "$ref": "#/$defs/notMeasuredReason"
