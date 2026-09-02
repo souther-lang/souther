@@ -116,7 +116,6 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                     "types an operand under the operator it stands beside"),
             new Held("souther.compiler.check.ConstEval.arith",
                     "what the operator computes of two constants"),
-            new Held("souther.compiler.check.ConstEval.compare", "the same for a comparison"),
             new Held("souther.compiler.reading.Meetings.run",
                     "walks the operands under the operator they are written with"),
 
@@ -278,8 +277,9 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                     "asks whether the operator joins two conditions, which is the one thing an"
                             + " operand can be held to before the one beside it has been read"),
             new Held("souther.compiler.check.ConstEval.binary",
-                    "what the operator computes of two constants, and which operand it needs to"
-                            + " compute it"),
+                    "what the operator computes of two constants, which operand it needs to compute"
+                            + " it, and — for the six that compare — what it placed, which is what"
+                            + " the fold is asked for instead of the operator"),
             new Held("souther.compiler.check.DischargeRules.noSmallerThan",
                     "which operands a string joined by another is no shorter than"),
             new Held("souther.compiler.core.GrowingFold.appended",

@@ -60,7 +60,11 @@ class AnOperatorIsAskedWhatItPlacesInOnePlaceTest {
                             + " the claim to the readings of what it bounds"),
             new Licence("souther.compiler.inputs.ComparedNumber.of", 1,
                     "reads any binary a walk met, so an operator that places nothing arrives here"
-                            + " and is answered rather than excluded"));
+                            + " and is answered rather than excluded"),
+            new Licence("souther.compiler.check.ConstEval.binary", 1,
+                    "folds any binary an expression is written with, so an operator that places"
+                            + " nothing arrives here too; what it placed is spent on the relation"
+                            + " the fold answers and is handed to nobody"));
 
     @Test
     void onlyARecognitionReadsAnOperatorForWhatItPlaces() throws IOException {
