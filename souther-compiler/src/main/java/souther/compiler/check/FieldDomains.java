@@ -82,9 +82,9 @@ public final class FieldDomains {
     /** The conjuncts this reading got no end out of, for whoever reads them next — see
      * {@link #withoutAnEnd}. */
     private final List<WithoutAnEnd> withoutAnEnd;
-    /** The conjuncts that placed no end and are about one number — see {@link #overOneCoordinate}.
+    /** The conjuncts that placed no end and are about one number — see {@link #aboutOneCoordinate}.
      */
-    private final List<OverOneCoordinate> overOneCoordinate;
+    private final List<AboutOneCoordinate> aboutOneCoordinate;
     /**
      * Which conjunct this reading was asked to leave out, so that a reading standing in for a
      * counterfactual is not asked one of its own.
@@ -171,7 +171,7 @@ public final class FieldDomains {
                          Map<RuleKey, List<UnreadReason>> unreadByName,
                          Set<RuleKey> notSeparatedByName,
                          List<InvariantChecker.Direct> directs, List<NoLine> noLines,
-                         List<WithoutAnEnd> withoutAnEnd, List<OverOneCoordinate> overOneCoordinate,
+                         List<WithoutAnEnd> withoutAnEnd, List<AboutOneCoordinate> aboutOneCoordinate,
                          PartsLeftOut withoutParts,
                          Map<RuleRef, Required> raised,
                          Map<RuleRef, Map<Core, Required>> raisedByPart,
@@ -194,7 +194,7 @@ public final class FieldDomains {
         this.directs = directs;
         this.noLines = noLines;
         this.withoutAnEnd = List.copyOf(withoutAnEnd);
-        this.overOneCoordinate = List.copyOf(overOneCoordinate);
+        this.aboutOneCoordinate = List.copyOf(aboutOneCoordinate);
         this.withoutParts = withoutParts;
         this.raised = raised;
         this.raisedByPart = raisedByPart;
@@ -439,7 +439,7 @@ public final class FieldDomains {
                 named(seeded, field).forEach(term -> placeOf.putIfAbsent(term, field)));
         return new FieldDomains(Map.copyOf(out), Map.copyOf(holds), Map.copyOf(admitted),
                 Map.copyOf(unread), Set.copyOf(notSeparated), seeded.reading().directs(), seeded.reading().noLines(),
-                seeded.reading().withoutAnEnd(), seeded.reading().overOneCoordinate(),
+                seeded.reading().withoutAnEnd(), seeded.reading().aboutOneCoordinate(),
                 reach.withoutParts(),
                 seeded.reading().raised(), seeded.reading().raisedByPart(),
                 seeded.reading().standing(), seeded.took(),
@@ -514,7 +514,7 @@ public final class FieldDomains {
     }
 
     /**
-     * One conjunct that placed no end and whose quantity is over exactly one coordinate.
+     * One authored conjunct whose quantity is over exactly one coordinate.
      *
      * <p><b>Read off the canonical quantity and not off how a side was spelled.</b> Which number a
      * rule is about is what its arithmetic came to: {@code value * 2 >= 4} is about the value and
@@ -522,33 +522,44 @@ public final class FieldDomains {
      * rule about nothing. The same reading was already made for a {@code guard}'s comparison, where
      * {@code a + 1 <= 10} had been classified as naming no position.
      *
-     * <p>Every shape of rule that placed no end, and not the ones that name a value. An equality, a
-     * disequality and an arithmetic this reading could not put an end on are three ways of leaving
-     * the coordinate somewhere without saying so, and what each of them did to it is one question
-     * with one answer.
+     * <p><b>Whether an end was read from it is no part of what this is.</b> A rule ordering the
+     * values, one naming a value, one holding the value away from one and one whose arithmetic no
+     * end could be read from are four ways of leaving a coordinate somewhere, and which of them is
+     * which decides nothing about who accounts for where it stops: {@code value >= 2} and
+     * {@code value * 2 >= 4} each put the values at two, and a population split by end-shape can
+     * attribute the end to one of them and not the other. Written into the identity, that split
+     * comes back as "this one is direct, so it is no candidate".
      *
      * <p>Exactly one coordinate. A rule over a form on two of them is about the pair, and an end
      * attributed to it at either would be an end of a number the rule does not divide — that rule
      * draws its line as a relation and is owed a row there instead.
      *
      * <p>What such a rule does to the number is not here and is not this reading's: it is read by
-     * asking what the rules leave the coordinate without this conjunct, and comparing
-     * ({@link #movedEndsOf}).
+     * asking what the rules leave the coordinate without it, and comparing ({@link #movedEndsOf}).
      *
      * @param at       the number its quantity is over
      * @param from     the clause it is a conjunct of
      * @param part     the conjunct itself, which is what a counterfactual reading is asked without
      * @param conjunct which of the clause's conjuncts it is
      */
-    public record OverOneCoordinate(Coordinate at, RuleRef.Invariant from, Core part,
-                                    int conjunct) {
+    public record AboutOneCoordinate(Coordinate at, RuleRef.Invariant from, Core part,
+                                     int conjunct) {
 
-        public OverOneCoordinate {
+        public AboutOneCoordinate {
             if (at == null || from == null || part == null) {
                 throw new IllegalArgumentException("a quantity over one number is some rule's");
             }
         }
+
+        /** Which authored line this is a conjunct of, which is what tells a candidate from an end
+         *  the reading of comparisons already placed. */
+        Line line() {
+            return new Line(from, conjunct);
+        }
     }
+
+    /** One authored line: the clause, and which of its conjuncts. */
+    record Line(RuleRef.Invariant from, int conjunct) {}
 
     /**
      * A rule about where one coordinate's values stop that this reading placed no end from, and
@@ -1063,6 +1074,9 @@ public final class FieldDomains {
         // read itself again without some of its own and never come back.
         if (!withoutParts.leavesAnythingOut()) {
             byCoordinate().forEach((at, candidates) -> {
+                if (!needsAttributing(candidates)) {
+                    return;
+                }
                 NumericDomain.Bounds with = leftAt(at.path(), at.kind());
                 if (with == null) {
                     return;
@@ -1076,12 +1090,39 @@ public final class FieldDomains {
         return answer;
     }
 
-    /** The conjuncts that placed no end, gathered by the number each is about. */
-    private Map<Coordinate, List<OverOneCoordinate>> byCoordinate() {
-        Map<Coordinate, List<OverOneCoordinate>> byNumber = new LinkedHashMap<>();
-        overOneCoordinate.forEach(each ->
+    /** Every conjunct about one number, gathered by the number it is about. */
+    private Map<Coordinate, List<AboutOneCoordinate>> byCoordinate() {
+        Map<Coordinate, List<AboutOneCoordinate>> byNumber = new LinkedHashMap<>();
+        aboutOneCoordinate.forEach(each ->
                 byNumber.computeIfAbsent(each.at(), _ -> new ArrayList<>()).add(each));
         return byNumber;
+    }
+
+    /**
+     * Whether the conjuncts about one number are attributed here at all.
+     *
+     * <p><b>A dispatch and not a shortcut.</b> Where every one of them placed an end, where the
+     * values stop and who put them there is what the reading of ends already answers, and this
+     * change does not take that over: {@code value >= 5} beside {@code value > 4} is two rules at
+     * one value and two rows to write, which {@link DeclaredBounds.End#tighter} has always said.
+     *
+     * <p>What it could not say is what an end owes to a conjunct it never saw. A rule that placed
+     * no end can move where the values stop — a hole at an edge, an arithmetic no end was read from
+     * — and it is invisible to a projection of ends, so where one of those is about the same number
+     * the whole set is attributed here instead. Split by end-shape, the two kinds of conjunct are
+     * attributed by two mechanisms with two principles and neither can see the other's candidates.
+     *
+     * <p>Not read as the two agreeing wherever they are both asked. They do not: a length is never
+     * negative, so {@code String.length(value) >= 0} places an end at nought that the rules leave
+     * there whether or not anybody wrote it, and taking the clause away moves nothing. The reading
+     * of ends names it and a counterfactual names nobody — which is why the case where the ends
+     * answer for themselves is left with them.
+     */
+    private boolean needsAttributing(List<AboutOneCoordinate> candidates) {
+        Set<Line> ends = directs.stream()
+                .map(each -> new Line(each.from(), each.conjunct()))
+                .collect(java.util.stream.Collectors.toSet());
+        return candidates.stream().anyMatch(each -> !ends.contains(each.line()));
     }
 
     /**
@@ -1092,22 +1133,27 @@ public final class FieldDomains {
      * and a model writing one rule twice answered no to it twice: neither copy is missed on its
      * own, and the end came back owed to nobody.
      *
-     * <p>Every candidate the answer names, and the answer is what says which they are. What is
-     * written here is that each of them placed this end, which is what a row at it is owed to.
+     * <p>Every candidate the answer names, whatever the reading of ends made of it. A conjunct that
+     * placed an end of its own is named here at the end the rules actually leave, which is not
+     * always the end it placed: {@code value >= 0} beside {@code value /= 0} put its own end at
+     * nought and holds the one at one, and a row at nought is a row at a value the rules refuse.
+     * The two ends meet in {@link DeclaredBounds.End#tighter}, which keeps the tighter and merges
+     * the rules that drew it — so a candidate named here and placing an end there comes out as one
+     * debt at one place.
      */
-    private void accountedFor(Coordinate at, List<OverOneCoordinate> candidates, Endpoint end,
+    private void accountedFor(Coordinate at, List<AboutOneCoordinate> candidates, Endpoint end,
                               boolean lower, List<Placed> out) {
         if (end == null) {
             return;
         }
-        for (OverOneCoordinate each : EndNarrowing.read(end, candidates,
+        for (AboutOneCoordinate each : EndNarrowing.read(end, candidates,
                 removed -> sideWithout(removed, at, lower), inWrittenOrder()).names()) {
             out.add(new Placed(at, each.from(), lower, end, each.conjunct()));
         }
     }
 
     /** Where the coordinate stops on one side with these conjuncts taken away. */
-    private Endpoint sideWithout(Set<OverOneCoordinate> removed, Coordinate at, boolean lower) {
+    private Endpoint sideWithout(Set<AboutOneCoordinate> removed, Coordinate at, boolean lower) {
         NumericDomain.Bounds without = without(removed).leftAt(at.path(), at.kind());
         return without == null ? null : lower ? without.min() : without.max();
     }
@@ -1119,10 +1165,10 @@ public final class FieldDomains {
      * everywhere else ({@link souther.compiler.partition.AuthoredLine}). Read off the walk that
      * collected them, two readings of one edge would come back as two lines.
      */
-    private static java.util.Comparator<OverOneCoordinate> inWrittenOrder() {
+    private static java.util.Comparator<AboutOneCoordinate> inWrittenOrder() {
         return java.util.Comparator
-                .comparing((OverOneCoordinate each) -> each.from().named())
-                .thenComparingInt(OverOneCoordinate::conjunct);
+                .comparing((AboutOneCoordinate each) -> each.from().named())
+                .thenComparingInt(AboutOneCoordinate::conjunct);
     }
 
     /** The ends the rules place on the coordinates at {@code path}, in the order they were read. */
@@ -1187,7 +1233,7 @@ public final class FieldDomains {
     public Set<Coordinate> writtenAbout() {
         Set<Coordinate> out = new java.util.LinkedHashSet<>();
         directs.forEach(each -> out.add(each.at()));
-        overOneCoordinate.forEach(each -> out.add(each.at()));
+        aboutOneCoordinate.forEach(each -> out.add(each.at()));
         return java.util.Collections.unmodifiableSet(out);
     }
 
@@ -1198,8 +1244,8 @@ public final class FieldDomains {
      * is at one, and where it is at one is a fact about everything else the rules say — so it is
      * read by {@link #movedEndsOf} and not written down as each conjunct arrives.
      */
-    public List<OverOneCoordinate> overOneCoordinate() {
-        return overOneCoordinate;
+    public List<AboutOneCoordinate> aboutOneCoordinate() {
+        return aboutOneCoordinate;
     }
 
     /**
@@ -1218,7 +1264,7 @@ public final class FieldDomains {
      * either side of it: a hole with something to side it is a hole, and no end of a range says
      * where it is.
      */
-    public List<InvariantBound> movedEndsOf(OverOneCoordinate over) {
+    public List<InvariantBound> movedEndsOf(AboutOneCoordinate over) {
         return movedEnds().stream()
                 .filter(each -> each.from().equals(over.from()) && each.conjunct() == over.conjunct()
                         && each.at().equals(over.at()))
@@ -1227,7 +1273,7 @@ public final class FieldDomains {
     }
 
     /** This value read again without some conjuncts of its rules. */
-    private FieldDomains without(Set<OverOneCoordinate> removed) {
+    private FieldDomains without(Set<AboutOneCoordinate> removed) {
         return of(named, data, symbols, policy, settled,
                 InvariantChecker.Reach.withoutParts(removed.stream()
                         .map(each -> new PartsLeftOut.AuthoredPart(each.from(), each.part()))

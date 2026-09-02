@@ -1264,7 +1264,7 @@ public final class InvariantChecker {
      */
     record Reading(List<Direct> directs, List<FieldDomains.NoLine> noLines,
                    List<FieldDomains.WithoutAnEnd> withoutAnEnd,
-                   List<FieldDomains.OverOneCoordinate> overOneCoordinate,
+                   List<FieldDomains.AboutOneCoordinate> aboutOneCoordinate,
                    Map<RuleKey, List<TypeSymbol.AtModule>> narrowers,
                    Map<RuleRef, Required> raised,
                    Map<RuleRef, Map<Core, Required>> raisedByPart,
@@ -1295,7 +1295,7 @@ public final class InvariantChecker {
         List<Direct> out = new ArrayList<>();
         List<FieldDomains.NoLine> noLines = new ArrayList<>();
         List<FieldDomains.WithoutAnEnd> withoutAnEnd = new ArrayList<>();
-        List<FieldDomains.OverOneCoordinate> overOneCoordinate = new ArrayList<>();
+        List<FieldDomains.AboutOneCoordinate> aboutOneCoordinate = new ArrayList<>();
         Map<RuleKey, List<TypeSymbol.AtModule>> narrowers = new LinkedHashMap<>();
         Map<RuleRef, Required> raised = new LinkedHashMap<>();
         Map<RuleRef, Map<Core, Required>> raisedByPart = new LinkedHashMap<>();
@@ -1303,12 +1303,12 @@ public final class InvariantChecker {
                 new LinkedHashMap<>();
         stated.forEach(each ->
                 direct(each.clause(), each.from(), new int[1], at, byName, out, noLines,
-                        withoutAnEnd, overOneCoordinate, narrowers, raised,
+                        withoutAnEnd, aboutOneCoordinate, narrowers, raised,
                         took, typeAt, parts, raisedByPart, standing, withoutParts));
         // Insertion order, kept: `Map.copyOf` iterates in an order salted once per JVM run, and
         // what a report prints for a position is these in the order the declaration writes them.
         return new Reading(List.copyOf(out), List.copyOf(noLines), List.copyOf(withoutAnEnd),
-                List.copyOf(overOneCoordinate),
+                List.copyOf(aboutOneCoordinate),
                 Map.copyOf(narrowers),
                 Collections.unmodifiableMap(new LinkedHashMap<>(raised)),
                 Collections.unmodifiableMap(new LinkedHashMap<>(raisedByPart)),
@@ -1408,7 +1408,7 @@ public final class InvariantChecker {
                         Map<FactSubject, Coordinate> byName, List<Direct> out,
                         List<FieldDomains.NoLine> noLines,
                         List<FieldDomains.WithoutAnEnd> withoutAnEnd,
-                        List<FieldDomains.OverOneCoordinate> naming,
+                        List<FieldDomains.AboutOneCoordinate> naming,
                         Map<RuleKey, List<TypeSymbol.AtModule>> narrowers,
                         Map<RuleRef, Required> raised, ReadingEvidence took,
                         Map<RuleKey, Type> typeAt,
@@ -1493,6 +1493,11 @@ public final class InvariantChecker {
                     at, byName, raised, took, typeAt, parts, raisedByPart);
             return;
         }
+        // Which number this conjunct is about, written down before anything is asked about what it
+        // did to it. Every shape of rule alike: whether an end is read from it below decides which
+        // reader states where the values stop, and decides nothing about which conjuncts account
+        // for where they stop.
+        aboutOneCoordinate(read, from, part, bin, naming);
         // The coordinate-bearing side read as the left one, as `0 <= value` says what `value >= 0`
         // says.
         //
@@ -1517,7 +1522,6 @@ public final class InvariantChecker {
             // author to lift and there is a conjunct for the reading that draws lines to make what
             // it can of.
             withoutAnEnd.add(new FieldDomains.WithoutAnEnd(from, part, bin));
-            overOneCoordinate(read, from, part, bin, naming);
             return;
         }
         // An end where the other side is a constant, and a relation everywhere else. Which it is
@@ -1588,7 +1592,6 @@ public final class InvariantChecker {
             // having no end, and they answer different questions: what an author is owed a word
             // about, and what the next reading is given to read.
             withoutAnEnd.add(new FieldDomains.WithoutAnEnd(from, part, bin));
-            overOneCoordinate(read, from, part, bin, naming);
             // The declaration and not the clause. Which declaration took an edge in is what ADR-0090
             // names beside a line, and what a reader is sent to look at is the declaration holding
             // the relation.
@@ -1905,13 +1908,13 @@ public final class InvariantChecker {
      * what the rules leave the coordinate without this conjunct
      * ({@link FieldDomains#movedEndsOf}).
      */
-    private static void overOneCoordinate(Arithmetic read, RuleRef.Invariant from, int part,
+    private static void aboutOneCoordinate(Arithmetic read, RuleRef.Invariant from, int part,
                                           Core.Binary bin,
-                                          List<FieldDomains.OverOneCoordinate> out) {
+                                          List<FieldDomains.AboutOneCoordinate> out) {
         if (!(read instanceof Arithmetic.OverOne one)) {
             return;
         }
-        out.add(new FieldDomains.OverOneCoordinate(one.at().at(), from, bin, part));
+        out.add(new FieldDomains.AboutOneCoordinate(one.at().at(), from, bin, part));
     }
 
     /** One finding, kept once. A coordinate reached twice is one place with one thing to say. */

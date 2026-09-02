@@ -46,10 +46,19 @@ class WhatAConjunctWasHoldingIsReadByLeavingItOutTest {
                         + " there");
     }
 
-    /** The same where a clause wrote the floor instead of the carrier supplying it. */
+    /**
+     * The same where a clause wrote the floor instead of the carrier supplying it.
+     *
+     * <p>Twice, because both clauses hold the end at one: without the denial the values start at
+     * nought, and without the floor they stop nowhere. Which is the same answer two clauses saying
+     * one thing get anywhere else, and what a population split by end-shape could not give — the
+     * clause that wrote a bound is not a candidate for the end it did not place, and the end it did
+     * place is at a value the rules refuse.
+     */
     @Test
     void aHoleAtAWrittenFloorMovesItAlike() {
-        assertEquals(List.of(Endpoint.inclusive(Count.of(1))),
+        assertEquals(
+                List.of(Endpoint.inclusive(Count.of(1)), Endpoint.inclusive(Count.of(1))),
                 movedBy("""
                         data Subject = Int
                             invariant notNegative = value >= 0
@@ -99,9 +108,9 @@ class WhatAConjunctWasHoldingIsReadByLeavingItOutTest {
     /** The ends every conjunct over one coordinate moved, in the order the rules were read. */
     private static List<Endpoint> movedBy(String declaration) {
         FieldDomains read = domainsOf(declaration);
-        assertTrue(!read.overOneCoordinate().isEmpty(),
+        assertTrue(!read.aboutOneCoordinate().isEmpty(),
                 "the model under test writes a rule that placed no end on one number");
-        return read.overOneCoordinate().stream()
+        return read.aboutOneCoordinate().stream()
                 .flatMap(each -> read.movedEndsOf(each).stream())
                 .map(InvariantBound::end)
                 .toList();

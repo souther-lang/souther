@@ -195,6 +195,58 @@ class AFloorTheCarrierSuppliesIsMovedAsAWrittenOneIsTest {
                 """), "one line, where the pair parts, and no end at either of them");
     }
 
+    /**
+     * Two conjuncts holding one end are two rows to write, whatever each of them placed.
+     *
+     * <p>Four pairs, and the fourth is the control. Three of them put a conjunct that placed an end
+     * beside one that placed none, and the fourth puts two that placed one — where the reading of
+     * ends has always answered, and still does.
+     *
+     * <p>Split by whether a conjunct placed an end, the first three lose a debt: the reading of
+     * ends cannot see a conjunct that placed none, and a counterfactual over the ones that placed
+     * none cannot see the one beside it. Neither can attribute an end the two of them hold together.
+     */
+    @Test
+    void twoConjunctsHoldingOneEndAreTwoRowsToWrite() {
+        assertEquals(2, bordersOf("""
+                data Subject = Int
+                    invariant plain = value >= 2
+                    invariant doubled = value * 2 >= 4
+                """).size(), "an ordering beside an arithmetic no end was read from");
+        assertEquals(2, bordersOf("""
+                data Subject = String
+                    invariant floor = String.length(value) >= 1
+                    invariant hole = String.length(value) /= 0
+                """).size(), "an ordering beside a hole that moves the carrier's floor onto it");
+        assertEquals(2, bordersOf("""
+                data Subject = Int
+                    invariant notNegative = value >= 0
+                    invariant notZero = value /= 0
+                """).size(), "and where the end is at neither of the values they name");
+        assertEquals(2, bordersOf("""
+                data Subject = Int
+                    invariant atLeastFive = value >= 5
+                    invariant aboveFour = value > 4
+                """).size(), "two orderings at one value, which is the answer this does not change");
+    }
+
+    /**
+     * A rule stating what the carrier already states is owed a row all the same.
+     *
+     * <p>The control for leaving a coordinate whose conjuncts all placed an end to the reading of
+     * ends. A length is never negative, so taking this clause away moves nothing and a
+     * counterfactual names nobody — and the clause is still a line an author wrote and a row is
+     * owed at it. Which is why the case where the ends answer for themselves is left with them,
+     * and not because the two readings agree.
+     */
+    @Test
+    void aRuleStatingWhatTheCarrierStatesIsStillOwedARow() {
+        assertEquals(List.of("String.length(n) = 0"), bordersOf("""
+                data Subject = String
+                    invariant nonNegative = String.length(value) >= 0
+                """));
+    }
+
     /** What each border is called, in the order a report shows them. */
     private static List<String> bordersOf(String declaration) {
         return boundariesOf(declaration).stream().map(BorderAssessment::label).toList();
