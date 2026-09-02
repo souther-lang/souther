@@ -13,6 +13,8 @@ import java.lang.classfile.ClassModel;
 import java.lang.classfile.CodeElement;
 import java.lang.classfile.MethodModel;
 import java.lang.classfile.instruction.InvokeInstruction;
+import java.lang.reflect.Constructor;
+import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -61,19 +63,73 @@ class WhoMaySettleACoverageOriginTest {
     private static final RepositoryLayout REPOSITORY = RepositoryLayout.ofWorkingDirectory();
 
     /**
-     * The members that settle an origin: the two that make one and the one that derives a fork, and
-     * the constructor every one of them goes through.
+     * The members that settle an origin: whatever answers with one, and the constructor they all go
+     * through.
      *
-     * <p>Named by what each takes and answers with, and not by its name alone. A fork is derived by
-     * {@code lowered} taking the part it is of, and the fork a value already is, is read by
-     * {@code lowered} taking nothing — one name over a derivation and an accessor, which a key made
-     * of names alone puts in one row and reports a reader as a writer.
+     * <p>Read off the type rather than written out, so a member added beside them is one of these by
+     * being one. A list spelled here would be a list of what was thought of, and a way to make an
+     * origin that this walk then passed over is the way one would come to be made.
+     *
+     * <p>Each is named by what it takes and answers with, and not by its name alone. A fork is
+     * derived by {@code lowered} taking the part it is of, and the fork a value already is, is read
+     * by {@code lowered} taking nothing — one name over a derivation and an accessor, which a key
+     * made of names alone puts in one row and reports a reader as a writer.
      */
-    private static final Set<String> SETTLES = Set.of(
-            OWNER + "#written(Ljava/lang/String;I" + A_CONSTRUCT + ")" + AN_ORIGIN,
-            OWNER + "#unwritten()" + AN_ORIGIN,
+    private static Set<String> settlingMembers() {
+        Set<String> members = new TreeSet<>();
+        for (Method each : CoverageOrigin.class.getDeclaredMethods()) {
+            if (each.getReturnType() == CoverageOrigin.class) {
+                members.add(OWNER + "#" + each.getName() + descriptorOf(
+                        each.getParameterTypes(), each.getReturnType()));
+            }
+        }
+        for (Constructor<?> each : CoverageOrigin.class.getDeclaredConstructors()) {
+            members.add(OWNER + "#<init>" + descriptorOf(each.getParameterTypes(), void.class));
+        }
+        return members;
+    }
+
+    /**
+     * What settling an origin looks like, written down — so that a way of doing it that is added is
+     * a row here before anyone calls it, and not a silence.
+     */
+    private static final List<String> SETTLES = List.of(
+            OWNER + "#<init>(Ljava/lang/String;II" + A_CONSTRUCT + ")V",
             OWNER + "#lowered(I)" + AN_ORIGIN,
-            OWNER + "#<init>(Ljava/lang/String;II" + A_CONSTRUCT + ")V");
+            OWNER + "#unwritten()" + AN_ORIGIN,
+            OWNER + "#written(Ljava/lang/String;I" + A_CONSTRUCT + ")" + AN_ORIGIN);
+
+    @Test
+    void everyWayOfSettlingOneIsWrittenDown() {
+        assertEquals(SETTLES, new ArrayList<>(settlingMembers()),
+                "a row added here is a way to say which construct an obligation was written as:"
+                        + " say what reads a source to answer it, and add the calls that reach it");
+    }
+
+    /** The descriptor of a member taking these and answering with that. */
+    private static String descriptorOf(Class<?>[] takes, Class<?> answers) {
+        StringBuilder out = new StringBuilder("(");
+        for (Class<?> each : takes) {
+            out.append(descriptorOf(each));
+        }
+        return out.append(')').append(descriptorOf(answers)).toString();
+    }
+
+    private static String descriptorOf(Class<?> type) {
+        if (type == void.class) {
+            return "V";
+        }
+        if (type == int.class) {
+            return "I";
+        }
+        if (type == boolean.class) {
+            return "Z";
+        }
+        if (type.isArray()) {
+            return "[" + descriptorOf(type.getComponentType());
+        }
+        return "L" + internalNameOf(type) + ";";
+    }
 
     /**
      * Every call that settles an origin, and who makes it.
@@ -123,7 +179,8 @@ class WhoMaySettleACoverageOriginTest {
                 method.code().ifPresent(code -> {
                     for (CodeElement element : code) {
                         if (element instanceof InvokeInstruction invoked
-                                && SETTLES.contains(invoked.owner().name().stringValue() + "#"
+                                && settlingMembers().contains(
+                                        invoked.owner().name().stringValue() + "#"
                                         + invoked.name().stringValue()
                                         + invoked.typeSymbol().descriptorString())) {
                             found.add(internalName(each) + " -> "
