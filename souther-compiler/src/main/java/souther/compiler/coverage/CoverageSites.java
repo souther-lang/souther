@@ -271,15 +271,12 @@ public final class CoverageSites {
 
         /** Which way {@code comparison} coming out {@code result} is, or empty where this plan
          *  numbered no comparison there. */
-        public java.util.Optional<ControlPointId.ComparisonPoint> outcomeOf(Core comparison,
-                                                                           boolean result) {
-            return comparisons.occurrenceAt(comparison).flatMap(which -> {
-                Integer control = controlByComparison.get(which);
-                return control == null ? java.util.Optional.empty()
-                        : emissionSiteOf(which).map(site ->
-                                new ControlPointId.ComparisonPoint(
-                                        control, new ComparisonOutcome(site, result)));
-            });
+        public java.util.Optional<ControlPointId.ComparisonPoint> outcomeOf(
+                ComparisonOccurrence which, boolean result) {
+            Integer control = controlByComparison.get(which);
+            return control == null ? java.util.Optional.empty()
+                    : emissionSiteOf(which).map(site -> new ControlPointId.ComparisonPoint(
+                            control, new ComparisonOutcome(site, result)));
         }
 
         /**

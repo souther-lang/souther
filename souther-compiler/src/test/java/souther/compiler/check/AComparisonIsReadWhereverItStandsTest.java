@@ -117,11 +117,14 @@ class AComparisonIsReadWhereverItStandsTest {
     private static void unanswered(Core e, CoverageSites.Plan plan,
                                    Map<ControlPointId, Reachability> found, List<String> out) {
         if (e instanceof Core.Binary node) {
-            for (boolean result : new boolean[] {true, false}) {
-                plan.outcomeOf(node, result)
-                        .filter(where -> !found.containsKey(where))
-                        .ifPresent(where -> out.add(node.op() + "@" + node.pos() + " " + result));
-            }
+            plan.comparisons().occurrenceAt(node).ifPresent(which -> {
+                for (boolean result : new boolean[] {true, false}) {
+                    plan.outcomeOf(which, result)
+                            .filter(where -> !found.containsKey(where))
+                            .ifPresent(where ->
+                                    out.add(node.op() + "@" + node.pos() + " " + result));
+                }
+            });
         }
         Core.forEachChild(e, child -> unanswered(child, plan, found, out));
     }

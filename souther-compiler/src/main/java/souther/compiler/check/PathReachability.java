@@ -271,8 +271,9 @@ public final class PathReachability {
             Map<souther.compiler.coverage.ComparisonOccurrence,
                     souther.compiler.reach.ComparisonArrival> arriving) {
         if (body instanceof Core.Binary comparison) {
-            for (boolean result : new boolean[] {true, false}) {
-                ControlPointId where = plan.outcomeOf(comparison, result).orElse(null);
+            ComparisonOccurrence numbered = numbered(comparison, plan);
+            for (boolean result : numbered == null ? new boolean[0] : new boolean[] {true, false}) {
+                ControlPointId where = plan.outcomeOf(numbered, result).orElse(null);
                 if (where != null && !out.containsKey(where)) {
                     return java.util.Optional.of(
                             "this reading answered for no run through " + comparison.op()
@@ -485,11 +486,13 @@ public final class PathReachability {
         // What arrives is about the comparison and not about either way out of it, so it is filed
         // under the comparison the plan names and asked of the plan directly.
         ComparisonOccurrence which = numbered(comparison, plan);
-        if (which != null) {
-            arriving.put(which, arrivalAt(comparison, k, at, reads));
+        if (which == null) {
+            return;
         }
+        arriving.put(which, arrivalAt(comparison, k, at, reads));
         for (boolean result : new boolean[] {true, false}) {
-            var where = plan.outcomeOf(comparison, result);
+            java.util.Optional<ControlPointId.ComparisonPoint> where =
+                    plan.outcomeOf(which, result);
             if (where.isEmpty()) {
                 continue;
             }
