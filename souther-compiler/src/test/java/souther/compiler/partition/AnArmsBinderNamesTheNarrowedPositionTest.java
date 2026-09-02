@@ -69,7 +69,7 @@ class AnArmsBinderNamesTheNarrowedPositionTest {
         Core body = checked.behaviorBodies().get("read");
         assertNotNull(body, "the behavior under test has a body");
         InputDomain inputs = compilation.db().ask(new Adequacy.Inputs(module)).value().get("read");
-        GuardThresholds.Guards guards = GuardThresholds.of("read", body,
+        GuardThresholds.Guards guards = GuardThresholds.of(body,
                 checked.plan(),
                 inputs, symbols);
         InputDomain read = InputDomain.of(spec, sigs.get("read"), symbols,

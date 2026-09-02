@@ -70,7 +70,7 @@ class ARuleInABodyIsFiledAtWhatItsQuantityIsAboutTest {
         Core body = checked.behaviorBodies().get("pick");
         assertNotNull(body);
         CoverageSites.Plan plan = checked.plan();
-        return GuardThresholds.of("pick", body, plan,
+        return GuardThresholds.of(body, plan,
                 compilation.db().ask(new souther.compiler.query.Adequacy.Inputs(module))
                         .value().get("pick"), symbols).rulesWithoutALine();
     }

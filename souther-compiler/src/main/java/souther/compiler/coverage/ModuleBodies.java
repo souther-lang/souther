@@ -4,6 +4,8 @@ import souther.compiler.core.Core;
 
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Objects;
 import java.util.SequencedMap;
 
 /**
@@ -37,6 +39,28 @@ public record ModuleBodies(String module, SequencedMap<String, Core> bodies) {
             throw new IllegalArgumentException("bodies are somebody's module's bodies");
         }
         bodies = Collections.unmodifiableSequencedMap(new LinkedHashMap<>(bodies));
+    }
+
+    /**
+     * Two of these are one where they are the same module's, and the same bodies in the same order.
+     *
+     * <p><b>The order is part of it, because it is part of what these are for.</b> A map is equal
+     * to a map with the same entries however they are arranged — {@code SequencedMap} says so too —
+     * and what is numbered off these is where a run is recorded, in the order they are walked. Left
+     * to the map's own answer, two of these would be one value and two numberings, and what asks
+     * the question is the check's answer saying whether the backend has anything new: a
+     * re-check that came back with the bodies in another order would be told there is nothing to
+     * emit, over classes whose probe numbers had moved.
+     */
+    @Override
+    public boolean equals(Object other) {
+        return other instanceof ModuleBodies that && module.equals(that.module)
+                && List.copyOf(bodies.entrySet()).equals(List.copyOf(that.bodies.entrySet()));
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(module, List.copyOf(bodies.entrySet()));
     }
 
     /** A module with nothing in it, which is what a check that did not finish leaves. */

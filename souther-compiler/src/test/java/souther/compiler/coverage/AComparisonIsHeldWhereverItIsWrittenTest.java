@@ -95,6 +95,17 @@ class AComparisonIsHeldWhereverItIsWrittenTest {
             let positives (xs) = List.filter(x -> x > 0, xs)
             """;
 
+    private static final String TWO_BEHAVIORS = """
+            module example.two
+
+            behavior fee : (a: Int) -> Int
+            behavior due : (a: Int) -> Int
+
+            let fee (a) = if a > 1 then 1 else 0
+
+            let due (a) = if a > 2 then 2 else 0
+            """;
+
     private static final String BEHIND_AN_ABORT = """
             module example.abort
 
@@ -324,6 +335,53 @@ class AComparisonIsHeldWhereverItIsWrittenTest {
                         numbered, new IdentityHashMap<>(), new LinkedHashMap<>(),
                         java.util.Set.of(), new IdentityHashMap<>(), catalogOf(bodies)));
         assertTrue(refused.getMessage().contains("one answer or they are two"),
+                refused.getMessage());
+    }
+
+    /**
+     * The same bodies in another order are not the same bodies.
+     *
+     * <p>A map is equal to a map with the same entries however they are arranged, and what is
+     * numbered off these is where a run is recorded, in the order they are walked. Answered the
+     * map's way, two of these would be one value and two numberings — and what asks is the check's
+     * own answer about whether the backend has anything new, so a re-check that came back with the
+     * bodies rearranged would be told there is nothing to emit, over classes whose probe numbers
+     * had moved.
+     */
+    @Test
+    void bodiesInAnotherOrderAreAnotherModuleBodies() {
+        Map<String, Core> bodies = bodiesOf(TWO_BEHAVIORS);
+        assertEquals(2, bodies.size(), "the model under test declares two behaviors");
+        LinkedHashMap<String, Core> reversed = new LinkedHashMap<>();
+        List<String> names = new ArrayList<>(bodies.keySet());
+        for (int at = names.size() - 1; at >= 0; at--) {
+            reversed.put(names.get(at), bodies.get(names.get(at)));
+        }
+
+        assertNotEquals(new ModuleBodies("example", new LinkedHashMap<>(bodies)),
+                new ModuleBodies("example", reversed),
+                "one order is what the numbering is of, so the other is another value");
+    }
+
+    /**
+     * One comparison standing in two bodies is refused where names are issued.
+     *
+     * <p>The index from nodes is of the module and the number counts within a body, so a node in
+     * two bodies is a node with two names and the index could hold one. Said out loud rather than
+     * passed over: what it would do quietly is number every comparison after it in the second body
+     * one low, against a walk of that body alone.
+     */
+    @Test
+    void oneComparisonStandingInTwoBodiesIsRefused() {
+        Map<String, Core> bodies = bodiesOf(TWO_BEHAVIORS);
+        Core shared = bodies.values().iterator().next();
+        LinkedHashMap<String, Core> both = new LinkedHashMap<>();
+        both.put("one", shared);
+        both.put("two", shared);
+
+        IllegalStateException refused = assertThrows(IllegalStateException.class,
+                () -> ComparisonCatalog.of(new ModuleBodies("example", both)));
+        assertTrue(refused.getMessage().contains("one comparison of two bodies"),
                 refused.getMessage());
     }
 

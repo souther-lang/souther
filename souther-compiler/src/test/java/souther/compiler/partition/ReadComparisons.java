@@ -37,7 +37,7 @@ record ReadComparisons(List<ComparisonReadings.Reading> comparisons,
         Symbols symbols = Scopes.derived(compilation.db(), module).value();
         souther.compiler.inputs.InputDomain inputs =
                 compilation.db().ask(new Adequacy.Inputs(module)).value().get(behavior);
-        return new ReadComparisons(ComparisonReadings.of(behavior,
+        return new ReadComparisons(ComparisonReadings.of(
                 checked.behaviorBodies().get(behavior),
                 checked.plan(),
                 inputs.reading(symbols), InputReads.ofParameters(inputs.parameterReads(),

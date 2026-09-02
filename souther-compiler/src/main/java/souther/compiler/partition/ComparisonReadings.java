@@ -109,7 +109,7 @@ final class ComparisonReadings {
      * reading is one value for the whole of this walk. Put in it, the reading would be copied at
      * every step and asked of whichever copy a reader happened to hold.
      */
-    private record Body(String behavior, CoverageSites.Plan plan,
+    private record Body(CoverageSites.Plan plan,
                         InputReading read,
                         souther.compiler.check.PathReachability.Answers arrives) {
 
@@ -119,18 +119,22 @@ final class ComparisonReadings {
     }
 
     /**
-     * One reading of {@code body}, which is {@code behavior}'s.
+     * One reading of {@code body}.
+     *
+     * <p>Whose body it is is not asked for: what a reading is of is a comparison the catalog named,
+     * and a name says which behavior's body it stands in. Taken as a parameter beside that, a
+     * caller could read one body under another's name and nothing would refuse it.
      *
      * <p>{@code arrives} is what the walk of the whole body found reaching each comparison, which is
      * one of the two domains a line is held against — the declarations leave the other. It is handed
      * in here because this is where a comparison is read, and a reading of it is made once.
      */
-    static ComparisonReadings of(String behavior, Core body, CoverageSites.Plan plan,
+    static ComparisonReadings of(Core body, CoverageSites.Plan plan,
                                  InputReading read,
                                  InputReads reads,
                                  souther.compiler.check.PathReachability.Answers arrives) {
         List<Reading> readings = new ArrayList<>();
-        walk(body, new Body(behavior, plan, read, arrives), reads,
+        walk(body, new Body(plan, read, arrives), reads,
                 LiveFlow.of(body), List.of(), true, readings);
         return new ComparisonReadings(readings);
     }
@@ -168,8 +172,8 @@ final class ComparisonReadings {
                     BoundaryPolicy.refuses(catalogued.which(), plan, live)
                     .<BoundaryPolicy.Standing>map(BoundaryPolicy.Standing.Refused::new)
                     .orElseGet(() -> new BoundaryPolicy.Standing.Admitted(
-                            ComparisonAssessment.of(in.behavior(), comparison, catalogued.at(),
-                                    in.read(), reads,
+                            ComparisonAssessment.of(catalogued.which().behavior(), comparison,
+                                    catalogued.at(), in.read(), reads,
                                     null, false,
                                     in.arrives().arrivalAt(catalogued.which()))));
             out.add(new Reading(catalogued, reads, assumed, standing));

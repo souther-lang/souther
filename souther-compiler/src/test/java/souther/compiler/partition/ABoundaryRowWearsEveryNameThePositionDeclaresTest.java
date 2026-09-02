@@ -93,7 +93,7 @@ class ABoundaryRowWearsEveryNameThePositionDeclaresTest {
         InputDomain domain = compilation.db()
                 .ask(new souther.compiler.query.Adequacy.Inputs(module)).value().get(spec.name());
         GuardThresholds.Guards guards =
-                GuardThresholds.of(spec.name(), body, plan, domain, symbols);
+                GuardThresholds.of(body, plan, domain, symbols);
         souther.compiler.inputs.Quantities reading = domain.quantities(symbols);
         Partitions.Partitioning p = Partitions.withThresholds(
                 Partitions.of(spec.name(), domain, symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES),

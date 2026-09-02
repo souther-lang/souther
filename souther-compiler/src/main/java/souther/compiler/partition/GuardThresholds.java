@@ -130,9 +130,9 @@ public final class GuardThresholds {
      * the same ones to everything that asks, since each of these reading its own is every rule of
      * every parameter read again to arrive at the same answers.
      */
-    public static Guards of(String behavior, Core body, CoverageSites.Plan plan,
+    public static Guards of(Core body, CoverageSites.Plan plan,
                             InputDomain inputs, Symbols symbols) {
-        return of(behavior, body, plan, inputs.reading(symbols),
+        return of(body, plan, inputs.reading(symbols),
                 souther.compiler.check.ElementBindings.NONE,
                 souther.compiler.check.PathReachability.Answers.NONE);
     }
@@ -142,7 +142,7 @@ public final class GuardThresholds {
      * comparison ran — which is not something the arms of anything standing round it record.
      * {@code arrives} says what the paths leave arriving at each of those sites, which is what a
      * line is dropped by ({@link ComparisonAssessment.NothingArrivesAtItsLine}). */
-    public static Guards of(String behavior, Core body, CoverageSites.Plan plan,
+    public static Guards of(Core body, CoverageSites.Plan plan,
                             InputReading read,
                             souther.compiler.check.ElementBindings elements,
                             souther.compiler.check.PathReachability.Answers arrives) {
@@ -155,12 +155,12 @@ public final class GuardThresholds {
         // comparison is written, what its names point at, what a row had satisfied to get there,
         // whether a line may be drawn on it and what it came to are five questions about one
         // position, and one walk answers them about one position.
-        ComparisonReadings comparisons = ComparisonReadings.of(behavior, body, plan, read,
+        ComparisonReadings comparisons = ComparisonReadings.of(body, plan, read,
                 InputReads.ofParameters(inputs.parameterReads(), elements), arrives);
         for (ComparisonReadings.Reading each : comparisons.all()) {
             switch (each.standing()) {
                 case BoundaryPolicy.Standing.Admitted admitted ->
-                        lineAt(behavior, each.catalogued(), plan, symbols,
+                        lineAt(each.catalogued(), plan, symbols,
                                 admitted.read(), found, between, withoutALine);
                 // Not a rule with no line here: its outcome is about no row, whichever of the
                 // reasons refused it ({@link NotABoundary}), so there is nothing for a report to
@@ -420,16 +420,16 @@ public final class GuardThresholds {
      * here, by {@link BoundaryPolicy}, and what the comparison comes to was read where that was
      * settled ({@code read}). Nothing here reads the comparison again.
      */
-    private static void lineAt(String behavior, ComparisonCatalog.Catalogued each,
+    private static void lineAt(ComparisonCatalog.Catalogued each,
                                CoverageSites.Plan plan,
                                Symbols symbols, ComparisonAssessment read,
                                List<LineEvidence> out,
                                List<LineDrawn> between,
                                List<RuleWithoutALine> withoutALine) {
-        publish(behavior, each, read, withoutALine);
+        publish(each, read, withoutALine);
         switch (read) {
             case ComparisonAssessment.AtAPosition at -> {
-                OriginRef.ComparisonOrigin origin = originOf(behavior, each, plan, at.cutting());
+                OriginRef.ComparisonOrigin origin = originOf(each, plan, at.cutting());
                 // The value a row is owed against this line, which the reading of the comparison
                 // already answered. Taken off the level the rule was written with, a rule that wrote
                 // a multiple of the position named a class at a number the position never holds.
@@ -475,7 +475,7 @@ public final class GuardThresholds {
                 // the two meet, and that arm is a row the branch measure already asks for.
                 if (over.drawsABorder()) {
                     between.add(new LineDrawn(over.cutting(),
-                            originOf(behavior, each, plan, over.cutting())));
+                            originOf(each, plan, over.cutting())));
                 }
             }
             case ComparisonAssessment.AnswerDependent _, ComparisonAssessment.NoInput _,
@@ -505,9 +505,13 @@ public final class GuardThresholds {
      * relating two positions — a sentence saying no measure is short of anything, over a model
      * missing a border.
      */
-    private static void publish(String behavior, ComparisonCatalog.Catalogued comparison,
+    private static void publish(ComparisonCatalog.Catalogued comparison,
                                 ComparisonAssessment read, List<RuleWithoutALine> out) {
-        RuleRef.Comparison rule = new RuleRef.Comparison(behavior, comparison.origin());
+        // Whose body it is, from the name the catalog issued. Taken from a caller beside it, the
+        // rule this reports and the comparison it is read off would be free to be of two behaviors,
+        // and the occurrence being one this plan holds would not refuse it.
+        RuleRef.Comparison rule =
+                new RuleRef.Comparison(comparison.which().behavior(), comparison.origin());
         souther.compiler.check.RuleCitation cited =
                 new souther.compiler.check.RuleCitation.WrittenAt(comparison.at());
         // What each place is left with, and which places there are, are the assessment's one
@@ -524,15 +528,14 @@ public final class GuardThresholds {
 
     /** How a row meets a line a body's condition drew, which is a guard's own answer: what it takes
      *  is getting the comparison to answer, because what it is about is a place in a body. */
-    private static OriginRef.ComparisonOrigin originOf(String behavior,
-                                                       ComparisonCatalog.Catalogued each,
+    private static OriginRef.ComparisonOrigin originOf(ComparisonCatalog.Catalogued each,
                                                        CoverageSites.Plan plan, Cutting cutting) {
         // The two together, from the plan that numbered this comparison. Which comparison the rule
         // is about is the catalog's answer; where a run through it is written down is the plan's,
         // and it is required rather than looked up leniently because only an admitted reading
         // reaches here and the policy admits nothing the plan does not number.
         return new OriginRef.ComparisonOrigin(
-                new RuleRef.Comparison(behavior, each.origin()),
+                new RuleRef.Comparison(each.which().behavior(), each.origin()),
                 new OriginRef.ComparisonOrigin.Read(each.which(),
                         new souther.compiler.check.RuleCitation.WrittenAt(each.at()),
                         plan.requireEmissionSiteOf(each.which())),
