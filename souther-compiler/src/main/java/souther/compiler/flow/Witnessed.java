@@ -3,7 +3,7 @@ package souther.compiler.flow;
 import souther.compiler.check.Comparison;
 import souther.compiler.check.ComparisonClaim;
 import souther.compiler.core.Core;
-import souther.compiler.numeric.NumericDomain.Rel;
+import souther.compiler.numeric.Rel;
 import souther.compiler.types.Type;
 
 import java.util.ArrayList;

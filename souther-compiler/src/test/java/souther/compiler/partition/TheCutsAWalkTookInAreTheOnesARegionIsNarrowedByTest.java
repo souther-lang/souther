@@ -10,8 +10,8 @@ import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.NumericDomain;
-import souther.compiler.numeric.NumericDomain.LinearForm;
-import souther.compiler.numeric.NumericDomain.Rel;
+import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.Rel;
 import souther.compiler.source.SourceId;
 
 import java.math.BigDecimal;

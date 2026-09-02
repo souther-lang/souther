@@ -8,7 +8,7 @@ import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
-import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.LinearForm;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.Prepared;
 import souther.compiler.query.Bodies;
@@ -60,7 +60,7 @@ class AQuotientNoDecimalWritesIsAProofAndNotAGivingUpTest {
     @Test
     void aLevelNoValueOfThePositionReachesIsOutOfReachAndNotUnsettled() {
         Standing.OfAForm aThird = new Standing.OfAForm(
-                new NumericDomain.LinearForm<>(BigDecimal.ZERO,
+                new LinearForm<>(BigDecimal.ZERO,
                         Map.of(value("b"), new BigDecimal("3"))),
                 Map.of(value("b"), new Carrier.Dense()),
                 LevelSpace.overFiniteDecimals(new BigDecimal("3")),
@@ -74,7 +74,7 @@ class AQuotientNoDecimalWritesIsAProofAndNotAGivingUpTest {
     @Test
     void aLevelAValueDoesReachComesBackAsARow() {
         Standing.OfAForm aWhole = new Standing.OfAForm(
-                new NumericDomain.LinearForm<>(BigDecimal.ZERO,
+                new LinearForm<>(BigDecimal.ZERO,
                         Map.of(value("b"), new BigDecimal("3"))),
                 Map.of(value("b"), new Carrier.Dense()),
                 LevelSpace.overFiniteDecimals(new BigDecimal("3")),

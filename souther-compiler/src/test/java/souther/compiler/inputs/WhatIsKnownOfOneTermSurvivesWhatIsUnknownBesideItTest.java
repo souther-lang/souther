@@ -9,6 +9,7 @@ import souther.compiler.check.Symbols;
 import souther.compiler.check.NumberAt;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
@@ -110,7 +111,7 @@ class WhatIsKnownOfOneTermSurvivesWhatIsUnknownBesideItTest {
         coefs.put(size, BigDecimal.ONE);
 
         NumericDomain.Bounds runs = read.quantities()
-                .runsBetween(new NumericDomain.LinearForm<>(BigDecimal.ZERO, coefs));
+                .runsBetween(new LinearForm<>(BigDecimal.ZERO, coefs));
 
         assertEquals(Endpoint.inclusive(count(0)), runs.min(),
                 "each of them is at least none, so their sum is");
@@ -164,7 +165,7 @@ class WhatIsKnownOfOneTermSurvivesWhatIsUnknownBesideItTest {
         coefs.put(buried, BigDecimal.ONE);
 
         NumericDomain.Bounds runs = read.quantities()
-                .runsBetween(new NumericDomain.LinearForm<>(BigDecimal.ZERO, coefs));
+                .runsBetween(new LinearForm<>(BigDecimal.ZERO, coefs));
 
         assertEquals(Endpoint.inclusive(count(0)), runs.min(),
                 "each of them is at least none, so their sum is");
@@ -227,7 +228,7 @@ class WhatIsKnownOfOneTermSurvivesWhatIsUnknownBesideItTest {
         NumericTerm one = size(read, "xs");
 
         NumericDomain.Bounds twice = read.quantities().runsBetween(
-                new NumericDomain.LinearForm<>(BigDecimal.ZERO,
+                new LinearForm<>(BigDecimal.ZERO,
                         Map.of(one, BigDecimal.valueOf(2))));
 
         assertEquals(Endpoint.inclusive(count(10)), twice.max(),
@@ -282,7 +283,7 @@ class WhatIsKnownOfOneTermSurvivesWhatIsUnknownBesideItTest {
         coefs.put(y, BigDecimal.ONE);
 
         NumericDomain.Bounds runs = read.quantities()
-                .runsBetween(new NumericDomain.LinearForm<>(BigDecimal.ZERO, coefs));
+                .runsBetween(new LinearForm<>(BigDecimal.ZERO, coefs));
 
         assertEquals(Endpoint.inclusive(count(5)), runs.min(),
                 "the two the record relates come to five, and nothing is negative beside them");
@@ -324,7 +325,7 @@ class WhatIsKnownOfOneTermSurvivesWhatIsUnknownBesideItTest {
         coefs.put(size(read, "c"), BigDecimal.ONE);
 
         NumericDomain.Bounds runs = read.quantities()
-                .runsBetween(new NumericDomain.LinearForm<>(BigDecimal.ZERO, coefs));
+                .runsBetween(new LinearForm<>(BigDecimal.ZERO, coefs));
 
         assertEquals(Endpoint.inclusive(count(1)), runs.min(),
                 "two of them come to one, and the third is never negative");

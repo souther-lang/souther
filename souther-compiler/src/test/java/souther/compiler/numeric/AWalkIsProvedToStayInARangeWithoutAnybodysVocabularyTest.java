@@ -31,11 +31,11 @@ class AWalkIsProvedToStayInARangeWithoutAnybodysVocabularyTest {
     private static final Map<Atom, Granularity> WHOLE_NUMBERS =
             Map.of(Atom.ACCUMULATOR, Granularity.DISCRETE, Atom.ELEMENT, Granularity.DISCRETE);
 
-    private static final NumericDomain.LinearForm<Atom> ACCUMULATOR =
-            NumericDomain.LinearForm.atom(Atom.ACCUMULATOR);
+    private static final LinearForm<Atom> ACCUMULATOR =
+            LinearForm.atom(Atom.ACCUMULATOR);
 
-    private static final NumericDomain.LinearForm<Atom> ADDED =
-            ACCUMULATOR.plus(NumericDomain.LinearForm.atom(Atom.ELEMENT));
+    private static final LinearForm<Atom> ADDED =
+            ACCUMULATOR.plus(LinearForm.atom(Atom.ELEMENT));
 
     /** A walk whose step adds, read against a domain holding the two numbers. */
     private record Adding(NumericDomain<Atom> reading, NumericDomain.Bounds element,

@@ -6,6 +6,7 @@ import souther.compiler.ast.Hir;
 import souther.compiler.check.Combinators.Handed;
 import souther.compiler.check.PathEngine.Entered;
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.core.Core;
 import souther.compiler.core.Evaluated;
@@ -1480,7 +1481,8 @@ public final class InvariantChecker {
         Comparison comparison = Comparison.of(bin).orElse(null);
         // And the one reading of the arithmetic over it, handed to each of the questions asked of
         // it: what the clause states, and what a reader is left with where no end came of it.
-        Arithmetic read = comparison == null ? null : arithmeticOf(comparison, at, byName);
+        CanonicalForm read =
+                comparison == null ? null : canonicalFormOf(comparison, at, byName);
         // A rule that orders the values, or one that says which value they take. A rule that only
         // rules a value out is read no further here, and neither is an operator that compares
         // nothing: what is below reads a clause for the end it places on a position and for which
@@ -1632,7 +1634,7 @@ public final class InvariantChecker {
      *             answer to that question
      */
     private ClauseStates states(Core clause, Denotations at,
-                                Map<FactSubject, Coordinate> byName, Arithmetic read) {
+                                Map<FactSubject, Coordinate> byName, CanonicalForm read) {
         List<RuleKey> found = new ArrayList<>();
         namedIn(clause, at, byName, found);
         // What the rule cuts, ahead of what it looks like. Which values a rule restricts is settled
@@ -1652,7 +1654,7 @@ public final class InvariantChecker {
         // And only where the clause names a position at all. `1 >= 0` cuts nothing either, and it
         // is not a rule that restricts no value of this position — it is a rule about nowhere, said
         // by the one authority for that question, which is whether the value is mentioned.
-        if (!found.isEmpty() && read instanceof Arithmetic.CutsNothing nothing
+        if (!found.isEmpty() && read instanceof CanonicalForm.CutsNothing nothing
                 && nothing.holdsOfEveryRow()) {
             return new ClauseStates.NoRestriction();
         }
@@ -1723,6 +1725,7 @@ public final class InvariantChecker {
      * held under the coordinate instead, two names of one place would be two.
      */
     private record Places(ValueOrigin<RuleKey> origin, Map<RuleKey, Coordinate> met) {}
+
 
     /** What the place {@code path} is counted on, off whichever side of the comparison met it. */
     private static Carrier carrierAt(RuleKey path, Places left, Places right) {
@@ -1810,7 +1813,7 @@ public final class InvariantChecker {
      * what the arithmetic made of them are three readings of one comparison, and handed over as
      * three arguments they are as much one comparison as the caller left them.
      */
-    private void noLineDrawn(Arithmetic read, RuleRef.Invariant from, Core clause, int conjunct,
+    private void noLineDrawn(CanonicalForm read, RuleRef.Invariant from, Core clause, int conjunct,
                             Denotations at,
                             Map<FactSubject, Coordinate> byName, List<FieldDomains.NoLine> out) {
         if (!(read.comparison().claim() instanceof ComparisonClaim.Cut)) {
@@ -1824,7 +1827,7 @@ public final class InvariantChecker {
         for (Coordinate each : coordinatesIn(comparison, at, byName)) {
             met.putIfAbsent(each.path(), each);
         }
-        switch (read.quantity()) {
+        switch (cuts(read, byName)) {
             case UnreadComparison.Quantity.Read<RuleKey> quantity -> {
                 BlockReason.RuleWithoutLineReason why =
                         UnreadComparison.ofTheQuantity(quantity, ordered);
@@ -1934,13 +1937,14 @@ public final class InvariantChecker {
      * what the rules leave the coordinate without this conjunct
      * ({@link FieldDomains#movedEndsOf}).
      */
-    private static void aboutOneCoordinate(Arithmetic read, RuleRef.Invariant from, int part,
+    private static void aboutOneCoordinate(CanonicalForm read, RuleRef.Invariant from, int part,
                                           Core.Binary bin,
                                           List<FieldDomains.AboutOneCoordinate> out) {
-        if (!(read instanceof Arithmetic.OverOne one)) {
+        if (!(read instanceof CanonicalForm.Over over) || over.numbers().size() != 1) {
             return;
         }
-        out.add(new FieldDomains.AboutOneCoordinate(one.at().at(), from, bin, part));
+        out.add(new FieldDomains.AboutOneCoordinate(over.numbers().iterator().next().at(), from,
+                bin, part));
     }
 
     /** One finding, kept once. A coordinate reached twice is one place with one thing to say. */
@@ -1976,13 +1980,10 @@ public final class InvariantChecker {
      * answered by whichever account its writer kept in step. Here the residue is a field of the one
      * case that has one: a residue standing beside a position is not refused, it is unwritable.
      */
-    private sealed interface Arithmetic {
+    private sealed interface CanonicalForm {
 
         /** The comparison this is the reading of. */
         Comparison comparison();
-
-        /** What the canonical form cuts, in the words {@link UnreadComparison} reads. */
-        UnreadComparison.Quantity<RuleKey> quantity();
 
         /**
          * The canonical form has no position left in it, and this is what {@code left - right} came
@@ -1993,12 +1994,7 @@ public final class InvariantChecker {
          * position at all — asked by the one authority for that question, which is the walk over
          * the clause, and not by this.
          */
-        record CutsNothing(Comparison comparison, BigDecimal residue) implements Arithmetic {
-
-            @Override
-            public UnreadComparison.Quantity.CutsNothing<RuleKey> quantity() {
-                return new UnreadComparison.Quantity.CutsNothing<>();
-            }
+        record CutsNothing(Comparison comparison, BigDecimal residue) implements CanonicalForm {
 
             /**
              * Whether the comparison holds of every row there is.
@@ -2021,27 +2017,90 @@ public final class InvariantChecker {
             }
         }
 
-        /** The arithmetic read no form here, and what it was looking at when it stopped. */
-        record NotRead(Comparison comparison,
-                       UnreadComparison.Quantity.NotRead<RuleKey> quantity) implements Arithmetic {}
+        /**
+         * The arithmetic read no form here, and what it was looking at when it stopped.
+         *
+         * <p>The node and the environment it was read in, which is what the walk stopped at. Not
+         * what a reader downstream makes of them: which subject that expression is about is an
+         * answer, and holding it here would put an answer inside what a classification is asked of.
+         */
+        record NotRead(Comparison comparison, Core stoppedAt, Denotations under)
+                implements CanonicalForm {}
 
         /**
-         * The quantity the canonical form cuts is over one position.
+         * The canonical form is over these numbers.
          *
-         * @param at which number the canonical form is over, as the value's rules name it. Beside
-         *           the quantity rather than read back out of it: a quantity says which name the
-         *           form is over, and a name carries more than one number — so a reader rebuilding
-         *           the coordinate from the name has to decide which of them, which is what this
-         *           reading already did
+         * <p>One arm for one and for several. How many there are is what an answer turns on — a
+         * rule over one bounds it, a rule over two relates them — and that is read off the set
+         * where the answer is given. Split here, this would be carrying the answer's distinction
+         * in the classification's vocabulary.
+         *
+         * <p><b>The numbers and not the names.</b> A name carries more than one — a string has its
+         * own order and its length — so a form over two numbers of one name is over two things, and
+         * counting the names would call it one. What the places are is read off these
+         * ({@link #positions}), which is the direction that loses nothing.
+         *
+         * <p><b>A set and no order.</b> These are the atoms the canonical form has a coefficient
+         * for, and what a form is does not say which of them comes first. A reader that needs them
+         * in an order gets one from the walk over the clause, which met them somewhere
+         * ({@code UnreadComparison.over}). Typed as a sequence, this would promise an order that is
+         * whatever a hash of the atoms happened to give.
          */
-        record OverOne(Comparison comparison,
-                       UnreadComparison.Quantity.OverOne<RuleKey> quantity,
-                       Coordinate at) implements Arithmetic {}
+        record Over(Comparison comparison, java.util.Set<Coordinate> numbers)
+                implements CanonicalForm {
 
-        /** The quantity the canonical form cuts is over several. */
-        record OverSeveral(Comparison comparison,
-                           UnreadComparison.Quantity.OverSeveral<RuleKey> quantity)
-                implements Arithmetic {}
+            public Over {
+                if (numbers.isEmpty()) {
+                    throw new IllegalArgumentException(
+                            "a form over no number is one whose positions cancelled, which is"
+                                    + " the arm with the residue");
+                }
+                numbers = java.util.Set.copyOf(numbers);
+                // One name and two of its numbers is a form the language cannot write today, since
+                // a shape declares one measure of itself. Refused here rather than passed on: the
+                // answer for such a form is neither of the two a reader has — it is over one name
+                // and over two numbers — so a reader handed either would be told what the form does
+                // not say.
+                if (numbers.stream().map(Coordinate::path).distinct().count() == 1
+                        && numbers.size() != 1) {
+                    throw new IllegalStateException(
+                            "a form over one name and more than one of its numbers: " + numbers);
+                }
+            }
+
+            /** The places these numbers are at, which is fewer than the numbers wherever one name
+             *  carries two. */
+            java.util.Set<RuleKey> positions() {
+                java.util.Set<RuleKey> out = new LinkedHashSet<>();
+                numbers.forEach(each -> out.add(each.path()));
+                return out;
+            }
+        }
+    }
+
+    /**
+     * What the form cuts, in the words {@link UnreadComparison} reads.
+     *
+     * <p><b>The projection runs this way and only this way.</b> A canonical form is what the clause
+     * came to; a quantity is the vocabulary the answer about it is given in, and which arm it is
+     * turns on how many positions are left and on what the walk met where the reading stopped. So
+     * an answer is made from a classification, and no classification is made from an answer — which
+     * is what {@code Required} being independent of the readers rests on one layer up.
+     *
+     * <p>Here rather than on the form, so that the classification's own value names nothing
+     * {@link UnreadComparison} declares. Held as a field of it, the two would be one reading with
+     * two accounts and the answer would be inside the thing it is an answer about.
+     */
+    private UnreadComparison.Quantity<RuleKey> cuts(CanonicalForm form,
+                                                    Map<FactSubject, Coordinate> byName) {
+        return switch (form) {
+            case CanonicalForm.NotRead it -> new UnreadComparison.Quantity.NotRead<>(
+                    placesIn(it.stoppedAt(), it.under(), byName).origin());
+            case CanonicalForm.CutsNothing _ -> new UnreadComparison.Quantity.CutsNothing<>();
+            case CanonicalForm.Over it -> it.positions().size() == 1
+                    ? new UnreadComparison.Quantity.OverOne<>(it.positions().iterator().next())
+                    : new UnreadComparison.Quantity.OverSeveral<>(it.positions());
+        };
     }
 
     /**
@@ -2057,8 +2116,8 @@ public final class InvariantChecker {
      * of the same shape in a body two declarations away is described in the same words — which is
      * what {@code invariant Int.add(length.value, width.value) <= 150} and the guard beside it are.
      */
-    private Arithmetic arithmeticOf(Comparison recognised, Denotations at,
-                                    Map<FactSubject, Coordinate> byName) {
+    private CanonicalForm canonicalFormOf(Comparison recognised, Denotations at,
+                                          Map<FactSubject, Coordinate> byName) {
         // Named against this reader's own coordinates rather than against every number the
         // discharge procedure can identify. A value that is a number and is no coordinate of the
         // subject is one the walk stops at, so the expression and its environment come back
@@ -2069,43 +2128,22 @@ public final class InvariantChecker {
                 terms.outcomeOf(recognised.right(), at, byName::containsKey);
         for (AffineForms.Outcome<FactSubject, Denotations> side : java.util.List.of(left, right)) {
             if (side instanceof AffineForms.Outcome.StoppedAt<FactSubject, Denotations> stopped) {
-                return new Arithmetic.NotRead(recognised, new UnreadComparison.Quantity.NotRead<>(
-                        placesIn(stopped.node(), stopped.at(), byName).origin()));
+                return new CanonicalForm.NotRead(recognised, stopped.node(), stopped.at());
             }
         }
-        NumericDomain.LinearForm<FactSubject> whole =
+        LinearForm<FactSubject> whole =
                 ((AffineForms.Outcome.Composed<FactSubject, Denotations>) left).form()
                         .minus(((AffineForms.Outcome.Composed<FactSubject, Denotations>) right)
                                 .form());
-        java.util.Set<RuleKey> over = new LinkedHashSet<>();
-        // And which numbers they are, counted as numbers. A path carries more than one — a string
-        // has its own order and its length — so a form over two numbers of one name is over two
-        // things and not over one, and counting the names would call it one.
+        // The numbers the form is left over, counted as numbers. A path carries more than one — a
+        // string has its own order and its length — so a form over two numbers of one name is over
+        // two things, and counting the names would call it one.
         java.util.Set<Coordinate> numbers = new LinkedHashSet<>();
         for (FactSubject atom : whole.coefs().keySet()) {
-            Coordinate found = byName.get(atom);
-            over.add(found.path());
-            numbers.add(found);
+            numbers.add(byName.get(atom));
         }
-        if (over.isEmpty()) {
-            return new Arithmetic.CutsNothing(recognised, whole.constant());
-        }
-        if (over.size() == 1) {
-            // One name, and the numbers taken at it are one number. The language declares one
-            // measure of a shape, so a form over two numbers of one name cannot be written today —
-            // said as an error rather than passed over, because the answer for such a form is
-            // neither of the two below: it is over one name and over two numbers, and a reader
-            // handed either would be told something the form does not say.
-            if (numbers.size() != 1) {
-                throw new IllegalStateException(
-                        "a form over one name and more than one of its numbers: " + numbers);
-            }
-            return new Arithmetic.OverOne(recognised,
-                    new UnreadComparison.Quantity.OverOne<>(over.iterator().next()),
-                    numbers.iterator().next());
-        }
-        return new Arithmetic.OverSeveral(recognised,
-                new UnreadComparison.Quantity.OverSeveral<>(over));
+        return numbers.isEmpty() ? new CanonicalForm.CutsNothing(recognised, whole.constant())
+                : new CanonicalForm.Over(recognised, numbers);
     }
 
     /**

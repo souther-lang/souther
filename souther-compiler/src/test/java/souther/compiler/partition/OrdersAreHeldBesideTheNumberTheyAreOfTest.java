@@ -77,7 +77,7 @@ class OrdersAreHeldBesideTheNumberTheyAreOfTest {
 
         assertThrows(IllegalArgumentException.class,
                 () -> new BorderQuantity.OverAForm("weigh",
-                        new souther.compiler.numeric.NumericDomain.LinearForm<>(
+                        new souther.compiler.numeric.LinearForm<>(
                                 java.math.BigDecimal.ZERO,
                                 Map.of(CHARGE, java.math.BigDecimal.ONE,
                                         CEILING, java.math.BigDecimal.ONE.negate())),

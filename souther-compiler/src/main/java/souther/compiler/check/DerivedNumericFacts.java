@@ -6,8 +6,8 @@ import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.Intervals;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.NumericDomain.Bounds;
-import souther.compiler.numeric.NumericDomain.LinearForm;
-import souther.compiler.numeric.NumericDomain.Rel;
+import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.Rel;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;

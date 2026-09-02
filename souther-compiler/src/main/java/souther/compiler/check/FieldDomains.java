@@ -4,7 +4,9 @@ import souther.compiler.semantics.ConditionJoin;
 import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
 import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.Rel;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.values.AdmissibleSet;
 import souther.compiler.values.ConjoinedAdmissibleValues;
@@ -1723,7 +1725,7 @@ public final class FieldDomains {
             coefs.merge(atom, each.getValue(), java.math.BigDecimal::add);
         }
         return constraints.numbers().boundsOf(
-                new NumericDomain.LinearForm<>(java.math.BigDecimal.ZERO, coefs));
+                new LinearForm<>(java.math.BigDecimal.ZERO, coefs));
     }
 
     /**
@@ -1834,7 +1836,7 @@ public final class FieldDomains {
                 }
                 for (FactSubject atom : each.atoms()) {
                     lossy.add(new ProjectionEvidence.Cause.Lossy(rule, atom,
-                            Set.of(each.rel() == NumericDomain.Rel.NE
+                            Set.of(each.rel() == Rel.NE
                                     ? ProjectionEvidence.Cause.Unstated.A_HOLE
                                     : ProjectionEvidence.Cause.Unstated.A_RELATION)));
                 }

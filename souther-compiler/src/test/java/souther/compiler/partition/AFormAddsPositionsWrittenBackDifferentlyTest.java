@@ -12,7 +12,7 @@ import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
-import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.LinearForm;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
@@ -71,8 +71,8 @@ class AFormAddsPositionsWrittenBackDifferentlyTest {
     }
 
     /** {@code d - n}, the difference of a decimal position and a whole-number one. */
-    private static NumericDomain.LinearForm<NumericTerm> aDecimalLessAnInt() {
-        return new NumericDomain.LinearForm<>(BigDecimal.ZERO,
+    private static LinearForm<NumericTerm> aDecimalLessAnInt() {
+        return new LinearForm<>(BigDecimal.ZERO,
                 Map.of(value("d"), BigDecimal.ONE, value("n"), BigDecimal.ONE.negate()));
     }
 
@@ -89,8 +89,8 @@ class AFormAddsPositionsWrittenBackDifferentlyTest {
      */
     @Test
     void twoDatesAndAWholeNumberAreOneQuantity() {
-        NumericDomain.LinearForm<NumericTerm> daysBetweenLessN =
-                new NumericDomain.LinearForm<>(BigDecimal.ZERO,
+        LinearForm<NumericTerm> daysBetweenLessN =
+                new LinearForm<>(BigDecimal.ZERO,
                         Map.of(value("to"), BigDecimal.ONE,
                                 value("from"), BigDecimal.ONE.negate(),
                                 value("n"), BigDecimal.ONE.negate()));
@@ -222,7 +222,7 @@ class AFormAddsPositionsWrittenBackDifferentlyTest {
      */
     @Test
     void aFormThatPutsTheDensePositionOnACosetIsStillReached() {
-        NumericDomain.LinearForm<NumericTerm> thriceD = new NumericDomain.LinearForm<>(
+        LinearForm<NumericTerm> thriceD = new LinearForm<>(
                 BigDecimal.ZERO,
                 Map.of(value("d"), new BigDecimal("3"), value("n"), BigDecimal.ONE));
         BorderQuantity.OverAForm over = new BorderQuantity.OverAForm("take", thriceD,

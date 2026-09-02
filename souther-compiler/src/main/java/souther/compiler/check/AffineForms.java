@@ -3,7 +3,7 @@ package souther.compiler.check;
 import souther.compiler.types.BinOp;
 import souther.compiler.core.Core;
 import souther.compiler.numeric.Count;
-import souther.compiler.numeric.NumericDomain.LinearForm;
+import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Place;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;

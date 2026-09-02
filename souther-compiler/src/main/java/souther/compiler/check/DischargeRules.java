@@ -202,7 +202,7 @@ final class DischargeRules {
 
     /** What {@code operation} answers, counted, in what its arguments are counted as — or null
      *  where it states no such form. */
-    static souther.compiler.numeric.NumericDomain.LinearForm<ArgumentRef> answersAFormOf(
+    static souther.compiler.numeric.LinearForm<ArgumentRef> answersAFormOf(
             ValueName operation) {
         return Bound.answersAFormOfItsArguments(operation);
     }
@@ -460,7 +460,7 @@ final class DischargeRules {
          * declaration's; what asking through here adds is that it has been held to the library
          * first.
          */
-        private static souther.compiler.numeric.NumericDomain.LinearForm<ArgumentRef>
+        private static souther.compiler.numeric.LinearForm<ArgumentRef>
                 answersAFormOfItsArguments(ValueName operation) {
             return OperationFacts.answersAFormOfItsArguments(operation);
         }
@@ -863,7 +863,7 @@ final class DischargeRules {
      * and belongs to the check ({@link #formOperationsThisCarries}).
      */
     static void holdAFormOfItsArguments(Stdlib stdlib, ValueName operation,
-            souther.compiler.numeric.NumericDomain.LinearForm<ArgumentRef> form) {
+            souther.compiler.numeric.LinearForm<ArgumentRef> form) {
         holdTheResultToTheDeclaration(stdlib, operation, TypeRequirement.COUNTED,
                 "what a form of its arguments is about");
         for (ArgumentRef argument : form.coefs().keySet()) {

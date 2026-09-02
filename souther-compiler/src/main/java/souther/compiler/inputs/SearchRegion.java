@@ -1,7 +1,9 @@
 package souther.compiler.inputs;
 
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.Rel;
 
 import java.util.Map;
 import java.util.Optional;
@@ -53,7 +55,7 @@ public interface SearchRegion {
      * leaves a region that still holds every row that arrives, and a region narrowed on a condition
      * nothing established would leave it narrower than they are.
      */
-    SearchRegion assuming(NumericDomain.LinearForm<NumericTerm> form, NumericDomain.Rel rel);
+    SearchRegion assuming(LinearForm<NumericTerm> form, Rel rel);
 
     /** The same region, with these positions standing at these values. */
     SearchRegion given(Map<NumericTerm, Count> fixed);
@@ -65,12 +67,12 @@ public interface SearchRegion {
 
     /** Where the values of {@code form} run inside this region, or null at either end where
      *  nothing bounds them. */
-    NumericDomain.Bounds runsBetween(NumericDomain.LinearForm<NumericTerm> form);
+    NumericDomain.Bounds runsBetween(LinearForm<NumericTerm> form);
 
     /** The same, of one term — the one-term case of the question above and not a second answer to
      *  it. */
     default NumericDomain.Bounds runsBetween(NumericTerm term) {
-        return runsBetween(NumericDomain.LinearForm.atom(term));
+        return runsBetween(LinearForm.atom(term));
     }
 
     /**

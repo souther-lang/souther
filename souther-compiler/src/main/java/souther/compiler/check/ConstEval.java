@@ -3,7 +3,7 @@ package souther.compiler.check;
 import souther.compiler.types.BinOp;
 import souther.compiler.ast.Hir;
 import souther.compiler.core.Kernel;
-import souther.compiler.numeric.NumericDomain.Rel;
+import souther.compiler.numeric.Rel;
 
 import java.math.BigDecimal;
 import java.util.List;

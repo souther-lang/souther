@@ -28,43 +28,43 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 class AComparisonNamingNoPositionIsSettledByItsConstantTest {
 
     /** What the constant came to, what the rule states of it, and which extreme that is. */
-    private record Row(long constant, NumericDomain.Rel rel, boolean holds) {
+    private record Row(long constant, Rel rel, boolean holds) {
 
         String asked() {
             return constant + " " + rel + " 0";
         }
     }
 
-    private static Row row(long constant, NumericDomain.Rel rel, boolean holds) {
+    private static Row row(long constant, Rel rel, boolean holds) {
         return new Row(constant, rel, holds);
     }
 
     private static final List<Row> ROWS = List.of(
-            row(-1, NumericDomain.Rel.LE, true),
-            row(0, NumericDomain.Rel.LE, true),
-            row(1, NumericDomain.Rel.LE, false),
-            row(-1, NumericDomain.Rel.LT, true),
-            row(0, NumericDomain.Rel.LT, false),
-            row(1, NumericDomain.Rel.LT, false),
-            row(-1, NumericDomain.Rel.GE, false),
-            row(0, NumericDomain.Rel.GE, true),
-            row(1, NumericDomain.Rel.GE, true),
-            row(-1, NumericDomain.Rel.GT, false),
-            row(0, NumericDomain.Rel.GT, false),
-            row(1, NumericDomain.Rel.GT, true),
-            row(-1, NumericDomain.Rel.EQ, false),
-            row(0, NumericDomain.Rel.EQ, true),
-            row(1, NumericDomain.Rel.EQ, false),
-            row(-1, NumericDomain.Rel.NE, true),
-            row(0, NumericDomain.Rel.NE, false),
-            row(1, NumericDomain.Rel.NE, true));
+            row(-1, Rel.LE, true),
+            row(0, Rel.LE, true),
+            row(1, Rel.LE, false),
+            row(-1, Rel.LT, true),
+            row(0, Rel.LT, false),
+            row(1, Rel.LT, false),
+            row(-1, Rel.GE, false),
+            row(0, Rel.GE, true),
+            row(1, Rel.GE, true),
+            row(-1, Rel.GT, false),
+            row(0, Rel.GT, false),
+            row(1, Rel.GT, true),
+            row(-1, Rel.EQ, false),
+            row(0, Rel.EQ, true),
+            row(1, Rel.EQ, false),
+            row(-1, Rel.NE, true),
+            row(0, Rel.NE, false),
+            row(1, Rel.NE, true));
 
     /** Every relation at each of the three ways its constant can stand. The table is what both
      *  halves of the test below are read out of, so a row taken out of it goes from the answers as
      *  well and nothing else would say so. */
     @Test
     void everyRelationIsAskedAboutAtEachSign() {
-        assertEquals(NumericDomain.Rel.values().length * 3, ROWS.size());
+        assertEquals(Rel.values().length * 3, ROWS.size());
     }
 
     @Test

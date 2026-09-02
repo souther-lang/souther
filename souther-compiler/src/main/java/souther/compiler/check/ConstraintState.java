@@ -3,8 +3,8 @@ package souther.compiler.check;
 import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.OrderedIntervals;
-import souther.compiler.numeric.NumericDomain.LinearForm;
-import souther.compiler.numeric.NumericDomain.Rel;
+import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.Rel;
 import souther.compiler.values.AdmissibleValues;
 import souther.compiler.values.ConjoinedAdmissibleValues;
 
@@ -273,8 +273,8 @@ public record ConstraintState<A>(NumericDomain<A> numbers, PredicateFacts<A> fac
                                            souther.compiler.numeric.Count at,
                                            souther.compiler.numeric.Granularity spacing) {
         return state.taking(
-                NumericDomain.LinearForm.<A>atom(atom)
-                        .minus(NumericDomain.LinearForm.<A>constant(at.at())),
-                NumericDomain.Rel.EQ, java.util.Map.of(atom, spacing));
+                LinearForm.<A>atom(atom)
+                        .minus(LinearForm.<A>constant(at.at())),
+                Rel.EQ, java.util.Map.of(atom, spacing));
     }
 }

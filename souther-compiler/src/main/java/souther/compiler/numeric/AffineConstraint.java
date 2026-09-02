@@ -217,7 +217,7 @@ public sealed interface AffineConstraint<A> {
      *                {@link NumericDomain#assume} wants it: a position whose spacing is guessed is
      *                one a bound is either wrongly sharpened on or silently left blunt
      */
-    static <A> Read<A> of(Map<A, Rational> coefs, Rational constant, NumericDomain.Rel rel,
+    static <A> Read<A> of(Map<A, Rational> coefs, Rational constant, Rel rel,
                           Function<A, Granularity> spacing) {
         CanonicalForm.Scaled<A> scaled = CanonicalForm.of(coefs);
         if (scaled == null) {
@@ -255,9 +255,9 @@ public sealed interface AffineConstraint<A> {
      *
      * <p>The assertion is {@code constant rel 0} once nothing is left to weigh, so which way the
      * constant stands to nought is which way the left side of the comparison stands to the right —
-     * which is the one thing a relation is answered at ({@link NumericDomain.Rel#holds}).
+     * which is the one thing a relation is answered at ({@link Rel#holds}).
      */
-    private static <A> Read<A> settledByConstantAlone(Rational constant, NumericDomain.Rel rel) {
+    private static <A> Read<A> settledByConstantAlone(Rational constant, Rel rel) {
         return rel.holds(constant.signum()) ? new Read.HoldsAlways<>() : new Read.HoldsNever<>();
     }
 }

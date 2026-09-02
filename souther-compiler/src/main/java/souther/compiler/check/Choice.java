@@ -2,7 +2,7 @@ package souther.compiler.check;
 
 import souther.compiler.semantics.OperationFact;
 import souther.compiler.core.Core;
-import souther.compiler.numeric.NumericDomain.Rel;
+import souther.compiler.numeric.Rel;
 
 import java.util.ArrayList;
 import java.util.List;

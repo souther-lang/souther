@@ -1,7 +1,9 @@
 package souther.compiler.inputs;
 
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.Rel;
 
 import java.util.Map;
 import java.util.Optional;
@@ -19,8 +21,8 @@ import java.util.Optional;
 record ReadRegion(ReadQuantities within) implements SearchRegion {
 
     @Override
-    public SearchRegion assuming(NumericDomain.LinearForm<NumericTerm> form,
-                                 NumericDomain.Rel rel) {
+    public SearchRegion assuming(LinearForm<NumericTerm> form,
+                                 Rel rel) {
         ReadQuantities taken = within.assuming(form, rel);
         return taken == within ? this : new ReadRegion(taken);
     }
@@ -32,7 +34,7 @@ record ReadRegion(ReadQuantities within) implements SearchRegion {
     }
 
     @Override
-    public NumericDomain.Bounds runsBetween(NumericDomain.LinearForm<NumericTerm> form) {
+    public NumericDomain.Bounds runsBetween(LinearForm<NumericTerm> form) {
         return within.runsBetween(form);
     }
 

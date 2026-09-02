@@ -1,7 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.core.Core;
-import souther.compiler.numeric.NumericDomain.Rel;
+import souther.compiler.numeric.Rel;
 
 /**
  * A comparison a reading arrived at: what it places, and the two values it places it on.
