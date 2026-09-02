@@ -43,10 +43,13 @@ class OnlyOnePlaceDeclaresAPublicationOrderTest {
                     // by a vocabulary is put in order by a comparison rather than by a list of
                     // places, and a second one of those is a second decision about what a reader is
                     // shown just as readily.
-                    // Called and not read: what it holds the comparison in is a field of that name
-                    // as well, and reading one's own field is not making an order.
+                    // Called or named for later, because either makes one: a reference runs the
+                    // same factory somewhere else and puts no invoke in the caller's code, so a
+                    // rule counting calls alone is passed by `Order::by`. What is not making one
+                    // is reading the field the comparison is held in, which has the same name.
                     || (site.owner().equals(ARRANGEMENT) && site.member().equals("by")
-                            && site.how() == Compiled.How.CALLS)) {
+                            && (site.how() == Compiled.How.CALLS
+                                    || site.how() == Compiled.How.REFERS))) {
                 reached = true;
                 if (!site.from().equals(AUTHORITY)) {
                     made.add(site.at());

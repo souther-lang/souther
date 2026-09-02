@@ -59,6 +59,15 @@ class AFieldWhoseOrderIsThisCompilersIsWrittenThroughACrossingTest {
                 unread.add(each.site().at());
             }
         }
+        // And named for later rather than called, which is the other way an array is started
+        // somewhere this cannot read a name: a reference puts no invoke in the caller's code, so
+        // the reading above meets it nowhere and the field would leave the population in silence.
+        for (Compiled.Site each : compiled()) {
+            if (each.member().equals(STARTS_AN_ARRAY) && each.how() != Compiled.How.CALLS
+                    && each.from().startsWith("souther.compiler.report.")) {
+                unread.add(each.at() + " names it for later");
+            }
+        }
 
         assertEquals(List.of(), unread,
                 "an array of the document is started under a name nothing here can read, so a"
@@ -147,7 +156,11 @@ class AFieldWhoseOrderIsThisCompilersIsWrittenThroughACrossingTest {
      */
     private static boolean crossesIn(String method) {
         for (Compiled.Site site : compiled()) {
-            if (CROSSINGS.contains(site.owner()) && site.member().equals("written")
+            // Called and not merely named. What is asked is that this method takes the sequence
+            // from a crossing; a method that hands `written` on as a reference has not taken one,
+            // and counting that would let a writer answer for a sequence it never asked for.
+            if (site.how() == Compiled.How.CALLS
+                    && CROSSINGS.contains(site.owner()) && site.member().equals("written")
                     && (site.at().equals(method) || site.at().startsWith(method + "("))) {
                 return true;
             }

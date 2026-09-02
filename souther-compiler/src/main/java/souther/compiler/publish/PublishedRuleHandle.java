@@ -129,12 +129,15 @@ public record PublishedRuleHandle(Optional<String> name, Where where, Place at,
         if (held.isPresent()) {
             return new Place.InSource(held.get());
         }
+        // Asked of what a report prints and not of what the citation holds. Code out of sight is
+        // said as where it came from and nothing else, whether or not this compiler met it at a
+        // position — so the numbers are no part of what a reader is shown, and a projection that
+        // kept them would tell apart two handles a document writes alike.
         SourcePos where = switch (cited) {
             case Citation.Written it -> it.at();
             case Citation.Unplaced it -> it.at();
             case Citation.Reached it -> it.at();
-            case Citation.UnplacedElsewhere it -> it.at();
-            case Citation.OutOfSight _ -> null;
+            case Citation.UnplacedElsewhere _, Citation.OutOfSight _ -> null;
         };
         return where == null ? new Place.Nowhere()
                 : new Place.Unplaced(where.line(), where.column());
