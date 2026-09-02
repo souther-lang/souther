@@ -7,7 +7,7 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * Where one obligation stands in the account a report counts it in.
+ * What became of one obligation the model owes a row at.
  *
  * <p>Derived from the evidence and never held beside it. What the readings came to
  * ({@link ObligationCoverage}) and what has shown a row can be written here
@@ -16,12 +16,30 @@ import java.util.Objects;
  * Asked of the evidence at each of those places instead, the three had three chances to read one
  * pair of answers differently.
  *
- * <p>Four states, and three of them are counted. A counted obligation is one the model owes a row at
- * and the rows were read against, so the three make a partition of the denominator: a row stands at
- * it, no row does and the model says one can be written, or nobody can say which. What is not
- * counted is said with every reason it is not, because the reasons are independent — nothing was
- * read <em>and</em> nothing has shown a row can be written is a state, and a disposition naming one
- * of the two would be choosing between them.
+ * <p><b>Three states, and every one of them is counted.</b> Whether a row is owed at a point is the
+ * model's answer and is settled before anything here: a border that owes no row at a point says so
+ * with a reason read off the rules ({@link souther.compiler.partition.NotOwedReason}), and a point
+ * the rules leave nothing at never becomes an obligation. Nothing this compiler failed to read,
+ * compose or represent reaches that decision, so nothing here subtracts. What the three say is what
+ * is known about a point that is owed: a row stands at it, no row does and something showed one
+ * could, or nobody can say which.
+ *
+ * <p>There was a fourth. A point every row was read against and none was at, with nothing to show a
+ * row could be written there, was left out of the account entirely — on the reading that asking for
+ * a row nothing promises is asking for work nobody can do. That reads a limit of this compiler as an
+ * answer about the model. Nothing composed and every candidate refused are facts about the composer;
+ * the model's own refusal has its own way of being said, one paragraph up, and is not any of them.
+ * What the fourth state cost is that a field nobody could compose a value for took its siblings'
+ * obligations out of the denominator with it — the row is written against the whole value, so one
+ * unreadable rule anywhere under a parameter emptied the grounds for every point beneath it
+ * (issue #1249).
+ *
+ * <p><b>And an open question carries what it is open on.</b> A name for the question alone sends
+ * every reader back to the evidence beside it to work out what to say, and each of them works it
+ * out on its own terms — so what one point is open on is as many answers as there are readers
+ * ({@link Uncertainty}). Which is also why the two questions are families rather than names: a
+ * reading that stopped short and no reading at all are one question open for two reasons, and so
+ * are a showing a budget ended and a showing nothing ever made.
  */
 public sealed interface ObligationDisposition {
 
