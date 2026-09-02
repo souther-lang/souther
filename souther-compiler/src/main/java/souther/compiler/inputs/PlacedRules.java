@@ -77,8 +77,9 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
      * lifted as ends alone, a wrapper relating two of the record's fields narrowed nothing and a
      * wrapper clause nothing could read left every edge under it looking certain.
      */
-    static PlacedRules of(TermPath root, Type type, Symbols symbols, ReadingPolicy policy) {
-        return of(root, type, symbols, policy, null);
+    static PlacedRules of(TermPath root, Type type, RuleReadingSource source,
+                          ReadingPolicy policy) {
+        return of(root, type, source, policy, null);
     }
 
     /** The same, of a value narrowed out of another whose rules name some of the same positions. */

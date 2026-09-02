@@ -271,7 +271,7 @@ public final class InputDomain {
             }
             TermPath at = TermPath.of(parameter.name());
             roots.add(new RuleRoot(at, parameter.type(), new RootOpening.Taken()));
-            PlacedRules rules = PlacedRules.of(at, parameter.type(), source.symbols(), policy);
+            PlacedRules rules = PlacedRules.of(at, parameter.type(), source, policy);
             account.from(rules);
             // One walk, carrying the paths the measurement named under this parameter. Walked once
             // per demand instead, two paths sharing a prefix would open that prefix's declaration
@@ -730,7 +730,7 @@ public final class InputDomain {
      * first, and there is nowhere else to make one.
      */
     public InputReading reading(RuleReadingSource source) {
-        return new InputReading(this, quantities(source), source.symbols());
+        return new InputReading(this, quantities(source), source);
     }
 
     /**
@@ -762,7 +762,7 @@ public final class InputDomain {
             // are about. Read without it, the cases of a sum are rules about every row and refuse
             // an input between them.
             byRoot.computeIfAbsent(root.at(),
-                    at -> new OpenedRules(PlacedRules.of(at, root.type(), source.symbols(), policy),
+                    at -> new OpenedRules(PlacedRules.of(at, root.type(), source, policy),
                             root.opening()));
         }
         // Where a term's subject stands, handed over already answered. What comes back asks a
@@ -770,7 +770,7 @@ public final class InputDomain {
         // resolution of it — worked out again from the positions this hands over, a rule about a
         // name every case of a sum spreads would be read as naming nothing.
         return ReadQuantities.of(byRoot, byRoot.keySet(), byPath, cases,
-                path -> typeAt(path, source), source.symbols(), policy);
+                path -> typeAt(path, source), source, policy);
     }
 
     /**

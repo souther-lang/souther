@@ -4,6 +4,7 @@ import souther.compiler.check.AffineForms;
 import souther.compiler.check.Comparison;
 import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.Location;
+import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.inputs.InputDomain;
@@ -49,8 +50,8 @@ record AffineReading(LinearForm<NumericTerm> form, BigDecimal cut, ComparisonCla
      * every comparison places something.
      */
     static AffineReading of(Comparison comparison, InputDomain inputs, InputReads reads,
-                            Symbols symbols) {
-        return read(comparison, inputs, reads, symbols) instanceof OfAComparison.Cuts cuts
+                            RuleReadingSource ruleSource) {
+        return read(comparison, inputs, reads, ruleSource) instanceof OfAComparison.Cuts cuts
                 ? cuts.read() : null;
     }
 
@@ -108,7 +109,7 @@ record AffineReading(LinearForm<NumericTerm> form, BigDecimal cut, ComparisonCla
 
     /** The same, saying which of the three it is. */
     static OfAComparison read(Comparison comparison, InputDomain inputs, InputReads reads,
-                              Symbols symbols) {
+                              RuleReadingSource ruleSource) {
         // What this reading names as it goes, kept so that a reading which ran to the end can say
         // what it was about without anybody reading the comparison again.
         java.util.Set<NumericTerm> named = new java.util.LinkedHashSet<>();
@@ -116,7 +117,7 @@ record AffineReading(LinearForm<NumericTerm> form, BigDecimal cut, ComparisonCla
         LinearForm<NumericTerm> left = null;
         for (Core side : java.util.List.of(comparison.left(), comparison.right())) {
             AffineForms.Outcome<NumericTerm, InputReads> read =
-                    AffineForms.outcome(side, reads, reading(inputs, symbols, named));
+                    AffineForms.outcome(side, reads, reading(inputs, ruleSource, named));
             if (read instanceof AffineForms.Outcome.StoppedAt<NumericTerm, InputReads> stopped) {
                 return new OfAComparison.Stopped(stopped.node(), stopped.at());
             }
@@ -136,7 +137,7 @@ record AffineReading(LinearForm<NumericTerm> form, BigDecimal cut, ComparisonCla
                 // `-3a - 6b` — the same four points under a name no author wrote, and a different
                 // line from the rule written the other way.
                 return new OfAComparison.Cuts(
-                        here.facesTheOtherWay(subjectOf(comparison.left(), left, reads, symbols))
+                        here.facesTheOtherWay(subjectOf(comparison.left(), left, reads, ruleSource))
                                 ? here.mirrored() : here);
             }
         }
@@ -195,17 +196,17 @@ record AffineReading(LinearForm<NumericTerm> form, BigDecimal cut, ComparisonCla
      * for the whole reading of one comparison, and this reader lives exactly that long.
      */
     private static AffineForms.Reading<NumericTerm, InputReads> reading(
-            InputDomain inputs, Symbols symbols, java.util.Set<NumericTerm> named) {
+            InputDomain inputs, RuleReadingSource ruleSource, java.util.Set<NumericTerm> named) {
         return new AffineForms.Reading<NumericTerm, InputReads>() {
 
             @Override
             public Symbols symbols() {
-                return symbols;
+                return ruleSource.symbols();
             }
 
             @Override
             public LinearForm<NumericTerm> leafOf(Core node, InputReads at) {
-                NumericTerm term = InputNumber.of(node, inputs, at, symbols);
+                NumericTerm term = InputNumber.of(node, inputs, at, ruleSource);
                 if (term == null) {
                     return null;
                 }
@@ -231,7 +232,7 @@ record AffineReading(LinearForm<NumericTerm> form, BigDecimal cut, ComparisonCla
              */
             @Override
             public AffineForms.ReadThrough<InputReads> readThrough(Core.Read read, InputReads at) {
-                return NameAnswers.denoting(read, at, symbols);
+                return NameAnswers.denoting(read, at, ruleSource.symbols());
             }
 
             /**
@@ -242,7 +243,7 @@ record AffineReading(LinearForm<NumericTerm> form, BigDecimal cut, ComparisonCla
             @Override
             public java.util.List<AffineForms.ReadThrough<InputReads>> alternativesOf(
                     Core.Read read, InputReads at) {
-                return NameAnswers.alternativesOf(read, at, symbols);
+                return NameAnswers.alternativesOf(read, at, ruleSource.symbols());
             }
 
             @Override
@@ -250,11 +251,12 @@ record AffineReading(LinearForm<NumericTerm> form, BigDecimal cut, ComparisonCla
                 // Read through where the target is at no position of the input: a field of a value
                 // that stands nowhere is arithmetic's to walk into, since it is no place a row
                 // writes at.
-                boolean stands = switch (at.pathOf(fa.target(), symbols)) {
+                boolean stands = switch (at.pathOf(fa.target(), ruleSource.symbols())) {
                     case PathResolution.At _ -> true;
                     case PathResolution.NotAPosition _ -> false;
                 };
-                return !stands && !Location.isStep(fa.target().type(), fa.field(), symbols);
+                return !stands
+                        && !Location.isStep(fa.target().type(), fa.field(), ruleSource.symbols());
             }
         };
     }
@@ -324,12 +326,12 @@ record AffineReading(LinearForm<NumericTerm> form, BigDecimal cut, ComparisonCla
     /** The position the comparison's left side names first, or null where it names none. Handed the
      *  reading of that side rather than walking it again: one comparison is read once. */
     private static NumericTerm subjectOf(Core leftSide, LinearForm<NumericTerm> left,
-                                         InputReads reads, Symbols symbols) {
+                                         InputReads reads, RuleReadingSource ruleSource) {
         if (left == null || left.coefs().isEmpty()) {
             return null;
         }
         for (souther.compiler.inputs.TermPath named
-                : GuardThresholds.mentionedIn(leftSide, reads, symbols)) {
+                : GuardThresholds.mentionedIn(leftSide, reads, ruleSource.symbols())) {
             for (NumericTerm atom : left.coefs().keySet()) {
                 if (atom.subjectPath().equals(named)) {
                     return atom;

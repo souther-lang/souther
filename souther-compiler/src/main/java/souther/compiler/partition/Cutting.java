@@ -140,7 +140,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
     static Read read(String behavior, Comparison comparison,
                      InputReading read, InputReads reads) {
         AffineReading.OfAComparison canonical =
-                AffineReading.read(comparison, read.domain(), reads, read.symbols());
+                AffineReading.read(comparison, read.domain(), reads, read.rules());
         return switch (canonical) {
             // Nothing was missing: the form was read from end to end, and the quantity in it is
             // empty. Unconditional, and before anything about how the comparison was spelled —

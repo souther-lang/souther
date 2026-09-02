@@ -3,7 +3,6 @@ package souther.compiler.inputs;
 import souther.compiler.check.ReadingPolicy;
 import souther.compiler.check.RuleKey;
 import souther.compiler.check.RuleReadingSource;
-import souther.compiler.check.Symbols;
 import souther.compiler.check.ValueGuarantees;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
@@ -96,11 +95,11 @@ final class RunReach {
      * @param typeAt what stands where a path names
      */
     static NumericDomain.Bounds of(NumericTerm.TakenOver over, TermOrders orders,
-                                   Function<TermPath, Type> typeAt, Symbols symbols,
+                                   Function<TermPath, Type> typeAt, RuleReadingSource rules,
                                    ReadingPolicy policy) {
         orders.areOf(over);
         Accumulation walk = OperationFacts.accumulation(over.operation());
-        NumericDomain.Bounds element = ofTheValuesWalked(over.source(), typeAt, symbols, policy);
+        NumericDomain.Bounds element = ofTheValuesWalked(over.source(), typeAt, rules, policy);
         Granularity answeredOn = spacingOf(orders.answered());
         Granularity observedOn = spacingOf(orders.observed());
         if (walk == null || element == null || answeredOn == null || observedOn == null) {

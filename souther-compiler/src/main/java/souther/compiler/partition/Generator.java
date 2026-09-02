@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.ReadingPolicy;
+import souther.compiler.check.RuleReadingSource;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.RuleKey;
 import souther.compiler.check.FieldDomains;
@@ -2865,7 +2866,7 @@ public final class Generator {
         // there is measured on as well, and the two are one value only for as long as no term
         // arrives where they part.
         souther.compiler.inputs.TermOrders on = subject.quantities().ordersOf(target.term());
-        return edgeFrom(TermRealizations.at(writtenAt, on, at, within, subject.symbols(),
+        return edgeFrom(TermRealizations.at(writtenAt, on, at, within, subject.rules(),
                 subject.inputs().policy()), target, at);
     }
 
@@ -3523,11 +3524,11 @@ public final class Generator {
         // reading of the parameter the values are chosen against. A list built around an element
         // has to meet that too: a row holding an element in the class and breaking the rule about
         // how many the list holds is not a row.
-        FieldDomains under = rulesOf(subject.types().get(p), subject.symbols(),
+        FieldDomains under = rulesOf(subject.types().get(p), subject.rules(),
                 subject.inputs().policy(), under(root, settled));
         ConstructionPlan.Result planned = ConstructionPlan.of(subject.types().get(p), root,
                 subject.symbols(), decided.keySet(), additional,
-                (at, building) -> leastHeld(under, at, building, subject.symbols()));
+                (at, building) -> leastHeld(under, at, building, subject.rules()));
         // A row that would have to be two things at one position, which is what the model settles
         // and not something this fell short of — the same answer the class search gives when two
         // classes select different refinements of one position.
@@ -3612,16 +3613,16 @@ public final class Generator {
      * value was refused at — over a position the rules leave no room in, and over the positions
      * beside it that have nothing to do with it.
      */
-    private static int mostHeld(FieldDomains rules, TermPath path, Type building, Symbols symbols) {
+    private static int mostHeld(FieldDomains rules, TermPath path, Type building, RuleReadingSource ruleSource) {
         RuleKey field = fieldUnder(path);
-        return Partitions.mostHeld(building, symbols, field == null ? null : rules.heldAt(field));
+        return Partitions.mostHeld(building, ruleSource, field == null ? null : rules.heldAt(field));
     }
 
     /** How many the rules say the value built at {@code path} holds at the fewest, or zero where
      *  they say nothing about how many. Read the same two ways as the cap beside it. */
-    private static int leastHeld(FieldDomains rules, TermPath path, Type building, Symbols symbols) {
+    private static int leastHeld(FieldDomains rules, TermPath path, Type building, RuleReadingSource ruleSource) {
         RuleKey field = fieldUnder(path);
-        return Partitions.leastHeld(building, symbols, field == null ? null : rules.heldAt(field));
+        return Partitions.leastHeld(building, ruleSource, field == null ? null : rules.heldAt(field));
     }
 
     /**
@@ -3636,14 +3637,14 @@ public final class Generator {
                                      Map<TermPath, Place> settled) {
         TermPath root = TermPath.of(subject.parameters().get(p));
         Type declared = subject.types().get(p);
-        FieldDomains rules = rulesOf(declared, subject.symbols(), subject.inputs().policy(),
+        FieldDomains rules = rulesOf(declared, subject.rules(), subject.inputs().policy(),
                 under(root, settled));
         // A collection asked to hold a value in a class, whose rules say it holds fewer than that.
         // Nothing composes one: what the search would offer is a collection the rules refuse, and
         // saying every candidate was refused sends an author looking for a value where the rule
         // says there is no room for one.
         for (ConstructionPlan.Held each : plan.held()) {
-            if (mostHeld(rules, each.at(), each.type(), subject.symbols()) < each.least()) {
+            if (mostHeld(rules, each.at(), each.type(), subject.rules()) < each.least()) {
                 return new HeldBack.NoRoomForOne();
             }
         }
@@ -3655,7 +3656,7 @@ public final class Generator {
                 java.util.EnumSet.noneOf(CompositionBudget.class);
         for (ConstructionPlan.Slot each : plan.slots()) {
             RuleKey field = fieldUnder(each.at());
-            budgets.addAll(Partitions.notBuilt(each.type(), subject.symbols(),
+            budgets.addAll(Partitions.notBuilt(each.type(), subject.rules(),
                     subject.inputs().policy(), field == null ? null : rules.heldAt(field)));
         }
         return budgets.isEmpty() ? new HeldBack.Nothing() : new HeldBack.ByABudget(budgets);
@@ -3763,7 +3764,7 @@ public final class Generator {
             if (!budget.spend()) {
                 return null;
             }
-            FixtureTemplate whole = compose(plan.root(), chosen, subject.symbols(), subject.inputs().policy());
+            FixtureTemplate whole = compose(plan.root(), chosen, subject.rules(), subject.inputs().policy());
             return whole != null && check.refuse(p, whole).isEmpty() ? whole : null;
         }
         ConstructionPlan.Slot position = positions.get(index);
@@ -3798,10 +3799,10 @@ public final class Generator {
             return fixed;
         }
         TermPath at = TermPath.of(subject.parameters().get(p));
-        FieldDomains left = rulesOf(subject.types().get(p), subject.symbols(),
+        FieldDomains left = rulesOf(subject.types().get(p), subject.rules(),
                 subject.inputs().policy(), under(at, settled));
         RuleKey field = fieldUnder(position.at());
-        return Partitions.displacedRepresentativesOf(position.type(), subject.symbols(),
+        return Partitions.displacedRepresentativesOf(position.type(), subject.rules(),
                 subject.inputs().policy(), field == null ? null : left.at(field).bounds(),
                 field == null ? null : left.heldAt(field));
     }
@@ -3860,7 +3861,7 @@ public final class Generator {
     private static Choices choicesOf(MeasuredInput subject, int p, ConstructionPlan plan,
                                      Map<TermPath, List<FixtureTemplate>> decided,
                                      Map<TermPath, Place> settled) {
-        Symbols symbols = subject.symbols();
+        RuleReadingSource ruleSource = subject.rules();
         ReadingPolicy policy = subject.inputs().policy();
         TermPath at = TermPath.of(subject.parameters().get(p));
         List<TermPath> paths = new ArrayList<>(decided.keySet());
@@ -3868,7 +3869,7 @@ public final class Generator {
         // A position the caller fixed holds nothing back: it was given the value it is to take.
         List<List<FixtureTemplate>> reserves = new ArrayList<>(
                 java.util.Collections.nCopies(paths.size(), List.<FixtureTemplate>of()));
-        FieldDomains left = rulesOf(subject.types().get(p), symbols, policy, under(at, settled));
+        FieldDomains left = rulesOf(subject.types().get(p), ruleSource, policy, under(at, settled));
         for (ConstructionPlan.Slot slot : plan.slots()) {
             if (paths.contains(slot.at())) {
                 continue;   // an axis decides here
@@ -3876,7 +3877,7 @@ public final class Generator {
             RuleKey field = fieldUnder(slot.at());
             souther.compiler.numeric.NumericDomain.Bounds here =
                     field == null ? null : left.at(field).bounds();
-            List<FixtureTemplate> stands = Partitions.representativesHolding(slot.type(), symbols,
+            List<FixtureTemplate> stands = Partitions.representativesHolding(slot.type(), ruleSource,
                     policy, here, field == null ? null : left.heldAt(field));
             if (stands.isEmpty()) {
                 // Nothing could be written at all: a position of a type nothing stands for. Which is
@@ -3886,7 +3887,7 @@ public final class Generator {
             }
             paths.add(slot.at());
             values.add(stands);
-            reserves.add(Partitions.inReserve(slot.type(), symbols, policy, here));
+            reserves.add(Partitions.inReserve(slot.type(), ruleSource, policy, here));
         }
         return new Choices(plan, paths, values, reserves, null);
     }
@@ -4031,12 +4032,12 @@ public final class Generator {
      * offered less than its rules allow. Those are the two halves of one floor and they were the two
      * halves this was already asymmetric about.
      */
-    private static FieldDomains rulesOf(Type type, Symbols symbols, ReadingPolicy policy,
+    private static FieldDomains rulesOf(Type type, RuleReadingSource source, ReadingPolicy policy,
                                         Map<RuleKey, Count> settled) {
         return type instanceof Type.Ref(TypeSymbol.AtModule named)
-                && symbols.declaredNode(named) instanceof Hir.Data data
+                && source.symbols().declaredNode(named) instanceof Hir.Data data
                 && !data.newtype()
-                ? FieldDomains.of(named, data, symbols, policy, settled) : FieldDomains.NONE;
+                ? FieldDomains.of(named, data, source, policy, settled) : FieldDomains.NONE;
     }
 
     /**
@@ -4153,7 +4154,7 @@ public final class Generator {
             for (int i = 0; i < positions; i++) {
                 chosen.put(at.get(i), values.get(i).get(assignment[i]));
             }
-            FixtureTemplate built = compose(plan.root(), chosen, subject.symbols(), subject.inputs().policy());
+            FixtureTemplate built = compose(plan.root(), chosen, subject.rules(), subject.inputs().policy());
             if (built != null && check.refuse(p, built).isEmpty()) {
                 return Outcome.built(built);
             }
@@ -4195,19 +4196,19 @@ public final class Generator {
      * Composed without that, the row carries a value of a type the parameter does not declare.
      */
     private static FixtureTemplate compose(ConstructionPlan.Node node,
-                                           Map<TermPath, FixtureTemplate> chosen, Symbols symbols,
+                                           Map<TermPath, FixtureTemplate> chosen, RuleReadingSource ruleSource,
                                            ReadingPolicy policy) {
         return switch (node) {
             // Under the names the position wore before a narrowing reached it, and under none where
             // none did: what is chosen at a slot is a value of the narrowed type, already written
             // under whatever names that type wears, and a `data DecisionN = Decision` narrowed to
             // one of its cases is written `DecisionN(...)` all the same.
-            case ConstructionPlan.Slot slot -> worn(slot.worn(), chosen.get(slot.at()), symbols);
-            case ConstructionPlan.Built built -> composed(built, chosen, symbols, policy);
-            case ConstructionPlan.Held held -> held(held, chosen, symbols, policy);
+            case ConstructionPlan.Slot slot -> worn(slot.worn(), chosen.get(slot.at()), ruleSource);
+            case ConstructionPlan.Built built -> composed(built, chosen, ruleSource, policy);
+            case ConstructionPlan.Held held -> held(held, chosen, ruleSource, policy);
             // The requirement settled this one, so nothing was chosen for it and there is nothing to
             // look up. Under every name the position wears, since the value arrives bare.
-            case ConstructionPlan.Exact exact -> worn(exact.worn(), exact.exact(), symbols);
+            case ConstructionPlan.Exact exact -> worn(exact.worn(), exact.exact(), ruleSource);
         };
     }
 
@@ -4218,11 +4219,11 @@ public final class Generator {
      * that cannot be written rather than one written without the name.
      */
     private static FixtureTemplate worn(List<TypeOps.Layer> worn, FixtureTemplate value,
-                                        Symbols symbols) {
+                                        RuleReadingSource ruleSource) {
         if (value == null || worn.isEmpty()) {
             return value;
         }
-        List<TypeReachName.Written> names = written(worn, symbols);
+        List<TypeReachName.Written> names = written(worn, ruleSource);
         return names == null ? null : RepresentativeSource.under(names, value);
     }
 
@@ -4235,10 +4236,10 @@ public final class Generator {
      * because every value this composes needs the same answer, and three copies of the loop are
      * three chances to differ about what a name this module cannot reach comes to.
      */
-    private static List<TypeReachName.Written> written(List<TypeOps.Layer> worn, Symbols symbols) {
+    private static List<TypeReachName.Written> written(List<TypeOps.Layer> worn, RuleReadingSource ruleSource) {
         List<TypeReachName.Written> names = new ArrayList<>();
         for (TypeOps.Layer layer : worn) {
-            if (!(symbols.scope().reach(layer.named()) instanceof TypeReachName.Written name)) {
+            if (!(ruleSource.symbols().scope().reach(layer.named()) instanceof TypeReachName.Written name)) {
                 return null;
             }
             names.add(name);
@@ -4254,9 +4255,9 @@ public final class Generator {
      * them is of a type the parameter does not declare.
      */
     private static FixtureTemplate held(ConstructionPlan.Held plan,
-                                        Map<TermPath, FixtureTemplate> chosen, Symbols symbols,
+                                        Map<TermPath, FixtureTemplate> chosen, RuleReadingSource ruleSource,
                                         ReadingPolicy policy) {
-        FixtureTemplate element = compose(plan.under(), chosen, symbols, policy);
+        FixtureTemplate element = compose(plan.under(), chosen, ruleSource, policy);
         if (element == null) {
             return null;
         }
@@ -4264,27 +4265,27 @@ public final class Generator {
         // admit. What may stand beside it is the carrier's business — a list may hold the same
         // value again and a set may not — so the collection is asked for whole rather than padded
         // here.
-        if (!(souther.compiler.check.TypeView.of(plan.type(), symbols).shape()
+        if (!(souther.compiler.check.TypeView.of(plan.type(), ruleSource.symbols()).shape()
                 instanceof souther.compiler.check.Shape.Sequence carrier)) {
             return null;
         }
         FixtureTemplate collection =
-                Witnesses.holdingAlso(carrier, element, plan.least(), symbols, policy);
+                Witnesses.holdingAlso(carrier, element, plan.least(), ruleSource, policy);
         if (collection == null) {
             return null;
         }
         // A name this module cannot write leaves no value to write.
-        List<TypeReachName.Written> worn = written(plan.worn(), symbols);
+        List<TypeReachName.Written> worn = written(plan.worn(), ruleSource);
         return worn == null ? null : RepresentativeSource.under(worn, collection);
     }
 
     /** One record of the plan, out of what the assignment put at the positions under it. */
     private static FixtureTemplate composed(ConstructionPlan.Built built,
-                                            Map<TermPath, FixtureTemplate> chosen, Symbols symbols,
+                                            Map<TermPath, FixtureTemplate> chosen, RuleReadingSource ruleSource,
                                             ReadingPolicy policy) {
         Map<String, FixtureTemplate> fields = new LinkedHashMap<>();
         for (Map.Entry<String, ConstructionPlan.Node> under : built.under().entrySet()) {
-            FixtureTemplate value = compose(under.getValue(), chosen, symbols, policy);
+            FixtureTemplate value = compose(under.getValue(), chosen, ruleSource, policy);
             if (value == null) {
                 return null;
             }
@@ -4294,9 +4295,10 @@ public final class Generator {
         // off to find them. A row at a `data SlotN = Slot` carries `SlotN(Slot { ... })`, and a value
         // composed without them is of a type the parameter does not declare.
         // A name this module cannot write leaves no value to write.
-        List<TypeReachName.Written> worn = written(built.worn(), symbols);
+        List<TypeReachName.Written> worn = written(built.worn(), ruleSource);
         if (worn == null
-                || !(symbols.scope().reach(built.of()) instanceof TypeReachName.Written written)) {
+                || !(ruleSource.symbols().scope().reach(built.of())
+                        instanceof TypeReachName.Written written)) {
             return null;
         }
         // Under every name the position wears, which where a refinement narrowed it are the names
