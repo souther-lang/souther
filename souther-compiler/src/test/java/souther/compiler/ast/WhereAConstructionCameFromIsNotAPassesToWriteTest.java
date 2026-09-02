@@ -28,9 +28,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * one are this package's to call.
  *
  * <p>Read off the compiled classes and not the source, because it is a rule about who calls what: a
- * reference is in the constant pool of the class that makes it whatever the call looks like. The
- * population is every class of every module, tests included — a rule about who may write an origin
- * that stopped at the module it was written in would be a rule about one build directory.
+ * reference is in the constant pool of the class that makes it whatever the call looks like.
+ *
+ * <p>Every module's build directory that exists when this runs is walked, and what that comes to is
+ * this module's own classes and tests: the reactor builds the modules that read the compiler after
+ * it, so theirs are not there yet, and none of them names either form in the first place. The walk
+ * is written wider than what it finds so that a module which starts building one is read the day it
+ * is built before this one — and until then, the two directories that must be there are asserted to
+ * be, so this cannot pass by having looked at nothing.
  *
  * <p>The name is matched whole and the argument types are read off the descriptor, so a component
  * added to either form leaves this saying what it said: what is looked for is a constructor of one
@@ -62,16 +67,18 @@ class WhereAConstructionCameFromIsNotAPassesToWriteTest {
                         + " ones to call, and a rebuild carries the origin it was handed");
     }
 
-    /** The control: the walk reads the classes it is about, and would see the reference it forbids
-     *  where the two forms make it. */
+    /** The control: the walk reads the classes that can hold the reference, and sees one where the
+     *  forms themselves make it. */
     @Test
-    void andTheCheckReadsEveryModuleAndSeesTheReferenceWhereItIsAllowed() {
+    void andTheCheckReadsWhereTheFormsAreBuiltAndSeesTheReferenceWhereItIsAllowed() {
         List<Path> classes = everyCompiledClass();
 
-        assertTrue(classes.size() > 1000, "every module's classes: " + classes.size());
-        assertTrue(classes.stream().anyMatch(each -> internalName(each).startsWith("souther/lsp/")
-                        || internalName(each).startsWith("souther/fmt/")),
-                "a module beside the compiler is in the population");
+        assertTrue(classes.stream().anyMatch(each -> internalName(each).equals(THEIRS + "Hir")),
+                "the tree's own classes are read");
+        assertTrue(classes.stream().anyMatch(each -> internalName(each)
+                        .equals(THEIRS + WhereAConstructionCameFromIsNotAPassesToWriteTest.class
+                                .getSimpleName())),
+                "and the tests, which write these forms too — this one is among them");
         assertTrue(classes.stream().filter(each -> internalName(each).endsWith("Hir$Apply"))
                         .anyMatch(WhereAConstructionCameFromIsNotAPassesToWriteTest
                                 ::handsAnOriginToAForm),
