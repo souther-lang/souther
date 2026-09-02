@@ -132,7 +132,8 @@ class WhatABodyDoesDoesNotMoveWithTheNumbersMintedForItsNamesTest {
     // --- the fixture ------------------------------------------------------------------------
 
     private static ExecutableIdentity identityOf(String module, String behavior, Core body) {
-        return ExecutableIdentity.of(body, Binders.of(NodeAddresses.of(behavior, body)));
+        return ExecutableIdentity.of(body,
+                Binders.of(module, NodeAddresses.of(behavior, body)));
     }
 
     private static List<ExecutableIdentity> identitiesOf(String source) {

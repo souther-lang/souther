@@ -10,9 +10,11 @@ import souther.compiler.types.CoverageOrigin;
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.OptionalInt;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * The arms of a behavior's body that an {@code example} row can be in or not in.
@@ -426,8 +428,8 @@ public final class CoverageSites {
             //
             // Off the addresses the walk just took, rather than taking them again: where a body's
             // places are is one answer, and a second descent for it would be a second.
-            executable.put(body.getKey(),
-                    ExecutableIdentity.of(body.getValue(), Binders.of(walk.places)));
+            executable.put(body.getKey(), ExecutableIdentity.of(body.getValue(),
+                    Binders.of(of.module(), walk.places)));
         }
         return new Plan(List.copyOf(walk.sites), List.copyOf(walk.guards), walk.byNode,
                 walk.byComparison, walk.armsByNode, walk.controlByComparison, walk.mayRepeat,
@@ -440,6 +442,8 @@ public final class CoverageSites {
         private final List<Site> sites = new ArrayList<>();
         /** What each number handed out is an address of, at the number's own position. */
         private final List<SiteAddress> byNumber = new ArrayList<>();
+        /** The places numbered so far, so that none is numbered twice. */
+        private final Set<SiteAddress> issued = new LinkedHashSet<>();
         /** Where the places of the body being walked are. Made per body, since a path is a way down
          *  from one body's root and means a different place in every other. */
         private NodeAddresses places;
@@ -590,6 +594,15 @@ public final class CoverageSites {
                 throw new IllegalStateException("a construct with no source wrote it is being "
                         + "numbered at " + owner.pos()
                         + "; a tree rebuilt for an analysis is not the tree that runs");
+            }
+            // One number per place. A node several ways lead to is arrived at once per way, and a
+            // place numbered twice is a second site the emitter lights on no run — the shape of a
+            // real omission, and reported as one. Held on the address rather than on whatever each
+            // family has to hand: what a number is issued for is the place, so the place is what
+            // may be issued for once.
+            if (!issued.add(where)) {
+                throw new IllegalStateException("`" + behavior + "` numbers " + where
+                        + " twice; a place a run is recorded at is recorded at one number");
             }
             int index = sites.size();
             // Of the node's own coordinate. This walk is over one module and an arm of a

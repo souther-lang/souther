@@ -200,8 +200,10 @@ public record ExecutableIdentity(Kind kind, List<Object> settled,
     }
 
     private static Type open(Type type) {
+        if (type == null) {
+            return null;   // a slot of a type a constructor left empty, which says nothing here
+        }
         switch (type) {
-            case null -> { }
             case Type.MetaVar it -> throw new IllegalStateException(
                     "a body that runs holds no metavariable: " + it);
             case Type.Var it -> {
@@ -210,22 +212,13 @@ public record ExecutableIdentity(Kind kind, List<Object> settled,
                             "a body that runs holds no inferred type variable: " + it);
                 }
             }
-            // Inside as well as at the top: what is left open is left open wherever it stands, and
-            // a list of them is as much a type no run has as one of them is.
-            case Type.ListOf it -> open(it.element());
-            case Type.SetOf it -> open(it.element());
-            case Type.OptionOf it -> open(it.element());
-            case Type.MapOf it -> {
-                open(it.key());
-                open(it.value());
-            }
-            case Type.TupleOf it -> it.elements().forEach(ExecutableIdentity::open);
-            case Type.FnOf it -> {
-                it.params().forEach(ExecutableIdentity::open);
-                open(it.result());
-            }
             default -> { }
         }
+        // Inside as well as at the top: what is left open is left open wherever it stands, and a
+        // list of them is as much a type no run has as one of them is. Which types a type is made
+        // of is asked of the one place that says so, rather than listed again here — a constructor
+        // added to the language would otherwise be one this walked past.
+        Type.forEachChild(type, ExecutableIdentity::open);
         return type;
     }
 }

@@ -17,16 +17,24 @@ final class Binders {
 
     private final String behavior;
 
+    /** The declaration this body is of, which is what binds its parameters. Module and name
+     *  together, because that is what tells one owner from another: two modules declaring
+     *  {@code f} own different bindings, so a read of the other module's would be taken for this
+     *  behavior's parameter if only the name were compared. */
+    private final BindingOwner.OfValue signature;
+
     private final Map<BindingId, BinderAddress> byId;
 
-    private Binders(String behavior, Map<BindingId, BinderAddress> byId) {
+    private Binders(String module, String behavior, Map<BindingId, BinderAddress> byId) {
         this.behavior = behavior;
+        this.signature = new BindingOwner.OfValue(module, behavior);
         this.byId = byId;
     }
 
-    /** Where every binder of the body {@code places} was taken over stands. */
-    static Binders of(NodeAddresses places) {
-        return new Binders(places.behavior(), places.bound());
+    /** Where every binder of the body {@code places} was taken over stands, that body being the one
+     *  {@code module} declares under the name the addresses are of. */
+    static Binders of(String module, NodeAddresses places) {
+        return new Binders(module, places.behavior(), places.bound());
     }
 
     /**
@@ -43,13 +51,9 @@ final class Binders {
         if (local != null) {
             return local;
         }
-        // The declaration this body is of, which is what binds a parameter and numbered the
-        // parameters in the order it wrote them. Told by the name it declares and not by the module
-        // beside it: which module a plan is labelled with is the caller's word for a collection of
-        // bodies, and a body is this behavior's because it is the body this walk was handed under
-        // that name.
-        if (read.owner() instanceof BindingOwner.OfValue declared
-                && declared.name().equals(behavior)) {
+        // The declaration this body is of, which binds its parameters and numbered them in the
+        // order it wrote them.
+        if (signature.equals(read.owner())) {
             return new BinderAddress.Parameter(behavior, read.ordinal());
         }
         throw new IllegalStateException("`" + behavior + "` reads " + read

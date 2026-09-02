@@ -17,6 +17,7 @@ import java.util.Set;
 import java.util.function.Consumer;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -77,11 +78,14 @@ class EveryNameABodyReadsIsBoundSomewhereThisCanPointAtTest {
         int reads = 0;
         for (Body body : everyBody()) {
             NodeAddresses places = NodeAddresses.of(body.behavior(), body.body());
-            Binders binders = Binders.of(places);
+            Binders binders = Binders.of(body.module(), places);
             for (Core.Read read : readsIn(body.body())) {
-                if (read.binding() == null) {
-                    continue;
-                }
+                // Refused rather than passed over. A name with nothing bound to it is a body that
+                // does not run, and what this is about is that every name has a place — so a read
+                // without one is this saying less than it says it does, not a shape to skip.
+                assertNotNull(read.binding(),
+                        () -> "`" + body.behavior() + "` reads `" + read.name() + "` at "
+                                + read.pos() + ", which nothing bound");
                 reads++;
                 arms.add(binders.at(read.binding()).getClass().getSimpleName());
             }
@@ -135,11 +139,9 @@ class EveryNameABodyReadsIsBoundSomewhereThisCanPointAtTest {
         Set<String> out = new LinkedHashSet<>();
         for (Body body : bodiesOf(List.of(List.of(source)))) {
             NodeAddresses places = NodeAddresses.of(body.behavior(), body.body());
-            Binders binders = Binders.of(places);
+            Binders binders = Binders.of(body.module(), places);
             for (Core.Read read : readsIn(body.body())) {
-                if (read.binding() != null) {
-                    out.add(binders.at(read.binding()).toString());
-                }
+                out.add(binders.at(read.binding()).toString());
             }
         }
         return out;
