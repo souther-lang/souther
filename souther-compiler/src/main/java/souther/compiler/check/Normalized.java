@@ -1,7 +1,6 @@
 package souther.compiler.check;
 
 import souther.compiler.ast.Hir;
-import souther.compiler.diag.CompileException;
 import souther.compiler.types.TypeKey;
 
 /**
@@ -46,19 +45,6 @@ public final class Normalized {
             return over(NewtypeDesugar.rewriteInvariantsOf(settled.def(), scope));
         }
 
-        /**
-         * What {@link #of} could not write as a construction, of the same declaration.
-         *
-         * <p>Beside the answer and not instead of it. The two read one question off one node — a
-         * name this module resolved to a newtype, applied — and they part on the count: applied to
-         * one value it is a construction and is written as one, applied to anything else it is not
-         * one and is wrong where it was written.
-         *
-         * @throws CompileException at the first such application, where there is one
-         */
-        static void refuseMalformedIn(InvariantSettled.Def settled, ResolvedSymbols scope) {
-            NewtypeDesugar.refuseMalformedIn(settled.def(), scope);
-        }
 
         /**
          * What the language itself declares.

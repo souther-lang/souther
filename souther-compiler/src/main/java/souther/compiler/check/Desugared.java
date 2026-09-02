@@ -46,13 +46,9 @@ public final class Desugared {
          * @throws CompileException where a construction written in the body cannot be read as one
          */
         public static Fn desugar(Hir.FnDef fn, Symbols scope) {
-            // Refused before it is rewritten, and refused rather than reported beside the answer.
-            // A definition is the unit the desugaring answers in — a module is assembled from all
-            // of them and is there only when each one is — so a body that cannot be read this way
-            // costs this definition its answer and costs the ones beside it nothing.
-            NewtypeDesugar.refuseMalformedIn(fn, scope);
             return new Fn(NewtypeDesugar.rewriteOf(fn, scope));
         }
+
 
         /**
          * This state, of a definition a rung above rewrote after it was desugared.

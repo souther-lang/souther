@@ -23,13 +23,20 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * What each declaration becomes before anything is checked against it: its codecs derived, the
- * clauses it wrote expanded to the rules they state, and its newtype constructors turned into
- * constructions.
+ * What each declaration becomes before anything is checked against it, one achievement to a rung:
+ * the clauses it wrote expanded to the rules they state ({@link Settling}), the constructions in
+ * those clauses written as constructions ({@link NormalizedDeclarations}), and a product's boundary
+ * representation read off its declared shape ({@link DerivedDeclarations}).
  *
- * <p>These used to be three passes over a whole module in a fixed order, and getting that order
- * wrong was its own class of defect. Here the order is not written anywhere: each answer names what
- * it reads, and reading it is what makes it happen first.
+ * <p>Three rungs and not one, because the three have different preconditions and a reader wants
+ * different ones. Normalizing is declaration-local and is answered for every declaration a module
+ * writes; deriving a representation reads what the fields name, and a product one of whose fields
+ * names no type has none. So a declaration is read as the normalized one whether or not a
+ * representation came out — the answers a reader gets do not turn on a question it did not ask.
+ *
+ * <p>These used to be passes over a whole module in a fixed order, and getting that order wrong was
+ * its own class of defect. Here the order is not written anywhere: each answer names what it reads,
+ * and reading it is what makes it happen first.
  */
 public final class Shapes {
 
@@ -37,15 +44,14 @@ public final class Shapes {
 
 
     /**
-     * A module with its codecs derived and every invariant clause saying the rule it states — the
-     * form each declaration is read from, before what one of them wrote is normalized.
+     * A module with every invariant clause saying the rule it states — the form each declaration is
+     * read from, before what one of them wrote is normalized.
      *
-     * <p>Not what a later stage reads. This is how {@link DerivedDeclarations} works its answers
-     * out, and a mistake reached here is a mistake in the module rather than in any one
-     * declaration: the derive and the settling read every declaration to answer about each.
+     * <p>Not what a later stage reads. This is what {@link NormalizedDeclarations} works its answers
+     * out from, and a mistake reached here is a mistake in the module rather than in any one
+     * declaration: the settling reads every declaration to answer about each.
      *
-     * <p>The two go together because the settling reads a clause through the symbols the derive
-     * produced. Which clauses govern a declaration is a separate question and is not answered here:
+     * <p>Which clauses govern a declaration is a separate question and is not answered here:
      * a clause of a type this one spreads stays that type's, and
      * {@link souther.compiler.check.TypeOps#declaredInvariants} composes them where one is asked
      * for.
@@ -138,13 +144,15 @@ public final class Shapes {
     }
 
     /**
-     * One declaration with its codecs derived and its clauses expanded — what every later stage
-     * resolves a type to.
+     * One declaration with the boundary representation derived for it.
      *
      * <p>Its own question, so its failure is the named declaration's and not the ones beside it: a
-     * clause that cannot be read costs the declaration that wrote it this answer and costs the rest
-     * nothing. A module still derives its declarations together, and this is read through that, so
-     * what it depends on is still the module — what it is about is the one declaration.
+     * product whose field names no type costs itself this answer and costs the rest nothing. A
+     * module still derives its declarations together, and this is read through that, so what it
+     * depends on is still the module — what it is about is the one declaration.
+     *
+     * <p>What a later stage resolves a type to is {@link NormalizedDef}, which is answered for every
+     * declaration. This is what a reader asking how a value of one crosses is answered from.
      */
     public record DerivedDef(TypeKey named) implements Key<souther.compiler.check.Derived.Def> {
         @Override
@@ -398,13 +406,6 @@ public final class Shapes {
                 return Answer.absent();
             }
             try {
-                // A clause holding a newtype applied to anything but one value is refused here and
-                // said once. The declaration it was written on is normalized either way and is read
-                // by whoever names it; what stops is the checking of this module, because a clause
-                // nobody could read is a rule nobody can be held to.
-                for (InvariantSettled.Def def : settling.value().defs()) {
-                    souther.compiler.check.Normalized.Def.refuseMalformedIn(def, resolved.value());
-                }
                 souther.compiler.check.CheckSurface assembled =
                         souther.compiler.check.CheckSurface.assemble(
                                 settling.value(), normalized.value(), fns.value(), scope.value(),

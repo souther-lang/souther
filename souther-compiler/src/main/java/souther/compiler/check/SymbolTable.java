@@ -108,10 +108,17 @@ final class SymbolTable<D> {
         return intrinsic == null ? null : intrinsic.kernel();
     }
 
-    /** Every bare spelling that reaches a definition here, and the definition it reaches. */
-    Map<String, D> reachable() {
+    /**
+     * Every bare spelling {@code in} reaches, and the declaration this table holds for it.
+     *
+     * <p>Which spellings are in scope and what this table has for one are two questions, so the
+     * scope to walk is handed in. Walked over this table's own, a spelling would be missing because
+     * this table has nothing under it — which is what the table is being asked, not what a scope
+     * answers.
+     */
+    Map<String, D> reachable(TypeScope in) {
         Map<String, D> reached = new LinkedHashMap<>();
-        scope.denotedNames().forEach((spelling, name) -> {
+        in.denotedNames().forEach((spelling, name) -> {
             D def = declarations.declaration(name);
             if (def != null) {
                 reached.put(spelling, def);

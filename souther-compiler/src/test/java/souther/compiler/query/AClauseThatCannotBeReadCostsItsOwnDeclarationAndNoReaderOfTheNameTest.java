@@ -91,6 +91,52 @@ class AClauseThatCannotBeReadCostsItsOwnDeclarationAndNoReaderOfTheNameTest {
                 "and it lists the field it lists, whatever its clause came to");
     }
 
+    /**
+     * A declaration no representation could be derived for is still a name, however it is spelled.
+     *
+     * <p>The other half of the same rule, and the one a scope decides. A scope answers which
+     * declaration a spelling denotes and works that out by asking a registry whether the declaration
+     * is there — so asked of the derived declarations it answers that a product whose field names no
+     * type denotes nothing, and the module that named it is told this compilation has no such type.
+     * Two mistakes in two files with one written.
+     *
+     * <p>Over the three ways one is written, because a bare name, a module qualifier and an alias
+     * are three routes through the scope and the tests above take only the first.
+     */
+    @Test
+    void aDeclarationWithNoRepresentationIsStillANameHoweverItIsSpelled() {
+        Map<String, String> byId = new LinkedHashMap<>();
+        byId.put("lib.sou", """
+                module lib exposing ( Bad )
+
+                data Bad = { v: Nowhere }
+                """);
+        byId.put("app.sou", """
+                module app exposing ( bare, qualified, aliased, Out )
+
+                import lib ( Bad )
+                import lib as L
+
+                data Out = { n: Int }
+
+                behavior bare : (b: Bad) -> Out constructs Out
+                let bare (b) = Out { n = 1 }
+
+                behavior qualified : (b: lib.Bad) -> Out constructs Out
+                let qualified (b) = Out { n = 1 }
+
+                behavior aliased : (b: L.Bad) -> Out constructs Out
+                let aliased (b) = Out { n = 1 }
+                """);
+        Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
+        c.answerEverything();
+
+        assertEquals(List.of("E1023"), c.diagnostics().values().stream().flatMap(List::stream)
+                        .map(each -> each.diagnostic().code()).toList(),
+                "the field's type names nothing, and each spelling of `Bad` still reaches the"
+                        + " declaration `lib` writes");
+    }
+
     /** And by the module that imported it, which asked nothing about the clause. */
     @Test
     void theImporterReadsTheDeclarationItNamed() {

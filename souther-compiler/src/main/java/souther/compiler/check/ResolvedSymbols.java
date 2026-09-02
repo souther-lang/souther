@@ -103,7 +103,7 @@ public final class ResolvedSymbols implements Symbols {
      * {@code scope().namesInScope()}, those being two questions.
      */
     public Map<String, Hir.Def> reachable() {
-        return table.reachable();
+        return table.reachable(table.scope());
     }
 
     @Override

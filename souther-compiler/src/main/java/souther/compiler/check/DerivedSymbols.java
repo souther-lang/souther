@@ -92,9 +92,10 @@ public final class DerivedSymbols implements Symbols {
         return table.declarations();
     }
 
-    /** Every bare spelling that reaches a definition here, and the derived definition it reaches. */
+    /** Every bare spelling in scope here, and the derived declaration it reaches — which is not
+     *  every spelling, because a declaration nothing derived a representation for has none. */
     public Map<String, Derived.Def> reachable() {
-        return table.reachable();
+        return table.reachable(resolved.scope());
     }
 
     /**
@@ -119,9 +120,19 @@ public final class DerivedSymbols implements Symbols {
                 + "` is being read below the derivation, which did not answer for it");
     }
 
+    /**
+     * What a name written here means.
+     *
+     * <p>Resolution's, like the questions above it. A scope answers which declaration a spelling
+     * denotes, and it works that out by asking its registry whether a declaration is there — so a
+     * scope over the derived table would answer that a name nothing derived a representation for
+     * denotes nothing, and a reader spelling it out in full would be told this compilation has no
+     * such type. That is the same mistake as reading a declaration from the derived table, one
+     * lookup over.
+     */
     @Override
     public TypeScope scope() {
-        return table.scope();
+        return resolved.scope();
     }
 
     /**
@@ -163,28 +174,35 @@ public final class DerivedSymbols implements Symbols {
         return resolved.declaredNamesIn(module);
     }
 
+    // What is left is neither a declaration nor a name of one: the module this is a scope of, and
+    // the library it was compiled against. The three tables hold the same answer to each, being
+    // built over one module and one library — and they are asked of the resolution all the same, so
+    // that the partial table is read by the three questions above it and by nothing else. A reader
+    // of this file can see which questions those are without working out whether the answer happens
+    // to be the same.
+
     @Override
     public String module() {
-        return table.module();
+        return resolved.module();
     }
 
     @Override
     public Stdlib library() {
-        return table.library();
+        return resolved.library();
     }
 
     @Override
     public ValueName.Stdlib.Operation theWalk() {
-        return table.theWalk();
+        return resolved.theWalk();
     }
 
     @Override
     public ValueName.Stdlib.Operation theDistinctnessPredicate() {
-        return table.theDistinctnessPredicate();
+        return resolved.theDistinctnessPredicate();
     }
 
     @Override
     public Kernel kernelOf(ValueName.Stdlib.Operation operation) {
-        return table.kernelOf(operation);
+        return resolved.kernelOf(operation);
     }
 }
