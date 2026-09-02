@@ -77,7 +77,7 @@ class AGenerationThatWentOnDoesNotSayItStoppedTest {
         Sig sig = sigs.get("submit");
         InputDomain domain = InputDomain.of(spec, sig, symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         return MeasuredInput.of(spec.name(), domain.reading(symbols),
-                Partitions.of(spec.name(), domain, symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES).axes());
+                Partitions.of(spec.name(), domain, symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES));
     }
 
     private static String written(souther.compiler.partition.FillResult result) {

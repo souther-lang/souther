@@ -298,8 +298,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         if (drawn == null) {
             return null;
         }
-        return made(new BorderQuantity.OfACoordinate(AxisId.of(behavior, drawn.term()),
-                        drawn.term(), drawn.orders()),
+        return made(new BorderQuantity.OfACoordinate(behavior, drawn.term(), drawn.orders()),
                 new Level.OnACarrier(drawn.orders().answered(), drawn.value()), drawn.claim(),
                 quantities);
     }

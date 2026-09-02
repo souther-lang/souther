@@ -111,7 +111,7 @@ class GeneratorTest {
         InputDomain domain = InputDomain.of(spec, sig, symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         Partitions.Partitioning partitioning = Partitions.of(spec.name(), domain, symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         return new Model(
-                MeasuredInput.of(spec.name(), domain.reading(symbols), partitioning.axes()),
+                MeasuredInput.of(spec.name(), domain.reading(symbols), partitioning),
                 symbols);
     }
 
@@ -201,7 +201,8 @@ class GeneratorTest {
         // Axes written here rather than read off a model, so nothing counts a container of this
         // input. The reading is still the input's own: what a number at one of these positions is
         // measured on is what the declarations say, and the subject asks it for that.
-        return MeasuredInput.of("f", readingOf(symbols, "a", "b"), List.of(a, b));
+        return MeasuredInput.of("f", readingOf(symbols, "a", "b"),
+                AxesATestWrote.asAMeasurement("f", List.of(a, b)));
     }
 
     /** The reading of an input whose parameters are bare numbers, which is what says what a number
@@ -405,7 +406,8 @@ class GeneratorTest {
         NumericTerm.ValueOf atA = new NumericTerm.ValueOf(TermPath.of("a"));
         Axis only = new Axis(new AxisId("f", "a"), atA,
                 classesOf(List.of(number("low", 1), number("high", 9)), atA), List.of());
-        MeasuredInput subject = MeasuredInput.of("f", readingOf(symbols, "a"), List.of(only));
+        MeasuredInput subject = MeasuredInput.of("f", readingOf(symbols, "a"),
+                AxesATestWrote.asAMeasurement("f", List.of(only)));
 
         FillResult filled =
                 Generator.fill(subject, List.of(), Generator.CandidateCheck.ANY, Budgets.generation());

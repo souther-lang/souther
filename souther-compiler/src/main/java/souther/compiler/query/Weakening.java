@@ -115,6 +115,20 @@ public sealed interface Weakening {
     record BoundaryNotDerived(String behavior) implements Weakening {}
 
     /**
+     * The input of the behavior was not read, so no measure that reads a position of it could be
+     * finished.
+     *
+     * <p>Beside the one above rather than folded into it, because the two send a reader to
+     * different places. A behavior whose boundary was not derived has a name in its own declaration
+     * that resolved to nothing. This one's declaration is whole: what refused the reading is a hole
+     * somewhere in the module, and the behavior it stops is any behavior the module declares.
+     *
+     * <p>Named by the behavior for the reason the one above is: every measure that reads a position
+     * is short of this one thing, and which of them was asking is not part of the fact.
+     */
+    record InputNotRead(String behavior) implements Weakening {}
+
+    /**
      * The space of two-class combinations was too large to walk, so the counts describe part of it.
      *
      * <p>Not an observation that went missing and not a reading of the model that stopped: the model

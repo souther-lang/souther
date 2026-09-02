@@ -202,7 +202,7 @@ class ASearchThatStoppedSaysSoRatherThanNamingItsLastRefusalTest {
             assertNotNull(body, "the behavior under test has a body");
             return new Model(MeasuredInput.of(spec.name(), inputs.reading(symbols),
                     Partitions.of(spec.name(), inputs, symbols,
-                            souther.compiler.query.ReadAs.THE_COMPILATION_DOES).axes()),
+                            souther.compiler.query.ReadAs.THE_COMPILATION_DOES)),
                     CoverageRead.of(spec.name(), body,
                             CoverageSites.of(checked.behaviorBodies(), checked.decisions(),
                 checked.supplied()), inputs,

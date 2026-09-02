@@ -43,7 +43,7 @@ class ACutSaysWhatItDividesAndWhereTest {
     /** {@code n > t}, read as one position's own values. */
     private static Cutting onThePosition(String t) {
         return new Cutting(
-                new BorderQuantity.OfACoordinate(AxisId.of("f", term("n")), term("n"),
+                new BorderQuantity.OfACoordinate("f", term("n"),
                         souther.compiler.inputs.TermOrdersFixtures.itself(term("n"), WHOLE)),
                 new Level.OnACarrier(WHOLE, new Count(new BigDecimal(t))),
                 new ComparisonClaim.Cut(Towards.BELOW, false), null);

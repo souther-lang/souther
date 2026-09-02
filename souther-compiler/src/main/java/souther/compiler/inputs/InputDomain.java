@@ -111,7 +111,21 @@ public final class InputDomain {
      */
     public record RuleRoot(TermPath at, Type type, RootOpening opening) {}
 
-    /** Nothing to read: a behavior whose signature is not in hand. */
+    /**
+     * A reading with no positions in it.
+     *
+     * <p><b>More than one absence is written down as this, and they are not the same absence.</b> A
+     * {@code >->} composition has no input of its own — what it takes is its first stage's and is
+     * read there — and that is a fact about the behavior. A caller that could not get a reading at
+     * all also substitutes this, and that is a fact about the compile: what such a caller goes on
+     * to measure is an input with no positions, which is what a behavior the model divides nowhere
+     * comes back with.
+     *
+     * <p>The boundary measures no longer do the second ({@code Adequacy.Divided} asks for the
+     * reading and is absent without one). {@code PathReached} still does, through
+     * {@code Adequacy.domainOf}. Until that is closed this constant means the first by intent and
+     * the second by accident, and a reader must not take it for either on its own.
+     */
     public static final InputDomain NONE =
             new InputDomain(List.of(), Map.of(), List.of(), List.of(), null, NameReach.NONE,
                     List.of(), List.of(), List.of());

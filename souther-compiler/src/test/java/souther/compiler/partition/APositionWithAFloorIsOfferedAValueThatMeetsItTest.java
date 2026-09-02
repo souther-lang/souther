@@ -40,7 +40,7 @@ class APositionWithAFloorIsOfferedAValueThatMeetsItTest {
         Sig sig = sigs.get(behavior);
         InputDomain domain = InputDomain.of(spec, sig, symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         Partitions.Partitioning partitioning = Partitions.of(spec.name(), domain, symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
-        return MeasuredInput.of(spec.name(), domain.reading(symbols), partitioning.axes());
+        return MeasuredInput.of(spec.name(), domain.reading(symbols), partitioning);
     }
 
     /** The value at the position the row wrote, which is the one the search reached first. */

@@ -59,8 +59,7 @@ class OrdersAreHeldBesideTheNumberTheyAreOfTest {
     @Test
     void norIsACoordinateOfABorder() {
         assertThrows(IllegalArgumentException.class,
-                () -> new BorderQuantity.OfACoordinate(
-                        AxisId.of("weigh", CHARGE), CHARGE, OF_THE_CEILING));
+                () -> new BorderQuantity.OfACoordinate("weigh", CHARGE, OF_THE_CEILING));
     }
 
     /**

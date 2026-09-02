@@ -188,7 +188,7 @@ class ARowIsAWitnessForAnArmOnlyByGoingThroughItTest {
                             .allMatch(axis -> axis.classes().isEmpty()),
                     "and divides it into classes a row can be composed at");
             return new Model(MeasuredInput.of(spec.name(), inputs.reading(symbols),
-                    partitioning.axes()),
+                    partitioning),
                     CoverageRead.of("fee", body, plan, inputs, symbols));
         }
     }
