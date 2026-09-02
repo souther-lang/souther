@@ -17,7 +17,11 @@ import souther.compiler.query.ArmExclusion;
 import souther.compiler.query.ItemAssessment;
 import souther.compiler.query.ObligationDisposition;
 import souther.compiler.query.Compilation;
+import souther.compiler.query.EstablishmentGap;
 import souther.compiler.query.PartitionEvidence;
+import souther.compiler.query.ReadingReasons;
+import souther.compiler.query.WritabilityKnowledge;
+import souther.compiler.partition.ReadingGap;
 import souther.compiler.check.BehaviorImplementation;
 import souther.compiler.report.AdequacyReport;
 import souther.compiler.types.CoverageConstruct;
@@ -450,10 +454,19 @@ class EverySchemaWordIsAccountedForTest {
         return List.of(
                 new ObligationDisposition.Met(),
                 new ObligationDisposition.Unmet(),
-                new ObligationDisposition.Undecided(
-                        Set.of(ObligationDisposition.Uncertainty.COVERAGE)),
-                new ObligationDisposition.Undecided(
-                        Set.of(ObligationDisposition.Uncertainty.WRITABILITY)));
+                new ObligationDisposition.Undecided(List.of(
+                        new ObligationDisposition.Uncertainty.WhetherARowIsThere.ReadingsStopped(
+                                new ReadingReasons(List.of(ReadingGap.NO_VALUE))))),
+                new ObligationDisposition.Undecided(List.of(
+                        new ObligationDisposition.Uncertainty.WhetherARowIsThere.NothingWasRead(
+                                ItemAssessment.Coverage.NotAsked.NO_ROWS))),
+                new ObligationDisposition.Undecided(List.of(
+                        new ObligationDisposition.Uncertainty.WhetherARowCanBeWritten.Stopped(
+                                WritabilityKnowledge.Prevented.by(new EstablishmentGap.Observation(
+                                        Set.of(Incompleteness.Code.VALUE_UNREADABLE)))))),
+                new ObligationDisposition.Undecided(List.of(
+                        new ObligationDisposition.Uncertainty
+                                .WhetherARowCanBeWritten.NothingShowedIt())));
     }
 
     /** Every kind of disposition is sampled above, so the words below are all the words there are. */
@@ -522,9 +535,28 @@ class EverySchemaWordIsAccountedForTest {
 
     /** The questions an obligation may be undecided about, likewise spelled by the writer. */
     private static Set<String> undecidedWords() {
-        return Arrays.stream(ObligationDisposition.Uncertainty.values())
+        return ObligationDisposition.Undecided.everyQuestion().stream()
+                .map(EverySchemaWordIsAccountedForTest::oneOf)
                 .map(AdequacyReport::wire)
                 .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+    }
+
+    /**
+     * One answer of each question, for a caller that wants the word rather than the answer.
+     *
+     * <p>The word a document carries is the question's and not what left it open, so any member of
+     * the family spells it — which {@code AnObligationsExplanationNamesEachReasonOnceTest} holds
+     * the writer to.
+     */
+    private static ObligationDisposition.Uncertainty oneOf(
+            Class<? extends ObligationDisposition.Uncertainty> question) {
+        for (ObligationDisposition each : dispositions()) {
+            if (each instanceof ObligationDisposition.Undecided open
+                    && open.because().getFirst().question() == question) {
+                return open.because().getFirst();
+            }
+        }
+        throw new AssertionError("no sample above is open on " + question);
     }
 
     /** The grounds a document may name, spelled by the one writer of the field. */

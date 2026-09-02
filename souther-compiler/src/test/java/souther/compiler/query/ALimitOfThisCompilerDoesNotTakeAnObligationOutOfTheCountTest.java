@@ -48,10 +48,12 @@ class ALimitOfThisCompilerDoesNotTakeAnObligationOutOfTheCountTest {
      */
     @Test
     void aShowingStoppedByALimitLeavesTheObligationUndecided() {
-        assertEquals(new ObligationDisposition.Undecided(
-                        EnumSet.of(ObligationDisposition.Uncertainty.WRITABILITY)),
+        assertEquals(new ObligationDisposition.Undecided(List.of(
+                        new ObligationDisposition.Uncertainty.WhetherARowCanBeWritten.Stopped(
+                                prevented()))),
                 ObligationDisposition.of(new ObligationCoverage.Missed(), prevented()),
-                "the question left open is whether a row can be written, not whether one is");
+                "the question left open is whether a row can be written, not whether one is,"
+                        + " and it says what stopped the showing");
     }
 
     /**
@@ -65,12 +67,14 @@ class ALimitOfThisCompilerDoesNotTakeAnObligationOutOfTheCountTest {
      */
     @Test
     void aShowingNothingEverMadeLeavesTheObligationUndecidedToo() {
-        assertEquals(new ObligationDisposition.Undecided(
-                        EnumSet.of(ObligationDisposition.Uncertainty.WRITABILITY)),
+        assertEquals(new ObligationDisposition.Undecided(List.of(
+                        new ObligationDisposition.Uncertainty
+                                .WhetherARowCanBeWritten.NothingShowedIt())),
                 ObligationDisposition.of(new ObligationCoverage.Missed(),
                         new WritabilityKnowledge.NoEvidence()),
                 "a point nothing promises a row at is a point nobody could decide, not a point"
-                        + " the model stopped owing");
+                        + " the model stopped owing — and what it is open on is that nothing"
+                        + " showed it, which is not a budget having stopped anything");
     }
 
     /** And the same coverage where something did show it, which is the only finding of the three. */
@@ -95,9 +99,12 @@ class ALimitOfThisCompilerDoesNotTakeAnObligationOutOfTheCountTest {
                                 ReadingGap.of(Incompleteness.Code.VALUE_TRUNCATED)))),
                 prevented());
 
-        assertEquals(new ObligationDisposition.Undecided(EnumSet.of(
-                        ObligationDisposition.Uncertainty.COVERAGE,
-                        ObligationDisposition.Uncertainty.WRITABILITY)),
+        assertEquals(new ObligationDisposition.Undecided(List.of(
+                        new ObligationDisposition.Uncertainty.WhetherARowIsThere.ReadingsStopped(
+                                new ReadingReasons(List.of(
+                                        ReadingGap.of(Incompleteness.Code.VALUE_TRUNCATED)))),
+                        new ObligationDisposition.Uncertainty.WhetherARowCanBeWritten.Stopped(
+                                prevented()))),
                 disposition,
                 "the rows left one question open and the search left the other");
     }
@@ -113,13 +120,16 @@ class ALimitOfThisCompilerDoesNotTakeAnObligationOutOfTheCountTest {
      */
     @Test
     void aPointNothingWasReadAgainstIsUndecidedAboutBoth() {
-        assertEquals(new ObligationDisposition.Undecided(EnumSet.of(
-                        ObligationDisposition.Uncertainty.COVERAGE,
-                        ObligationDisposition.Uncertainty.WRITABILITY)),
+        assertEquals(new ObligationDisposition.Undecided(List.of(
+                        new ObligationDisposition.Uncertainty.WhetherARowIsThere.NothingWasRead(
+                                ItemAssessment.Coverage.NotAsked.NO_ROWS),
+                        new ObligationDisposition.Uncertainty
+                                .WhetherARowCanBeWritten.NothingShowedIt())),
                 ObligationDisposition.of(
                         new ObligationCoverage.NotMeasured(ItemAssessment.Coverage.NotAsked.NO_ROWS),
                         new WritabilityKnowledge.NoEvidence()),
-                "nothing was read and nothing promises a row, and both are open about it");
+                "nothing was read and nothing promises a row, both are open about it, and each"
+                        + " says which of the two left it so");
     }
 
     /**
@@ -205,7 +215,7 @@ class ALimitOfThisCompilerDoesNotTakeAnObligationOutOfTheCountTest {
                 Set.of(ItemAssessment.WritabilityEvidence.Ground.THE_RULES_PROVE_IT)));
     }
 
-    private static WritabilityKnowledge prevented() {
+    private static WritabilityKnowledge.Prevented prevented() {
         return WritabilityKnowledge.Prevented.by(new EstablishmentGap.Observation(
                 EnumSet.of(Incompleteness.Code.VALUE_TRUNCATED)));
     }

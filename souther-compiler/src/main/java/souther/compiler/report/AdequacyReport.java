@@ -41,6 +41,7 @@ import souther.compiler.query.ObligationAssessment;
 import souther.compiler.query.ObligationCoverage;
 import souther.compiler.query.ObligationDisposition;
 import souther.compiler.query.ObligationSummary;
+import souther.compiler.query.ReadingReasons;
 import souther.compiler.query.EstablishmentGap;
 import souther.compiler.query.WritabilityKnowledge;
 import souther.compiler.partition.ReadingGap;
@@ -516,7 +517,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         // denominator with no line under it is a difference nothing can be done about — which holds
         // of a point nobody read as much as of one nothing could show writable.
         for (Adequacy.DeclaredDebt each : account.undecided()) {
-            for (String said : undecidedBecause(each.debt().owed(),
+            for (String said : undecidedBecause(each.debt().owed().disposition(),
                     pointOf(each, each.debt().describe(names, null)))) {
                 out.append(String.format("      ? %s%n", said));
             }
@@ -1265,7 +1266,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         // a point nobody can say is missed is not a gap and is no finding, and left to the number
         // alone a reader is told a difference with nothing under it to act on.
         for (BorderObligationPointAssessment point : owed.undecided()) {
-            for (String said : undecidedBecause(point.owed(),
+            for (String said : undecidedBecause(point.owed().disposition(),
                     point.role() + " point (" + point.describe(names, declaredIn) + ")")) {
                 out.append(String.format("      ? %s%n", said));
             }
@@ -1709,53 +1710,66 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * and the second is not work an author can do. Said in one sentence, the second reads as the
      * first and sends a reader to look through their own rows for something that is not there.
      *
-     * <p>Read off the disposition rather than off what is beside it. Which questions are open is
-     * what the disposition was made to say, and a second reading here would be a second answer.
+     * <p>Read off the disposition and off nothing beside it. What each question is open on is what
+     * the disposition carries, and a second reading of the evidence here would be a second answer
+     * about one point, free to differ from the one the disposition holds. So this is handed the
+     * disposition and not the assessment it came from: the evidence is not in reach of the sentence
+     * at all, rather than in reach and left alone.
      */
-    private static List<String> undecidedBecause(ObligationAssessment owed, String point) {
-        if (!(owed.disposition() instanceof ObligationDisposition.Undecided it)) {
+    private static List<String> undecidedBecause(ObligationDisposition disposition, String point) {
+        if (!(disposition instanceof ObligationDisposition.Undecided it)) {
             return List.of();
         }
         List<String> said = new ArrayList<>();
         for (ObligationDisposition.Uncertainty each : it.because()) {
             said.add(switch (each) {
-                // And what the rows went without, which is what makes it undecided rather than
-                // missed. The reading carried whether a value was stopped or never arrived all the
-                // way here, and a sentence that stopped at "undecided" would be the last step of
-                // the carrying dropping it.
-                // What the readings went without where they ran, and why nobody read where they
-                // did not. The second used to be a note beside the numbers, said once for however
-                // many points it held of; said per point, it is what a reader walking from the
-                // denominator to the work lands on.
-                case COVERAGE -> "undecided whether a row is at the " + point
-                        + (owed.coverage() instanceof ObligationCoverage.NotMeasured
-                                ? " — " + whyNoBoundaryItem(owed.coverage())
-                                : whatTheRowsWentWithout(owed));
+                // And what the readings met, which is what makes it undecided rather than missed.
+                // The reading carried whether a value was stopped or never arrived all the way
+                // here, and a sentence that stopped at "undecided" would be the last step of the
+                // carrying dropping it.
+                case ObligationDisposition.Uncertainty.WhetherARowIsThere.ReadingsStopped(
+                        ReadingReasons met) ->
+                        "undecided whether a row is at the " + point + whatTheReadingsMet(met);
+                // And why nobody read, where nobody did. Off the question and not off the coverage
+                // beside it: what a question is open on travels with the question, so a sentence
+                // that reached past it for the evidence would be one more reader working the
+                // answer out on its own terms.
+                case ObligationDisposition.Uncertainty.WhetherARowIsThere.NothingWasRead(
+                        MeasureReason why) ->
+                        "undecided whether a row is at the " + point + " — " + whyNobodyRead(why);
                 // Named for what happened, which is not one thing. A reading that did not come
                 // back is of a row this compiler composed; a composing that stopped never had one
                 // — and an opening written for the first says a row was built at a point where
                 // none was. So the sentence is the gap's, and the gaps say which they are.
-                case WRITABILITY ->
+                case ObligationDisposition.Uncertainty.WhetherARowCanBeWritten.Stopped(
+                        WritabilityKnowledge.Prevented stopped) ->
                         "nothing could show a row can be written at the " + point
-                                + " — " + why(owed.writabilityKnowledge());
+                                + " — " + why(stopped);
+                // And where nothing was stopped there is no budget to name. What the searches came
+                // to is said under the point, a line per reading, so a summary here would be that
+                // sentence written twice with less in it.
+                case ObligationDisposition.Uncertainty.WhetherARowCanBeWritten.NothingShowedIt _ ->
+                        "nothing could show a row can be written at the " + point
+                                + " — no search of it established one";
             });
         }
         return said;
     }
 
     /**
-     * What the readings of a point went without at the border, said after the verdict.
+     * What the readings of a point met instead of a number, said after the verdict.
      *
-     * <p>Empty where they went without nothing there — a point left undecided by a row that never
-     * ran has its reason said elsewhere, and repeating it here would be one gap wearing two
+     * <p>One clause per reason and never one per reading. How many readings met a reason is how
+     * many places the line was read at, which is said under the point one reading to a line.
+     *
+     * <p>Empty where they met nothing of their own — a point left undecided by a row that never ran
+     * has its reason said where the row stopped, and repeating it here would be one gap wearing two
      * sentences.
      */
-    private static String whatTheRowsWentWithout(ObligationAssessment owed) {
+    private static String whatTheReadingsMet(ReadingReasons met) {
         List<String> said = new ArrayList<>();
-        for (Weakening each : owed.weakening().causes()) {
-            if (each instanceof Weakening.BorderValueUnreadable it) {
-                said.add(atTheBorder(it.why()));
-            }
+        for (ReadingGap each : met.eachKindOnce()) {
+            said.add(atTheBorder(each));
         }
         return said.isEmpty() ? "" : ", and " + String.join(", and ", said);
     }
@@ -1777,21 +1791,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * a reading of one value that did not come back, a composing for another that never started —
      * and what a reader wants is everything that would have to give for the point to be settled.
      */
-    private static String why(WritabilityKnowledge knowledge) {
-        if (knowledge instanceof WritabilityKnowledge.NoEvidence) {
-            // Nothing was stopped, so there is no budget to name. What the searches came to is said
-            // under the point, a line per reading, and a summary of it here would be that sentence
-            // written twice with less in it.
-            return "no search of it established one";
-        }
-        if (!(knowledge instanceof WritabilityKnowledge.Prevented(Set<EstablishmentGap> by))) {
-            // Established is the one state this is never asked of: a point something showed
-            // writable is not one nothing could show writable.
-            throw new IllegalStateException("a point undecided about being writable was shown "
-                    + "to be so: " + knowledge);
-        }
+    private static String why(WritabilityKnowledge.Prevented stopped) {
         List<String> out = new ArrayList<>();
-        for (EstablishmentGap each : by) {
+        for (EstablishmentGap each : stopped.by()) {
             out.add(switch (each) {
                 case EstablishmentGap.Observation(Set<Incompleteness.Code> causes) ->
                         "a row was built for it, and " + causes.stream()
@@ -2096,9 +2098,17 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
 
     private static String whyNoBoundaryItem(ObligationCoverage coverage) {
         MeasureReason why = coverage.why();
-        if (why == null) {
-            return "";
-        }
+        return why == null ? "" : whyNobodyRead(why);
+    }
+
+    /**
+     * Why nobody read against a point, in the words this document promises its reader.
+     *
+     * <p>Taking the reason and not a coverage to read it off. What a question is open on travels
+     * with the question ({@link ObligationDisposition.Uncertainty}), so a sentence written from the
+     * evidence beside it would be a second reader working out what the account already says.
+     */
+    private static String whyNobodyRead(MeasureReason why) {
         return switch (why) {
             case ItemAssessment.Coverage.NotAsked it -> switch (it) {
                 case NOT_ASKED -> "nothing was asked for";
@@ -3391,12 +3401,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         }
         of.put("disposition", wire(owed.disposition()));
         if (owed.disposition() instanceof ObligationDisposition.Undecided open) {
+            // In the order the questions are said in, which the disposition holds them to. A
+            // document ordering them again would be a second answer to which comes first.
             ArrayNode left = of.putArray("undecidedAbout");
-            for (ObligationDisposition.Uncertainty question
-                    : ObligationDisposition.Uncertainty.values()) {
-                if (open.because().contains(question)) {
-                    left.add(wire(question));
-                }
+            for (ObligationDisposition.Uncertainty question : open.because()) {
+                left.add(wire(question));
             }
         }
     }
@@ -3528,11 +3537,20 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         };
     }
 
-    /** Which question about an obligation nothing answered, likewise exhaustive. */
+    /**
+     * Which question about an obligation nothing answered, likewise exhaustive.
+     *
+     * <p>The question and not what it is open on. What left it open is said in the sentence under
+     * the point, where a reader can act on it; a document keys on which question stands, and the
+     * two halves of one question are one word here because a consumer asking "is whether a row is
+     * there open" is asking one thing.
+     */
     public static String wire(ObligationDisposition.Uncertainty question) {
         return switch (question) {
-            case COVERAGE -> "whether_a_row_is_at_it";
-            case WRITABILITY -> "whether_a_row_can_be_written";
+            case ObligationDisposition.Uncertainty.WhetherARowIsThere _ ->
+                    "whether_a_row_is_at_it";
+            case ObligationDisposition.Uncertainty.WhetherARowCanBeWritten _ ->
+                    "whether_a_row_can_be_written";
         };
     }
 
