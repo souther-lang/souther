@@ -36,23 +36,45 @@ public sealed interface BodyCutInspection {
     record Exhausted() implements BodyCutInspection {}
 
     /**
-     * A rule was written about the position and this phase turned it into no line.
+     * Rules are filed at the position and none of them came to a line, with what they established
+     * between them.
      *
      * <p>Not a verdict on the position. Something else may still answer for it, and what this
      * settles is only that this phase did not.
      *
-     * <p><b>That a rule states something here, and nothing about how far a reading of it got.</b>
-     * Whether the rules of the position leave a question standing is the accounting's answer, asked
-     * of every reading at once; carried here as well, this phase's own reading decided it — so a
-     * {@code guard} relating two positions, understood completely and answered for by another
-     * reading, came out as a position something is written at that nothing read.
+     * <p><b>Two answers and not one of two.</b> A position carries as many rules as its author
+     * wrote, and a reading stopping on one of them says nothing about the one beside it — so both
+     * are asked of the whole run and both are kept. Neither outranks the other here: what a verdict
+     * needs is whether anything is unsettled, which is a projection, and a precedence would be this
+     * phase deciding it. Written as "a rule is filed here", a comparison whose reading stopped and
+     * one read from end to end came out alike, and the first went out as the model stating
+     * something.
+     *
+     * <p><b>And the stop is this phase's to say, because the accounting does not say it.</b> A
+     * question is raised by a rule of a declaration and answered by whichever reading took it in; a
+     * comparison a body writes raises and answers in one breath, so no question of it ever stands.
+     * A verdict that asked only the accounting had nothing to go on for those rules.
      *
      * <p>Which rule it was is not here, and is not lost. A rule this phase could not use is a
      * {@link souther.compiler.inputs.RuleWithoutALine} made by the reader that read it, naming
      * which rule; carried through here as well, one limit at one position stood for however many
      * rules were stopped by it and the first of them was the one a report printed.
+     *
+     * @param aReadingStopped whether a rule filed here is one a reading did not get through, so
+     *                        that what it would have divided the position by is not known
+     * @param aRuleStatesSomething whether a rule filed here was read from end to end, which is the
+     *                        model stating something at the position that came to no line
      */
-    record ARuleWithNoLine() implements BodyCutInspection {}
+    record NoLine(boolean aReadingStopped, boolean aRuleStatesSomething)
+            implements BodyCutInspection {
+
+        public NoLine {
+            if (!aReadingStopped && !aRuleStatesSomething) {
+                throw new IllegalArgumentException(
+                        "no rule filed here is what Exhausted says");
+            }
+        }
+    }
 
     /**
      * What this phase came to about one position, where it answered once per number the position is
@@ -64,9 +86,9 @@ public sealed interface BodyCutInspection {
      * over.
      *
      * <p>A line anywhere outranks everything: the position is divided, whichever of its numbers the
-     * line is on. Then a rule that came to nothing outranks the rules having been exhausted, for the
-     * reason the arms are three and not two — a rule is written here, and saying the reading ran out
-     * would be the opposite of what that rule says.
+     * line is on. Between the other two nothing outranks anything — what each of them found is
+     * taken together, because a rule filed at one number of a location is filed at the location and
+     * a reading that stopped on one is not answered for by another that finished.
      */
     static BodyCutInspection outranking(BodyCutInspection first, BodyCutInspection second) {
         if (first == null) {
@@ -78,6 +100,10 @@ public sealed interface BodyCutInspection {
         if (first instanceof Evidence || second instanceof Evidence) {
             return new Evidence();
         }
-        return first instanceof ARuleWithNoLine ? first : second;
+        if (first instanceof NoLine one && second instanceof NoLine other) {
+            return new NoLine(one.aReadingStopped() || other.aReadingStopped(),
+                    one.aRuleStatesSomething() || other.aRuleStatesSomething());
+        }
+        return first instanceof NoLine ? first : second;
     }
 }

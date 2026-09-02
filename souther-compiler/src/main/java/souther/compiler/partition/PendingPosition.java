@@ -164,27 +164,22 @@ sealed interface PendingPosition {
             // Nothing about the model follows from there being no class: the position was not read
             // into, or a rule of it raises a question nothing answered.
             case Blocked _, AQuestionStands _ -> UndividedPosition.cannotDerive(at());
-            case Leaf _ -> stated(body) ? UndividedPosition.statedWithoutALine(at())
-                    : UndividedPosition.absentAfter(this);
-        };
-    }
-
-    /**
-     * Whether the model states something at this position that came to no line.
-     *
-     * <p>The rules of the position and the rules a body writes about it are one question here: a
-     * position either has a rule filed at it or it has none, and a verdict saying the model divides
-     * it no way would deny whichever of them is written. Which rule that is, and what became of the
-     * reading of it, are said in the finding that names it.
-     */
-    private static boolean stated(BodyCutInspection body) {
-        return switch (body) {
-            // The producers of this phase asked, none of them found anything, and no rule is filed
-            // at the position. Which is what an absence means: what those readers read, rather than
-            // a claim about what could have been written.
-            case BodyCutInspection.Exhausted _ -> false;
-            case BodyCutInspection.ARuleWithNoLine _ -> true;
-            case BodyCutInspection.Evidence _ -> throw new IllegalStateException("unreachable");
+            case Leaf leaf -> switch (body) {
+                // The producers of this phase asked, none of them found anything, and no rule is
+                // filed at the position. Which is what an absence means: what those readers read,
+                // rather than a claim about what could have been written.
+                case BodyCutInspection.Exhausted _ -> UndividedPosition.absentAfter(leaf);
+                // And where rules are filed here, a reading that did not get through one of them
+                // is the same news as a question standing: what that rule would have divided the
+                // position by is exactly the part nobody read. Where none of them stopped, what is
+                // left is the model stating something that came to no line — the two are not both
+                // false, which is what a rule being filed at all means.
+                case BodyCutInspection.NoLine(boolean stopped, boolean _) ->
+                        stopped ? UndividedPosition.cannotDerive(at())
+                                : UndividedPosition.statedWithoutALine(at());
+                case BodyCutInspection.Evidence _ ->
+                        throw new IllegalStateException("refused above");
+            };
         };
     }
 }

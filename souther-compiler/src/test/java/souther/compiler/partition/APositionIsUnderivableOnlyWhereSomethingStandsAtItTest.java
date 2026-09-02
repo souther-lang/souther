@@ -7,6 +7,7 @@ import souther.compiler.ast.Hir;
 import souther.compiler.check.Prepared;
 import souther.compiler.conformance.ConformanceCorpus;
 import souther.compiler.diag.Located;
+import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.RuleWithoutALine;
 import souther.compiler.inputs.StandingQuestion;
 import souther.compiler.inputs.TermPath;
@@ -181,10 +182,20 @@ class APositionIsUnderivableOnlyWhereSomethingStandsAtItTest {
                     unreached.add(at.path());
                 }
             }
+            // And a rule filed at the position that a reading did not get through. Such a rule
+            // raises no question a caller can be told about where a body wrote it — a comparison
+            // raises and answers in one breath — so the accounting has nothing to say and the
+            // finding the reader made is what says it.
+            Set<TermPath> stopped = new LinkedHashSet<>();
+            for (RuleWithoutALine rule : divided.rulesWithoutALine()) {
+                if (rule.why() instanceof BlockReason.RuleReadingStopped) {
+                    stopped.add(rule.at().path());
+                }
+            }
             for (UndividedPosition each : divided.undivided()) {
                 boolean underivable = each.why() instanceof UndividedPosition.Why.CannotDerive;
-                boolean somethingStands =
-                        standing.contains(each.at()) || unreached.contains(each.at());
+                boolean somethingStands = standing.contains(each.at())
+                        || unreached.contains(each.at()) || stopped.contains(each.at());
                 if (underivable != somethingStands) {
                     out.add(behavior + " at " + each.at() + ": " + each.why()
                             + (somethingStands ? " with something standing at it"
@@ -204,7 +215,12 @@ class APositionIsUnderivableOnlyWhereSomethingStandsAtItTest {
         forEachBehavior(compilation, (behavior, divided) -> {
             Set<TermPath> stated = new LinkedHashSet<>();
             for (RuleWithoutALine rule : divided.rulesWithoutALine()) {
-                stated.add(rule.at().path());
+                // Read from the end to the end, which is the model stating something. A rule a
+                // reading did not get through states nothing anybody here can act on, and counting
+                // it would be this check making the assumption the production code makes.
+                if (rule.why() instanceof BlockReason.ReadToEndWithoutLine) {
+                    stated.add(rule.at().path());
+                }
             }
             for (UndividedPosition each : divided.undivided()) {
                 if (each.why() instanceof UndividedPosition.Why.CannotDerive) {

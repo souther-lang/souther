@@ -433,16 +433,26 @@ public final class Partitions {
     private static BodyCutInspection cameTo(NumericTerm.FromOnePosition term,
                                             souther.compiler.inputs.TermPath path,
                                             List<RuleWithoutALine> rules) {
-        boolean stated = rules.stream().anyMatch(one -> term == null
+        List<RuleWithoutALine> here = rules.stream().filter(one -> term == null
                 ? one.at().path().equals(path)
                 : switch (one.at()) {
                     case souther.compiler.inputs.FilingCoordinate.OfTerm it ->
                             it.term().equals(term);
                     case souther.compiler.inputs.FilingCoordinate.AtPosition it ->
                             it.path().equals(path);
-                });
-        return stated ? new BodyCutInspection.ARuleWithNoLine()
-                : new BodyCutInspection.Exhausted();
+                }).toList();
+        if (here.isEmpty()) {
+            return new BodyCutInspection.Exhausted();
+        }
+        // What the rules came to, asked of each of them and kept apart. A reading that stopped on
+        // one rule is not answered for by another read from end to end, and a rule read from end to
+        // end is the model stating something whatever became of the reading beside it.
+        return new BodyCutInspection.NoLine(
+                here.stream().anyMatch(one ->
+                        one.why() instanceof souther.compiler.inputs.BlockReason.RuleReadingStopped),
+                here.stream().anyMatch(one ->
+                        one.why() instanceof souther.compiler.inputs.BlockReason
+                                .ReadToEndWithoutLine));
     }
 
     /**

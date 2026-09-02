@@ -156,8 +156,14 @@ class AnUnderivablePositionIsPublishedWithSomethingToActOnTest {
             case About.AQuestionNothingAnswered asked -> asked.asked().asked().asks().path();
             case About.APositionThisCouldNotRead read -> read.finding().finding().at();
             case About.APositionWhoseRulesWereNotReached gap -> gap.gap().at().at();
-            // A rule filed at the position, which says the reading of it finished.
-            case About.ARuleWithoutALine _,
+            // A rule filed at the position, which counts where the reading of it did not finish.
+            // Such a rule raises no question a caller is told about where a body wrote it, so this
+            // finding is the only thing that says the position is short of anything.
+            case About.ARuleWithoutALine rule ->
+                    rule.finding().finding().why()
+                            instanceof souther.compiler.inputs.BlockReason.RuleReadingStopped
+                            ? rule.finding().finding().at().path() : null;
+            case
             // The values the position was read as, wider than its rules leave them: a fact about
             // the set and about no rule, and about a position that may well be measured.
                  About.APositionReadWiderThanItsRules _,
