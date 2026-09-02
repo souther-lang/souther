@@ -17,14 +17,10 @@ import souther.compiler.types.BindingOwner;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
 
-import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.Deque;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 /**
  * What each declaration becomes before anything is checked against it: its codecs derived, the
@@ -245,59 +241,6 @@ public final class Shapes {
                     souther.compiler.check.Derived.Module.assemble(settling.value(),
                             declarations.value());
             return assembled == null ? Answer.absent() : Answer.of(assembled);
-        }
-    }
-
-    /**
-     * Whether every module outside this one that it reads derived declarations from has a complete
-     * derived surface.
-     *
-     * <p>Two tables of derived declarations, and this is the line between them.
-     * {@link DerivedDeclarations} is the module's own, and it is partial on purpose: a declaration
-     * that did not come out is left out and the ones beside it are still answered, so what is wrong
-     * with one of them costs the readers that name it and no others. That is a reading of the
-     * module's own declarations while it is being checked, and it stops at the module.
-     *
-     * <p>What crosses to another module cannot be partial. A name in an import reaches a declaration
-     * of the module that wrote it, and a table missing one entry answers "nothing declares that"
-     * — so the importing module reads a name it can see as one this compilation does not declare,
-     * and goes on to say something false about it. The mistake belongs to the module that could not
-     * derive, and nothing is added by saying it again from next door.
-     *
-     * <p>The whole way out, and not the imports written here. A declaration this module reads
-     * carries types of its own, so a module two imports away is read through it; a check over the
-     * direct imports only would let the second one's absence back in.
-     */
-    public record DerivedDependencies(String name) implements Key<Boolean> {
-        @Override
-        public String module() {
-            return name;
-        }
-
-        @Override
-        public Answer<Boolean> compute(Db db) {
-            Set<String> seen = new LinkedHashSet<>();
-            Deque<String> pending = new ArrayDeque<>(
-                    db.ask(new Front.ImportedModules(name)).value());
-            while (!pending.isEmpty()) {
-                String reached = pending.poll();
-                if (reached.equals(name) || !seen.add(reached)) {
-                    continue;
-                }
-                // A module this compilation does not have is a different mistake, and one already
-                // said where the import is written. What it was to bring in denotes nothing here,
-                // and the names that rest on it are read as the error type they are — which every
-                // reader below handles. Refused here as well, a module would go unread for an
-                // import it never had.
-                if (db.ask(new Front.Available(reached)).value() == null) {
-                    continue;
-                }
-                if (!db.ask(new Derived(reached)).present()) {
-                    return Answer.absent();
-                }
-                pending.addAll(db.ask(new Front.ImportedModules(reached)).value());
-            }
-            return Answer.of(Boolean.TRUE);
         }
     }
 

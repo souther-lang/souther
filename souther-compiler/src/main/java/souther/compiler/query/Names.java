@@ -546,15 +546,6 @@ public final class Names {
      */
     public static Answer<DerivedSymbols> derivedSymbols(
             Db db, String name) {
-        // What this module's own declarations came to may be partial — a declaration that did not
-        // come out is left out and the ones beside it are still read. What another module's are may
-        // not: a table missing an entry answers that nothing declares the name, and this module
-        // would go on to say something about a name it can see that is not true of it. So a module
-        // whose derived surface is incomplete leaves the modules that read it with no derived world
-        // at all, and the mistake stays where it is.
-        if (!db.ask(new Shapes.DerivedDependencies(name)).present()) {
-            return Answer.absent();
-        }
         return symbols(db, name, (names, stdlib) -> DerivedSymbols
                 .over(name, derivedRegistry(db), resolvedRegistry(db), names, stdlib));
     }
