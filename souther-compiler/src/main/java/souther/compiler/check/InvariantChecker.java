@@ -1398,23 +1398,24 @@ public final class InvariantChecker {
                 noLines.add(said);
             }
         }
-        Core.Binary bin = clause instanceof Core.Binary written ? written : null;
+        if (!(clause instanceof Core.Binary bin)) {
+            // Nothing but a binary is written as a comparison, so there is no reading of one for
+            // the classification to be handed.
+            settle(clause, from, states(clause, at, byName, null),
+                    new InvariantBound.Read.NoEnd(),
+                    at, byName, raised, took, typeAt, parts, raisedByPart);
+            return;
+        }
         // Where this clause is recognised as a comparison, and the one place it is. What each
         // reader below wants is what the recognition established — the two sides to walk, and what
         // the rule states of them — so each is handed that rather than the node it was read off.
         // Asked again below, the question is answered a second time and every reader has a case to
         // invent an answer for: the one where the operator compares nothing, which the recognition
         // here already took out.
-        Comparison comparison = bin == null ? null : Comparison.of(bin).orElse(null);
+        Comparison comparison = Comparison.of(bin).orElse(null);
         // And the one reading of the arithmetic over it, handed to each of the questions asked of
         // it: what the clause states, and what a reader is left with where no end came of it.
         Arithmetic read = comparison == null ? null : arithmeticOf(comparison, at, byName);
-        if (bin == null) {
-            settle(clause, from, states(clause, at, byName, read),
-                    new InvariantBound.Read.NoEnd(),
-                    at, byName, raised, took, typeAt, parts, raisedByPart);
-            return;
-        }
         // A rule that orders the values, or one that says which value they take. A rule that only
         // rules a value out is read no further here, and neither is an operator that compares
         // nothing: what is below reads a clause for the end it places on a position and for which
@@ -1819,8 +1820,8 @@ public final class InvariantChecker {
      * whether a rule relates two positions or bounds one, and what is left when they cancel is what
      * says whether the rule holds of every row. Read separately, each reader calls the same
      * arithmetic on the same two sides and the answers agree only for as long as the calls are kept
-     * the same, which is what {@link ComparisonAssessment} at the other producer is one reading for
-     * the same reason.
+     * the same, which is why the assessment a {@code guard}'s comparison goes through is one
+     * reading as well.
      *
      * <p><b>The comparison it was read of, in every case.</b> A reader below has the node to walk
      * and what the rule states of its sides without going back to either: this is what one
