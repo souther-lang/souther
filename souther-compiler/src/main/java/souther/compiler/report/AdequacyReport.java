@@ -46,6 +46,8 @@ import souther.compiler.query.EstablishmentGap;
 import souther.compiler.query.WritabilityKnowledge;
 import souther.compiler.publish.CanonicalSelection;
 import souther.compiler.publish.PublicationOrders;
+import souther.compiler.publish.WeakeningVocabulary;
+import souther.compiler.publish.WeakeningWord;
 import souther.compiler.partition.CompositionBudget;
 import souther.compiler.partition.ReadingGap;
 import souther.compiler.partition.UndividedPosition;

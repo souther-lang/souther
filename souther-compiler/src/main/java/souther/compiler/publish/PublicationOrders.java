@@ -6,8 +6,6 @@ import souther.compiler.partition.ReadingGap;
 import souther.compiler.query.EstablishmentGap;
 import souther.compiler.query.ItemAssessment;
 import souther.compiler.query.ObligationDisposition;
-import souther.compiler.report.WeakeningVocabulary;
-import souther.compiler.report.WeakeningWord;
 
 import java.util.ArrayList;
 import java.util.List;

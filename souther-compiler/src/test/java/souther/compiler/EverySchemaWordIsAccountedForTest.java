@@ -355,7 +355,7 @@ class EverySchemaWordIsAccountedForTest {
             new Vocabulary("weakening[]", List.of("$defs", "weakening", "items"),
                     Set.of("probe_mapping_lost", "row_did_not_finish"),
                     Incompleteness.Code.class,
-                    souther.compiler.report.WeakeningWord.class),
+                    souther.compiler.publish.WeakeningWord.class),
             new Vocabulary("incompleteness.scope",
                     List.of("$defs", "incompleteness", "properties", "scope"),
                     Incompleteness.Scope.class),

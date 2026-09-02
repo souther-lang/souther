@@ -80,9 +80,9 @@ class NoReasonReachesAReportUnorderedTest {
             for (Member each : membersOf(here)) {
                 if (each.type() instanceof ParameterizedType held
                         && Set.class.isAssignableFrom(rawOf(held.getRawType()))
-                        && isAKind(rawOf(held.getActualTypeArguments()[0]))) {
+                        && isAKind(held.getActualTypeArguments()[0])) {
                     found.add(here.getSimpleName() + "." + each.name() + " holds "
-                            + rawOf(held.getActualTypeArguments()[0]).getSimpleName()
+                            + held.getActualTypeArguments()[0].getTypeName()
                             + " as a set, so what a report says them in is what it iterates in");
                 }
                 for (Class<?> reached : typesIn(each.type())) {
@@ -129,10 +129,10 @@ class NoReasonReachesAReportUnorderedTest {
                 for (Type type : said) {
                     if (type instanceof ParameterizedType held
                             && unordered(rawOf(held.getRawType()))
-                            && isAKind(rawOf(held.getActualTypeArguments()[0]))) {
+                            && isAKind(held.getActualTypeArguments()[0])) {
                         found.add(each.getSimpleName() + "." + method.getName() + " takes or"
                                 + " answers with an unordered plurality of "
-                                + rawOf(held.getActualTypeArguments()[0]).getSimpleName());
+                                + held.getActualTypeArguments()[0].getTypeName());
                     }
                 }
             }
@@ -173,10 +173,26 @@ class NoReasonReachesAReportUnorderedTest {
         return out;
     }
 
-    /** Whether a plurality of this type is one a report would have to put in an order. */
-    private static boolean isAKind(Class<?> type) {
-        return (type.isEnum() && type.getPackageName().startsWith("souther.compiler"))
-                || kindsWithAnOrder().contains(type);
+    /**
+     * Whether values of this type are members of a kind a report would have to put in an order.
+     *
+     * <p>Asked of the type as it is written and not of the class it erases to. {@code ? extends
+     * CompositionBudget} erases to {@link Object} and is the budgets all the same; an arm of a sum
+     * that has an order is a member of that kind whatever it is called. Asked of the erasure, a
+     * plurality could be written in either of those shapes and answer no.
+     */
+    private static boolean isAKind(Type type) {
+        Class<?> written = rawOf(type instanceof WildcardType it && it.getUpperBounds().length > 0
+                ? it.getUpperBounds()[0] : type);
+        if (written.isEnum() && written.getPackageName().startsWith("souther.compiler")) {
+            return true;
+        }
+        for (Class<?> kind : kindsWithAnOrder()) {
+            if (kind.isAssignableFrom(written)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** Every kind something is published in an order of, which is the sums among them. */

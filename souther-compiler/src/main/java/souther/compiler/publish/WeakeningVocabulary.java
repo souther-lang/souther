@@ -1,7 +1,6 @@
-package souther.compiler.report;
+package souther.compiler.publish;
 
 import souther.compiler.observe.Incompleteness;
-import souther.compiler.publish.PublicationOrders;
 
 /**
  * The word a document writes for one weakening, out of either vocabulary it can come from.
