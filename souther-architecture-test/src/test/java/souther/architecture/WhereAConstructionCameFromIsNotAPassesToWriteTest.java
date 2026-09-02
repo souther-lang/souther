@@ -1,7 +1,6 @@
 package souther.architecture;
 
-import souther.compiler.ast.Ast;
-import souther.compiler.ast.Hir;
+import souther.compiler.ast.ConstructionOrigin;
 import souther.test.RepositoryLayout;
 
 import org.junit.jupiter.api.Test;
@@ -18,7 +17,6 @@ import java.io.UncheckedIOException;
 import java.lang.classfile.ClassFile;
 import java.lang.classfile.constantpool.MemberRefEntry;
 import java.lang.classfile.constantpool.PoolEntry;
-import java.lang.reflect.RecordComponent;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -45,12 +43,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>Read off the compiled classes and not the source, because it is a rule about who calls what: a
  * reference is in the constant pool of the class that makes it whatever the call looks like.
  *
- * <p>Both sets it works from are read off the tree rather than written here. The forms it watches
- * are the ones whose components say where a construction came from, so a third form that holds one
- * is watched the day it is written; and the members it forbids are every member of those forms whose
- * descriptor takes an origin, so a second way in beside the constructor is forbidden the day it is
- * declared. A check that spelled either set would go on saying what it said while the thing it is
- * about moved.
+ * <p>What is forbidden is a crossing and not a call on a particular form: from outside the package,
+ * naming anything inside it that takes an origin. Written the other way — the members of the forms
+ * that hold one — it would ask which forms those are, and then a method beside them taking an origin
+ * and handing it on would be a way in that the question does not reach. Nothing here knows which
+ * forms hold an origin, which is the compiler's own to say and is said in its tests.
+ *
+ * <p>What counts as an origin is read off the type: the interface and the arms it permits, so an
+ * argument written as one of the arms is one of these too.
  *
  * <p>This lives in a module that depends on every other, so every module's classes are built when it
  * runs and the population is the whole repository rather than whatever happened to be built. That
@@ -58,35 +58,30 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * what the repository is made of — a module added without a dependency from here would otherwise be
  * passed over in silence, and the build order does not reliably show it.
  *
- * <p>Which forms hold an origin, and that they are the two, is the compiler's own to say and is
- * said in its tests. What is here is the question no module can answer alone: who, across every
- * module of the reactor, calls what.
+ * <p>What is here is the question no module can answer alone: who, across every module of the
+ * reactor, calls what.
  */
 class WhereAConstructionCameFromIsNotAPassesToWriteTest {
 
-    private static final String ORIGIN = "Lsouther/compiler/ast/ConstructionOrigin;";
-
-    /** Where the forms are written, and so where an origin may be handed to one. */
+    /** Where an origin may be made, asked about and handed over. */
     private static final String THEIRS = "souther/compiler/ast/";
 
     private static final RepositoryLayout REPOSITORY = RepositoryLayout.ofWorkingDirectory();
 
     @Test
-    void nothingOutsideTheTreeWritesAnOriginIntoAConstruction() {
-        Set<String> forms = formsThatHoldAnOrigin();
-
-        List<String> writing = new ArrayList<>();
+    void nothingOutsideTheTreeHandsAnOriginToIt() {
+        List<String> handing = new ArrayList<>();
         for (Path each : everyCompiledClass()) {
-            if (internalName(each).startsWith(THEIRS) || !handsAnOriginTo(forms, each)) {
+            if (internalName(each).startsWith(THEIRS) || !handsAnOriginIn(each)) {
                 continue;
             }
-            writing.add(internalName(each));
+            handing.add(internalName(each));
         }
 
-        assertEquals(List.of(), writing.stream().sorted().toList(),
+        assertEquals(List.of(), handing.stream().sorted().toList(),
                 "a pass writing one of these forms says what it is building and not where the"
-                        + " construction came from: the constructors that take no origin are the"
-                        + " ones to call, and a rebuild carries the origin it was handed");
+                        + " construction came from: what takes no origin is what to call, and a"
+                        + " rebuild carries the origin it was handed");
     }
 
     /**
@@ -114,44 +109,40 @@ class WhereAConstructionCameFromIsNotAPassesToWriteTest {
                         + " of");
     }
 
-    /** The control: the walk found forms to watch and sees the reference where they make it
-     *  themselves. Which forms those are is the compiler's own to say, and its tests do. */
+    /** The control: the walk reads the classes it is about, and sees the crossing it forbids where
+     *  it is not a crossing at all — inside the package, where a form hands one to itself. */
     @Test
-    void andTheCheckSeesTheReferenceWhereItIsAllowed() {
-        Set<String> forms = formsThatHoldAnOrigin();
-
-        assertFalse(forms.isEmpty(), "a form that holds an origin is what this watches");
+    void andTheCheckSeesWhatItIsLookingForWhereThatIsAllowed() {
+        assertFalse(anOrigin().isEmpty(), "what an origin is, is read off the type");
         assertTrue(everyCompiledClass().stream()
-                        .filter(each -> forms.contains(internalName(each)))
-                        .anyMatch(each -> handsAnOriginTo(forms, each)),
+                        .filter(each -> internalName(each).startsWith(THEIRS))
+                        .anyMatch(WhereAConstructionCameFromIsNotAPassesToWriteTest
+                                ::handsAnOriginIn),
                 "a form hands an origin to its own constructor, which is what this reads");
     }
 
-    /** The forms that say where a construction came from, read off the trees that have them. */
-    private static Set<String> formsThatHoldAnOrigin() {
-        Set<String> holders = new LinkedHashSet<>();
-        for (Class<?> tree : List.of(Ast.class, Hir.class)) {
-            for (Class<?> form : tree.getNestMembers()) {
-                if (!form.isRecord()) {
-                    continue;
-                }
-                for (RecordComponent part : form.getRecordComponents()) {
-                    if (part.getType().getName().equals("souther.compiler.ast.ConstructionOrigin")) {
-                        holders.add(form.getName().replace('.', '/'));
-                    }
-                }
-            }
+    /** The descriptors of an origin: the type and the arms it permits, so an argument written as an
+     *  arm is one too. */
+    private static Set<String> anOrigin() {
+        Set<String> descriptors = new LinkedHashSet<>();
+        descriptors.add(descriptorOf(ConstructionOrigin.class));
+        for (Class<?> arm : ConstructionOrigin.class.getPermittedSubclasses()) {
+            descriptors.add(descriptorOf(arm));
         }
-        return holders;
+        return descriptors;
     }
 
-    /** Whether {@code compiled} names a member of one of {@code forms} that takes an origin. */
-    private static boolean handsAnOriginTo(Set<String> forms, Path compiled) {
+    private static String descriptorOf(Class<?> type) {
+        return "L" + type.getName().replace('.', '/') + ";";
+    }
+
+    /** Whether {@code compiled} names anything of the tree's package that takes an origin. */
+    private static boolean handsAnOriginIn(Path compiled) {
         try {
             for (PoolEntry entry : ClassFile.of().parse(Files.readAllBytes(compiled))
                     .constantPool()) {
                 if (entry instanceof MemberRefEntry member
-                        && forms.contains(member.owner().name().stringValue())
+                        && member.owner().name().stringValue().startsWith(THEIRS)
                         && takesAnOrigin(member.type().stringValue())) {
                     return true;
                 }
@@ -162,11 +153,15 @@ class WhereAConstructionCameFromIsNotAPassesToWriteTest {
         return false;
     }
 
-    /** Whether a descriptor takes an origin, which is what a member may not be handed from outside.
+    /** Whether a descriptor takes an origin, which is what may not be handed over from outside.
      *  What it answers with is another question: a form holds one and says so. */
     private static boolean takesAnOrigin(String descriptor) {
         int arguments = descriptor.lastIndexOf(')');
-        return arguments > 0 && descriptor.substring(0, arguments).contains(ORIGIN);
+        if (arguments < 0) {
+            return anOrigin().contains(descriptor);   // a field, whose descriptor is its type
+        }
+        String parameters = descriptor.substring(0, arguments);
+        return anOrigin().stream().anyMatch(parameters::contains);
     }
 
     /** The class's own binary name, read off the file's place under its module's build directory. */
