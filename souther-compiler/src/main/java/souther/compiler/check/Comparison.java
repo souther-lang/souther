@@ -29,7 +29,17 @@ import java.util.Optional;
  * module's bodies are enumerated. So there are three questions and three answers: what is compared,
  * which comparison it is, and where it is written.
  */
-public record Comparison(ComparisonClaim claim, Core left, Core right) {
+public final class Comparison {
+
+    private final ComparisonClaim claim;
+    private final Core left;
+    private final Core right;
+
+    private Comparison(ComparisonClaim claim, Core left, Core right) {
+        this.claim = claim;
+        this.left = left;
+        this.right = right;
+    }
 
     /** {@code at} as a comparison, or nothing where its operator compares no values. */
     public static Optional<Comparison> of(Core.Binary at) {
@@ -38,5 +48,40 @@ public record Comparison(ComparisonClaim claim, Core left, Core right) {
             case ComparisonClaim claim ->
                     Optional.of(new Comparison(claim, at.left(), at.right()));
         };
+    }
+
+    /** What its operator placed on the values. */
+    public ComparisonClaim claim() {
+        return claim;
+    }
+
+    /** The side the claim is stated of. */
+    public Core left() {
+        return left;
+    }
+
+    /** What that side is compared against. */
+    public Core right() {
+        return right;
+    }
+
+    /** Everything this holds, which is what an identity is of. The claim is read off the operator
+     *  the sides were written with, so two of these over one binary carry one claim — and it is
+     *  read here all the same, because a field left out of an identity is a field a reader of the
+     *  identity is told has not changed. */
+    @Override
+    public boolean equals(Object other) {
+        return other instanceof Comparison that && claim.equals(that.claim)
+                && left.equals(that.left) && right.equals(that.right);
+    }
+
+    @Override
+    public int hashCode() {
+        return java.util.Objects.hash(claim, left, right);
+    }
+
+    @Override
+    public String toString() {
+        return "Comparison[" + left + " " + claim + " " + right + "]";
     }
 }
