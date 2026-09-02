@@ -117,15 +117,18 @@ class EveryOutcomeOfASearchIsClassifiedWhereTheAccountReadsItTest {
                 assertEquals(List.of(
                                 ObligationDisposition.Uncertainty.WhetherARowCanBeWritten.class),
                         assertInstanceOf(ObligationDisposition.Undecided.class, disposition)
-                                .because().stream().map(Object::getClass).toList(),
+                                .because().stream()
+                                .map(ObligationDisposition.Uncertainty::question).toList(),
                         () -> leaf.getSimpleName() + " is this compiler being stopped, which is not"
                                 + " the model refusing a row and may not take one out of the count");
             } else {
-                assertEquals(new ObligationDisposition.NotCounted(
-                                Set.of(ObligationDisposition.Reason.NOT_KNOWN_TO_BE_WRITABLE)),
+                assertEquals(new ObligationDisposition.Undecided(List.of(
+                                new ObligationDisposition.Uncertainty
+                                        .WhetherARowCanBeWritten.NothingShowedIt())),
                         disposition,
                         () -> leaf.getSimpleName() + " has shown nothing and was stopped by"
-                                + " nothing, so a row at the point is not work anybody is behind on");
+                                + " nothing, which is still this compiler and not the model: the"
+                                + " point stays owed and nobody can say whether a row fits it");
             }
         });
     }

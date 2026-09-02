@@ -89,6 +89,12 @@ public final class ReportedReason {
             // drawn.
             case BlockReason.ComparisonOverARun _ ->
                     UndividedPosition.Reason.RULE_ABOUT_A_RUN;
+            // Its own word again, and the one furthest from the two above. Those two are rules that
+            // divide no position; this one divides the position it is about, and what has no line
+            // is this measure's way of holding a class. A reader told the model divides nothing
+            // here would be told the opposite of what the rule says.
+            case BlockReason.RuleDividingOutsideAnOrder _ ->
+                    UndividedPosition.Reason.PARTITION_NOT_REPRESENTABLE;
             // The same word, from the other reading of the same rule. What a document promises its
             // reader is which kind of thing stopped the derivation, and a relation between two
             // positions is one kind of thing whether the reading that met it was drawing a line or

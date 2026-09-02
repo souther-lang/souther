@@ -33,8 +33,19 @@ class AStandingQuestionSaysWhatItStandsForTest {
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
+    /**
+     * The models here with their stand-in for a rule nothing reads written out.
+     *
+     * <p>Named rather than written, because which spelling this compiler cannot read is a fact
+     * about this compiler and moves ({@link ARuleNoReadingTakesIn}).
+     */
+    private static String unreadable(String source) {
+        return source.replace("UNREAD_A", ARuleNoReadingTakesIn.about("a"))
+                .replace("UNREAD_VALUE", ARuleNoReadingTakesIn.about("value"));
+    }
+
     private static AdequacyReport measured(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
+        Compilation compilation = Compilation.ofSource(unreadable(source), "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         return AdequacyReport.of(compilation);
@@ -101,7 +112,7 @@ class AStandingQuestionSaysWhatItStandsForTest {
      * Two parts of one clause stopped in two ways, and the line says both.
      *
      * <p>{@code a /= b} relates the position to another, which this reading recognised and has no
-     * set of one position's values for; {@code String.startsWith} is a form it does not take apart.
+     * set of one position's values for; the other is a form it does not take apart.
      * The two are lifted by different work, so an author told only one of them lifts it and finds
      * the question still standing.
      *
@@ -118,7 +129,7 @@ class AStandingQuestionSaysWhatItStandsForTest {
                         module probe.two
 
                         data Pair = { a: String, b: String }
-                            invariant both = a /= b && String.startsWith("x", a)
+                            invariant both = a /= b && UNREAD_A
 
                         behavior read : (p: Pair) -> Ok
                         """), "invariant Pair (both)"));
@@ -131,7 +142,7 @@ class AStandingQuestionSaysWhatItStandsForTest {
                         module probe.two
 
                         data Pair = { a: String, b: String }
-                            invariant both = String.startsWith("x", a) && a /= b
+                            invariant both = UNREAD_A && a /= b
 
                         behavior read : (p: Pair) -> Ok
                         """), "invariant Pair (both)"),
@@ -214,7 +225,7 @@ class AStandingQuestionSaysWhatItStandsForTest {
                 module probe.regex
 
                 data Number = String
-                    invariant String.startsWith("T", value)
+                    invariant UNREAD_VALUE
 
                 data Held = { n: Number }
 
@@ -226,7 +237,7 @@ class AStandingQuestionSaysWhatItStandsForTest {
                         module probe.two
 
                         data Pair = { a: String, b: String }
-                            invariant both = a /= b && String.startsWith("x", a)
+                            invariant both = a /= b && UNREAD_A
 
                         behavior read : (p: Pair) -> Ok
                         """));
@@ -236,7 +247,7 @@ class AStandingQuestionSaysWhatItStandsForTest {
                         module probe.two
 
                         data Pair = { a: String, b: String }
-                            invariant both = String.startsWith("x", a) && a /= b
+                            invariant both = UNREAD_A && a /= b
 
                         behavior read : (p: Pair) -> Ok
                         """),

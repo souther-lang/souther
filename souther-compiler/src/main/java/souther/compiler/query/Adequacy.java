@@ -3809,6 +3809,19 @@ public final class Adequacy {
             return debt.against(axis);
         }
 
+        /**
+         * Whether the declaration has a quantity to say the point on.
+         *
+         * <p>Asked rather than read back off {@link #said()}. A line between two positions writes
+         * its level as a distance from the other one, which is a reading's name for it and not the
+         * declaration's, so there is no quantity here and the point is the rule's line and the role
+         * on it. A report comparing the sentence with the rule's name to work that out would be
+         * deciding from the words what the account already answers.
+         */
+        public boolean namesItsQuantity() {
+            return against() != null;
+        }
+
         /** What a finding about it is about, which is every declaration that owes it. */
         public FindingSubject.OfADeclaration subject() {
             return new FindingSubject.OfADeclaration(
@@ -4350,11 +4363,23 @@ public final class Adequacy {
             }
             // What the model divides this position no way at all, which is the classes question and
             // is answered only for a position that has none.
+            //
+            // Over the verdict and not over a boolean read off it. The three answers are three
+            // different things to say — the model divides nothing here, this could not read what is
+            // written here, and a rule divides it in a way no line of this measure holds — and a
+            // reader that asked only "is it the first" filed the other two under the first's
+            // sentence (issue #1249). A fourth answer arrives here as a compile error.
             for (souther.compiler.partition.UndividedPosition position : partition.notDerivable()) {
-                if (position.isAbsent()) {
-                    out.add(Finding.noticed(behavior.name(),
-                            Citation.of(behavior.pos()),
-                            new About.APositionNoLineDivides(position)));
+                switch (position.why()) {
+                    case souther.compiler.partition.UndividedPosition.Why.Absent _ ->
+                            out.add(Finding.noticed(behavior.name(),
+                                    Citation.of(behavior.pos()),
+                                    new About.APositionNoLineDivides(position)));
+                    // Both are said by the rule that stopped it, in a finding of its own with the
+                    // rule named. Said here as well, they would be one situation under two
+                    // sentences, and the one here has no rule to name.
+                    case souther.compiler.partition.UndividedPosition.Why.CannotDerive _,
+                         souther.compiler.partition.UndividedPosition.Why.StatedWithoutALine _ -> { }
                 }
             }
             // And what this could not read, asked of the one reading that answers it. A position
