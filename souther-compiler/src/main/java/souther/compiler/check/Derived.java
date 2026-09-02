@@ -61,7 +61,7 @@ public final class Derived {
          * @throws CompileException where what the declaration says cannot be read that way
          */
         static Def derive(InvariantSettled.Def settled, ResolvedSymbols scope) {
-            return switch (NewtypeDesugar.rewriteInvariantsOf(settled.def(), scope)) {
+            return switch (normalized(settled, scope)) {
                 case Hir.Data d -> {
                     Deriver.Codecs codecs = Deriver.derive(d, scope);
                     yield codecs == null ? null : new Data(d, codecs);
@@ -121,6 +121,23 @@ public final class Derived {
         default TypeKey declaredKey() {
             return declared().declaredKey();
         }
+    }
+
+    /**
+     * The declaration-local form a declaration is written in below the settling: the newtype
+     * constructions in what it says about itself, written as the constructions they denote.
+     *
+     * <p>Told apart from deriving a representation, and shared with what reads a declaration that
+     * has none. A product whose fields do not all name a type has no representation to derive, and
+     * the constructions in its clauses are still the constructions they are — so what a best-effort
+     * reading of the module puts in its place is this, and not the spelling one rung up. Written
+     * once so the two cannot come apart: a reader comparing a declaration on such a surface against
+     * {@link Def#declared()} finds the same node.
+     *
+     * @throws CompileException where what the declaration says cannot be read that way
+     */
+    public static Hir.Def normalized(InvariantSettled.Def settled, ResolvedSymbols scope) {
+        return NewtypeDesugar.rewriteInvariantsOf(settled.def(), scope);
     }
 
     /**
