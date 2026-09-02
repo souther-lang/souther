@@ -9,10 +9,8 @@ import org.junit.jupiter.api.Test;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.lang.classfile.ClassFile;
-import java.lang.classfile.ClassModel;
-import java.lang.classfile.CodeElement;
-import java.lang.classfile.MethodModel;
-import java.lang.classfile.instruction.InvokeInstruction;
+import java.lang.classfile.constantpool.MemberRefEntry;
+import java.lang.classfile.constantpool.PoolEntry;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
 import java.nio.file.Files;
@@ -24,27 +22,37 @@ import java.util.TreeSet;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Who may say which construct a coverage obligation was written as.
  *
  * <p>A non-recursive helper is expanded at each call, so one construct the author wrote becomes
  * several in the tree that runs, and what says those copies are one obligation is that they carry
- * one origin. An origin minted after that expansion gives two copies of one construct two, which is
+ * one origin. An origin made after that expansion gives two copies of one construct two, which is
  * the thing the type exists to prevent. Its own account says where one may be made: at the reading
  * of a source construct, at a rewrite that reads a call back as the comparison it means and has no
  * source to answer for, and at the derivation of the forks a lowering makes.
  *
- * <p>Nothing held that. The record's canonical constructor is public, as a record's is, and takes
- * every component; a member that answers for its caller leaves the caller's classes clean. So the
- * account is read off the compiled classes here instead: every call that settles an origin, with who
- * makes it. A row added is a place answering for a construct it did not read.
+ * <p>Nothing held that. The record's constructor is public and takes every component, as a record's
+ * is, so a pass reaching for one makes whatever it likes. So the account is read off the compiled
+ * classes here: every class naming a member that makes an origin, with the member it names.
+ *
+ * <p>What is read is the constant pool and not the instructions. A name reached through a method
+ * reference is a constant and no call instruction — {@code CoverageOrigin::unwritten} handed to
+ * something that will call it makes an origin as surely as calling it here does, and a walk over
+ * instructions passes over it.
  *
  * <p>Not the shape its neighbours have. Where a construction came from and which of its fields had
  * to be written are answered by asking the node, so their vocabulary stays inside the package that
- * owns it and a check over callers is enough. What reads an origin reads the module, the construct
- * and the fork, so the vocabulary crosses and the calls are what there is to read.
+ * owns it and a check over callers is enough. What reads a coverage origin reads the module, the
+ * construct and the fork, so the vocabulary crosses and who names the makers is what there is to
+ * read.
+ *
+ * <p>A member that hands on an origin it was given is not one of these. {@link
+ * souther.compiler.ast.Hir.ListComp#forkOfGuard} derives a fork by asking the origin it holds, and
+ * what it can answer with is a fork of its own comprehension and nothing else — which is that
+ * method's to refuse and is refused there, rather than a thing this could tell by reading a call.
  */
 class WhoMaySettleACoverageOriginTest {
 
@@ -56,31 +64,89 @@ class WhoMaySettleACoverageOriginTest {
 
     private static final String A_CONSTRUCT = "L" + internalNameOf(CoverageConstruct.class) + ";";
 
-    private static String internalNameOf(Class<?> type) {
-        return type.getName().replace('.', '/');
-    }
-
     private static final RepositoryLayout REPOSITORY = RepositoryLayout.ofWorkingDirectory();
 
     /**
-     * The members that settle an origin: whatever answers with one, and the constructor they all go
-     * through.
-     *
-     * <p>Read off the type rather than written out, so a member added beside them is one of these by
-     * being one. A list spelled here would be a list of what was thought of, and a way to make an
-     * origin that this walk then passed over is the way one would come to be made.
-     *
-     * <p>Each is named by what it takes and answers with, and not by its name alone. A fork is
-     * derived by {@code lowered} taking the part it is of, and the fork a value already is, is read
-     * by {@code lowered} taking nothing — one name over a derivation and an accessor, which a key
-     * made of names alone puts in one row and reports a reader as a writer.
+     * What makes an origin, written down — so that a way of making one that is added is a row here
+     * before anyone names it, and not a silence until someone does.
      */
-    private static Set<String> settlingMembers() {
+    private static final List<String> MAKERS = List.of(
+            OWNER + "#<init>(Ljava/lang/String;II" + A_CONSTRUCT + ")V",
+            OWNER + "#lowered(I)" + AN_ORIGIN,
+            OWNER + "#unwritten()" + AN_ORIGIN,
+            OWNER + "#written(Ljava/lang/String;I" + A_CONSTRUCT + ")" + AN_ORIGIN);
+
+    /**
+     * Every class that names one of the makers, with the maker it names.
+     *
+     * <p>A source construct is read in one place. {@code TheOtherCase}, {@code Terms} and
+     * {@code Conditions} read a preserved call back as the comparison it means, and a preserved call
+     * holds no origin, so there is none to carry and each says which it is answering. The fork of a
+     * comprehension's guard is derived where the comprehension is, so that the lowering and the
+     * reading that runs before it cannot number the guards differently.
+     *
+     * <p>The constructor is named only from inside {@code CoverageOrigin}. A row naming it elsewhere
+     * is a pass making an origin of its own, which after an expansion is two obligations where the
+     * author wrote one.
+     */
+    private static final List<String> NAMING_A_MAKER = List.of(
+            "souther/compiler/ast/Hir$ListComp -> " + OWNER + "#lowered(I)" + AN_ORIGIN,
+            "souther/compiler/check/Conditions -> " + OWNER + "#unwritten()" + AN_ORIGIN,
+            "souther/compiler/check/Conditions$AsPolar -> " + OWNER + "#unwritten()" + AN_ORIGIN,
+            "souther/compiler/check/Terms -> " + OWNER + "#unwritten()" + AN_ORIGIN,
+            "souther/compiler/check/TheOtherCase -> " + OWNER + "#unwritten()" + AN_ORIGIN,
+            "souther/compiler/frontend/AstBuilder -> " + OWNER
+                    + "#written(Ljava/lang/String;I" + A_CONSTRUCT + ")" + AN_ORIGIN,
+            OWNER + " -> " + OWNER + "#<init>(Ljava/lang/String;II" + A_CONSTRUCT + ")V");
+
+    @Test
+    void everyWayOfMakingOneIsWrittenDown() {
+        assertEquals(MAKERS, new ArrayList<>(makers()),
+                "a row added here is a way to say which construct an obligation was written as:"
+                        + " say what reads a source to answer it, and add who names it");
+    }
+
+    @Test
+    void andEveryClassThatNamesOneIsWrittenDownWithWhatItNames() {
+        assertEquals(NAMING_A_MAKER, new ArrayList<>(namingAMaker()),
+                "an origin is made where a source is read and where a rewrite has no source to"
+                        + " answer for, and derived where a lowering forks one construct into"
+                        + " several: a row that is neither is a copy given an obligation of its own");
+    }
+
+    /**
+     * The walk reads every module's classes.
+     *
+     * <p>Asked of the modules the repository has and not of what a build happened to leave: a module
+     * whose classes are missing is one whose calls this cannot see, and the rows from the rest would
+     * match and this would pass while answering about fewer modules than it names.
+     */
+    @Test
+    void andEveryModuleTheRepositoryHoldsWasRead() {
+        List<String> unbuilt = new ArrayList<>();
+        for (Path module : REPOSITORY.modules()) {
+            if (!Files.isDirectory(classesOf(module)) && hasMainSources(module)) {
+                unbuilt.add(module.getFileName().toString());
+            }
+        }
+
+        assertEquals(List.of(), unbuilt,
+                "a module whose classes are not built is one this walk passes over, and a walk that"
+                        + " passes over a module answers about the rest while saying it answers"
+                        + " about all of them");
+        assertTrue(modulesRead() > 1,
+                "the classes this reads are in more than the one module that declares an origin");
+    }
+
+    /** Every member of {@code CoverageOrigin} that answers with one, and the constructor they all go
+     *  through — read off the type rather than written out, so a member added beside them is one of
+     *  these by being one. */
+    private static Set<String> makers() {
         Set<String> members = new TreeSet<>();
         for (Method each : CoverageOrigin.class.getDeclaredMethods()) {
             if (each.getReturnType() == CoverageOrigin.class) {
-                members.add(OWNER + "#" + each.getName() + descriptorOf(
-                        each.getParameterTypes(), each.getReturnType()));
+                members.add(OWNER + "#" + each.getName()
+                        + descriptorOf(each.getParameterTypes(), each.getReturnType()));
             }
         }
         for (Constructor<?> each : CoverageOrigin.class.getDeclaredConstructors()) {
@@ -89,21 +155,75 @@ class WhoMaySettleACoverageOriginTest {
         return members;
     }
 
-    /**
-     * What settling an origin looks like, written down — so that a way of doing it that is added is
-     * a row here before anyone calls it, and not a silence.
-     */
-    private static final List<String> SETTLES = List.of(
-            OWNER + "#<init>(Ljava/lang/String;II" + A_CONSTRUCT + ")V",
-            OWNER + "#lowered(I)" + AN_ORIGIN,
-            OWNER + "#unwritten()" + AN_ORIGIN,
-            OWNER + "#written(Ljava/lang/String;I" + A_CONSTRUCT + ")" + AN_ORIGIN);
+    /** Every class naming a maker, as the class and the maker — the maker by the whole of what it
+     *  is, as the key that found it was. */
+    private static Set<String> namingAMaker() {
+        Set<String> found = new TreeSet<>();
+        Set<String> makers = makers();
+        for (Path module : REPOSITORY.modules()) {
+            for (Path each : classesUnder(module)) {
+                for (PoolEntry entry : constantPoolOf(each)) {
+                    if (entry instanceof MemberRefEntry member) {
+                        String named = member.owner().name().stringValue() + "#"
+                                + member.name().stringValue() + member.type().stringValue();
+                        if (makers.contains(named)) {
+                            found.add(internalName(module, each) + " -> " + named);
+                        }
+                    }
+                }
+            }
+        }
+        return found;
+    }
 
-    @Test
-    void everyWayOfSettlingOneIsWrittenDown() {
-        assertEquals(SETTLES, new ArrayList<>(settlingMembers()),
-                "a row added here is a way to say which construct an obligation was written as:"
-                        + " say what reads a source to answer it, and add the calls that reach it");
+    private static int modulesRead() {
+        int read = 0;
+        for (Path module : REPOSITORY.modules()) {
+            if (!classesUnder(module).isEmpty()) {
+                read++;
+            }
+        }
+        return read;
+    }
+
+    private static Iterable<PoolEntry> constantPoolOf(Path compiled) {
+        try {
+            return ClassFile.of().parse(Files.readAllBytes(compiled)).constantPool();
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
+
+    /** The class's own binary name, taken against the directory it was found under rather than off
+     *  the first {@code classes} in the path, which a checkout under one would be. */
+    private static String internalName(Path module, Path compiled) {
+        String name = classesOf(module).relativize(compiled).toString().replace('\\', '/');
+        return name.substring(0, name.length() - ".class".length());
+    }
+
+    private static Path classesOf(Path module) {
+        return module.resolve("target").resolve("classes");
+    }
+
+    /** Whether the module has main sources to have been built from. A module holding only tests or
+     *  only a pom leaves no classes and is not one this walk is missing. */
+    private static boolean hasMainSources(Path module) {
+        return Files.isDirectory(module.resolve("src").resolve("main").resolve("java"));
+    }
+
+    /** The compiled classes of one module that the compiler is made of. Its own tests are not among
+     *  them: a test builds an origin to look at it and ships nothing, and a list that moved whenever
+     *  one was written is a list nobody keeps up. */
+    private static List<Path> classesUnder(Path module) {
+        Path where = classesOf(module);
+        if (!Files.isDirectory(where)) {
+            return List.of();
+        }
+        try (Stream<Path> found = Files.walk(where)) {
+            return found.filter(p -> p.toString().endsWith(".class")).toList();
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
     }
 
     /** The descriptor of a member taking these and answering with that. */
@@ -131,103 +251,7 @@ class WhoMaySettleACoverageOriginTest {
         return "L" + internalNameOf(type) + ";";
     }
 
-    /**
-     * Every call that settles an origin, and who makes it.
-     *
-     * <p>A source construct is read in one place. {@code TheOtherCase}, {@code Terms} and
-     * {@code Conditions} read a preserved call back as the comparison it means, and a preserved call
-     * holds no origin, so there is none to carry and each says which it is answering. The fork of a
-     * comprehension's guard is derived where the comprehension is, so that the lowering and the
-     * reading that runs before it cannot number the guards differently.
-     *
-     * <p>The constructor is reached only from the members above. A row naming it elsewhere is a
-     * pass minting an origin of its own, which after an expansion is two obligations where the
-     * author wrote one.
-     */
-    private static final List<String> SETTLING = List.of(
-            "souther/compiler/ast/Hir$ListComp -> souther/compiler/types/CoverageOrigin#lowered",
-            "souther/compiler/check/Conditions -> souther/compiler/types/CoverageOrigin#unwritten",
-            "souther/compiler/check/Conditions$AsPolar -> souther/compiler/types/CoverageOrigin#unwritten",
-            "souther/compiler/check/Terms -> souther/compiler/types/CoverageOrigin#unwritten",
-            "souther/compiler/check/TheOtherCase -> souther/compiler/types/CoverageOrigin#unwritten",
-            "souther/compiler/frontend/AstBuilder -> souther/compiler/types/CoverageOrigin#written",
-            "souther/compiler/types/CoverageOrigin -> souther/compiler/types/CoverageOrigin#<init>");
-
-    @Test
-    void everyCallThatSettlesOneIsWrittenDownWithWhoMakesIt() {
-        assertEquals(SETTLING, new ArrayList<>(settlingAnOrigin()),
-                "an origin is made where a source is read and where a rewrite has no source to"
-                        + " answer for, and derived where a lowering forks one construct into"
-                        + " several: a row that is neither is a copy given an obligation of its own");
-    }
-
-    /** The control: the walk reads the whole reactor and not only the class it is about, which is
-     *  where the calls it lists are made. */
-    @Test
-    void andTheWalkReadsEveryModulesClasses() {
-        assertFalse(everyCompiledClass().stream()
-                        .allMatch(each -> internalName(each).startsWith(OWNER)),
-                "the calls this reads are made outside the class that declares what they reach");
-    }
-
-    /** Every call to a settling member, as the class that makes it and what it settles. */
-    private static Set<String> settlingAnOrigin() {
-        Set<String> found = new TreeSet<>();
-        for (Path each : everyCompiledClass()) {
-            ClassModel model = parse(each);
-            for (MethodModel method : model.methods()) {
-                method.code().ifPresent(code -> {
-                    for (CodeElement element : code) {
-                        if (element instanceof InvokeInstruction invoked
-                                && settlingMembers().contains(
-                                        invoked.owner().name().stringValue() + "#"
-                                        + invoked.name().stringValue()
-                                        + invoked.typeSymbol().descriptorString())) {
-                            found.add(internalName(each) + " -> "
-                                    + invoked.owner().name().stringValue() + "#"
-                                    + invoked.name().stringValue());
-                        }
-                    }
-                });
-            }
-        }
-        return found;
-    }
-
-    private static ClassModel parse(Path compiled) {
-        try {
-            return ClassFile.of().parse(Files.readAllBytes(compiled));
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
-        }
-    }
-
-    /** The class's own binary name, read off the file's place under its module's build directory. */
-    private static String internalName(Path compiled) {
-        String path = compiled.toString().replace('\\', '/');
-        int from = path.indexOf("/classes/") + "/classes/".length();
-        return path.substring(from, path.length() - ".class".length());
-    }
-
-    /**
-     * The compiled classes of every module of this build that the compiler is made of.
-     *
-     * <p>Its own tests are not among them. A test builds an origin to look at it and ships nothing,
-     * and a list that moved whenever one was written is a list nobody keeps up.
-     */
-    private static List<Path> everyCompiledClass() {
-        List<Path> out = new ArrayList<>();
-        for (Path module : REPOSITORY.modules()) {
-            Path where = module.resolve("target").resolve("classes");
-            if (!Files.isDirectory(where)) {
-                continue;
-            }
-            try (Stream<Path> found = Files.walk(where)) {
-                out.addAll(found.filter(p -> p.toString().endsWith(".class")).toList());
-            } catch (IOException e) {
-                throw new UncheckedIOException(e);
-            }
-        }
-        return out;
+    private static String internalNameOf(Class<?> type) {
+        return type.getName().replace('.', '/');
     }
 }

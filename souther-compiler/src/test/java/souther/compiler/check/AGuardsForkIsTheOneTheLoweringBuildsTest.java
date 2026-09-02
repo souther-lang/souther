@@ -12,6 +12,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
  * A comprehension's guard is one fork, whichever of its two readers is asking.
@@ -53,6 +54,24 @@ class AGuardsForkIsTheOneTheLoweringBuildsTest {
 
         assertNotEquals(comp.forkOfGuard(0), comp.forkOfGuard(1),
                 "two guards of one comprehension are two forks");
+    }
+
+    /**
+     * A fork is one of the guards, and asking for one that is not refuses.
+     *
+     * <p>The fork before the first is what the construct itself is owed for, and a value answering
+     * that from here would be an obligation about the comprehension wearing a guard's name. The
+     * fork after the last is a branch the lowering does not build, and an obligation about one is
+     * about nothing.
+     */
+    @Test
+    void andWhatIsNotAGuardIsNotAFork() {
+        Hir.ListComp comp = aComprehensionGuardedBy(2);
+
+        assertThrows(IndexOutOfBoundsException.class, () -> comp.forkOfGuard(-1),
+                "the fork before the first would pass for the comprehension's own obligation");
+        assertThrows(IndexOutOfBoundsException.class, () -> comp.forkOfGuard(2),
+                "the lowering builds a fork for each guard and no more");
     }
 
     /** The origins the lowering put on the {@code if} it built for each guard, outermost first —

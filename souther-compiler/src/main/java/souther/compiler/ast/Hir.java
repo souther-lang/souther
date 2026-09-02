@@ -1477,8 +1477,19 @@ public interface Hir {
          * before the lowering, where a rule is still a parameter. Written once here so that the two
          * cannot come to number the guards differently — the numbering is what makes an obligation
          * name a fork that exists, and it held only while both spelled the same arithmetic.
+         *
+         * @throws IndexOutOfBoundsException where {@code at} is not a guard of this comprehension.
+         *                                   A fork is one of the guards and nothing else is one:
+         *                                   the fork before the first would be the comprehension's
+         *                                   own origin, which is a different obligation and would
+         *                                   pass for this one, and the fork after the last is a
+         *                                   branch the lowering does not build
          */
         public CoverageOrigin forkOfGuard(int at) {
+            if (at < 0 || at >= guards.size()) {
+                throw new IndexOutOfBoundsException(
+                        "a fork is one of the guards written: " + at + " of " + guards.size());
+            }
             return origin.lowered(at);
         }
     }
