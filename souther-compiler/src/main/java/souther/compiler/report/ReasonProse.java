@@ -91,7 +91,15 @@ record ReasonProse(Introduction introduction, Clause said) {
      */
     record Clause(String words, Scope scope) {}
 
-    /** What the report says about this reason, and what it is about. */
+    /**
+     * What the report says about this reason, and what it is about.
+     *
+     * <p>The three arms are tried in the order they are written, and that is an answer only because
+     * a reason is in one family. Two sealed interfaces may permit one type and that type may
+     * implement both, which leaves every {@code switch} over either of them exhaustive and this
+     * reader answering from whichever arm comes first — so the families being disjoint is asked of
+     * the families themselves, by {@code AReasonIsInOneFamilyAndNotTwoTest}.
+     */
     static ReasonProse of(MeasureReason reason) {
         return switch (reason) {
             case NotApplicableReason it ->
