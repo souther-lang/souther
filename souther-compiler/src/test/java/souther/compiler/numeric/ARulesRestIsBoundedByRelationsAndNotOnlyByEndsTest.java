@@ -8,8 +8,6 @@ import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.numeric.NumericDomain.Bounds;
-import souther.compiler.numeric.NumericDomain.LinearForm;
-import souther.compiler.numeric.NumericDomain.Rel;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;

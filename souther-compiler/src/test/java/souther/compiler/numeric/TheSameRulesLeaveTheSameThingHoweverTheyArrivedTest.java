@@ -3,8 +3,6 @@ package souther.compiler.numeric;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.numeric.NumericDomain.Bounds;
-import souther.compiler.numeric.NumericDomain.LinearForm;
-import souther.compiler.numeric.NumericDomain.Rel;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;

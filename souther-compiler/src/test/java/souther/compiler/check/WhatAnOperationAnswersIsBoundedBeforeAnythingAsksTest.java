@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.semantics.ArgumentRef;
 import souther.compiler.semantics.ConstantArguments;
@@ -110,7 +111,7 @@ class WhatAnOperationAnswersIsBoundedBeforeAnythingAsksTest {
     @Test
     void aBoundCannotBeWrittenAsADisequality() {
         IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
-                () -> new ResultBound(null, BigDecimal.ZERO, NumericDomain.Rel.NE,
+                () -> new ResultBound(null, BigDecimal.ZERO, Rel.NE,
                         new ResultBound.Provided.Always()));
         assertTrue(refused.getMessage().contains("NE"), refused.getMessage());
     }

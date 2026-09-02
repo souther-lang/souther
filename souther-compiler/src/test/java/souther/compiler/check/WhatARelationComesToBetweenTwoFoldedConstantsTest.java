@@ -1,6 +1,6 @@
 package souther.compiler.check;
 
-import souther.compiler.numeric.NumericDomain.Rel;
+import souther.compiler.numeric.Rel;
 
 import org.junit.jupiter.api.Test;
 

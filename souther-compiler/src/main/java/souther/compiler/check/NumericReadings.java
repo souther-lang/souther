@@ -1,6 +1,6 @@
 package souther.compiler.check;
 
-import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.LinearForm;
 import souther.compiler.semantics.ArgumentRef;
 import souther.compiler.semantics.NumericResult;
 import souther.compiler.semantics.OperationFact;
@@ -138,7 +138,7 @@ final class NumericReadings {
                 case OperationFact.AnswersANumberTakenOfTheOneValueItIsGiven(TakenAs how) ->
                         terms.add(new NumericReading.AsATermTakenOfItsArgument(how));
                 case OperationFact.AnswersAFormOfItsArguments(
-                        NumericDomain.LinearForm<ArgumentRef> form) ->
+                        LinearForm<ArgumentRef> form) ->
                         forms.add(new NumericReading.AsAFormOfItsArguments(form));
                 case OperationFact.ComputesANumber(NumericResult result) ->
                         arithmetic.add(new NumericReading.AsTheArithmeticItComputes(result));

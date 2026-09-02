@@ -4,7 +4,7 @@ import souther.compiler.DefaultStdlib;
 import souther.compiler.types.BinOp;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
-import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.LinearForm;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
 import souther.compiler.types.CoverageOrigin;
@@ -75,7 +75,7 @@ class WhatTheCheckWillNotGiveUpOnIsAskedByItsKindTest {
         Denotations at = Denotations.none().location(a, AsPlaces.of(a), AsPlaces.term(a)).location(b, AsPlaces.of(b), AsPlaces.term(b));
         Core.Read left = new Core.Read("a", a, Type.INT, POS);
         Core.Read right = new Core.Read("b", b, Type.INT, POS);
-        NumericDomain.LinearForm<FactSubject> product = terms.affineOf(
+        LinearForm<FactSubject> product = terms.affineOf(
                 new Core.Binary(BinOp.MUL, left, right, CoverageOrigin.unwritten(), Type.INT,
                         POS), at);
         FactSubject atom = product.coefs().keySet().iterator().next();

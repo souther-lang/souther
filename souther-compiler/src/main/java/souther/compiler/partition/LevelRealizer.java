@@ -5,6 +5,7 @@ import souther.compiler.inputs.NumericTerm;
 import souther.compiler.numeric.AdditiveImage;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
 
@@ -355,7 +356,7 @@ public final class LevelRealizer {
          * What the positions from each one on can add up to, worked out once.
          *
          * <p>A form names no position twice and weighs none of them by nothing — {@link
-         * NumericDomain.LinearForm} drops a coefficient the moment it comes to zero — so every
+         * LinearForm} drops a coefficient the moment it comes to zero — so every
          * suffix of it is a form and has an image.
          */
         private final AdditiveImage[] fromHere;

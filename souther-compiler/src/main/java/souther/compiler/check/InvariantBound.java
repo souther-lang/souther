@@ -107,7 +107,7 @@ public record InvariantBound(boolean lower, Endpoint end) {
                 || !(about.comparison().claim() instanceof ComparisonClaim.Cut cut)) {
             return NO_END;
         }
-        BigDecimal count = wholeLiteral(about.comparison().right());
+        BigDecimal count = NumericLiterals.wholeLiteralOf(about.comparison().right());
         // A size is a whole number whatever it is a size of, so it steps like an `Int` and stops
         // where one does.
         return count == null ? NO_END : ordered(cut, Count.of(count), Carrier.WHOLE);
@@ -179,38 +179,4 @@ public record InvariantBound(boolean lower, Endpoint end) {
                 : placed(lower, Endpoint.inclusive(onto));
     }
 
-    /** A whole number a literal names, or null where it names one with a fraction: a value that
-     *  steps one at a time is not bounded at a place between two of its values. */
-    public static BigDecimal wholeLiteral(Hir.Expr e) {
-        BigDecimal read = literalOf(e);
-        return read == null || read.stripTrailingZeros().scale() > 0 ? null : read;
-    }
-
-    /** A numeric literal, negation included. A bare integer counts against a decimal, since a literal
-     * takes the other side's type. */
-    public static BigDecimal literalOf(Hir.Expr e) {
-        return switch (e) {
-            case Hir.IntLit lit -> BigDecimal.valueOf(lit.value());
-            case Hir.DecimalLit lit -> normalized(lit.value());
-            case Hir.Neg neg -> negated(literalOf(neg.operand()));
-            case null, default -> null;
-        };
-    }
-
-    /**
-     * The number a literal names, without how many places it was written to.
-     *
-     * <p>{@code 5.0m} and {@code 5.00m} are one constraint, so they have to reach a range as one
-     * number: two spellings of an end would be two lines through a position, both holding the same
-     * values, and one boundary owed twice under one printed figure. Trailing zeros left of the point
-     * are put back, so a hundred is written as one.
-     */
-    private static BigDecimal normalized(BigDecimal value) {
-        BigDecimal bare = value.stripTrailingZeros();
-        return bare.scale() < 0 ? bare.setScale(0) : bare;
-    }
-
-    private static BigDecimal negated(BigDecimal value) {
-        return value == null ? null : value.negate();
-    }
 }

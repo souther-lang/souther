@@ -8,8 +8,10 @@ import souther.compiler.check.RuleKey;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.CountDomain;
 import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Rational;
+import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.RationalCut;
 import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.Type;
@@ -113,7 +115,7 @@ final class ReadQuantities implements Quantities {
             new ConcurrentHashMap<>();
 
     /** One thing taken in about a form of this input's terms: {@code form rel 0}. */
-    private record Assumed(NumericDomain.LinearForm<NumericTerm> form, NumericDomain.Rel rel) {}
+    private record Assumed(LinearForm<NumericTerm> form, Rel rel) {}
 
     /** The values fixed at one term, kept as their least and greatest so that what was fixed does
      *  not depend on the order it arrived in. */
@@ -312,7 +314,7 @@ final class ReadQuantities implements Quantities {
      * refuses outright; declined here, the region still holds everything that reaches the border,
      * which is the direction every reader of it depends on.
      */
-    ReadQuantities assuming(NumericDomain.LinearForm<NumericTerm> form, NumericDomain.Rel rel) {
+    ReadQuantities assuming(LinearForm<NumericTerm> form, Rel rel) {
         if (form == null || form.coefs().isEmpty()) {
             return this;
         }
@@ -437,9 +439,9 @@ final class ReadQuantities implements Quantities {
                 souther.compiler.numeric.Granularity spaced =
                         spacingOf(rules.numbers(), counted, atom);
                 return spaced == null ? rules : rules.taking(
-                        NumericDomain.LinearForm.<InputAtom>atom(atom)
-                                .minus(NumericDomain.LinearForm.constant(BigDecimal.ONE)),
-                        NumericDomain.Rel.GE, Map.of(atom, spaced));
+                        LinearForm.<InputAtom>atom(atom)
+                                .minus(LinearForm.constant(BigDecimal.ONE)),
+                        Rel.GE, Map.of(atom, spaced));
             }
         }
     }
@@ -729,7 +731,7 @@ final class ReadQuantities implements Quantities {
     }
 
     @Override
-    public NumericDomain.Bounds runsBetween(NumericDomain.LinearForm<NumericTerm> form) {
+    public NumericDomain.Bounds runsBetween(LinearForm<NumericTerm> form) {
         if (form.coefs().isEmpty()) {
             return null;
         }
@@ -752,7 +754,7 @@ final class ReadQuantities implements Quantities {
      * the context is the one the fold has reached and not the one anybody fixed.
      */
     private NumericDomain.Bounds runsIn(StructuralContext under,
-                                        NumericDomain.LinearForm<NumericTerm> form) {
+                                        LinearForm<NumericTerm> form) {
         souther.compiler.numeric.NumericDomain<InputAtom> rules = constraints(under).numbers();
         for (NumericTerm term : form.coefs().keySet()) {
             rules = holding(rules, term, under);
@@ -781,12 +783,12 @@ final class ReadQuantities implements Quantities {
      * would say they are one number, which nobody said. Reading a caller's form may, because the
      * caller wrote two spellings of a number this input has one of.
      */
-    private NumericDomain.LinearForm<InputAtom> over(
-            NumericDomain.LinearForm<NumericTerm> form, StructuralContext under) {
+    private LinearForm<InputAtom> over(
+            LinearForm<NumericTerm> form, StructuralContext under) {
         Map<InputAtom, BigDecimal> coefs = new LinkedHashMap<>();
         form.coefs().forEach((term, coef) ->
                 coefs.merge(called(term, under), coef, BigDecimal::add));
-        return new NumericDomain.LinearForm<>(form.constant(), coefs);
+        return new LinearForm<>(form.constant(), coefs);
     }
 
     @Override
@@ -966,7 +968,7 @@ final class ReadQuantities implements Quantities {
         if (counted == null) {
             return new Viability.MayStand();
         }
-        NumericDomain.Bounds many = runsIn(under, NumericDomain.LinearForm.atom(counted));
+        NumericDomain.Bounds many = runsIn(under, LinearForm.atom(counted));
         if (many == null || CountDomain.leastFrom(many.min()) < 1) {
             return new Viability.MayStand();
         }
@@ -1099,7 +1101,7 @@ final class ReadQuantities implements Quantities {
     }
 
     /** The term a form is, where it is one term taken as itself, or null where it is arithmetic. */
-    private static NumericTerm onlyTermOf(NumericDomain.LinearForm<NumericTerm> form) {
+    private static NumericTerm onlyTermOf(LinearForm<NumericTerm> form) {
         if (form.coefs().size() != 1 || form.constant().signum() != 0) {
             return null;
         }

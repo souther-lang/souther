@@ -9,6 +9,7 @@ import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.Induction;
 import souther.compiler.numeric.Intervals;
+import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.semantics.Accumulation;
 import souther.compiler.semantics.OperationFacts;
@@ -58,11 +59,11 @@ final class RunReach {
         ELEMENT
     }
 
-    private static final NumericDomain.LinearForm<Atom> ACCUMULATOR =
-            NumericDomain.LinearForm.atom(Atom.ACCUMULATOR);
+    private static final LinearForm<Atom> ACCUMULATOR =
+            LinearForm.atom(Atom.ACCUMULATOR);
 
-    private static final NumericDomain.LinearForm<Atom> CARRIED =
-            ACCUMULATOR.plus(NumericDomain.LinearForm.atom(Atom.ELEMENT));
+    private static final LinearForm<Atom> CARRIED =
+            ACCUMULATOR.plus(LinearForm.atom(Atom.ELEMENT));
 
     /**
      * What the step answers, given a reading that has the accumulator and the element in it.

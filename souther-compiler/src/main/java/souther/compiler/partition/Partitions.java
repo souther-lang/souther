@@ -24,6 +24,7 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.Granularity;
+import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
 import souther.compiler.types.Type;
@@ -976,7 +977,7 @@ public final class Partitions {
             if (axis.parted().isEmpty()) {
                 continue;
             }
-            out.computeIfAbsent(QuantityKey.of(NumericDomain.LinearForm.atom(axis.term())).key(),
+            out.computeIfAbsent(QuantityKey.of(LinearForm.atom(axis.term())).key(),
                     _ -> new ArrayList<>()).addAll(axis.parted());
         }
         return out;

@@ -1,7 +1,7 @@
 package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
-import souther.compiler.numeric.NumericDomain.Rel;
+import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.Towards;
 import souther.compiler.types.BinOp;
 

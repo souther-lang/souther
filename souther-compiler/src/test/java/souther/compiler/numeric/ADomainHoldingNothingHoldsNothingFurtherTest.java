@@ -25,38 +25,38 @@ class ADomainHoldingNothingHoldsNothingFurtherTest {
 
     private static final Map<String, Granularity> COUNTS = Map.of("n", Granularity.DISCRETE);
 
-    private static NumericDomain.LinearForm<String> nMinus(long count) {
-        return NumericDomain.LinearForm.<String>atom("n")
-                .minus(NumericDomain.LinearForm.<String>constant(BigDecimal.valueOf(count)));
+    private static LinearForm<String> nMinus(long count) {
+        return LinearForm.<String>atom("n")
+                .minus(LinearForm.<String>constant(BigDecimal.valueOf(count)));
     }
 
     private static NumericDomain<String> atLeastTwo() {
-        return NumericDomain.<String>top().assume(nMinus(2), NumericDomain.Rel.GE, COUNTS);
+        return NumericDomain.<String>top().assume(nMinus(2), Rel.GE, COUNTS);
     }
 
     @Test
     void aFloorIsWhatItSays() {
         assertFalse(atLeastTwo().isBottom(), "two and up is somewhere to be");
-        assertFalse(atLeastTwo().assume(nMinus(2), NumericDomain.Rel.EQ, COUNTS).isBottom(),
+        assertFalse(atLeastTwo().assume(nMinus(2), Rel.EQ, COUNTS).isBottom(),
                 "and two is one of them");
     }
 
     @Test
     void anEqualityBelowAFloorLeavesNothing() {
-        assertTrue(atLeastTwo().assume(nMinus(0), NumericDomain.Rel.EQ, COUNTS).isBottom(),
+        assertTrue(atLeastTwo().assume(nMinus(0), Rel.EQ, COUNTS).isBottom(),
                 "nothing is both at least two and none");
-        assertTrue(atLeastTwo().assume(nMinus(1), NumericDomain.Rel.EQ, COUNTS).isBottom());
+        assertTrue(atLeastTwo().assume(nMinus(1), Rel.EQ, COUNTS).isBottom());
     }
 
     @Test
     void aCeilingBelowAFloorLeavesNothing() {
-        assertTrue(atLeastTwo().assume(nMinus(1), NumericDomain.Rel.LE, COUNTS).isBottom());
+        assertTrue(atLeastTwo().assume(nMinus(1), Rel.LE, COUNTS).isBottom());
     }
 
     @Test
     void whatHoldsNothingKeepsHoldingNothing() {
-        NumericDomain<String> none = atLeastTwo().assume(nMinus(1), NumericDomain.Rel.LE, COUNTS);
-        assertTrue(none.assume(nMinus(0), NumericDomain.Rel.EQ, COUNTS).isBottom());
-        assertTrue(none.assume(nMinus(5), NumericDomain.Rel.GE, COUNTS).isBottom());
+        NumericDomain<String> none = atLeastTwo().assume(nMinus(1), Rel.LE, COUNTS);
+        assertTrue(none.assume(nMinus(0), Rel.EQ, COUNTS).isBottom());
+        assertTrue(none.assume(nMinus(5), Rel.GE, COUNTS).isBottom());
     }
 }

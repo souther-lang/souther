@@ -181,7 +181,7 @@ public final class AffineReduction {
         boolean strict = !half.bound().inclusive() || !rest.reached();
         AffineConstraint.Read<A> read = AffineConstraint.of(
                 Map.of(atom, weight), rest.at().minus(half.bound().at()),
-                strict ? NumericDomain.Rel.LT : NumericDomain.Rel.LE, spacing);
+                strict ? Rel.LT : Rel.LE, spacing);
         switch (read) {
             case AffineConstraint.Read.HoldsNever<A> ignored -> {
                 return false;

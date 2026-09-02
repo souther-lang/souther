@@ -1,6 +1,6 @@
 package souther.compiler.semantics;
 
-import souther.compiler.numeric.NumericDomain.Rel;
+import souther.compiler.numeric.Rel;
 
 import java.math.BigDecimal;
 

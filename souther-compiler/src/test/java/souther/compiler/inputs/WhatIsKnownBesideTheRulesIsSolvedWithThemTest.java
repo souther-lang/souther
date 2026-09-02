@@ -8,7 +8,8 @@ import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.Count;
-import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.Rel;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
@@ -68,7 +69,7 @@ class WhatIsKnownBesideTheRulesIsSolvedWithThemTest {
         // And on its own the third is exactly what the caller said and no more, so a reader meeting
         // that onto the answer above would still have no floor for the sum.
         SearchRegion withAFloorUnderTheThird =
-                rules.assuming(NumericDomain.LinearForm.atom(Z), NumericDomain.Rel.GE);
+                rules.assuming(LinearForm.atom(Z), Rel.GE);
         assertEquals(Endpoint.inclusive(Count.of(0)), withAFloorUnderTheThird.runsBetween(Z).min());
 
         assertEquals(Endpoint.inclusive(Count.of(1)), withAFloorUnderTheThird.runsBetween(sum()).min(),
@@ -81,17 +82,17 @@ class WhatIsKnownBesideTheRulesIsSolvedWithThemTest {
     void aFactAboutAPositionTheRulesDoNotNameChangesNothing() {
         SearchRegion rules = region();
 
-        assertEquals(rules.runsBetween(NumericDomain.LinearForm.atom(X)),
-                rules.assuming(NumericDomain.LinearForm.atom(Z), NumericDomain.Rel.GE)
-                        .runsBetween(NumericDomain.LinearForm.atom(X)));
+        assertEquals(rules.runsBetween(LinearForm.atom(X)),
+                rules.assuming(LinearForm.atom(Z), Rel.GE)
+                        .runsBetween(LinearForm.atom(X)));
     }
 
-    private static NumericDomain.LinearForm<NumericTerm> sum() {
+    private static LinearForm<NumericTerm> sum() {
         Map<NumericTerm, BigDecimal> coefs = new LinkedHashMap<>();
         coefs.put(X, BigDecimal.ONE);
         coefs.put(Y, BigDecimal.ONE);
         coefs.put(Z, BigDecimal.ONE);
-        return new NumericDomain.LinearForm<>(BigDecimal.ZERO, coefs);
+        return new LinearForm<>(BigDecimal.ZERO, coefs);
     }
 
     private static NumericTerm value(String field) {
