@@ -466,8 +466,8 @@ public final class InvariantChecker {
          *  every position, since nothing here knows which of them the rules were about. */
         static Seeded nothingRead() {
             return new Seeded(ConstraintState.<FactSubject>top(), Map.of(), Map.of(), Map.of(),
-                    new Reading(List.of(), List.of(), List.of(), Map.of(), Map.of(), Map.of(),
-                            Map.of()),
+                    new Reading(List.of(), List.of(), List.of(), List.of(), Map.of(), Map.of(),
+                            Map.of(), Map.of()),
                     new ReadingEvidence(),
                     false, Map.of(RuleKey.THE_VALUE,
                             Set.of(new RulesMissed.ReadingFellOver())),
@@ -506,20 +506,34 @@ public final class InvariantChecker {
      *                       them still being read
      * @param stopAt         which declarations are not read at all
      */
-    record Reach(RulesLeftOut withoutClauses, java.util.function.Predicate<TypeSymbol> stopAt) {
+    record Reach(RulesLeftOut withoutClauses, PartsLeftOut withoutParts,
+                 java.util.function.Predicate<TypeSymbol> stopAt) {
 
         /** Every rule, wherever it is written. */
-        static final Reach EVERYTHING = new Reach(RulesLeftOut.NONE, _ -> false);
+        static final Reach EVERYTHING =
+                new Reach(RulesLeftOut.NONE, PartsLeftOut.NONE, _ -> false);
 
         /** Every rule but the ones {@code these} names wrote. */
         static Reach withoutClausesOf(java.util.function.Predicate<TypeSymbol> these) {
-            return new Reach(RulesLeftOut.writtenOn(these), _ -> false);
+            return new Reach(RulesLeftOut.writtenOn(these), PartsLeftOut.NONE, _ -> false);
+        }
+
+        /**
+         * Every rule, with one conjunct of one of them left out.
+         *
+         * <p>What a reader asking what that conjunct was holding compares against. Everything else
+         * the declaration says is still read, which is the whole of the difference from
+         * {@link #withoutClausesOf}: a clause has as many conjuncts as the author wrote, and taking
+         * the clause away answers for all of them at once.
+         */
+        static Reach withoutPart(RuleRef.Invariant rule, Core part) {
+            return new Reach(RulesLeftOut.NONE, PartsLeftOut.without(rule, part), _ -> false);
         }
 
         /** Every rule that is not reached through one of {@code these}, they being supposed to hold
          * values whatever is written under them. */
         static Reach stoppingAt(java.util.function.Predicate<TypeSymbol> these) {
-            return new Reach(RulesLeftOut.NONE, these);
+            return new Reach(RulesLeftOut.NONE, PartsLeftOut.NONE, these);
         }
     }
 
@@ -647,7 +661,12 @@ public final class InvariantChecker {
                 }
                 written.add(new Written(origin, stated));
                 Predicates.Owed owed = c.predicates.assumed(stated, at, false,
-                        (part, said) -> gathering.constrained(origin, part, partRead(said)));
+                        (part, said) -> gathering.constrained(origin, part, partRead(said)),
+                        // Which conjuncts of this rule were asked for. Which nodes of the clause
+                        // its conjuncts are is the predicate reader's answer, so what is handed
+                        // over is the one that is not wanted rather than a clause rebuilt without
+                        // it.
+                        reach.withoutParts().of(origin));
                 // And the reading that builds the numeric constraints, said by what it produced.
                 // `value * 2 >= 4` is beyond the two readings below and is taken in here about the
                 // position itself; `value * value >= 4` comes back about an atom standing for the
@@ -777,7 +796,7 @@ public final class InvariantChecker {
             // And which of the clauses place an edge, asked once the positions have names to be
             // recognised by.
             Reading reading = c.directsIn(written, at, atoms, keys, held, typeAt, took,
-                    new PartsRead(readBy, adoptedBy));
+                    new PartsRead(readBy, adoptedBy), reach.withoutParts());
             ConstraintState<FactSubject> constraints = k.constraints()
                     .takingValuesRead(values, allowed)
                     .taking(answered.whole().ordered());
@@ -1245,6 +1264,7 @@ public final class InvariantChecker {
      */
     record Reading(List<Direct> directs, List<FieldDomains.NoLine> noLines,
                    List<FieldDomains.WithoutAnEnd> withoutAnEnd,
+                   List<FieldDomains.NamesAValue> namesAValue,
                    Map<RuleKey, List<TypeSymbol.AtModule>> narrowers,
                    Map<RuleRef, Required> raised,
                    Map<RuleRef, Map<Core, Required>> raisedByPart,
@@ -1254,7 +1274,8 @@ public final class InvariantChecker {
                                    Map<RuleKey, FactSubject> atoms, Map<RuleKey, FactSubject> keys,
                                    Map<RuleKey, FieldDomains.Counted> held,
                                    Map<RuleKey, Type> typeAt,
-                                   ReadingEvidence took, PartsRead parts) {
+                                   ReadingEvidence took, PartsRead parts,
+                                   PartsLeftOut withoutParts) {
         Map<FactSubject, Coordinate> byName = new LinkedHashMap<>();
         keys.forEach((path, key) -> {
             Carrier carrier = Carrier.ofValue(typeAt.get(path), symbols);
@@ -1274,6 +1295,7 @@ public final class InvariantChecker {
         List<Direct> out = new ArrayList<>();
         List<FieldDomains.NoLine> noLines = new ArrayList<>();
         List<FieldDomains.WithoutAnEnd> withoutAnEnd = new ArrayList<>();
+        List<FieldDomains.NamesAValue> namesAValue = new ArrayList<>();
         Map<RuleKey, List<TypeSymbol.AtModule>> narrowers = new LinkedHashMap<>();
         Map<RuleRef, Required> raised = new LinkedHashMap<>();
         Map<RuleRef, Map<Core, Required>> raisedByPart = new LinkedHashMap<>();
@@ -1281,11 +1303,12 @@ public final class InvariantChecker {
                 new LinkedHashMap<>();
         stated.forEach(each ->
                 direct(each.clause(), each.from(), new int[1], at, byName, out, noLines,
-                        withoutAnEnd, narrowers, raised,
-                        took, typeAt, parts, raisedByPart, standing));
+                        withoutAnEnd, namesAValue, narrowers, raised,
+                        took, typeAt, parts, raisedByPart, standing, withoutParts));
         // Insertion order, kept: `Map.copyOf` iterates in an order salted once per JVM run, and
         // what a report prints for a position is these in the order the declaration writes them.
         return new Reading(List.copyOf(out), List.copyOf(noLines), List.copyOf(withoutAnEnd),
+                List.copyOf(namesAValue),
                 Map.copyOf(narrowers),
                 Collections.unmodifiableMap(new LinkedHashMap<>(raised)),
                 Collections.unmodifiableMap(new LinkedHashMap<>(raisedByPart)),
@@ -1385,13 +1408,15 @@ public final class InvariantChecker {
                         Map<FactSubject, Coordinate> byName, List<Direct> out,
                         List<FieldDomains.NoLine> noLines,
                         List<FieldDomains.WithoutAnEnd> withoutAnEnd,
+                        List<FieldDomains.NamesAValue> naming,
                         Map<RuleKey, List<TypeSymbol.AtModule>> narrowers,
                         Map<RuleRef, Required> raised, ReadingEvidence took,
                         Map<RuleKey, Type> typeAt,
                         PartsRead parts,
                         Map<RuleRef, Map<Core, Required>> raisedByPart,
                         Map<FieldDomains.BoundaryQuestion,
-                                FieldDomains.BoundaryStanding> standing) {
+                                FieldDomains.BoundaryStanding> standing,
+                        PartsLeftOut withoutParts) {
         if (clause instanceof Core.Binary and
                 && ConditionJoin.of(and.op()).orElse(null) == ConditionJoin.BOTH) {
             // One rule the author wrote, so what it raises is what its conjuncts raise together.
@@ -1399,10 +1424,10 @@ public final class InvariantChecker {
             // {@code ClauseHelpers.conjunctsOf} reads it in: the two readings of one clause number
             // its conjuncts alike, which is what lets a line drawn here be recognised as the line
             // the declaration's own reading drew (issue #1062).
-            direct(and.left(), from, conjunct, at, byName, out, noLines, withoutAnEnd, narrowers,
-                    raised, took, typeAt, parts, raisedByPart, standing);
-            direct(and.right(), from, conjunct, at, byName, out, noLines, withoutAnEnd, narrowers,
-                    raised, took, typeAt, parts, raisedByPart, standing);
+            direct(and.left(), from, conjunct, at, byName, out, noLines, withoutAnEnd, naming,
+                    narrowers, raised, took, typeAt, parts, raisedByPart, standing, withoutParts);
+            direct(and.right(), from, conjunct, at, byName, out, noLines, withoutAnEnd, naming,
+                    narrowers, raised, took, typeAt, parts, raisedByPart, standing, withoutParts);
             return;
         }
         // Which conjunct of the clause this is, taken here so that every one of them is numbered —
@@ -1410,6 +1435,16 @@ public final class InvariantChecker {
         // would depend on what this reading could make of the conjuncts before it, and two readings
         // of one clause would disagree about which line is which.
         int part = conjunct[0]++;
+        // And a conjunct this reading was not asked for is walked no further. Counted first, so
+        // that a counterfactual reading numbers the conjuncts as the reading it is compared against
+        // does — what is left out is the conjunct and not the numbering of the ones beside it.
+        //
+        // Here as well as in the reader of predicates, because the two walk the clause together: a
+        // part this one reached that the other never read is a value whose rules were not gathered
+        // ({@link APartNoReadingSaw}), and leaving it out of one walk alone is exactly that.
+        if (withoutParts.excludes(from, clause)) {
+            return;
+        }
         // A rule that divides the position by something no order carries, said as that. The
         // reading took it in — which strings stand here is an answer, and this walk is the one that
         // would have drawn a line from it — so what is absent is a line and not a reading. Passed
@@ -1452,22 +1487,19 @@ public final class InvariantChecker {
         // declarations narrowed that position, and neither of those is a thing a denial of one
         // value states.
         ComparisonClaim asWritten = comparison == null ? null : comparison.claim();
-        if (asWritten == null
-                || asWritten instanceof ComparisonClaim.Singled named && !named.holdsAtTheValue()) {
+        if (asWritten == null) {
             settle(bin, from, states(bin, at, byName, read),
                     new InvariantBound.Read.NoEnd(),
                     at, byName, raised, took, typeAt, parts, raisedByPart);
-            // And handed on where it is a comparison, which is not the same as being reported.
-            // A rule that rules one value out places no end and is no failure of this reading, so
-            // there is nothing here for an author to lift and there is a conjunct for the reading
-            // that draws lines to make what it can of.
-            if (asWritten != null) {
-                withoutAnEnd.add(new FieldDomains.WithoutAnEnd(from, part, bin));
-            }
             return;
         }
         // The coordinate-bearing side read as the left one, as `0 <= value` says what `value >= 0`
         // says.
+        //
+        // Above what the claim is, because which number the rule is about does not turn on that. A
+        // rule that names a value is about the number it names as plainly as one that orders the
+        // values around it, and the lookup done under the ordering alone was one every other
+        // reading of the clause had to do again for itself.
         Coordinate found = byName.get(nameOf(bin.left(), at));
         Core bound = bin.right();
         ComparisonClaim said = asWritten;
@@ -1475,6 +1507,18 @@ public final class InvariantChecker {
             found = byName.get(nameOf(bin.right(), at));
             bound = bin.left();
             said = said.turned();
+        }
+        if (asWritten instanceof ComparisonClaim.Singled named && !named.holdsAtTheValue()) {
+            settle(bin, from, states(bin, at, byName, read),
+                    new InvariantBound.Read.NoEnd(),
+                    at, byName, raised, took, typeAt, parts, raisedByPart);
+            // And handed on, which is not the same as being reported. A rule that rules one value
+            // out places no end and is no failure of this reading, so there is nothing here for an
+            // author to lift and there is a conjunct for the reading that draws lines to make what
+            // it can of.
+            withoutAnEnd.add(new FieldDomains.WithoutAnEnd(from, part, bin));
+            singles(found, bound, said, from, part, bin, at, byName, naming);
+            return;
         }
         // An end where the other side is a constant, and a relation everywhere else. Which it is
         // cannot be asked of the other side's name: what a clause compares a coordinate to may be a
@@ -1544,6 +1588,7 @@ public final class InvariantChecker {
             // having no end, and they answer different questions: what an author is owed a word
             // about, and what the next reading is given to read.
             withoutAnEnd.add(new FieldDomains.WithoutAnEnd(from, part, bin));
+            singles(found, bound, said, from, part, bin, at, byName, naming);
             // The declaration and not the clause. Which declaration took an edge in is what ADR-0090
             // names beside a line, and what a reader is sent to look at is the declaration holding
             // the relation.
@@ -1841,6 +1886,30 @@ public final class InvariantChecker {
             case StringPredicates.Divides.CouldNotTell _ -> null;
             case null -> null;
         };
+    }
+
+    /**
+     * Written down where this conjunct names a value of one coordinate and of nothing else.
+     *
+     * <p>Both shapes of such a rule, since which of them it is says which values are kept and not
+     * which number is named. What the rule does to that number is nobody's answer here: it is read
+     * afterwards, from what the rules leave the coordinate without this conjunct
+     * ({@link FieldDomains#movedEndsOf}).
+     *
+     * <p>And only where the other side names no coordinate. A rule naming a value of a form over
+     * two of them is about the pair, and an end attributed to it at either would be an end of a
+     * number it does not divide — the same condition an ordering is held to before it becomes a
+     * bound.
+     */
+    private void singles(Coordinate found, Core bound, ComparisonClaim said,
+                         RuleRef.Invariant from, int part, Core.Binary bin, Denotations at,
+                         Map<FactSubject, Coordinate> byName,
+                         List<FieldDomains.NamesAValue> out) {
+        if (found == null || !(said instanceof ComparisonClaim.Singled)
+                || !coordinatesIn(bound, at, byName).isEmpty()) {
+            return;
+        }
+        out.add(new FieldDomains.NamesAValue(found.at(), from, bin, part));
     }
 
     /** One finding, kept once. A coordinate reached twice is one place with one thing to say. */

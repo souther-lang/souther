@@ -64,7 +64,7 @@ public final class FieldDomains {
      */
     public static final FieldDomains NONE =
             new FieldDomains(Map.of(), Map.of(), Map.of(), Map.of(), Set.of(), List.of(), List.of(),
-                    List.of(), Map.of(),
+                    List.of(), List.of(), Map.of(),
                     Map.of(), Map.of(), new ReadingEvidence(), Map.of(),
                     Map.of(RuleKey.THE_VALUE, Set.of(new RulesMissed.NoReadingWasMade())), Set.of(),
                     NOTHING_NAMED,
@@ -82,6 +82,8 @@ public final class FieldDomains {
     /** The conjuncts this reading got no end out of, for whoever reads them next — see
      * {@link #withoutAnEnd}. */
     private final List<WithoutAnEnd> withoutAnEnd;
+    /** The conjuncts that name a value of one coordinate — see {@link #namesAValue}. */
+    private final List<NamesAValue> namesAValue;
     /** What each clause reaching this value raises, keyed on the rule it is. */
     private final Map<RuleRef, Required> raised;
     /** The same per part of each clause. A reader that found one conjunct wanting names what that
@@ -157,7 +159,7 @@ public final class FieldDomains {
                          Map<RuleKey, List<UnreadReason>> unreadByName,
                          Set<RuleKey> notSeparatedByName,
                          List<InvariantChecker.Direct> directs, List<NoLine> noLines,
-                         List<WithoutAnEnd> withoutAnEnd,
+                         List<WithoutAnEnd> withoutAnEnd, List<NamesAValue> namesAValue,
                          Map<RuleRef, Required> raised,
                          Map<RuleRef, Map<Core, Required>> raisedByPart,
                          Map<BoundaryQuestion, BoundaryStanding> standing, ReadingEvidence took,
@@ -179,6 +181,7 @@ public final class FieldDomains {
         this.directs = directs;
         this.noLines = noLines;
         this.withoutAnEnd = List.copyOf(withoutAnEnd);
+        this.namesAValue = List.copyOf(namesAValue);
         this.raised = raised;
         this.raisedByPart = raisedByPart;
         this.standing = standing;
@@ -422,7 +425,7 @@ public final class FieldDomains {
                 named(seeded, field).forEach(term -> placeOf.putIfAbsent(term, field)));
         return new FieldDomains(Map.copyOf(out), Map.copyOf(holds), Map.copyOf(admitted),
                 Map.copyOf(unread), Set.copyOf(notSeparated), seeded.reading().directs(), seeded.reading().noLines(),
-                seeded.reading().withoutAnEnd(),
+                seeded.reading().withoutAnEnd(), seeded.reading().namesAValue(),
                 seeded.reading().raised(), seeded.reading().raisedByPart(),
                 seeded.reading().standing(), seeded.took(),
                 seeded.reading().narrowers(),
@@ -491,6 +494,32 @@ public final class FieldDomains {
             if (conjunct < 0) {
                 throw new IllegalArgumentException(
                         "a conjunct of a clause is counted from zero: " + conjunct);
+            }
+        }
+    }
+
+    /**
+     * One conjunct that names a value of one coordinate and of nothing else.
+     *
+     * <p>An equality and a disequality both, since which of the two it is says which values are
+     * kept and not which number is named. What such a rule does to that number is not here and is
+     * not this reading's: it is read by asking what the rules leave the coordinate without this
+     * conjunct, and comparing.
+     *
+     * <p>One coordinate. A rule naming a value of a form over two of them — {@code lo == hi} — is
+     * about the pair, and an end attributed to it at either would be an end of a number the rule
+     * does not divide.
+     *
+     * @param at       the number it names a value of
+     * @param from     the clause it is a conjunct of
+     * @param part     the conjunct itself, which is what a counterfactual reading is asked without
+     * @param conjunct which of the clause's conjuncts it is
+     */
+    public record NamesAValue(Coordinate at, RuleRef.Invariant from, Core part, int conjunct) {
+
+        public NamesAValue {
+            if (at == null || from == null || part == null) {
+                throw new IllegalArgumentException("a named value is some rule's, at some number");
             }
         }
     }
@@ -1010,6 +1039,62 @@ public final class FieldDomains {
      */
     public List<WithoutAnEnd> withoutAnEnd() {
         return withoutAnEnd;
+    }
+
+    /**
+     * The conjuncts naming a value of one coordinate, in the order they were read.
+     *
+     * <p>What they do to the coordinate is not here. A rule naming a value moves an end where the
+     * value it names sits at one, and where it sits at one is a fact about everything else the
+     * rules say — so it is read by {@link #movedEndsOf} and not written down as each conjunct
+     * arrives.
+     */
+    public List<NamesAValue> namesAValue() {
+        return namesAValue;
+    }
+
+    /**
+     * The ends {@code names} moved, which is what its conjunct was holding.
+     *
+     * <p>Read by asking what the rules leave the coordinate without this conjunct and comparing
+     * with what they leave it. An end that moves is an end the conjunct was holding — the same
+     * question {@link EndNarrowing} puts to a declaration, put here to one authored conjunct.
+     *
+     * <p><b>Against the rules and not against the ends they placed.</b> A rule naming a value
+     * places none, so a counterfactual over the ends would take nothing away and answer that
+     * nothing moved. What is left out is the conjunct itself, and what is compared is what the
+     * whole reading leaves.
+     *
+     * <p>Empty where nothing moved, which is a rule whose value has other values either side of it:
+     * a hole with something to side it is a hole, and no end of a range says where it is.
+     */
+    public List<InvariantBound> movedEndsOf(NamesAValue names) {
+        NumericDomain.Bounds with = leftAt(names.at().path(), names.at().kind());
+        if (with == null) {
+            return List.of();
+        }
+        NumericDomain.Bounds without =
+                without(names.from(), names.part()).leftAt(names.at().path(), names.at().kind());
+        List<InvariantBound> moved = new ArrayList<>();
+        if (movedFrom(without == null ? null : without.min(), with.min())) {
+            moved.add(new InvariantBound(true, with.min()));
+        }
+        if (movedFrom(without == null ? null : without.max(), with.max())) {
+            moved.add(new InvariantBound(false, with.max()));
+        }
+        return List.copyOf(moved);
+    }
+
+    /** Whether an end stands somewhere other than where it stood without the conjunct. An end that
+     *  was not there before is one that moved, which is what taking a rule away widens. */
+    private static boolean movedFrom(Endpoint without, Endpoint with) {
+        return with != null && !with.equals(without);
+    }
+
+    /** This value read again without one conjunct of one of its rules. */
+    private FieldDomains without(RuleRef.Invariant rule, Core part) {
+        return of(named, data, symbols, policy, settled,
+                InvariantChecker.Reach.withoutPart(rule, part));
     }
 
     /**

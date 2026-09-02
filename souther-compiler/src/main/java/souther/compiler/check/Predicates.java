@@ -365,6 +365,18 @@ final class Predicates {
             return new Owed(List.of(), holds ? Fold.HOLDS : Fold.FAILS);
         }
 
+        /**
+         * A part this reading was not asked for.
+         *
+         * <p>Nothing owed and nothing settled, which is a clause with that part taken out of it and
+         * not a clause that holds. {@link Fold#HOLDS} would state the part rather than leave it
+         * unread, and a reading asked what a clause comes to without one of its conjuncts would be
+         * told the conjunct is true.
+         */
+        static Owed unread() {
+            return new Owed(List.of(), Fold.NOT_DECIDED);
+        }
+
         /** One part of the clause this could make nothing of, which is {@code where}. */
         static Owed unreadable(Core where) {
             return new Owed(List.of(new Part.Unread(where)), Fold.NOT_DECIDED);
@@ -504,7 +516,8 @@ final class Predicates {
      * happened to be holding decide what a declaration says. The parameter is gone rather than
      * ignored: what is not there cannot come to be read. */
     Owed assumed(Core inv, Denotations at, boolean decidesFalse) {
-        return obligations(inv, at, Set.of(), true, decidesFalse, Discharge.AN_ASSUMPTION, null);
+        return obligations(inv, at, Set.of(), true, decidesFalse, Discharge.AN_ASSUMPTION, null,
+                PartsToRead.ALL);
     }
 
     /**
@@ -516,12 +529,57 @@ final class Predicates {
      * changes one of them.
      */
     Owed assumed(Core inv, Denotations at, boolean decidesFalse, PerPart per) {
-        return obligations(inv, at, Set.of(), true, decidesFalse, Discharge.AN_ASSUMPTION, per);
+        return assumed(inv, at, decidesFalse, per, PartsToRead.ALL);
+    }
+
+    /**
+     * The same, reading only the parts {@code parts} asks for.
+     *
+     * <p>What a clause comes to with one of its conjuncts left out, which is what a reader asking
+     * what that conjunct was holding compares against. Left out here rather than by handing over a
+     * clause with the conjunct cut out of it: which nodes of an expression are its conjuncts is this
+     * reader's answer, and a caller rebuilding the clause without one would be deciding it a second
+     * time.
+     */
+    Owed assumed(Core inv, Denotations at, boolean decidesFalse, PerPart per, PartsToRead parts) {
+        return obligations(inv, at, Set.of(), true, decidesFalse, Discharge.AN_ASSUMPTION, per,
+                parts);
     }
 
     /** Told what one part of a clause owed, keyed by the part it was read from. */
     interface PerPart {
         void read(Core part, Owed owed);
+    }
+
+    /**
+     * Which parts of a clause this reading takes in.
+     *
+     * <p>A conjunction is read a conjunct at a time here, and this is where a caller says which of
+     * those conjuncts it asked for. Nothing about why: a reading that leaves a part out to find what
+     * that part was holding, and one that leaves it out for any other reason, are one reading here.
+     * What the answer is for belongs to whoever asked, and a reader of predicates that knew would be
+     * deciding a caller's business in the middle of a semantic walk.
+     *
+     * <p>Asked of the node the clause was written as, which is the identity a part already has
+     * ({@link PerPart}). As a value and not by reference: a counterfactual reading types the
+     * declaration's clauses again, so the nodes it walks are not the nodes the first reading
+     * handed out, and a part named by reference would match nothing at all. What keeps two
+     * conjuncts written alike apart is where they are written, which every node carries.
+     */
+    @FunctionalInterface
+    interface PartsToRead {
+
+        /** Every part the clause has. */
+        PartsToRead ALL = _ -> true;
+
+        /** Whether this reading takes {@code part} in. */
+        boolean includes(Core part);
+
+        /** Every part but {@code excluded}, which is what a counterfactual reading of one conjunct
+         *  asks for. */
+        static PartsToRead without(Core excluded) {
+            return part -> !excluded.equals(part);
+        }
     }
 
     /**
@@ -588,7 +646,8 @@ final class Predicates {
      * clause may be read against. */
     Owed obligations(Core inv, Known k, Denotations at, Set<Core> unnamed,
                      boolean decidesFalse) {
-        return obligations(inv, at, unnamed, true, decidesFalse, Discharge.spending(k), null);
+        return obligations(inv, at, unnamed, true, decidesFalse, Discharge.spending(k), null,
+                PartsToRead.ALL);
     }
 
     /**
@@ -600,9 +659,15 @@ final class Predicates {
      */
     private Owed obligations(Core rawInv, Denotations at, Set<Core> unnamed,
                              boolean positive, boolean decidesFalse, Discharge discharge,
-                             PerPart per) {
+                             PerPart per, PartsToRead parts) {
+        // A clause of one conjunct is that conjunct, so a caller leaving it out leaves out the
+        // whole of what the clause states. The halves of a conjunction are answered where they are
+        // split, which is the one place that knows a clause has halves.
+        if (!parts.includes(rawInv)) {
+            return Owed.unread();
+        }
         Owed out = read(Conditions.asSizeComparison(rawInv), at, unnamed, positive, decidesFalse,
-                discharge, per);
+                discharge, per, parts);
         if (per != null) {
             // Keyed by the part as it was handed in, which is the node a reader of this walk holds.
             // What it was rewritten to on the way is this reading's business.
@@ -615,7 +680,7 @@ final class Predicates {
      * which is where each of them is taken as the comparison it states. */
     private Owed read(Core inv, Denotations at, Set<Core> unnamed,
                       boolean positive, boolean decidesFalse, Discharge discharge,
-                      PerPart per) {
+                      PerPart per, PartsToRead parts) {
         if (inv instanceof Core.Binary b
                 && ConditionJoin.of(b.op()).map(join -> join.under(positive)).orElse(null)
                         == ConditionJoin.BOTH) {
@@ -623,14 +688,27 @@ final class Predicates {
             // cannot read leaves its own run-time check standing without costing the others theirs.
             // That it stands is carried rather than dropped — the other half being discharged is
             // not the invariant proven.
-            return obligations(b.left(), at, unnamed, positive, decidesFalse, discharge, per)
+            //
+            // A half a caller did not ask for is the other half alone, which is what a clause
+            // without one of its conjuncts states. Not an empty answer composed with the other:
+            // what a conjunction comes to is its conjuncts together, and there is nothing here for
+            // a conjunct nobody read to contribute.
+            if (!parts.includes(b.left())) {
+                return obligations(b.right(), at, unnamed, positive, decidesFalse, discharge, per,
+                        parts);
+            }
+            if (!parts.includes(b.right())) {
+                return obligations(b.left(), at, unnamed, positive, decidesFalse, discharge, per,
+                        parts);
+            }
+            return obligations(b.left(), at, unnamed, positive, decidesFalse, discharge, per, parts)
                     .and(obligations(b.right(), at, unnamed, positive, decidesFalse, discharge,
-                            per));
+                            per, parts));
         }
         Conditions.Restated under = Conditions.restated(inv);
         if (under != null) {
             return obligations(under.condition(), at, unnamed, under.denied() != positive,
-                    decidesFalse, discharge, per);
+                    decidesFalse, discharge, per, parts);
         }
         ComparisonReadings readings = Conditions.comparisonsStatedBy(terms, inv, at);
         if (readings.inReadingOrder().isEmpty()) {
