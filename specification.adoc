@@ -3607,13 +3607,18 @@ A strict bound on a `+Decimal+` is further along again: its cut is a value the t
 
 *Whether a measure has a number.* Three states, and the report's own word for each. `+complete+` — the measure was made and everything it reads was readable, so a gap is a gap. `+partial+` — it was made and something it reads was not, so it shows what it saw and what it could not decide; a line under a partial measure reads `+undecided+`, which is that measure's account of one thing rather than a state of its own. `+unavailable+` — there is no number.
 
-*Why a measure has none.* `+unavailable+` alone does not say, and the two states it covers ask opposite things of a reader:
+*Why a measure has none.* `+unavailable+` alone does not say, and the two words that follow it ask opposite things of a reader:
 
 * [[a-measure-says-why-it-has-no-number]]a measure that has no number MUST say why, and one that has a number MUST NOT.
 
-`+not applicable+` — there is nothing here for the measure to be about, and no row could change that: a `+>->+` composition and a behavior with no `+let+` have no arms, and a position that is not a sum has no cases to cover. `+not measured+` — it could have been made and was not, and which of the reasons is given: no row names this behavior, the build did not ask for the arms, or the run's instrumentation could not be tied back to the body.
+`+not applicable+` — there is nothing here for the measure to be about, and no row could change that: a `+>->+` composition and a behavior with no `+let+` have no arms, and a position that is not a sum has no cases to cover. `+not measured+` — the measure has something to be about and has no number: either it was never started, or it was started and could not be finished, and the reason says which. The two are one word because they ask the same thing of an author, who has something to do either way; they are two reasons because what to do is not the same, and a measurement that was started and could not be finished says what it went without as well (<<a-measure-weaker-than-complete-says-what-made-it-so>>).
 
 That difference is the one worth reading. `+not applicable+` asks nothing of an author. `+not measured+` says what to do: write a row, ask for the arms, or find out why the run could not read them. Rows that nothing could read are neither — a source that would not evaluate may hold the row being asked for, so what it was carrying is undecided rather than absent.
+
+Which reason it is, is what a reader acts on, so the words are held to the state and not to the kind of thing the state is:
+
+* [[a-reason-is-said-for-the-state-and-not-for-its-kind]]a reason MUST be said for the state the measure is in, and never for the kind of reason that state is one of. A kind can hold more than one state and gain another later, and a sentence written for the kind is a sentence about whichever of them was in mind when it was written — which every other state of that kind is then given. A behavior whose signature could not be read and one whose signature was read and whose input was not are one kind and two states, and the second was told the first's sentence: an author reading it looks in the declaration for a name that resolved.
+* [[two-reasons-that-send-a-reader-elsewhere-are-said-apart]]and two states MUST NOT share a sentence where they send a reader to a different cause, a different action, or a different place in the model. Which states share one is decided by what a reader does about them and not by how alike they look: the same words for two of them are as much a loss as no words at all, and different words for one of them are a difference a reader goes looking for and does not find.
 
 *What made a measure weaker than complete.* A measure that shows a number and cannot be trusted for it, and a measure that was started and could not be finished, both went without something, and the report says what:
 
