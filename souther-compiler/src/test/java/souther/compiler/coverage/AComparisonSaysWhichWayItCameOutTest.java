@@ -5,6 +5,7 @@ import souther.compiler.Emitted;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.generated.MemoryClassLoader;
+import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.query.Output;
@@ -60,8 +61,7 @@ class AComparisonSaysWhichWayItCameOutTest {
     @Test
     void twoWaysOfFailingOneConditionAreNotOneObservation() {
         Compilation compilation = compiled();
-        CoverageSites.Plan plan =
-                Output.Evaluated.planOf(compilation.db(), compilation.modules().get(0));
+        CoverageSites.Plan plan = checkedPlanOf(compilation);
         Behavior submit = new Behavior(probed(compilation));
 
         Observation early = submit.observing(-1L);
@@ -159,6 +159,16 @@ class AComparisonSaysWhichWayItCameOutTest {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
         compilation.answerEverything();
         return compilation;
+    }
+
+    /** The numbering of the bodies the classes below were generated from, asked of the check the
+     *  emitter reads too. Named apart from the plans this package's other tests build straight from
+     *  bodies, which have no compile behind them at all. */
+    private static CoverageSites.Plan checkedPlanOf(Compilation compilation) {
+        Bodies.Elaborated checked = compilation.db()
+                .ask(new Bodies.Checked(compilation.modules().get(0))).value();
+        assertNotNull(checked, "the model under test compiles");
+        return checked.plan();
     }
 
     private static Map<String, ClassFileImage> probed(Compilation compilation) {

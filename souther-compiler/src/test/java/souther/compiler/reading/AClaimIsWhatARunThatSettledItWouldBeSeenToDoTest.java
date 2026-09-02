@@ -148,9 +148,9 @@ class AClaimIsWhatARunThatSettledItWouldBeSeenToDoTest {
             assertNotNull(checked, "the model under test compiles");
             Core body = checked.behaviorBodies().get(name);
             assertNotNull(body, "the behavior under test has a body");
-            // The emitter's plan, which is the numbering the classes below were lit against. A plan
-            // built here again would be the same numbering and would be a second thing to be right.
-            CoverageSites.Plan plan = Output.Evaluated.planOf(compilation.db(), module);
+            // Of the check the emitter reads too, so the numbering below is of the bodies the
+            // classes were generated from.
+            CoverageSites.Plan plan = checked.plan();
             Symbols symbols = Scopes.derived(compilation.db(), module).value();
             InputDomain inputs =
                     compilation.db().ask(new Adequacy.Inputs(module)).value().get(name);

@@ -5,6 +5,7 @@ import souther.compiler.Emitted;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.generated.MemoryClassLoader;
+import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.query.Output;
@@ -64,8 +65,7 @@ class AComparisonIsLitWhereverItIsWrittenTest {
     @Test
     void oneRunPassesTheComparisonInsideAFunctionValueOncePerElement() {
         Compilation compilation = compiled();
-        CoverageSites.Plan plan =
-                Output.Evaluated.planOf(compilation.db(), compilation.modules().get(0));
+        CoverageSites.Plan plan = checkedPlanOf(compilation);
         ComparisonEmissionSite perElement = comparisonAt(plan, "fee", 9);
         Map<String, ClassFileImage> classes = probed(compilation);
 
@@ -88,8 +88,7 @@ class AComparisonIsLitWhereverItIsWrittenTest {
     @Test
     void aComparisonGivenANameIsRecordedWhereItIsWritten() {
         Compilation compilation = compiled();
-        CoverageSites.Plan plan =
-                Output.Evaluated.planOf(compilation.db(), compilation.modules().get(0));
+        CoverageSites.Plan plan = checkedPlanOf(compilation);
         ComparisonEmissionSite named = comparisonAt(plan, "fee", 7);
         Map<String, ClassFileImage> classes = probed(compilation);
 
@@ -103,8 +102,7 @@ class AComparisonIsLitWhereverItIsWrittenTest {
     @Test
     void aComparisonABehaviorAnswersWithIsRecordedToo() {
         Compilation compilation = compiled();
-        CoverageSites.Plan plan =
-                Output.Evaluated.planOf(compilation.db(), compilation.modules().get(0));
+        CoverageSites.Plan plan = checkedPlanOf(compilation);
         ComparisonEmissionSite answered = comparisonAt(plan, "positive", 12);
         Map<String, ClassFileImage> classes = probed(compilation);
 
@@ -143,6 +141,16 @@ class AComparisonIsLitWhereverItIsWrittenTest {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
         compilation.answerEverything();
         return compilation;
+    }
+
+    /** The numbering of the bodies the classes below were generated from, asked of the check the
+     *  emitter reads too. Named apart from the plans this package's other tests build straight from
+     *  bodies, which have no compile behind them at all. */
+    private static CoverageSites.Plan checkedPlanOf(Compilation compilation) {
+        Bodies.Elaborated checked = compilation.db()
+                .ask(new Bodies.Checked(compilation.modules().get(0))).value();
+        assertNotNull(checked, "the model under test compiles");
+        return checked.plan();
     }
 
     private static Map<String, ClassFileImage> probed(Compilation compilation) {

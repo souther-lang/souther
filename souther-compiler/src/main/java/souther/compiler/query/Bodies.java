@@ -2262,6 +2262,14 @@ public final class Bodies {
          * says which module. Built from the bodies and the module handed over separately, the two
          * are only as true as the caller made them — and there are a dozen callers, each holding
          * one of these and taking the parts off it.
+         *
+         * <p><b>Each call walks the bodies again.</b> What comes back is a plan of its own, and two
+         * of them number one arm alike because the walk is a function of the bodies rather than
+         * because anything here hands the same one out twice. So a caller holding two — the
+         * emitter's and a measure's, say — holds two answers that agree, which is not the same as
+         * holding one answer, and nothing yet says what it would take for two numberings of one
+         * module to mean the same thing. Said here because it is asked here: a caller that had to
+         * work it out would work it out once per call site.
          */
         public souther.compiler.coverage.CoverageSites.Plan plan() {
             return souther.compiler.coverage.CoverageSites.of(of, decisions, supplied);
