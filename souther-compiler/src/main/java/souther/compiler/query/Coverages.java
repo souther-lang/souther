@@ -463,7 +463,7 @@ final class Coverages {
             case souther.compiler.inputs.InputQuestion.AboutAPosition it ->
                     it.path().equals(axis.path());
             case souther.compiler.inputs.InputQuestion.AboutANumber it ->
-                    it.term().equals(axis.term());
+                    it.about().equals(axis.subject());
         };
     }
 

@@ -32,7 +32,7 @@ import java.util.Map;
  * the frames above would make one line two.
  */
 public record DeclaredBorders(souther.compiler.diag.Citation at,
-                              Map<Key, FieldDomains.Coordinate> forms) {
+                              Map<Key, NumberAt<RuleKey>> forms) {
 
     /** Which authored line: the clause, and which of its conjuncts placed the end. */
     public record Key(RuleRef.Invariant rule, int conjunct) {}
@@ -61,7 +61,7 @@ public record DeclaredBorders(souther.compiler.diag.Citation at,
                     "there is no declaration of " + declaredOn.name() + " to read");
         }
         souther.compiler.diag.Citation at = souther.compiler.diag.Citation.of(data.pos());
-        Map<Key, FieldDomains.Coordinate> forms = new LinkedHashMap<>();
+        Map<Key, NumberAt<RuleKey>> forms = new LinkedHashMap<>();
         for (FieldDomains.Placed placed : Rules.of(declaredOn, symbols, policy).bounds().placed()) {
             // A clause reaching this declaration through a spread is written on another one and is
             // that one's to name, the way a line is named by the rule that drew it (ADR-0090). Its
@@ -80,13 +80,39 @@ public record DeclaredBorders(souther.compiler.diag.Citation at,
      * not read is a clause with no form to print, and a caller handed one has nothing to call the
      * line but the rule's own name.
      */
-    public FieldDomains.Coordinate at(RuleRef.Invariant rule, int conjunct) {
+    public NumberAt<RuleKey> at(RuleRef.Invariant rule, int conjunct) {
         return at(new Key(rule, conjunct));
     }
 
     /** The same, for a caller holding the key the rule handed it
      *  ({@code OriginRef.declaredLine}). */
-    public FieldDomains.Coordinate at(Key line) {
+    public NumberAt<RuleKey> at(Key line) {
         return forms.get(line);
+    }
+
+    /**
+     * What to call the line the author drew, in their own terms, or null where this declaration
+     * draws no such line.
+     *
+     * <p>Here, where the lines a declaration wrote are, and nowhere else. The claim itself is the
+     * question's vocabulary and is written about a place of any kind, so it has no word for a name
+     * a value's own rules spell one way and an input's spell another; what a declaration calls its
+     * own place is this reading's to say. Written at each surface that shows a line, the same line
+     * came out in two spellings and neither was the other's.
+     */
+    public String nameOf(Key line) {
+        NumberAt<RuleKey> at = forms.get(line);
+        if (at == null) {
+            return null;
+        }
+        // The value a newtype wraps is at no name, and the clause writing about it says `value`.
+        String where = at.position().isTheValueItself() ? "value" : at.position().toString();
+        return at.of() instanceof NumberAt.OfWhatNumber.OfWhatAnOperationAnswers taken
+                ? taken.operation() + "(" + where + ")" : where;
+    }
+
+    /** The same, for a caller holding the rule and the conjunct that drew the line. */
+    public String nameOf(RuleRef.Invariant rule, int conjunct) {
+        return nameOf(new Key(rule, conjunct));
     }
 }
