@@ -24,6 +24,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * What can arrive at each position of one behavior's input, read once.
@@ -111,25 +112,6 @@ public final class InputDomain {
      */
     public record RuleRoot(TermPath at, Type type, RootOpening opening) {}
 
-    /**
-     * A reading with no positions in it.
-     *
-     * <p><b>More than one absence is written down as this, and they are not the same absence.</b> A
-     * {@code >->} composition has no input of its own — what it takes is its first stage's and is
-     * read there — and that is a fact about the behavior. A caller that could not get a reading at
-     * all also substitutes this, and that is a fact about the compile: what such a caller goes on
-     * to measure is an input with no positions, which is what a behavior the model divides nowhere
-     * comes back with.
-     *
-     * <p>The boundary measures no longer do the second ({@code Adequacy.Divided} asks for the
-     * reading and is absent without one). {@code PathReached} still does, through
-     * {@code Adequacy.domainOf}. Until that is closed this constant means the first by intent and
-     * the second by accident, and a reader must not take it for either on its own.
-     */
-    public static final InputDomain NONE =
-            new InputDomain(List.of(), Map.of(), List.of(), List.of(), null, NameReach.NONE,
-                    List.of(), List.of(), List.of());
-
     private final List<Position> positions;
     private final Map<TermPath, Position> byPath;
     private final Map<BindingId, String> read;
@@ -184,8 +166,12 @@ public final class InputDomain {
         this.read = Map.copyOf(read);
         this.parameters = List.copyOf(parameters);
         this.roots = List.copyOf(roots);
-        this.policy = policy;
-        this.reach = reach;
+        // Every one of these is what a walk that ran came back with. A reading is made by walking
+        // an input and no other way, so there is no state of this in which one of them is missing —
+        // and a reader asking how the names in it are read gets the policy it was read under
+        // whatever the walk found.
+        this.policy = Objects.requireNonNull(policy, "a reading is made under a policy");
+        this.reach = Objects.requireNonNull(reach, "a reading says what its names reach");
         Map<TermPath, Position> at = new LinkedHashMap<>();
         // The first reading of a path stands. A path is where a rule and a row meet, so two
         // readings under one path would be the position answering differently depending on which
@@ -300,9 +286,13 @@ public final class InputDomain {
         List<Position> settled = found.stream()
                 .map(each -> shortOfHandedOnRules(each, handoffs.unresolvedAt(each.path())))
                 .toList();
-        return settled.isEmpty() ? NONE
-                : new InputDomain(settled, read, parameters, roots, policy, observed.reach(),
-                        account.placed(), account.clauses(), observed.cases());
+        // Whatever the walk found, including nothing. A behavior declaring no parameters has an
+        // input with no positions in it, and that is a reading that was made rather than one that
+        // was not: it holds the parameters it was given, the policy it was read under and the names
+        // it reached. Answered with a value standing for no reading at all, an input nobody could
+        // read would be the same value as an input there was nothing to read.
+        return new InputDomain(settled, read, parameters, roots, policy, observed.reach(),
+                account.placed(), account.clauses(), observed.cases());
     }
 
     /**

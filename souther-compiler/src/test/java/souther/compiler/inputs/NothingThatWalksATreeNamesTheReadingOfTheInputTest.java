@@ -415,7 +415,11 @@ class NothingThatWalksATreeNamesTheReadingOfTheInputTest {
 
     private static final class InAMemberType {
         static Object taken() {
-            return InputDomain.NONE.positions();
+            // The call is what puts a member of the reading in this class file, which is what is
+            // being witnessed. A reading is made by walking an input and there is none to walk
+            // here, so the call is written and not made.
+            InputDomain read = null;
+            return read == null ? List.of() : read.positions();
         }
     }
 

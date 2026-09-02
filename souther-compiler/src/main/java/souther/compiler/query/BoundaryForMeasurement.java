@@ -1,19 +1,25 @@
 package souther.compiler.query;
 
+import souther.compiler.ast.Hir;
 import souther.compiler.check.Sig;
 import souther.compiler.inputs.InputDomain;
 
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * What a measure of one behavior has to work from at its boundary, or which part of it is missing.
  *
- * <p>Two things and not one. A signature says what the behavior takes and answers with, and a
- * reading of the input says where its positions are and what the rules leave the numbers at them.
- * A measure that reads the boundary needs both, and they go missing for different reasons: a
- * declaration resting on a name nothing resolved has no signature, and a module holding a type
- * nobody could name has no reading of what any of its behaviors take. A behavior can have the
- * first and not the second.
+ * <p>A signature, and where what the behavior takes is read. The signature says what it takes and
+ * answers with; where its input is read is {@link InputForMeasurement} — here, as a reading whose
+ * positions and numbers a measure goes on to ask about, or at its stages for a {@code >->}
+ * composition. So a boundary that was worked out always has a signature, and holds a reading only
+ * where the behavior has an input of its own.
+ *
+ * <p>They go missing for different reasons, which is why {@link NotDerived} has two: a declaration
+ * resting on a name nothing resolved has no signature, and a module holding a type nobody could
+ * name has no reading of what any of its behaviors take. A behavior can have the first and not the
+ * second.
  *
  * <p>What is not an analysis's to say is what a report should do about either. Read straight, the
  * absence is a key a measure can skip — which is what both measures of a behavior's boundary did,
@@ -28,28 +34,33 @@ import java.util.Map;
 public sealed interface BoundaryForMeasurement {
 
     /**
-     * The boundary a measure works from: what the behavior declares, and the input as it was read.
+     * The boundary a measure works from: what the behavior declares, and where what it takes is
+     * read.
      *
-     * <p>Both, because a measure that reads one reads the other. Handed the signature alone, a
-     * reader that needed the reading took it from a map that may not hold one and read the absence
-     * as an input with no positions — which measures as an input the model divides nowhere.
+     * <p>The second because of what happened without it. Handed the signature alone, a reader that
+     * needed the reading took it from a map that may not hold one and read the absence as an input
+     * with no positions — which measures as an input the model divides nowhere. Here a measure is
+     * told where what the behavior takes is read, and a behavior whose reading could not be made is
+     * not one of these at all.
      *
-     * @param inputs {@link InputDomain#NONE} for a behavior with no input of its own, which is a
-     *               {@code >->} composition: what it takes is its first stage's and is read there
+     * @param input where what this behavior takes is read ({@link InputForMeasurement}), which is
+     *              here for a declared behavior and at its stages for a composition. A boundary
+     *              this compilation could not work out is not one of these
      */
-    record Derived(Sig sig, InputDomain inputs) implements BoundaryForMeasurement {
+    record Derived(Sig sig, InputForMeasurement input) implements BoundaryForMeasurement {
 
         public Derived {
-            java.util.Objects.requireNonNull(sig, "a derived boundary is a signature");
-            java.util.Objects.requireNonNull(inputs, "a derived boundary is an input that was read");
+            Objects.requireNonNull(sig, "a derived boundary is a signature");
+            Objects.requireNonNull(input, "a derived boundary says where its input is read");
         }
     }
 
     /**
-     * One of the two is missing, so nothing that reads the boundary could be measured.
+     * The signature, or a reading this behavior was owed, is missing — so nothing that reads the
+     * boundary could be measured.
      *
      * <p>A {@link FailureReason} as well as an arm, because it is both: the fact a measure holds
-     * about its input, and the word every measure short of that input has no number for.
+     * about its boundary, and the word every measure short of it has no number for.
      */
     enum NotDerived implements BoundaryForMeasurement, FailureReason {
 
@@ -98,22 +109,40 @@ public sealed interface BoundaryForMeasurement {
      *
      * <p>Asked of the declaration rather than of the name, because only a declaration says whether
      * this behavior has an input of its own to read. A {@code >->} composition takes what its first
-     * stage takes and is read there, so having no reading here is what it is rather than a reading
-     * that was refused — and told apart by the name alone, every composition in the module reads as
-     * a behavior whose input nobody could read.
+     * stage takes and is read there, which is what {@link InputForMeasurement.AtStages} says — told
+     * apart by the name alone, every composition in the module reads as a behavior whose input
+     * nobody could read.
+     *
+     * <p><b>The one place a behavior is put in one of these states.</b> A measure that worked it out
+     * again from the signatures, the kind of the declaration and a lookup that may miss would be
+     * deciding a second time what a missing entry means, and the two decisions moved apart: of the
+     * two readers of one reachability walk, one skipped a behavior whose input was not read and the
+     * other measured it against an input with no positions.
+     *
+     * <p><b>Three steps, in this order.</b> A signature is asked for first, and without one there is
+     * no boundary whatever the behavior is. With one in hand the declaration says whether a reading
+     * of an input of its own is owed at all — a composition's is its first stage's — and only where
+     * one is owed is its presence asked about. Taken in the other order, a module whose reading
+     * could not be made would report every composition in it as a behavior whose input nobody could
+     * read.
+     *
+     * <p>Which is not the question of whether a measure applies to this behavior. That one is the
+     * declaration's, asked by each measure that has a subject to choose; what is answered here is
+     * what this compilation worked out.
      */
     static BoundaryForMeasurement of(Map<String, Sig> signatures,
                                      Map<String, InputDomain> read,
-                                     souther.compiler.ast.Hir.BehaviorDef behavior) {
+                                     Hir.BehaviorDef behavior) {
         Sig sig = signatures.get(behavior.name());
         if (sig == null) {
             return NotDerived.BEHAVIOR_BOUNDARY_NOT_DERIVED;
         }
-        if (!(behavior instanceof souther.compiler.ast.Hir.SpecBehavior)) {
-            return new Derived(sig, InputDomain.NONE);   // its input is its first stage's
+        if (!(behavior instanceof Hir.SpecBehavior spec)) {
+            return new Derived(sig, InputForMeasurement.AtStages.INSTANCE);
         }
-        InputDomain inputs = read == null ? null : read.get(behavior.name());
-        return inputs == null ? NotDerived.BEHAVIOR_INPUT_NOT_READ : new Derived(sig, inputs);
+        InputDomain inputs = read == null ? null : read.get(spec.name());
+        return inputs == null ? NotDerived.BEHAVIOR_INPUT_NOT_READ
+                : new Derived(sig, new InputForMeasurement.Local(spec, inputs));
     }
 
     /**
