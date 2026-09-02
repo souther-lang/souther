@@ -44,6 +44,16 @@ class ProbeMappingTest {
         return compilation;
     }
 
+    /** The numbering of {@code module}'s bodies as {@code compilation} checked them. Which compile
+     *  they were checked by is what the tests below turn on: two compiles of one source number one
+     *  arm alike, and a plan of one compile's bodies is about that compile's trees. */
+    private static CoverageSites.Plan checkedPlanOf(Compilation compilation, String module) {
+        Bodies.Elaborated checked =
+                compilation.db().ask(new Bodies.Checked(module)).value();
+        assertNotNull(checked, "the model under test compiles");
+        return checked.plan();
+    }
+
     /**
      * A plan made from one compile, used to emit another's bodies.
      *
@@ -57,7 +67,7 @@ class ProbeMappingTest {
         Compilation elsewhere = compiled();
         String module = emitting.modules().get(0);
         Output.Classes.Inputs in = Output.Classes.inputs(emitting.db(), module);
-        CoverageSites.Plan somewhereElse = Output.Evaluated.planOf(elsewhere.db(), module);
+        CoverageSites.Plan somewhereElse = checkedPlanOf(elsewhere, module);
         assertNotNull(in);
         assertTrue(somewhereElse.sites().size() > 0, "the other compile has arms of its own");
 
@@ -86,7 +96,7 @@ class ProbeMappingTest {
         String module = emitting.modules().get(0);
         Output.Classes.Inputs in = Output.Classes.inputs(emitting.db(), module);
         assertNotNull(in);
-        CoverageSites.Plan real = Output.Evaluated.planOf(emitting.db(), module);
+        CoverageSites.Plan real = checkedPlanOf(emitting, module);
         assertTrue(real.sites().size() > 0);
 
         // The same plan with one more arm in it than any body will emit.
