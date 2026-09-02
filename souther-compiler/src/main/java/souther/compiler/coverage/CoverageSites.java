@@ -226,24 +226,39 @@ public final class CoverageSites {
                        IdentityHashMap<Core, ForkOccurrence> forkByNode,
                        ComparisonCatalog comparisons) {
 
-        // What a number is of is no longer checked here, and the two halves it used to check are
-        // closed differently.
-        //
-        // That a number is on a comparison at all is the key's own answer. A numbering keyed by the
-        // node could put one on an `&&` or on arithmetic, and the emitter would copy half a `long`
-        // off the stack for it; a ComparisonOccurrence names a comparison and nothing else, so
-        // there is no such number to write down.
-        //
-        // That the numbering and the catalog describe one set of bodies is `of`'s doing: it walks
-        // one map of bodies, builds the catalog from it, and numbers what that catalog holds — so
-        // the two cannot come from different bodies without somebody assembling a plan out of parts
-        // by hand, which is what a test does deliberately. It is not a property of the key: an
-        // occurrence is a behavior's name and a number, and one made against another set of bodies
-        // is a value like any other.
+        public Plan {
+            // Half of what a numbering could get wrong is the key's own answer now: an occurrence
+            // names a comparison and nothing else, so there is no number to put on an `&&` or on
+            // arithmetic, which is what would have had the emitter copy half a `long` off the
+            // stack.
+            //
+            // The other half is not. An occurrence is a module, a behavior and a number — ordinary
+            // values — so one issued by another module's catalog is a key like any other, and a
+            // plan assembled out of parts can be numbering comparisons its own catalog never held.
+            // Every reader below joins on the catalog to tell a comparison this plan does not
+            // instrument from one that was never this plan's, and that only answers while the
+            // numbering is of the catalog beside it.
+            for (ComparisonOccurrence numbered : byComparison.keySet()) {
+                requireHeld(numbered, comparisons, "numbered");
+            }
+            for (ComparisonOccurrence numbered : controlByComparison.keySet()) {
+                requireHeld(numbered, comparisons, "given a control point");
+            }
+        }
+
+        private static void requireHeld(ComparisonOccurrence which, ComparisonCatalog comparisons,
+                                        String what) {
+            if (!comparisons.holds(which)) {
+                throw new IllegalArgumentException("a comparison this plan's catalog does not hold "
+                        + "was " + what + ": " + which
+                        + "; the numbering and the catalog are one answer or they are two");
+            }
+        }
 
         public static final Plan NONE = new Plan(List.of(), List.of(), new IdentityHashMap<>(),
                 new LinkedHashMap<>(), new IdentityHashMap<>(), new LinkedHashMap<>(),
-                java.util.Set.of(), new IdentityHashMap<>(), ComparisonCatalog.of("", Map.of()));
+                java.util.Set.of(), new IdentityHashMap<>(),
+                ComparisonCatalog.of(ModuleBodies.none()));
 
         /**
          * Whether one run of the behavior can pass {@code node} more than once.
@@ -385,14 +400,13 @@ public final class CoverageSites {
 
     /** The sites of every behavior body in one module, numbered in the order the bodies are declared
      * and, within one, in the order the arms are written. */
-    public static Plan of(String module, Map<String, Core> behaviorBodies,
-                          DecisionSources decisions, SuppliedRules supplied) {
+    public static Plan of(ModuleBodies of, DecisionSources decisions, SuppliedRules supplied) {
         // Which comparisons there are is not this walk's to decide. Asked here and answered once,
         // so that what gets a number and what a line is drawn on are the same collection read twice
         // rather than two descents that happen to agree.
-        ComparisonCatalog comparisons = ComparisonCatalog.of(module, behaviorBodies);
+        ComparisonCatalog comparisons = ComparisonCatalog.of(of);
         Walk walk = new Walk(comparisons, decisions, supplied);
-        for (Map.Entry<String, Core> body : behaviorBodies.entrySet()) {
+        for (Map.Entry<String, Core> body : of.bodies().entrySet()) {
             walk.behavior(body.getKey(), body.getValue());
         }
         return new Plan(List.copyOf(walk.sites), List.copyOf(walk.guards), walk.byNode,

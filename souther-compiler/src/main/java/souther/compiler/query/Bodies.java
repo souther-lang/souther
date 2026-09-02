@@ -2012,7 +2012,9 @@ public final class Bodies {
         // query that answers it for a report depends on this one and cannot be asked from inside
         // it. Both routes call one function over one input; what is not shared is the memo.
         souther.compiler.coverage.CoverageSites.Plan plan =
-                souther.compiler.coverage.CoverageSites.of(module, bodies, decisions, supplied);
+                souther.compiler.coverage.CoverageSites.of(
+                        new souther.compiler.coverage.ModuleBodies(module, bodies),
+                        decisions, supplied);
         Map<String, souther.compiler.claims.Claims> out = new LinkedHashMap<>();
         for (Hir.BehaviorDef behavior : settled.behaviors()) {
             Core body = bodies.get(behavior.name());
@@ -2254,7 +2256,8 @@ public final class Bodies {
          */
         public souther.compiler.coverage.CoverageSites.Plan plan() {
             return souther.compiler.coverage.CoverageSites.of(
-                    module, behaviorBodies, decisions, supplied);
+                    new souther.compiler.coverage.ModuleBodies(module, behaviorBodies),
+                    decisions, supplied);
         }
 
         /** Who owns the rule each fork of this module's bodies decides by. */

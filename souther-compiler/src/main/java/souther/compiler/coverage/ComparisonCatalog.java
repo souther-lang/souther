@@ -85,18 +85,19 @@ public final class ComparisonCatalog {
     }
 
     /**
-     * The comparisons of every behavior body of {@code module}.
+     * The comparisons of every behavior body of one module.
      *
-     * <p>The module is here because a name this issues has to tell one comparison from every other
-     * there is, and a behavior's name is one module's word. Left out, two modules each declaring a
-     * behavior of one name would name their first comparisons the same thing, and a reading of one
-     * would join to the other's.
+     * <p>Taken as one value because a name this issues is made of the module and the body: a name
+     * has to tell one comparison from every other there is, and a behavior's name is one module's
+     * word. Handed the module and the trees apart, a caller could put one module's name beside
+     * another's trees, and what this issued would be names true of nothing — which no later check
+     * could refuse, since the catalog being asked is the one that made them.
      */
-    public static ComparisonCatalog of(String module, Map<String, Core> behaviorBodies) {
+    public static ComparisonCatalog of(ModuleBodies of) {
         IdentityHashMap<Core, ComparisonOccurrence> occurrenceAtNode = new IdentityHashMap<>();
         Map<ComparisonOccurrence, Catalogued> byOccurrence = new LinkedHashMap<>();
-        for (Map.Entry<String, Core> body : behaviorBodies.entrySet()) {
-            walk(body.getValue(), module, body.getKey(), new int[] {0},
+        for (Map.Entry<String, Core> body : of.bodies().entrySet()) {
+            walk(body.getValue(), of.module(), body.getKey(), new int[] {0},
                     occurrenceAtNode, byOccurrence);
         }
         return new ComparisonCatalog(occurrenceAtNode, byOccurrence);

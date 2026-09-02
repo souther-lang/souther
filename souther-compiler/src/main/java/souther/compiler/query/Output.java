@@ -370,8 +370,7 @@ public final class Output {
             Instrumentation instrumentation = Instrumentation.COUNTING;
             if (arms == ArmObservation.RECORD) {
                 instrumentation = instrumentation.measuring(
-                        CoverageSites.of(module(), in.checked().behaviorBodies(),
-                                in.checked().decisions(), in.checked().supplied()));
+                        in.checked().plan());
             }
             try {
                 Emissions emitted = Backend.generate(
@@ -395,9 +394,7 @@ public final class Output {
          * from the same answer the classes were generated from, so the numbers agree. */
         public static CoverageSites.Plan planOf(Db db, String module) {
             Bodies.Elaborated checked = db.ask(new Bodies.Checked(module)).value();
-            return checked == null ? CoverageSites.Plan.NONE
-                    : CoverageSites.of(module, checked.behaviorBodies(), checked.decisions(),
-                            checked.supplied());
+            return checked == null ? CoverageSites.Plan.NONE : checked.plan();
         }
     }
 

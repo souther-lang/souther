@@ -879,11 +879,8 @@ public final class Adequacy {
                 return Answer.of(Ordered.map(Map.of()));
             }
             souther.compiler.coverage.CoverageSites.Plan plan =
-                    souther.compiler.coverage.CoverageSites.of(name, bodies,
-                            checked == null
-                                    ? souther.compiler.coverage.DecisionSources.NONE
-                                    : checked.decisions(),
-                            checked == null ? souther.compiler.coverage.SuppliedRules.NONE : checked.supplied());
+                    checked == null
+                            ? souther.compiler.coverage.CoverageSites.Plan.NONE : checked.plan();
             // Asked here and not above, because this is where one is needed: what a behavior's
             // boundary came to is asked of the signatures and the readings together, and the
             // answer above is about there being no places to ask it of. Asked at the way in, a
@@ -1225,11 +1222,9 @@ public final class Adequacy {
             Map<String, souther.compiler.core.Core> producing =
                     checkedBodies == null ? Map.of() : checkedBodies.behaviorBodies();
             souther.compiler.coverage.CoverageSites.Plan producingPlan =
-                    souther.compiler.coverage.CoverageSites.of(name, producing,
-                            checkedBodies == null
-                                    ? souther.compiler.coverage.DecisionSources.NONE
-                                    : checkedBodies.decisions(),
-                            checkedBodies == null ? souther.compiler.coverage.SuppliedRules.NONE : checkedBodies.supplied());
+                    checkedBodies == null
+                            ? souther.compiler.coverage.CoverageSites.Plan.NONE
+                            : checkedBodies.plan();
             Map<String, souther.compiler.check.PathReachability.Answers.AsRun> reachableArms = db.ask(new Arrived(name)).value();
             return answerEveryBehavior(prepared.value(), behavior ->
                     // What this measure works from, or the fact that it has none. A behavior left
@@ -1282,11 +1277,8 @@ public final class Adequacy {
             Map<String, souther.compiler.check.ElementBindings> elementsOf =
                     checked == null ? Map.of() : checked.elementBindings();
             souther.compiler.coverage.CoverageSites.Plan plan =
-                    souther.compiler.coverage.CoverageSites.of(name, bodies,
-                            checked == null
-                                    ? souther.compiler.coverage.DecisionSources.NONE
-                                    : checked.decisions(),
-                            checked == null ? souther.compiler.coverage.SuppliedRules.NONE : checked.supplied());
+                    checked == null
+                            ? souther.compiler.coverage.CoverageSites.Plan.NONE : checked.plan();
             Level level = levelOf(db);
             Map<String, RowReading> byTarget = db.ask(new RowReadings(name)).value();
             Map<String, InputDomain> readInputs = db.ask(new Inputs(name)).value();
@@ -1426,12 +1418,8 @@ public final class Adequacy {
             Map<String, souther.compiler.core.Core> bodies =
                     checked == null ? Map.of() : checked.behaviorBodies();
             souther.compiler.coverage.CoverageSites.Plan plan =
-                    souther.compiler.coverage.CoverageSites.of(name, bodies,
-                            checked == null
-                                    ? souther.compiler.coverage.DecisionSources.NONE
-                                    : checked.decisions(),
-                            checked == null ? souther.compiler.coverage.SuppliedRules.NONE
-                                    : checked.supplied());
+                    checked == null
+                            ? souther.compiler.coverage.CoverageSites.Plan.NONE : checked.plan();
             return Answer.of(Coverages.partitioningOf(spec,
                     domain.reading(scope.value()), bodies.get(behavior),
                     checked == null ? souther.compiler.check.ElementBindings.NONE
@@ -2712,11 +2700,8 @@ public final class Adequacy {
             Map<String, souther.compiler.check.ElementBindings> elementsOf =
                     checked == null ? Map.of() : checked.elementBindings();
             souther.compiler.coverage.CoverageSites.Plan plan =
-                    souther.compiler.coverage.CoverageSites.of(name, bodies,
-                            checked == null
-                                    ? souther.compiler.coverage.DecisionSources.NONE
-                                    : checked.decisions(),
-                            checked == null ? souther.compiler.coverage.SuppliedRules.NONE : checked.supplied());
+                    checked == null
+                            ? souther.compiler.coverage.CoverageSites.Plan.NONE : checked.plan();
             Map<String, RowReading> byTarget = db.ask(new RowReadings(name)).value();
             Map<String, InputDomain> readInputs = db.ask(new Inputs(name)).value();
             // What the guards above each place leave, asked once for the module and read by

@@ -53,6 +53,12 @@ class WhoNamesAComparisonAndWhoAddressesOneTest {
 
     private static final String SITE = "souther/compiler/coverage/ComparisonEmissionSite";
 
+    private static final String BODIES = "souther/compiler/coverage/ModuleBodies";
+
+    private static final String CATALOGUED = "souther/compiler/coverage/ComparisonCatalog$Catalogued";
+
+    private static final String READ = "souther/compiler/partition/OriginRef$ComparisonOrigin$Read";
+
     /** A method that may make one, how many times it does, and why it is the one that does. */
     private record Licence(String who, int calls, String why) { }
 
@@ -69,6 +75,58 @@ class WhoNamesAComparisonAndWhoAddressesOneTest {
             new Licence("souther.compiler.coverage.Probe.compared", 1,
                     "what a probed class calls as it runs, which arrives as the number the emitter"
                             + " wrote into the call and has no catalog to ask anything of"));
+
+    /**
+     * What holds a value whose parts have to agree, and where each is put together.
+     *
+     * <p>Beside the two above and the same rule. A value made of parts that are only true together
+     * is one a caller can pair wrongly — one module's name beside another's trees, a comparison
+     * beside a citation of somewhere else, an occurrence beside the emission site of another plan.
+     * What keeps them true is that one place makes each, so what is fixed is where that place is.
+     */
+    private static final List<Licence> MAY_PAIR = List.of(
+            new Licence("souther.compiler.query.Bodies.Elaborated.plan", 1,
+                    "the bodies a check produced, beside whose module they are: the check knows"
+                            + " both because it produced them under one name"),
+            new Licence("souther.compiler.query.Bodies.judged", 1,
+                    "the same, for the plan the check reads its own claims off before there is an"
+                            + " answer to hold them"),
+            new Licence("souther.compiler.coverage.ModuleBodies.none", 1,
+                    "the module with nothing in it, which is what a check that did not finish"
+                            + " leaves and is a pair of nothing with nobody"));
+
+    private static final List<Licence> MAY_CATALOGUE = List.of(
+            new Licence("souther.compiler.coverage.ComparisonCatalog.lambda$walk$0", 1,
+                    "the one walk that recognises a comparison, names it and says where it is"
+                            + " written, all from the node it is standing at"));
+
+    private static final List<Licence> MAY_READ = List.of(
+            new Licence("souther.compiler.partition.GuardThresholds.originOf", 1,
+                    "which comparison a rule is about, where it is written and where a run through"
+                            + " it is recorded, taken together from the catalog and the plan that"
+                            + " numbered it"));
+
+    @Test
+    void onlyACheckPairsAModuleWithItsBodies() throws IOException {
+        assertEquals(declared(MAY_PAIR), callsToConstructor(BODIES),
+                "a module's name beside another module's trees has the catalog issue names true of"
+                        + " nothing, and no later check can refuse them. What may pair them, and"
+                        + " why: " + why(MAY_PAIR));
+    }
+
+    @Test
+    void onlyTheWalkPutsACataloguedComparisonTogether() throws IOException {
+        assertEquals(declared(MAY_CATALOGUE), callsToConstructor(CATALOGUED),
+                "a name, a recognition and a place are true together or not at all. What may put"
+                        + " them together, and why: " + why(MAY_CATALOGUE));
+    }
+
+    @Test
+    void onlyOnePlaceSaysWhichComparisonARuleIsReadOff() throws IOException {
+        assertEquals(declared(MAY_READ), callsToConstructor(READ),
+                "an occurrence of one plan beside the emission site of another is a rule pointing"
+                        + " at two places. What may pair them, and why: " + why(MAY_READ));
+    }
 
     @Test
     void onlyTheCatalogNamesAComparisonOfABody() throws IOException {
@@ -104,10 +162,6 @@ class WhoNamesAComparisonAndWhoAddressesOneTest {
             ClassModel model = ClassFile.of().parse(Files.readAllBytes(each));
             read++;
             String from = model.thisClass().asInternalName().replace('/', '.').replace('$', '.');
-            if (from.equals(owner.replace('/', '.'))) {
-                // Its own constructor calling itself is not somebody making one.
-                continue;
-            }
             for (MethodModel method : model.methods()) {
                 method.code().ifPresent(code -> code.forEach(element -> {
                     if (element instanceof InvokeInstruction call

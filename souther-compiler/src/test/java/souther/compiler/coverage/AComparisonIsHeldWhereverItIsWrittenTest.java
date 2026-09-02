@@ -57,12 +57,13 @@ class AComparisonIsHeldWhereverItIsWrittenTest {
      *  does not matter here: every question below is of one catalog, and a name only has to tell
      *  one module's comparisons from another's. */
     private static ComparisonCatalog catalogOf(Map<String, Core> bodies) {
-        return ComparisonCatalog.of("example", bodies);
+        return ComparisonCatalog.of(new ModuleBodies("example", bodies));
     }
 
     /** The plan of the same, under the same name. */
     private static CoverageSites.Plan planOf(Map<String, Core> bodies) {
-        return CoverageSites.of("example", bodies, DecisionSources.NONE, SuppliedRules.NONE);
+        return CoverageSites.of(new ModuleBodies("example", bodies),
+                DecisionSources.NONE, SuppliedRules.NONE);
     }
 
     private static void collect(Core e, ComparisonCatalog catalog, List<Core.Binary> out) {
@@ -216,9 +217,11 @@ class AComparisonIsHeldWhereverItIsWrittenTest {
     /**
      * Two comparisons spelled the same way in one body are two occurrences.
      *
-     * <p>What an occurrence is for. {@code Core} nodes are records, so the two are equal as values
-     * and a reading that told them apart by what they say would have one answer for both — which is
-     * what a line drawn on one and a run recorded at the other come to.
+     * <p>What an occurrence is for. One comparison as written is spliced into a body once per call
+     * of the helper that holds it, so where it is written does not tell the copies apart — they
+     * cite one place — and each is reached under its caller's own conditions. A reading that named
+     * a comparison by where it is written would have one answer for both, which is what a line
+     * drawn on one and a run recorded at the other come to.
      */
     @Test
     void twoComparisonsSpelledAlikeAreTwoOccurrences() {
@@ -258,8 +261,10 @@ class AComparisonIsHeldWhereverItIsWrittenTest {
 
                 let check (a) = if a > 10 then 1 else 2
                 """;
-        ComparisonCatalog here = ComparisonCatalog.of("one", bodiesOf(body.formatted("one")));
-        ComparisonCatalog there = ComparisonCatalog.of("two", bodiesOf(body.formatted("two")));
+        ComparisonCatalog here =
+                ComparisonCatalog.of(new ModuleBodies("one", bodiesOf(body.formatted("one"))));
+        ComparisonCatalog there =
+                ComparisonCatalog.of(new ModuleBodies("two", bodiesOf(body.formatted("two"))));
 
         assertEquals(1, here.all().size(), "each module writes one comparison");
         assertEquals(1, there.all().size(), "each module writes one comparison");
@@ -284,10 +289,11 @@ class AComparisonIsHeldWhereverItIsWrittenTest {
 
                 let check (a) = if a > 10 then 1 else 2
                 """;
-        CoverageSites.Plan here = CoverageSites.of("one", bodiesOf(body.formatted("one")),
+        CoverageSites.Plan here = CoverageSites.of(
+                new ModuleBodies("one", bodiesOf(body.formatted("one"))),
                 DecisionSources.NONE, SuppliedRules.NONE);
-        ComparisonOccurrence there =
-                ComparisonCatalog.of("two", bodiesOf(body.formatted("two"))).all().get(0).which();
+        ComparisonOccurrence there = ComparisonCatalog.of(
+                new ModuleBodies("two", bodiesOf(body.formatted("two")))).all().get(0).which();
 
         IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
                 () -> here.instruments(there));
