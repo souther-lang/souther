@@ -69,6 +69,6 @@ class AConstructionMadeFromAnApplicationAnswersAsTheApplicationDidTest {
     }
 
     private static Hir.Apply anApplication() {
-        return new Hir.Apply(new Hir.IntLit(1, SOMEWHERE, null), List.of(), SOMEWHERE, null);
+        return Hir.Apply.synthetic(new Hir.IntLit(1, SOMEWHERE, null), List.of(), SOMEWHERE, null);
     }
 }

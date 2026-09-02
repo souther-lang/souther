@@ -58,7 +58,7 @@ class WhatARepresentationKeepsIsTheRepresentationsToSayTest {
 
     @Test
     void aKeptCallAppliedToTheWrongNumberOfArgumentsIsSaidAsThat() {
-        Hir.Expr twoArgs = new Hir.Apply("List.map", new ReachName.OfLibrary(MAP),
+        Hir.Expr twoArgs = Hir.Apply.synthetic("List.map", new ReachName.OfLibrary(MAP),
                 List.of(new Hir.IntLit(1, POS, null), new Hir.IntLit(2, POS, null)), POS, null);
 
         assertThrows(RuntimeException.class, () -> elaborate(twoArgs, keeping(MAP, SIGNATURE)));
@@ -91,7 +91,7 @@ class WhatARepresentationKeepsIsTheRepresentationsToSayTest {
     }
 
     private static Hir.Expr callTo(ValueName.Stdlib.Operation operation) {
-        return new Hir.Apply(operation.qualified(), new ReachName.OfLibrary(operation),
+        return Hir.Apply.synthetic(operation.qualified(), new ReachName.OfLibrary(operation),
                 List.of(new Hir.IntLit(1, POS, null)), POS, null);
     }
 

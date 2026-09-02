@@ -1082,8 +1082,8 @@ public final class Resolve {
             // function or a type it is decides what the application means. Applying anything else
             // is answered as the expression it is, and what may be applied is the check's to say.
             case Ast.Apply call when call.appliesAName() -> applied(call, bound);
-            case Ast.Apply call -> new Hir.Apply(callee(call.function(), bound),
-                    exprs(call.args(), bound), call.appliedAs(), call.pos(), call.region());
+            case Ast.Apply call -> Hir.Apply.read(call, callee(call.function(), bound),
+                    exprs(call.args(), bound));
             // `Map.empty`, `String.isEmpty`, `up.Amount` — a namespace and a member of it, which
             // the parser read as a field taken off a name because it reads no case at all. Folded
             // here and nowhere earlier: `Map` may be a parameter, and a binding in force wins over
@@ -1231,8 +1231,7 @@ public final class Resolve {
             name = new Hir.Var.Denoting(written,
                     ReachName.of(denotes, call.written(), reachable.module()), over);
         }
-        return new Hir.Apply(name, exprs(call.args(), bound), call.appliedAs(), call.pos(),
-                call.region());
+        return Hir.Apply.read(call, name, exprs(call.args(), bound));
     }
 
     /**

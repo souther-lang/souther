@@ -29,7 +29,7 @@ class ConstEvalMatchBudgetTest {
         // Folded against the real library, because which operation folds is asked as the kernel
         // that library declares it to be. No module of its own: the call names a library operation
         // and nothing else.
-        return ConstEval.against(Symbols.none(DefaultStdlib.get())).eval(new Hir.Apply("String.matches",
+        return ConstEval.against(Symbols.none(DefaultStdlib.get())).eval(Hir.Apply.synthetic("String.matches",
                 new ReachName.OfLibrary(matches),
                 List.of(new Hir.StringLit(pattern, POS, null), new Hir.StringLit(subject, POS, null)),
                 POS, null));

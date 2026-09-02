@@ -72,14 +72,20 @@ class WhichOfItsFieldsAConstructionHadToWriteIsNotAPassesToSayTest {
      * it is answering and out of what.
      */
     @Test
-    void andAConstructionIsMadeFromItsPartsInOneWay() {
-        List<String> constructors = new ArrayList<>();
-        for (Constructor<?> each : Hir.NewData.class.getDeclaredConstructors()) {
-            constructors.add(each.getParameterCount() + " parameters");
+    void andAFormThatHoldsAnAnswerIsMadeFromItsPartsInOneWay() {
+        List<String> made = new ArrayList<>();
+        for (Class<?> form : List.of(Hir.NewData.class, Hir.Apply.class)) {
+            for (Constructor<?> each : form.getDeclaredConstructors()) {
+                made.add(form.getSimpleName() + " from " + each.getParameterCount() + " parameters");
+            }
         }
 
-        assertEquals(List.of(Hir.NewData.class.getRecordComponents().length + " parameters"),
-                constructors,
+        assertEquals(List.of(
+                        "NewData from " + Hir.NewData.class.getRecordComponents().length
+                                + " parameters",
+                        "Apply from " + Hir.Apply.class.getRecordComponents().length
+                                + " parameters"),
+                made,
                 "a constructor taking fewer than every component answers for its caller: what to"
                         + " add instead is an entry point named for what it is answering out of");
     }

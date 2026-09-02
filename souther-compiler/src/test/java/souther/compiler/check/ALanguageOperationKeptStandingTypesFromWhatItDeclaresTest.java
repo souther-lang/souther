@@ -33,7 +33,7 @@ class ALanguageOperationKeptStandingTypesFromWhatItDeclaresTest {
     @Test
     void aPolymorphicOperationSettlesItsVariablesFromItsArguments() {
         // List.length : (List<'a>) -> Int — the argument decides 'a, and the result is not a variable
-        Hir.Expr call = new Hir.Apply("List.length",
+        Hir.Expr call = Hir.Apply.synthetic("List.length",
                 new ReachName.OfLibrary(ValueName.Stdlib.operation("List", "length")),
                 List.of(new Hir.ListLit(List.of(new Hir.IntLit(1, POS, null)), POS, null)),
                 POS, null);
@@ -56,7 +56,7 @@ class ALanguageOperationKeptStandingTypesFromWhatItDeclaresTest {
         Hir.Binders binders = new Hir.Binders(new BindingOwner.OfValue("demo", "test"));
         Hir.Block step = new Hir.Block(List.of(binders.binder("x", POS)),
                 new Hir.ListLit(List.of(new Hir.IntLit(1, POS, null)), POS, null), souther.compiler.types.RuleOrigin.unwritten(), POS, null);
-        Hir.Expr call = new Hir.Apply("List.flatMap",
+        Hir.Expr call = Hir.Apply.synthetic("List.flatMap",
                 new ReachName.OfLibrary(ValueName.Stdlib.operation("List", "flatMap")),
                 List.of(step, new Hir.ListLit(List.of(new Hir.IntLit(2, POS, null)), POS, null)),
                 POS, null);
@@ -90,7 +90,7 @@ class ALanguageOperationKeptStandingTypesFromWhatItDeclaresTest {
         // nothing could be derived from leaving it standing, so it is expanded — and a tree that
         // still holds one is this compiler having failed to do that
         ValueName.Helper half = new ValueName.Helper("demo", "half");
-        Hir.Expr call = new Hir.Apply("half",
+        Hir.Expr call = Hir.Apply.synthetic("half",
                 new ReachName.Own(half), List.of(new Hir.IntLit(1, POS, null)), POS, null);
 
         assertThrows(RuntimeException.class, () -> Elaborator.elaborate(call, Scope.NONE,

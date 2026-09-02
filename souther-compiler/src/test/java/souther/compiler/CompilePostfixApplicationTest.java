@@ -311,9 +311,9 @@ class CompilePostfixApplicationTest {
         SourcePos at = new SourcePos(1, 1);
         souther.compiler.types.ValueName.Stdlib.Operation map =
                 souther.compiler.types.ValueName.Stdlib.operation("List", "map");
-        Hir.Apply named = new Hir.Apply("List.map",
+        Hir.Apply named = Hir.Apply.synthetic("List.map",
                 new ReachName.OfLibrary(map), java.util.List.of(), at, null);
-        Hir.Apply nameless = new Hir.Apply(new Hir.Block(java.util.List.of(),
+        Hir.Apply nameless = Hir.Apply.synthetic(new Hir.Block(java.util.List.of(),
                 new Hir.IntLit(1, at, null), souther.compiler.types.RuleOrigin.unwritten(), at, null),
                 java.util.List.of(), at, null);
 
@@ -337,9 +337,9 @@ class CompilePostfixApplicationTest {
         SourcePos at = new SourcePos(1, 1);
         BindingId id = new BindingId(new BindingOwner.OfValue("demo", "go"), 0);
         ValueName.Local fn0 = new ValueName.Local("$fn0", id);
-        Hir.Apply lowered = new Hir.Apply(
+        Hir.Apply lowered = Hir.Apply.synthetic(
                 Hir.Var.denoting("$fn0", new ReachName.InScope(fn0), at),
-                java.util.List.of(), "d.count", at, null);
+                java.util.List.of(), at, null).standingIn("d.count");
 
         assertEquals("d.count", lowered.written(), "a report quotes what the author wrote");
         assertEquals("$fn0", lowered.answered().reaches(),

@@ -43,7 +43,7 @@ class CallElaboratorNoCalleeTest {
         // one case that reads a declaration is a newtype applied to a count other than one, which
         // is not what any of these is.
         return CallElaborator.noCallee(
-                new Hir.Apply("f", ReachName.of(denotes, "f", "m"),
+                Hir.Apply.synthetic("f", ReachName.of(denotes, "f", "m"),
                         List.of(new Hir.IntLit(1, AT, null)), AT, null),
                 ResolvedSymbols.none(souther.compiler.DefaultStdlib.get()));
     }
@@ -126,7 +126,7 @@ class CallElaboratorNoCalleeTest {
     @Test
     void anApplicationOfSomethingThatIsNotANameIsAnInternalError() {
         Hir.Expr block = new Hir.Block(List.of(), new Hir.IntLit(1, AT, null), souther.compiler.types.RuleOrigin.unwritten(), AT, null);
-        RuntimeException e = CallElaborator.noCallee(new Hir.Apply(block,
+        RuntimeException e = CallElaborator.noCallee(Hir.Apply.synthetic(block,
                 List.of(new Hir.IntLit(1, AT, null)), AT, null),
                 ResolvedSymbols.none(souther.compiler.DefaultStdlib.get()));
 

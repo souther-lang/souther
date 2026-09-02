@@ -1590,8 +1590,9 @@ public interface Hir {
      * and a construction a row spreads in was read as the model's own however it stands now — so the
      * position a node is found at says neither, and asking the node is what is left.
      *
-     * <p>So a pass has no way to make one that says what it was not read as — the components are of
-     * types only this package can name, and every way in is here. A construction is either
+     * <p>So a pass has no way to make one that says what it was not read as: the components are of
+     * types only this package can name, and every place in this package that settles one is written
+     * out and held against the compiled classes. A construction is either
      * read from the source that spells it ({@link #read}), translated from the form that already
      * answered for it ({@link #fromApply}), rebuilt from one that has the answers ({@link #with}),
      * moved across a crossing that changes where it came from ({@link #publishedBy},
@@ -1608,9 +1609,10 @@ public interface Hir {
          * construction is made from a source that writes one.
          *
          * <p>{@code surface} is the run of characters this is the reading of, and what it answers is
-         * where the construction stands. A pass rewriting a body has no surface node, which is what
-         * puts this out of its reach: whatever a rewrite would say the reading was, it has nothing
-         * to say it about.
+         * where the construction stands. A pass rewriting a body holds no surface node, so nothing
+         * it has is a reading — but that is what the passes are like and not something the language
+         * refuses, a parsed node being a record anyone can build. What holds the answer down is that
+         * every place one is settled is written out and checked against the compiled classes.
          */
         public static NewData read(Ast.NewData surface, Name typeName, List<FieldInit> inits,
                                    List<Var> spreads, Reading reading) {
@@ -2036,17 +2038,31 @@ public interface Hir {
     record Apply(Expr function, List<Expr> args, ConstructionOrigin origin, String appliedAs,
                  SourcePos pos, Region region) implements Expr {
 
-        /** Applying whatever {@code function} is, with nothing standing in for what the source
-         * wrote — every application but one a lowering rewrote. */
-        public Apply(Expr function, List<Expr> args, SourcePos pos, Region region) {
-            this(function, args, Origins.Own.IT_IS, null, pos, region);
+        /**
+         * The application {@code surface} spells, of whatever {@code function} is — the one way an
+         * application is made from a source that writes one.
+         *
+         * <p>Where it came from is the body's own, because a source spells an application in the
+         * body it is written in. What a lowering replaced the written name with, where it stands
+         * and what it covers are the surface node's, which is what this is the reading of.
+         */
+        public static Apply read(Ast.Apply surface, Expr function, List<Expr> args) {
+            return new Apply(function, args, Origins.Own.IT_IS, surface.appliedAs(), surface.pos(),
+                    surface.region());
         }
 
-        /** Applying whatever {@code function} is, saying what a lowering replaced the written name
-         *  with. */
-        public Apply(Expr function, List<Expr> args, String appliedAs, SourcePos pos,
-                     Region region) {
-            this(function, args, Origins.Own.IT_IS, appliedAs, pos, region);
+        /**
+         * An application a pass composed, standing where it puts it — a call that stands for a name
+         * used as a value, a library operation a rewrite reached for.
+         *
+         * <p>Nobody's reading, so it says what it is in its name. Where it came from is the body it
+         * is written into: a pass composing an application is writing one there, and a pass moving
+         * an application that was already written carries what it was handed instead
+         * ({@link #with}, {@link #withArgs}, {@link #withFunction}).
+         */
+        public static Apply synthetic(Expr function, List<Expr> args, SourcePos pos,
+                                      Region region) {
+            return new Apply(function, args, Origins.Own.IT_IS, null, pos, region);
         }
 
         /**
@@ -2071,9 +2087,11 @@ public interface Hir {
          * they are, so a report about what is applied would otherwise underline them too. A caller
          * that has the callee's extent builds the {@link Var} itself and passes it.
          */
-        public Apply(String fn, ReachName reachedAs, List<Expr> args, SourcePos pos, Region region) {
-            this(Var.respelled(fn, Objects.requireNonNull(reachedAs, unanswered(fn)), pos, null),
-                    args, Origins.Own.IT_IS, null, pos, region);
+        public static Apply synthetic(String fn, ReachName reachedAs, List<Expr> args,
+                                      SourcePos pos, Region region) {
+            return synthetic(
+                    Var.respelled(fn, Objects.requireNonNull(reachedAs, unanswered(fn)), pos, null),
+                    args, pos, region);
         }
 
         /** Why a pass may not apply a name it has not answered for. */
