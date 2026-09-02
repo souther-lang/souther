@@ -981,14 +981,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             // three, with nothing saying the fourth did not apply — and hid the fact worth reading,
             // which is that a behavior answering a bare primitive gets less scrutiny than one
             // answering a sum.
-            // A measure whose reason is a fact about the run is not said at all: a line repeating
-            // it against every behavior says one fact as many times as the module has behaviors.
-            // Which reasons those are is the reason's own answer and not this line's, so a state
-            // added to one of them arrives here already saying whether it belongs under a behavior.
-            ReasonProse why = ReasonProse.of(counted.reason());
-            if (why.scope() == ReasonProse.Scope.BEHAVIOR) {
-                out.append(String.format("    signature   %s%n", why.sentence()));
-            }
+            sayWhy(out, "signature", counted.reason());
             return;
         }
         boolean decided = counted.inFull();
@@ -1130,8 +1123,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             // A measure with no number says why, rather than showing a nought that reads as a
             // measurement. `axes 0   single-axis 0/0` was the same three characters a behavior gets
             // when every position it has was measured and every class covered.
-            out.append(String.format("    partition   %s%n",
-                    ReasonProse.of(partitioned.reason()).sentence()));
+            sayWhy(out, "partition", partitioned.reason());
         } else {
             // Counted over the positions that were measured. A position nothing was measured at
             // contributes no classes to the denominator: nought out of two reads as two gaps, and a
@@ -1232,8 +1224,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             // `0/0` said the rows were at every line there was. What it meant was that nobody found
             // a line to be at, which a model whose bounds sit one type away from the position the
             // behavior takes has, and which is the shape of every behavior that validates raw input.
-            out.append(String.format("    border      %s%n",
-                    ReasonProse.of(bounded.reason()).sentence()));
+            sayWhy(out, "border", bounded.reason());
         } else {
             // The points the model's own rules discharged are not on this line. They are not
             // obligations, so a count of them beside the obligations would be two units in one
@@ -1552,14 +1543,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             // The measure's own answer, translated. Nothing here works out why from the row count or
             // the kind of behavior: those correlate with the reason and are not it, and the line an
             // author reads is the one place that difference shows.
-            //
-            // What a build asked for is not said behavior by behavior, and which reasons those are
-            // comes with the reason rather than being compared against here. Spelled as a test for
-            // the one state that is said, the state added beside it is said as neither.
-            ReasonProse said = ReasonProse.of(measured.reason());
-            if (said.scope() == ReasonProse.Scope.BEHAVIOR) {
-                out.append(String.format("    branch      %s%n", said.sentence()));
-            }
+            sayWhy(out, "branch", measured.reason());
             return;
         }
         // The two numbers, and nothing beside them qualifying every arm at once. What is uncertain
@@ -1802,6 +1786,27 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                         .anyMatch(reason -> surfaceOf(reason) == surface))
                 .map(ObligationSummary.Excluded::item)
                 .toList();
+    }
+
+    /**
+     * The line a measure with no number gets, under the behavior it is of.
+     *
+     * <p>Whether there is a line at all is settled here, because one rule settles it: a line whose
+     * whole subject is one measure of one behavior says what that behavior is short of, and a
+     * reason that is a fact about the run said under each behavior says one fact as many times as
+     * the module has behaviors. Asked at each of the lines instead, the rule holds where whoever
+     * wrote that line remembered it, which is not the same rule.
+     *
+     * <p>A clause written into a line that is there for another reason is not one of these. An
+     * obligation and an axis are printed because they are owed, and the reason is what that line is
+     * short of whatever the reason is about.
+     */
+    private static void sayWhy(StringBuilder out, String measure, MeasureReason reason) {
+        ReasonProse why = ReasonProse.of(reason);
+        if (why.scope() == ReasonProse.Scope.BEHAVIOR) {
+            out.append(String.format("    %s%s%n",
+                    DisplayColumns.padRight(measure, 12), why.sentence()));
+        }
     }
 
     /**
