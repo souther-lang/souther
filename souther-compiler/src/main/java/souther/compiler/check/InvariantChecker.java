@@ -1379,21 +1379,25 @@ public final class InvariantChecker {
         // would depend on what this reading could make of the conjuncts before it, and two readings
         // of one clause would disagree about which line is which.
         int part = conjunct[0]++;
-        if (!(clause instanceof Core.Binary bin)) {
-            // A rule that divides the position by something no order carries, said as that. The
-            // reading took it in — which strings stand here is an answer, and this walk is the one
-            // that would have drawn a line from it — so what is absent is a line and not a reading.
-            // Passed over in silence, the position came back with no classes and nothing saying
-            // why, and every reader downstream took the silence for the model dividing it no way
-            // at all (issue #1249).
-            Coordinate divided = dividedOutsideAnOrder(clause, at, byName);
-            if (divided != null) {
-                FieldDomains.NoLine said = new FieldDomains.NoLine(divided.at(), from, clause, part,
-                        new BlockReason.RuleDividingOutsideAnOrder());
-                if (!noLines.contains(said)) {
-                    noLines.add(said);
-                }
+        // A rule that divides the position by something no order carries, said as that. The
+        // reading took it in — which strings stand here is an answer, and this walk is the one that
+        // would have drawn a line from it — so what is absent is a line and not a reading. Passed
+        // over in silence, the position came back with no classes and nothing saying why, and every
+        // reader downstream took the silence for the model dividing it no way at all (issue #1249).
+        //
+        // Asked here and not inside one of the shapes below, because which shape the clause is
+        // written as is exactly what does not decide it: `String.contains(s, value)` is a call and
+        // `String.contains(s, value) == true` is a comparison, and both divide the position the
+        // same way.
+        Coordinate divided = dividedOutsideAnOrder(clause, at, byName);
+        if (divided != null) {
+            FieldDomains.NoLine said = new FieldDomains.NoLine(divided.at(), from, clause, part,
+                    new BlockReason.RuleDividingOutsideAnOrder());
+            if (!noLines.contains(said)) {
+                noLines.add(said);
             }
+        }
+        if (!(clause instanceof Core.Binary bin)) {
             settle(clause, from, states(clause, at, byName, null),
                     new InvariantBound.Read.NoEnd(),
                     at, byName, raised, took, typeAt, parts, raisedByPart);
@@ -1748,13 +1752,23 @@ public final class InvariantChecker {
      */
     private Coordinate dividedOutsideAnOrder(Core clause, Denotations at,
                                              Map<FactSubject, Coordinate> byName) {
-        if (!(clause instanceof Core.PreservedCall call)
-                || !(call.operation() instanceof ValueName.Stdlib.Operation operation)) {
-            return null;
+        // Through the one reading of what a spelling comes to, so that a predicate stated and one
+        // denied are the same rule here as they are everywhere else. Asked of the clause as
+        // written, `String.contains(s, value) == true` is a comparison and never reached this
+        // question, so one of the ways of writing a rule went on dividing a position nobody said
+        // was divided.
+        Core atom = clause;
+        for (Conditions.Restated under = Conditions.restated(atom); under != null;
+                under = Conditions.restated(atom)) {
+            atom = under.condition();
         }
-        StringPredicates predicate = StringPredicates.of(symbols.kernelOf(operation));
-        return predicate == null || call.args().size() != predicate.arity() ? null
-                : byName.get(nameOf(call.args().get(predicate.subject()), at));
+        // Whether the predicate is read is the reading's answer and not a membership test. A
+        // pattern this compiler cannot take apart is a rule it did not read, and filing it as one
+        // read to the end would say the reading finished where it stopped — which is the boundary
+        // between `CannotDerive` and `StatedWithoutALine` and is the reason they are two things.
+        StringPredicates.Stated stated = StringPredicates.statedByChecked(atom, symbols);
+        return stated == null || stated.accepts() == null ? null
+                : byName.get(nameOf(stated.subject(), at));
     }
 
     /** One finding, kept once. A coordinate reached twice is one place with one thing to say. */

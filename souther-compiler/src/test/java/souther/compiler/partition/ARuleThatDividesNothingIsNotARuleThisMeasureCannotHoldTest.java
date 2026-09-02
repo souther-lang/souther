@@ -83,6 +83,41 @@ class ARuleThatDividesNothingIsNotARuleThisMeasureCannotHoldTest {
         }
     }
 
+    /** A format this compiler does not read that far into, which is a reading that stopped. */
+    private static final String NOT_READ = """
+            module probe
+
+            data Ok
+
+            data N = String
+                invariant format = String.matches("(a+)\\\\1", value)
+
+            behavior read : (n: N) -> Ok
+            let read (n) = Ok
+            """;
+
+    /**
+     * A pattern this could not take apart is a reading that stopped, and never one that finished.
+     *
+     * <p>The pair the reason exists for. Both are `String.matches` about one position, and what
+     * tells them apart is whether the pattern was read — so a producer deciding from the operation
+     * alone would call the second a division this measure cannot hold, which says the reading
+     * finished where it stopped. A reader sent after a limit of the measure would be looking for one
+     * that is not there, and the rule they could rewrite would go unmentioned.
+     */
+    @Test
+    void aPatternThisCouldNotReadIsNotADivisionThisMeasureCannotHold() {
+        List<UndividedPosition> undivided = partitioningOf(NOT_READ).undivided();
+
+        assertEquals(1, undivided.size(), undivided.toString());
+        assertInstanceOf(UndividedPosition.Why.CannotDerive.class, undivided.get(0).why(),
+                "the pattern was not read, so nothing about the division follows");
+        assertFalse(reasonsOf(NOT_READ).contains(
+                        UndividedPosition.Reason.PARTITION_NOT_REPRESENTABLE),
+                "and the word for a division this measure cannot hold is not said of it: "
+                        + reasonsOf(NOT_READ));
+    }
+
     /**
      * And the format is a reading that finished, which is the half that moved.
      *

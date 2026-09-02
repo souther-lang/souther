@@ -173,8 +173,7 @@ public sealed interface PatternSyntax {
      * text somebody looked for is any string at all, newlines included.
      */
     static PatternSyntax anything() {
-        return new Repeated(new Symbols(
-                CodePoints.EVERYTHING.less(CodePoints.LINE_TERMINATORS)), 0, Repeated.NO_CEILING);
+        return new Repeated(new Symbols(CodePoints.EVERYTHING), 0, Repeated.NO_CEILING);
     }
 }
 

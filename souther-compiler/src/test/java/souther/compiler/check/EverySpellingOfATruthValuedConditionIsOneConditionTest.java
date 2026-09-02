@@ -110,6 +110,51 @@ class EverySpellingOfATruthValuedConditionIsOneConditionTest {
         }
     }
 
+    /** Every way of saying a string holds a format, over a position a rule divides. */
+    private static final List<String> A_PREDICATE_HOLDS = List.of(
+            "String.contains(\"x\", value)",
+            "String.contains(\"x\", value) == true",
+            "String.contains(\"x\", value) /= false",
+            "Bool.not(String.contains(\"x\", value) == false)");
+
+    /** One string position, with the rule under test and nothing else about it. */
+    private static String divided(String rule) {
+        return """
+                module example.spelt
+
+                data Ok
+
+                data S = String
+                    invariant it = RULE
+
+                data Form = { s: S }
+
+                behavior read : (f: Form) -> Ok
+                let read (f) = Ok
+                """.replace("RULE", rule);
+    }
+
+    /**
+     * And a rule about a string is one rule however it is written against a truth value.
+     *
+     * <p>The other reader of the same normalisation. Whether a position is divided by something no
+     * order carries is answered by the walk that draws lines, and that walk discriminated on the
+     * shape of the clause first — so a predicate written plainly reached the question and the same
+     * predicate compared with {@code true} did not, and one of the two spellings went on dividing a
+     * position nobody said was divided.
+     */
+    @Test
+    void everySpellingOfAPredicateOverAStringDividesThePositionAlike() {
+        for (String rule : A_PREDICATE_HOLDS) {
+            String report = report(divided(rule));
+
+            assertTrue(report.contains(
+                            "no line: invariant S (it) — it divides this position into values"),
+                    () -> "`" + rule + "` divides `f.s`, and this measure has no line for it:\n"
+                            + report);
+        }
+    }
+
     private static String report(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
