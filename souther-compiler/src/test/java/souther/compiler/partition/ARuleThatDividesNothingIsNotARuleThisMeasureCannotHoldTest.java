@@ -118,6 +118,64 @@ class ARuleThatDividesNothingIsNotARuleThisMeasureCannotHoldTest {
                         + reasonsOf(NOT_READ));
     }
 
+    /** A predicate every string satisfies, which tells no value here from another. */
+    private static final String RULES_NOTHING_OUT = """
+            module probe
+
+            data Ok
+
+            data N = String
+                invariant nothing = String.contains("", value)
+
+            behavior read : (n: N) -> Ok
+            let read (n) = Ok
+            """;
+
+    /** And one no string satisfies, which leaves no value rather than dividing them. */
+    private static final String LEAVES_NOTHING = """
+            module probe
+
+            data Ok
+
+            data N = String
+                invariant nothing = Bool.not(String.contains("", value))
+
+            behavior read : (n: N) -> Ok
+            let read (n) = Ok
+            """;
+
+    /**
+     * A predicate that rules nothing out divides nothing, and a division is not what it is called.
+     *
+     * <p>Read and divides are two questions. {@code String.contains("", value)} is read perfectly —
+     * the strings it admits are every string there is — and a reading that answered the first for
+     * the second called it a position divided into values this measure draws no line between, which
+     * says the model tells values apart here and it does not.
+     *
+     * <p>The pair is the point: the same call, one needle apart, and only one of them is a
+     * division. A reading that decided from the operation, or from whether the text was written,
+     * would give them one answer.
+     */
+    @Test
+    void aPredicateThatRulesNothingOutIsNotADivisionThisMeasureCannotHold() {
+        assertFalse(reasonsOf(RULES_NOTHING_OUT)
+                        .contains(UndividedPosition.Reason.PARTITION_NOT_REPRESENTABLE),
+                () -> "every string satisfies it, so there is no distinction to have no line for: "
+                        + reasonsOf(RULES_NOTHING_OUT));
+        assertEquals(List.of(UndividedPosition.Reason.PARTITION_NOT_REPRESENTABLE),
+                reasonsOf(DIVIDES_WITHOUT_AN_ORDER),
+                "and the one that does divide still says so");
+    }
+
+    /** And one no string satisfies leaves no value, which is not a division either. */
+    @Test
+    void aPredicateNoStringSatisfiesIsNotADivisionEither() {
+        assertFalse(reasonsOf(LEAVES_NOTHING)
+                        .contains(UndividedPosition.Reason.PARTITION_NOT_REPRESENTABLE),
+                () -> "no string satisfies it, so the rules leave no value rather than two"
+                        + " classes: " + reasonsOf(LEAVES_NOTHING));
+    }
+
     /**
      * And the format is a reading that finished, which is the half that moved.
      *

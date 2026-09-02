@@ -207,6 +207,67 @@ public enum StringPredicates {
     }
 
     /**
+     * What a predicate's strings come to at the position it is about.
+     *
+     * <p>Read and divides are two questions, and one had been standing in for the other. A rule is
+     * read as a set of strings whether that set is some of them, all of them or none — and only the
+     * first is a division, so only the first is a position divided in a way no order carries. Asked
+     * as "was it read", {@code String.contains("", value)} came out as a position divided into
+     * values this measure draws no line between, and it makes no distinction at all.
+     *
+     * <p>Off the set and never off what was written. Whether the strings are all of them is a fact
+     * about the language, and a caller looking at the text for an empty one would be back to
+     * deciding meaning from a spelling — the thing that made {@code contains} unreadable in the
+     * first place (issue #1249).
+     */
+    public sealed interface Divides {
+
+        /** Some strings and not others, which is a division and is not one an order holds. */
+        record IntoTwo() implements Divides {}
+
+        /** Every string there is, so the rule tells no value here from another. */
+        record NothingIsRuledOut() implements Divides {}
+
+        /** No string at all, so the rules leave no value here — which is not a division either. */
+        record NothingIsLeft() implements Divides {}
+
+        /**
+         * This compiler could not build the machine, so it could not tell which of the three.
+         *
+         * <p>Its own answer and never one of the others. A limit read as "no division" would be a
+         * claim about the model made out of an allowance running down, which is the shape this
+         * whole reading exists to stop.
+         */
+        record CouldNotTell() implements Divides {}
+    }
+
+    /**
+     * What {@code clause} divides the position it is about into, or null where it is no predicate
+     * of this kind or where the reading of it did not finish.
+     *
+     * <p>The machine is built here because the question is about the strings and there is no other
+     * way to ask it. What it costs is one language per clause of this kind, under the allowance one
+     * value is written from — the shapes composed above are a few states, and a pattern larger than
+     * that allowance is the one case that comes back unable to tell.
+     */
+    public static Divides divides(Core clause, Symbols symbols) {
+        Stated stated = statedByChecked(clause, symbols);
+        if (stated == null || stated.accepts() == null) {
+            return null;
+        }
+        souther.compiler.regex.Language strings = souther.compiler.regex.PatternPlan
+                .of(stated.accepts())
+                .compile(souther.compiler.regex.PatternPlan.Budget.OF_A_WITNESS);
+        if (strings == null) {
+            return new Divides.CouldNotTell();
+        }
+        if (strings.isEmpty()) {
+            return new Divides.NothingIsLeft();
+        }
+        return strings.isEverything() ? new Divides.NothingIsRuledOut() : new Divides.IntoTwo();
+    }
+
+    /**
      * Whether a pattern this could not take apart is one it read too little of rather than one it
      * has no word for.
      *
