@@ -1,0 +1,141 @@
+package souther.compiler.partition;
+
+import org.junit.jupiter.api.Test;
+
+import souther.compiler.ast.Hir;
+import souther.compiler.check.Prepared;
+import souther.compiler.check.Sig;
+import souther.compiler.check.Symbols;
+import souther.compiler.inputs.InputDomain;
+import souther.compiler.inputs.TermPath;
+import souther.compiler.numeric.NumericDomain;
+import souther.compiler.query.Adequacy;
+import souther.compiler.query.Bodies;
+import souther.compiler.query.BorderAssessment;
+import souther.compiler.query.Compilation;
+import souther.compiler.query.ReadAs;
+import souther.compiler.query.Scopes;
+import souther.compiler.query.Shapes;
+
+import java.util.List;
+import java.util.Map;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
+/**
+ * Wrapping a value in a name does not change what its rules leave or who accounts for it.
+ *
+ * <p>The rules are the same rules and the value is the same value: a newtype over a type states
+ * what that type states, and a clause written on either reaches the value it is about. So the two
+ * models leave the position the same values, and the same authored lines are owed a row at the same
+ * places.
+ *
+ * <p>Which the counterfactual has to be asked on both roads for. A clause reaches a value either as
+ * its own declaration's, which the gathering takes in, or as the declaration it wraps, which the
+ * guarantee walk does — and a reading asked to leave a conjunct out on one road only leaves it in
+ * on the other. What comes back then is a reading identical to the whole one, which is the answer a
+ * set of rules that accounts for nothing gets.
+ */
+class WrappingAValueDoesNotChangeWhatItsRulesAccountForTest {
+
+    /** Two clauses on the declaration the position's type is. */
+    private static final String PLAIN = """
+            data Held = Int
+                invariant atLeastNought = value >= 0
+                invariant notNought = value /= 0
+            """;
+
+    /** The same two, on a declaration this one wraps. */
+    private static final String WRAPPED = """
+            data Inner = Int
+                invariant atLeastNought = value >= 0
+                invariant notNought = value /= 0
+
+            data Held = Inner
+            """;
+
+    /** One on each, which is the shape a wrapper is usually written in. */
+    private static final String SPLIT = """
+            data Inner = Int
+                invariant atLeastNought = value >= 0
+
+            data Held = Inner
+                invariant notNought = value /= 0
+            """;
+
+    @Test
+    void theRulesLeaveThePositionTheSameValuesEitherWay() {
+        assertEquals(rangeOf(PLAIN), rangeOf(WRAPPED));
+        assertEquals(rangeOf(PLAIN), rangeOf(SPLIT));
+    }
+
+    /**
+     * And the same lines are owed a row, at the same places.
+     *
+     * <p>Read as the clause and the conjunct rather than as the declaration: which declaration a
+     * clause is written on is what the models differ in, and it is no part of what a row at the
+     * line is owed for.
+     */
+    @Test
+    void theSameLinesAreOwedARowEitherWay() {
+        assertEquals(owedBy(PLAIN), owedBy(WRAPPED));
+        assertEquals(owedBy(PLAIN), owedBy(SPLIT));
+        assertEquals(List.of("atLeastNought#0 LOWER at 1", "notNought#0 LOWER at 1"),
+                owedBy(PLAIN),
+                "both clauses hold the values at one, and each is a clause an author can rewrite");
+    }
+
+    /** Which authored lines are owed a row, as the clauses that drew them are named. */
+    private static List<String> owedBy(String declarations) {
+        return boundariesOf(declarations).stream()
+                .map(WrappingAValueDoesNotChangeWhatItsRulesAccountForTest::said)
+                .sorted().toList();
+    }
+
+    /** One line, said without the declaration it happens to be written on. */
+    private static String said(BorderAssessment border) {
+        if (!(border.origin() instanceof OriginRef.InvariantOrigin invariant)) {
+            throw new AssertionError("this line was not drawn by an invariant: " + border.origin());
+        }
+        return invariant.rule().clause().name().orElseThrow() + "#" + invariant.conjunct()
+                + " " + invariant.keeps() + " at " + border.value();
+    }
+
+    private static List<BorderAssessment> boundariesOf(String declarations) {
+        Compilation compilation = Compilation.ofSource(sourceOf(declarations), "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        Map<String, List<BorderAssessment>> boundaries =
+                Adequacy.boundariesOf(compilation.db(), "example.wrapping");
+        if (boundaries == null) {
+            throw new AssertionError("the model under test compiles: " + declarations);
+        }
+        return boundaries.values().stream().flatMap(List::stream).toList();
+    }
+
+    /** What the rules leave the position, once every one of them has been read. */
+    private static NumericDomain.Bounds rangeOf(String declarations) {
+        Compilation compilation = Compilation.ofSource(sourceOf(declarations), "Main");
+        compilation.answerEverything();
+        String module = compilation.modules().get(0);
+        Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
+        Map<String, Sig> sigs = compilation.db().ask(new Bodies.Signatures(module)).value();
+        Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().stream()
+                .filter(b -> b.name().equals("take")).findFirst().orElseThrow();
+        Symbols symbols = Scopes.derived(compilation.db(), module).value();
+        return InputDomain.of(spec, sigs.get("take"), symbols, ReadAs.THE_COMPILATION_DOES)
+                .at(TermPath.of("n")).rangeLeft();
+    }
+
+    private static String sourceOf(String declarations) {
+        return """
+                module example.wrapping
+
+                %s
+                data Ok
+
+                behavior take : (n: Held) -> Ok
+                let take (n) = Ok
+                """.formatted(declarations);
+    }
+}

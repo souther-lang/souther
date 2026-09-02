@@ -82,8 +82,7 @@ public final class FieldDomains {
     /** The conjuncts this reading got no end out of, for whoever reads them next — see
      * {@link #withoutAnEnd}. */
     private final List<WithoutAnEnd> withoutAnEnd;
-    /** The conjuncts that placed no end and are about one number — see {@link #aboutOneCoordinate}.
-     */
+    /** The conjuncts whose quantity is over one number — see {@link #aboutOneCoordinate}. */
     private final List<AboutOneCoordinate> aboutOneCoordinate;
     /**
      * Which conjunct this reading was asked to leave out, so that a reading standing in for a
@@ -94,7 +93,8 @@ public final class FieldDomains {
      * one of its conjuncts, and again, and never come back.
      */
     private final PartsLeftOut withoutParts;
-    /** The ends the conjuncts that placed none moved, worked out once — see {@link #movedEnds}. */
+    /** The surviving ends attributed to the conjuncts that account for them, worked out once — see
+     *  {@link #movedEnds}. */
     private volatile List<Placed> moved;
     /** What each clause reaching this value raises, keyed on the rule it is. */
     private final Map<RuleRef, Required> raised;
@@ -1032,16 +1032,17 @@ public final class FieldDomains {
     /**
      * Every end the rules place, wherever it is.
      *
-     * <p>The ends read off an ordering, and the ends a conjunct that placed none moved. Both are
-     * ends the declaration's rules put where they are, and which of the two an end came from is not
-     * a difference a reader of ends has any use for: {@code String.length(value) /= 0} leaves the
-     * length starting at one exactly as {@code String.length(value) >= 1} does, and a row at one is
-     * owed to whichever of them the author wrote.
+     * <p>The ends read off an ordering, and the surviving ends the conjuncts about a number account
+     * for. Both are ends the declaration's rules put where they are, and which of the two an end
+     * came from is not a difference a reader of ends has any use for:
+     * {@code String.length(value) /= 0} leaves the length starting at one exactly as
+     * {@code String.length(value) >= 1} does, and a row at one is owed to whichever of them the
+     * author wrote.
      *
      * <p>Not read off the comparison, which is what tells them apart at the other end of the
-     * question. Where an ordering places an end is in the rule; where a rule that placed none put
-     * one is in everything else the rules say, and it is read by asking what they leave without
-     * that conjunct ({@link #movedEndsOf}).
+     * question. Where an ordering places an end is in the rule; which conjuncts account for where
+     * the values actually stop is in everything the rules say together, and it is read by asking
+     * what they leave without them ({@link #movedEnds}).
      *
      */
     public List<Placed> placed() {
@@ -1054,7 +1055,7 @@ public final class FieldDomains {
     }
 
     /**
-     * The ends a conjunct that placed none moved.
+     * The surviving ends, each written down against the conjuncts that account for it.
      *
      * <p>Apart from the ends an ordering placed, because one reader wants them apart. A newtype's
      * own value has its ends read off the clauses as they are written ({@link DeclaredBounds#of}),
@@ -1249,31 +1250,32 @@ public final class FieldDomains {
     }
 
     /**
-     * The conjuncts that placed no end and are about one number, in the order they were read.
+     * The conjuncts whose quantity is over one number, in the order they were read.
      *
-     * <p>What they do to that number is not here. Such a rule moves an end where what it takes away
-     * is at one, and where it is at one is a fact about everything else the rules say — so it is
-     * read by {@link #movedEndsOf} and not written down as each conjunct arrives.
+     * <p>Every shape of rule alike, whatever the reading of ends made of it. Which of them accounts
+     * for where the values stop is not here: it is a fact about everything the rules say together,
+     * read by {@link #movedEnds} and not written down as each conjunct arrives.
      */
     public List<AboutOneCoordinate> aboutOneCoordinate() {
         return aboutOneCoordinate;
     }
 
     /**
-     * The ends {@code over} moved, which is what its conjunct was holding.
+     * The surviving ends {@code over} accounts for, which is what its conjunct was holding.
      *
-     * <p>Read by asking what the rules leave the coordinate without this conjunct and comparing
-     * with what they leave it. An end that moves is an end the conjunct was holding — the same
-     * question {@link EndNarrowing} puts to a declaration, put here to one authored conjunct.
+     * <p>The answer {@link #movedEnds} came to, read back for one conjunct. What it rests on is
+     * there: which of the conjuncts about a number account for where its values stop, asked as the
+     * three questions {@link EndNarrowing} puts to a declaration.
      *
-     * <p><b>Against the rules and not against the ends they placed.</b> Every conjunct asked here
-     * placed no end, so a counterfactual over the ends would take nothing away and answer that
-     * nothing moved. What is left out is the conjunct itself, and what is compared is what the
-     * whole reading leaves.
+     * <p><b>Against the rules and not against the ends they placed.</b> A conjunct can place no end
+     * and still hold one — a hole at an edge, an arithmetic no end was read from — so a
+     * counterfactual over the ends would take nothing away from it and answer that nothing moved.
+     * What is left out is the conjunct itself, and what is compared is what the whole reading
+     * leaves.
      *
-     * <p>Empty where nothing moved, which is what a rule leaves when what it takes away has values
-     * either side of it: a hole with something to side it is a hole, and no end of a range says
-     * where it is.
+     * <p>Empty where this conjunct accounts for nothing: a hole with values either side of it is a
+     * hole and no end of a range says where it is, and a clause restating what the carrier already
+     * states leaves the values where they were.
      */
     public List<InvariantBound> movedEndsOf(AboutOneCoordinate over) {
         return movedEnds().stream()

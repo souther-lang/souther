@@ -6,19 +6,24 @@ import souther.compiler.types.ValueName;
 import java.util.function.Predicate;
 
 /**
- * Which number of a value one conjunct of its rules is written about, with the comparison read so
- * that number is on the left.
+ * Which number of a value a comparison names on one of its sides, with that side read as the left
+ * one.
  *
- * <p>Above the reading of ends, and not a step of it. What a rule is about and where it leaves the
- * values are two questions with two answers: {@code String.length(value) /= 0} is about the length
- * and places no end, and {@code String.length(value) == 5} is about the length and places both at
- * once. Read off the end, both of them are rules about nothing — and everything that decides which
- * number a position is measured on, what its values run between, and which rule drew an edge is
- * then short of them.
+ * <p><b>What a rule is about is not this.</b> That is the canonical quantity its arithmetic came to
+ * ({@link FieldDomains#writtenAbout}), and this is the narrower thing the reading of ends needs: an
+ * end is read off a comparison of a number against something, so what that reading has to recognise
+ * is a side that is the number. {@code String.length(value) * 2 >= 4} is about the length and this
+ * answers nothing for it, which is why nothing choosing what a position is measured on may ask
+ * here.
  *
- * <p>Nothing about the other side comes into it. A rule is about the number it names whether or not
- * what it stands against is something this compiler can fold: what the other side holds decides
- * where an end lands, and decides nothing about what the rule is about.
+ * <p>Above the reading of ends and not a step of it, which is what it is for. Whether a comparison
+ * places an end and which number it names are two questions: {@code String.length(value) /= 0}
+ * names the length and places no end, and {@code String.length(value) == 5} names it and places
+ * both at once. Recognised inside the end reading, a rule that places none is a rule about nothing.
+ *
+ * <p>Nothing about the other side comes into it. A side is the number it is whether or not what it
+ * stands against is something this compiler can fold: what the other side holds decides where an
+ * end lands, and decides nothing about which number was named.
  *
  * <p>The comparison is handed back turned, so that the number this recognised is the side the claim
  * is stated of. A reader turning it again would be recognising the subject a second time to find

@@ -32,10 +32,15 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
  * what they have in common is being in what the other rules leave, and that is where the rule is
  * read against.
  *
- * <p>Two things are asked of each model and they are separate answers. What the rules leave the
- * position is the geometry, and it is the same for both. What is owed for it is the authored line,
- * and a model writing two clauses is not a model writing one — a check that folded the second into
- * the first would let an obligation be deduplicated away the day the two ranges agreed.
+ * <p>Two things are asked of each model and neither settles the other. What the rules leave the
+ * position is the geometry; what is owed for it is the authored lines that account for where the
+ * values stop. Two models leaving the same range may owe different lines, and two models writing
+ * different numbers of clauses may owe the same — a clause restating what the carrier already
+ * states holds nothing, and one whose end a tighter one covers owes nothing either, as before.
+ *
+ * <p>Both directions are held here. Read as "the same range means the same obligations", a check
+ * would let a debt be folded away the day two ranges agreed; read as "different clauses mean
+ * different obligations", it would demand a row for a clause that accounts for nothing.
  */
 class AFloorTheCarrierSuppliesIsMovedAsAWrittenOneIsTest {
 
@@ -72,6 +77,32 @@ class AFloorTheCarrierSuppliesIsMovedAsAWrittenOneIsTest {
         assertEquals(rangeOf(CARRIERS), rangeOf(TURNED));
         assertEquals("Bounds[min=Endpoint[at=1, inclusive=true], max=null]",
                 rangeOf(CARRIERS).toString(), "and the range is the one the rules leave");
+    }
+
+    /**
+     * A clause restating what the carrier already states holds nothing, and owes nothing.
+     *
+     * <p>A length is never negative, so writing {@code String.length(value) >= 0} beside the rule
+     * that takes the nought away leaves the values exactly where that rule leaves them alone: take
+     * the written floor away and the position still starts at one. The clause's own end is at
+     * nought, which the rules refuse, and a looser end falls out as any does.
+     *
+     * <p>Which is not the answer where the carrier holds no floor. On an {@code Int} the written
+     * one is load-bearing — without it the values stop nowhere — so it is owed a row at one beside
+     * the rule that took the nought away.
+     */
+    @Test
+    void aClauseRestatingTheCarrierOwesNothingBesideTheRuleThatMovesTheEnd() {
+        assertEquals(1, owedBy(WRITTEN).size(),
+                "the written floor says what the length's own order already says");
+        assertEquals(clausesOwing(CARRIERS), clausesOwing(WRITTEN),
+                "so the model with it owes the row the model without it owes, and no other");
+        assertEquals(2, bordersOf("""
+                data Subject = Int
+                    invariant notNegative = value >= 0
+                    invariant notZero = value /= 0
+                """).size(),
+                "and where the carrier holds no floor the written one is holding the end");
     }
 
     /** Swapping the conjuncts moves neither the range nor what is owed. */
@@ -250,6 +281,20 @@ class AFloorTheCarrierSuppliesIsMovedAsAWrittenOneIsTest {
     /** What each border is called, in the order a report shows them. */
     private static List<String> bordersOf(String declaration) {
         return boundariesOf(declaration).stream().map(BorderAssessment::label).toList();
+    }
+
+    /**
+     * Which clauses are owed a row, by the names their authors gave them.
+     *
+     * <p>The name and not the whole origin: which of a declaration's clauses a rule is comes from
+     * how many are written above it, and that is what two models differ in when one of them writes
+     * a floor the other leaves to the carrier.
+     */
+    private static List<String> clausesOwing(String declaration) {
+        return boundariesOf(declaration).stream()
+                .map(each -> ((OriginRef.InvariantOrigin) each.origin()).rule().clause().name()
+                        .orElseThrow().toString())
+                .sorted().toList();
     }
 
     /** Which authored lines are owed a row, as the rules that drew them are named. */
