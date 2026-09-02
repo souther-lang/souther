@@ -9,10 +9,14 @@ package souther.compiler.coverage;
  * agreeing meant they were holding the same object, which nothing outside one walk of one tree can
  * be held to.
  *
- * <p><b>Issued by {@link ComparisonCatalog} and by nothing else.</b> The catalog is the one
- * enumeration of what the bodies of a module hold, so an occurrence exists for every comparison
- * there is one of, whether or not anything measures it. Made anywhere else, two enumerations would
- * be handing out names for one thing and nothing would say which name a reader was holding.
+ * <p><b>Issued by {@link ComparisonCatalog}.</b> The catalog is the one enumeration of what the
+ * bodies of a module hold, so an occurrence exists for every comparison there is one of, whether or
+ * not anything measures it. A second place making one would be a second enumeration handing out
+ * names for one thing, with nothing to say which name a reader was holding — which is a rule about
+ * the compiler and not about the type: what is written here is a pair of ordinary values, and
+ * {@code WhoNamesAComparisonAndWhoAddressesOneTest} is what holds the compiler to one maker of
+ * them. A test fixture that writes a report about a comparison nothing compiled makes one by hand,
+ * and that is a fixture standing in for a catalog.
  *
  * <p><b>Not the emitter's number.</b> Where a run through this is recorded is
  * {@link ComparisonEmissionSite}, which the plan hands out for the comparisons it instruments —

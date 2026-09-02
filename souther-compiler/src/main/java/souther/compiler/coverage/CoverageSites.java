@@ -226,11 +226,20 @@ public final class CoverageSites {
                        IdentityHashMap<Core, ForkOccurrence> forkByNode,
                        ComparisonCatalog comparisons) {
 
-        // What a number is of is not checked here, because it cannot be anything else. A
-        // ComparisonOccurrence is issued by the catalog and by nothing else, so a numbering keyed
-        // by one is a numbering of comparisons this catalog holds — where a numbering keyed by the
-        // node could be a number on an `&&` or on arithmetic, and the emitter would copy half a
-        // `long` off the stack for it.
+        // What a number is of is no longer checked here, and the two halves it used to check are
+        // closed differently.
+        //
+        // That a number is on a comparison at all is the key's own answer. A numbering keyed by the
+        // node could put one on an `&&` or on arithmetic, and the emitter would copy half a `long`
+        // off the stack for it; a ComparisonOccurrence names a comparison and nothing else, so
+        // there is no such number to write down.
+        //
+        // That the numbering and the catalog describe one set of bodies is `of`'s doing: it walks
+        // one map of bodies, builds the catalog from it, and numbers what that catalog holds — so
+        // the two cannot come from different bodies without somebody assembling a plan out of parts
+        // by hand, which is what a test does deliberately. It is not a property of the key: an
+        // occurrence is a behavior's name and a number, and one made against another set of bodies
+        // is a value like any other.
 
         public static final Plan NONE = new Plan(List.of(), List.of(), new IdentityHashMap<>(),
                 new LinkedHashMap<>(), new IdentityHashMap<>(), new LinkedHashMap<>(),

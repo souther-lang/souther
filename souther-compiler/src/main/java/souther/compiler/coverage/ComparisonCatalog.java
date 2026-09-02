@@ -143,9 +143,9 @@ public final class ComparisonCatalog {
     /**
      * What {@code which} names.
      *
-     * <p>Total, because the only way to hold one of these is to have been given it here. A reader
-     * that has an occurrence has one of this module's comparisons, so there is no answer for it not
-     * to have — and an occurrence from another module's catalog is a mistake this says out loud
+     * <p>Total for an occurrence this catalog issued, which is the only kind a reader of the
+     * compiler is handed. So there is no answer for one of those not to have, and an occurrence
+     * made anywhere else — another module's catalog, or a fixture — is a mistake this says out loud
      * rather than an empty a caller writes a branch for.
      */
     public Catalogued of(ComparisonOccurrence which) {
