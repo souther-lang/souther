@@ -19,7 +19,6 @@ import souther.compiler.types.TypeSymbol;
 
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Modifier;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -120,9 +119,11 @@ class ANarrowingIsSpelledByTheOneThatOwnsItTest {
                 behavior open : (b: Box) -> Ack
                 """);
 
-        assertEquals(List.of("Empty", "Held"), spelledCases(read, "slot"),
+        // That the model under test states what this is about, and no more than that: which order a
+        // type's divisions come back in is settled elsewhere and is nothing this claim rests on.
+        assertEquals(java.util.Set.of("Empty", "Held"), spelledCases(read, "slot"),
                 "the sum states its cases");
-        assertEquals(List.of("None", "Some"), spelledCases(read, "tag"),
+        assertEquals(java.util.Set.of("None", "Some"), spelledCases(read, "tag"),
                 "and the optional states whether it holds anything");
 
         for (Case each : distinctionsAt(read, "slot")) {
@@ -194,8 +195,8 @@ class ANarrowingIsSpelledByTheOneThatOwnsItTest {
                 read.symbols);
     }
 
-    private static List<String> spelledCases(Read read, String field) {
-        List<String> out = new ArrayList<>();
+    private static java.util.Set<String> spelledCases(Read read, String field) {
+        java.util.Set<String> out = new java.util.LinkedHashSet<>();
         for (Case each : distinctionsAt(read, field)) {
             out.add(Refinement.of(each).spelled());
         }

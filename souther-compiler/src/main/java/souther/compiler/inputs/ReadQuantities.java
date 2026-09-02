@@ -522,9 +522,10 @@ final class ReadQuantities implements Quantities {
         return switch (asking(terms)) {
             case StructuralContext.Merge.Together it -> it.context();
             case StructuralContext.Merge.Disagreeing it -> throw new IllegalArgumentException(
-                    "`" + it.why().at() + "` is asked to be " + it.why().one().spelled()
-                            + " and " + it.why().other().spelled() + ", which no value of this"
-                            + " input is, so there is nothing here to answer about " + terms);
+                    "`" + it.why().at().discriminated() + "` is asked to be "
+                            + it.why().one().discriminated() + " and "
+                            + it.why().other().discriminated() + ", which no value of this input"
+                            + " is, so there is nothing here to answer about " + terms);
         };
     }
 
@@ -573,8 +574,8 @@ final class ReadQuantities implements Quantities {
     private static Emptiness.AtAField.Where placeOf(InputAtom atom, TermPath root, String path) {
         if (!(atom instanceof InputAtom.Named named)) {
             throw new IllegalStateException(
-                    "`" + root + "` names a subject at `" + path + "` that arrived here with no"
-                            + " place, so nothing can say where a proof about it is");
+                    "`" + root.discriminated() + "` names a subject at `" + path + "` that arrived"
+                            + " here with no place, so nothing can say where a proof about it is");
         }
         return new Emptiness.AtAField.Where.In(named.place());
     }

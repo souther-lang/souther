@@ -50,6 +50,18 @@ public record TermPath(String head, List<Step> steps) {
     /** One step of a path: two that go somewhere, and one that stays and narrows. */
     public sealed interface Step {
 
+        /**
+         * How this is written where a narrowing says which kind it is as well.
+         *
+         * <p>The same text for every step that carries no narrowing, which is why this is here
+         * rather than at the one that does: a caller spelling a path asks each step how it is
+         * written, and a caller that reached inside a step to add the kind would be deciding a
+         * step's separator somewhere other than the step.
+         */
+        default String discriminated() {
+            return toString();
+        }
+
         /** The field of a record. */
         record Field(String name) implements Step {
 
@@ -89,6 +101,11 @@ public record TermPath(String head, List<Step> steps) {
             @Override
             public String toString() {
                 return "@" + refinement.spelled();
+            }
+
+            @Override
+            public String discriminated() {
+                return "@" + refinement.discriminated();
             }
         }
     }
@@ -336,11 +353,10 @@ public record TermPath(String head, List<Step> steps) {
                 }
                 out.append(field);
             }
-            case Step.Refine refine -> out.append('@').append(discriminating
-                    ? refine.refinement().discriminated() : refine.refinement().spelled());
-            // No separator: what a list holds follows the list, and a dot before it would read as a
-            // field of it. The same is true of a narrowing, which wears its own `@` above.
-            case Step.Element _ -> out.append(step);
+            // Neither wears a separator: what a list holds follows the list, and a narrowing of a
+            // position follows the position, and a dot before either would read as a field of it.
+            case Step.Element _, Step.Refine _ ->
+                    out.append(discriminating ? step.discriminated() : step.toString());
         }
     }
 

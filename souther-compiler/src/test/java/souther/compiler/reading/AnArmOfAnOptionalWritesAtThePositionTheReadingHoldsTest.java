@@ -3,7 +3,9 @@ package souther.compiler.reading;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.NumericMeasures;
+import souther.compiler.check.Shape;
 import souther.compiler.check.Symbols;
+import souther.compiler.check.TypeView;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.inputs.InputDomain;
@@ -67,9 +69,13 @@ class AnArmOfAnOptionalWritesAtThePositionTheReadingHoldsTest {
     /** The position the arm's name stands at, spelled by the narrowing the optional's own carrier
      *  is. */
     private static TermPath underSome(Read read) {
-        Type held = read.inputs.at(TermPath.of("b").then("held")).view().declared();
-        return TermPath.of("b").then("held")
-                .refine(Refinement.of(CaseSelector.optionPresent(held)))
+        TermPath optional = TermPath.of("b").then("held");
+        // What the optional holds, which is what its present carrier is written for. Taken off the
+        // type rather than passed the optional itself: the two spell one narrowing today, and a
+        // carrier written for the wrong type is a selector no checker would build.
+        Shape.Optional shape = (Shape.Optional) TypeView.of(
+                read.inputs.at(optional).view().declared(), read.symbols).shape();
+        return optional.refine(Refinement.of(CaseSelector.optionPresent(shape.element())))
                 .then("c");
     }
 
