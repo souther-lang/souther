@@ -216,11 +216,11 @@ public final class DeclaredBounds {
      *             path is the caller's already, which is what {@code placed} is a list of
      */
     public static Bounds placed(List<FieldDomains.Placed> placed,
-                                FieldDomains.CoordinateKind kind, Carrier carrier) {
+                                NumberAt.OfWhatNumber kind, Carrier carrier) {
         End min = null;
         End max = null;
         for (FieldDomains.Placed each : placed) {
-            if (!each.at().kind().equals(kind)) {
+            if (!each.at().of().equals(kind)) {
                 continue;
             }
             End end = new End(each.end(), List.of(new Drawn(each.from(), each.conjunct())));

@@ -211,7 +211,6 @@ public enum DiagnosticCode {
 
     // --- the external representation ---
     E2201("a-custom-codec-agrees-with-its-type", "check.codec.title"),
-    E2202("a-codec-reached-for-exists", "check.codec.title"),
 
     // --- the text as written ---
     E2301("declaration-syntax", "parse.title"),

@@ -109,7 +109,7 @@ public final class ClauseHelpers {
                 BindingOwner declared = new BindingOwner.OfData(d.declares());
                 defs.add(new Hir.Data(d.written(), d.declares(), d.newtype(), d.includes(), d.fields(),
                         Hir.mapClauses(d.invariants(), clause -> inliner.inline(clause, declared)),
-                        d.decoder(), d.encoder(), d.pos()));
+                        d.pos()));
             } else {
                 defs.add(def);
             }

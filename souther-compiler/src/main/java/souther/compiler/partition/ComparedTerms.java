@@ -91,9 +91,9 @@ record ComparedTerms(TermOrders on, TermOrders against, Count stepsApart) {
         // operator list of this reading's own would be a second answer to that.
         if (comparison.claim() instanceof ComparisonClaim.Cut) {
             GuardThresholds.Named on =
-                    GuardThresholds.namedBy(comparison.at().left(), read, reads);
+                    GuardThresholds.namedBy(comparison.left(), read, reads);
             GuardThresholds.Named against =
-                    GuardThresholds.namedBy(comparison.at().right(), read, reads);
+                    GuardThresholds.namedBy(comparison.right(), read, reads);
             if (on != null && against != null && aDistanceRuns(on.orders(), against.orders())) {
                 // The subject is the one the author wrote on the left, which the canonical form
                 // keeps too. Which of the two a line is named by is not something to derive where

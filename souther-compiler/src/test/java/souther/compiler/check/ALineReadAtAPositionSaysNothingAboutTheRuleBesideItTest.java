@@ -44,7 +44,7 @@ class ALineReadAtAPositionSaysNothingAboutTheRuleBesideItTest {
         Symbols symbols = Scopes.derived(compilation.db(), module).value();
         assertNotNull(symbols, "the model under test compiles");
         TypeSymbol.AtModule named = TypeSymbols.declared(new TypeKey(module, type));
-        Hir.Data data = (Hir.Data) symbols.declarations().declaration(named.key());
+        Hir.Data data = (Hir.Data) symbols.declaredNode(named.key());
         assertNotNull(data, "no `" + type + "` declared");
         return FieldDomains.of(named, data, symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
     }

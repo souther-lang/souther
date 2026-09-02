@@ -149,7 +149,7 @@ class ARowIsAWitnessForAnArmOnlyByGoingThroughItTest {
                     switch (claim.at()) {
                         case ControlPointId.ArmOccurrence arm -> taken.add(arm.probe().getAsInt());
                         case ControlPointId.ComparisonPoint point -> {
-                            taken.add(point.at().emissionSite());
+                            taken.add(point.at().value());
                             ways.add(point.way());
                         }
                     }
@@ -175,8 +175,7 @@ class ARowIsAWitnessForAnArmOnlyByGoingThroughItTest {
                     .ask(new Adequacy.Inputs(module)).value().get("fee");
             Core body = checked.behaviorBodies().get("fee");
             assertNotNull(body, "the behavior under test has a body");
-            CoverageSites.Plan plan = CoverageSites.of(checked.behaviorBodies(), checked.decisions(),
-                    checked.supplied());
+            CoverageSites.Plan plan = checked.plan();
             // What the compilation divides this behavior into, and not what the classes alone come
             // to. The line this fork is on is drawn off the comparison in the body, so a reading
             // that only asked the declarations would leave the position with no classes — and a

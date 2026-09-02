@@ -1,6 +1,7 @@
 package souther.compiler.inputs;
 
 import souther.compiler.ast.Hir;
+import souther.compiler.check.NumberAt;
 import souther.compiler.check.FieldDomains;
 import souther.compiler.check.NarrowedBounds;
 import souther.compiler.check.RuleKey;
@@ -154,7 +155,7 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
      * <p>The value's own paths and not this input's: what a caller out here calls {@code p.x} is
      * {@code x} to the rules of the value {@code p} holds, and the translation is the caller's.
      */
-    FieldDomains.Settled given(java.util.Map<FieldDomains.Coordinate,
+    FieldDomains.Settled given(java.util.Map<NumberAt<RuleKey>,
             souther.compiler.numeric.Count> settled) {
         return bounds().given(settled);
     }
@@ -186,7 +187,7 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
      * in, which is not the same as what {@link #at} projects onto it.
      */
     NumericDomain.Bounds leftAt(TermPath path,
-                                souther.compiler.check.FieldDomains.CoordinateKind kind) {
+                                NumberAt.OfWhatNumber kind) {
         RuleKey where = keyOf(path);
         NumericDomain.Bounds here = where == null ? null : bounds().leftAt(where, kind);
         TermPath above = alsoAt(path);
@@ -294,7 +295,7 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
                 accounting.unansweredQuestions().stream()
                         .filter(each -> switch (each.owed()) {
                             case Owed.AdmittedValues it -> it.path().equals(where);
-                            case Owed.Boundary it -> it.on().path().equals(where);
+                            case Owed.Boundary it -> it.on().position().equals(where);
                         })
                         .forEach(out::add));
         TermPath above = alsoAt(path);
@@ -492,7 +493,7 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
     private static TypeSymbol readAs(Type type, Symbols symbols) {
         TypeSymbol written = nameOf(type);
         return written != null
-                && symbols.declarations().declaration(written) instanceof Hir.Data
+                && symbols.declaredNode(written) instanceof Hir.Data
                 ? written : heldIn(type, symbols);
     }
 

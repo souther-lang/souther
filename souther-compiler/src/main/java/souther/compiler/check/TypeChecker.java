@@ -75,7 +75,8 @@ public final class TypeChecker {
      * <p>{@code reqSigs} and {@code recursiveHelperFns} are handed over rather than worked out here,
      * because the body check reads the same two and they must be the same two.
      */
-    public static Reported checkModule(Hir.Module module, Symbols symbols, ReadingPolicy policy,
+    public static Reported checkModule(Hir.Module module, DerivedSymbols symbols,
+                                       ReadingPolicy policy,
                                        Map<String, Sig> sigs,
                                        Set<ValueName.Behavior> importedInjected,
                                        Set<ValueName.Behavior> importedUnwritten,
@@ -199,7 +200,7 @@ public final class TypeChecker {
      * phase reads (the {@code fns} map, the {@code exposed} set, {@code reqSigs}, {@code sigs}) may
      * throw straight out — its caller treats that as fail-fast and abandons the module.
      */
-    static void checkRecovering(Hir.Module module, Symbols symbols, ReadingPolicy policy,
+    static void checkRecovering(Hir.Module module, DerivedSymbols symbols, ReadingPolicy policy,
                                         Map<String, Sig> sigs,
                                        Set<ValueName.Behavior> importedInjected,
                                        Set<ValueName.Behavior> importedUnwritten,
@@ -304,8 +305,17 @@ public final class TypeChecker {
             }
             collect(errors, abandoned, () -> {
                 switch (def) {
-                    case Hir.Data data ->
-                            DataChecker.checkData(CheckContext.of(symbols).forData(data));
+                    // The declarations that came out, which is what the derived world has. One that
+                    // did not was reported where it was derived, and a check over it would find
+                    // that mistake again from further down — against a line the author has no
+                    // reason to look at.
+                    case Hir.Data data -> {
+                        if (symbols.declarations().declaration(data.declares())
+                                instanceof Derived.Data derived) {
+                            DataChecker.checkData(derived,
+                                    CheckContext.of(symbols).forData(data));
+                        }
+                    }
                     case Hir.SumData sum -> DataChecker.checkSum(sum, symbols);
                     case Hir.UnitData _ -> { }
                 }
@@ -551,7 +561,7 @@ public final class TypeChecker {
     }
 
     /** The symbol table of a module compiled on its own: bare names are its own definitions. */
-    public static Symbols symbols(Hir.Module module, Stdlib stdlib) {
+    public static ResolvedSymbols symbols(Hir.Module module, Stdlib stdlib) {
         return Symbols.of(module, stdlib);
     }
 

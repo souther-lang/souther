@@ -85,7 +85,7 @@ public record ComparedNumber(NumericTerm term, TermOrders orders, ComparisonPlac
      * needs no more.
      */
     static ComparedNumber of(Core.Binary binary, InputReading read, InputReads reads) {
-        OnASide side = sideOf(binary, read, reads);
+        OnASide side = sideOf(binary.left(), binary.right(), read, reads);
         if (side == null) {
             return null;
         }
@@ -111,7 +111,7 @@ public record ComparedNumber(NumericTerm term, TermOrders orders, ComparisonPlac
      * other.
      */
     public static DrawnLine lineOf(Comparison comparison, InputReading read, InputReads reads) {
-        OnASide side = sideOf(comparison.at(), read, reads);
+        OnASide side = sideOf(comparison.left(), comparison.right(), read, reads);
         NumericTerm.FromOnePosition position =
                 side == null ? null : side.named().term().atOnePosition();
         if (position == null || side.at() == null || side.named().orders() == null) {
@@ -130,12 +130,12 @@ public record ComparedNumber(NumericTerm term, TermOrders orders, ComparisonPlac
      * about, unless the right is a number the left is a value of — then the line is on that one,
      * and the comparison is read turned round.
      */
-    private static OnASide sideOf(Core.Binary binary, InputReading read, InputReads reads) {
-        OnASide left = onOneSide(binary.left(), binary.right(), false, read, reads);
+    private static OnASide sideOf(Core one, Core other, InputReading read, InputReads reads) {
+        OnASide left = onOneSide(one, other, false, read, reads);
         if (left != null && left.at() != null) {
             return left;
         }
-        OnASide right = onOneSide(binary.right(), binary.left(), true, read, reads);
+        OnASide right = onOneSide(other, one, true, read, reads);
         return right != null && right.at() != null ? right : left != null ? left : right;
     }
 

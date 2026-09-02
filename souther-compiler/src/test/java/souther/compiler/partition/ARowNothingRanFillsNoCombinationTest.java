@@ -363,7 +363,7 @@ class ARowNothingRanFillsNoCombinationTest {
             switch (claim.at()) {
                 case ControlPointId.ArmOccurrence arm -> taken.add(arm.probe().getAsInt());
                 case ControlPointId.ComparisonPoint point -> {
-                    taken.add(point.at().emissionSite());
+                    taken.add(point.at().value());
                     ways.add(point.way());
                 }
             }
@@ -400,8 +400,7 @@ class ARowNothingRanFillsNoCombinationTest {
                     souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
             Core body = checked.behaviorBodies().get(behavior);
             assertNotNull(body, "the behavior under test has a body");
-            CoverageSites.Plan plan = CoverageSites.of(checked.behaviorBodies(), checked.decisions(),
-                checked.supplied());
+            CoverageSites.Plan plan = checked.plan();
             return new Model(MeasuredInput.of(spec.name(), inputs.reading(symbols),
                     partitioning),
                     CoverageRead.of(spec.name(), body, plan, inputs, symbols));

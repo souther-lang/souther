@@ -139,8 +139,7 @@ class AGroupIsOnlyOfferedWhereARunPassesItOnceTest {
             Core body = checked.behaviorBodies().get(behavior);
             assertNotNull(body, "the behavior under test has a body");
             return new Model(behavior, body,
-                    CoverageSites.of(checked.behaviorBodies(), checked.decisions(),
-                checked.supplied()),
+                    checked.plan(),
                     compilation.db().ask(new Adequacy.Inputs(module)).value().get(behavior),
                     Scopes.derived(compilation.db(), module).value());
         }

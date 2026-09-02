@@ -94,7 +94,7 @@ public final class Distinctions {
      * end of values and says nothing, which is what leaves a denial unable to prove it empty.
      */
     private static boolean oneValue(TypeSymbol leaf, Symbols symbols) {
-        return !(symbols.declarations().declaration(leaf) instanceof Hir.Data);
+        return !(symbols.declaredNode(leaf) instanceof Hir.Data);
     }
 
     /**

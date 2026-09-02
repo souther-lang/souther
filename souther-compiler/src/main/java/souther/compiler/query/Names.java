@@ -7,6 +7,10 @@ import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
 import souther.compiler.ast.WrittenName;
 import souther.compiler.check.DeclarationRefusals;
+import souther.compiler.check.Derived;
+import souther.compiler.check.DerivedSymbols;
+import souther.compiler.check.Normalized;
+import souther.compiler.check.ResolvedSymbols;
 import souther.compiler.check.Denoting;
 import souther.compiler.check.DeclaredNames;
 import souther.compiler.check.ModuleUniverse;
@@ -14,7 +18,6 @@ import souther.compiler.check.Scoping;
 import souther.compiler.check.Registry;
 import souther.compiler.check.Resolve;
 import souther.compiler.check.SyntaxSymbols;
-import souther.compiler.check.Symbols;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.msg.DeclarationMessage;
@@ -127,38 +130,71 @@ public final class Names {
     }
 
     /**
-     * A registry over this compilation, reading each module's declarations as they were derived.
+     * A registry over this compilation, reading each module's declarations as they were normalized.
      *
-     * <p>Where a derived declaration becomes a node, and the only place it does. What the derived
-     * stage answers with says that the constructions in what a declaration says are constructions;
-     * this hands over {@link Hir.Def}, and what settles that is the other source a reader is
-     * answered from rather than a step nobody has taken. {@link souther.compiler.check.Declarations}
-     * answers an identity from this registry and from the language's own vocabulary, and the
-     * prelude's declarations are loaded resolved and kept out of derivation — so there is no derived
-     * declaration for the second source to hand over, and the representation both can be in is the
-     * node. What says a reader is at the derived world is which of the two it asked for:
-     * {@link #derivedSymbols} is built over this one and {@link #resolvedSymbols} over the
-     * resolved one.
+     * <p>What a reader of declarations below the settling is answered from. Every declaration a
+     * module writes is here, because normalizing one is declaration-local and asks nothing of the
+     * shapes its fields name — so which form a reader gets is not decided by whether a
+     * representation could be derived for the declaration it asked about.
      */
-    static Registry<Hir.Def> derivedRegistry(Db db) {
-        return new Registry<Hir.Def>() {
+    static Registry<Normalized.Def> normalizedRegistry(Db db) {
+        return new Registry<Normalized.Def>() {
             @Override
-            public Hir.Def declaration(TypeKey address) {
-                Answer<souther.compiler.check.Derived.Def> def =
-                        db.ask(new Shapes.DerivedDef(address));
-                return def.present() ? def.value().read() : null;
+            public Normalized.Def declaration(TypeKey address) {
+                Answer<Normalized.Def> def = db.ask(new Shapes.NormalizedDef(address));
+                return def.present() ? def.value() : null;
             }
 
             @Override
-            public Map<String, Hir.Def> declaredIn(String moduleName) {
-                Answer<Map<String, souther.compiler.check.Derived.Def>> defs =
+            public Map<String, Normalized.Def> declaredIn(String moduleName) {
+                Answer<Map<String, Normalized.Def>> defs =
+                        db.ask(new Shapes.NormalizedDeclarations(moduleName));
+                return defs.present() ? defs.value() : Map.of();
+            }
+
+            @Override
+            public Set<String> exposedBy(String moduleName) {
+                Set<String> exposed = db.ask(new Front.Exposes(moduleName)).value();
+                return exposed == null ? Set.of() : exposed;
+            }
+
+            @Override
+            public Set<String> moduleNames() {
+                Set<String> names = db.ask(new Front.ModuleNames()).value();
+                return names == null ? Set.of() : names;
+            }
+        };
+    }
+
+    /**
+     * A registry over this compilation, reading each module's declarations with the representation
+     * derived for each.
+     *
+     * <p>What it hands over is the derived declaration and not the node it was derived from. A table
+     * of nodes would say of every declaration below the stage what nothing established of it. Both
+     * sources a reader is answered from are at this rung: the compilation's, here, and the
+     * language's own vocabulary, which is lifted to the same representation
+     * ({@link Declarations.Vocabulary#ofDerived}) rather than left resolved with no derived
+     * declaration to give.
+     *
+     * <p>Short of the declarations a module writes, by exactly the products whose representation
+     * could not be derived. Which is why it is not what a declaration is read through:
+     * {@link #normalizedRegistry} is, and it is missing none of them.
+     */
+    static Registry<Derived.Def> derivedRegistry(Db db) {
+        return new Registry<Derived.Def>() {
+            @Override
+            public Derived.Def declaration(TypeKey address) {
+                Answer<Derived.Def> def =
+                        db.ask(new Shapes.DerivedDef(address));
+                return def.present() ? def.value() : null;
+            }
+
+            @Override
+            public Map<String, Derived.Def> declaredIn(String moduleName) {
+                Answer<Map<String, Derived.Def>> defs =
                         db.ask(new Shapes.DerivedDeclarations(moduleName));
-                if (!defs.present()) {
-                    return Map.of();
-                }
-                Map<String, Hir.Def> out = new LinkedHashMap<>();
-                defs.value().forEach((name, def) -> out.put(name, def.read()));
-                return Map.copyOf(out);
+                return defs.present() ? defs.value() : Map.of();
             }
 
             @Override
@@ -431,11 +467,12 @@ public final class Names {
      * against whichever question was being answered when it made them — which is one declaration at
      * a time, and is the finer dependency this hands out.
      */
-    private static Answer<Symbols> symbols(Db db, String name, Registry<Hir.Def> registry) {
+    private static <S> Answer<S> symbols(Db db, String name,
+                                         java.util.function.BiFunction<Denoting, Stdlib, S> over) {
         if (!db.ask(new HasScope(name)).value()) {
             return Answer.absent();
         }
-        return Answer.of(Symbols.of(name, registry, asked(db, name), library(db)));
+        return Answer.of(over.apply(asked(db, name), library(db)));
     }
 
     /**
@@ -531,8 +568,9 @@ public final class Names {
 
     /** What names mean in a module over the declarations as resolution left them — what
      * {@link Resolved} is resolved against. */
-    static Answer<Symbols> resolvedSymbols(Db db, String name) {
-        return symbols(db, name, resolvedRegistry(db));
+    static Answer<ResolvedSymbols> resolvedSymbols(Db db, String name) {
+        return symbols(db, name, (names, stdlib) -> ResolvedSymbols
+                .over(name, resolvedRegistry(db), names, stdlib));
     }
 
     /**
@@ -547,8 +585,11 @@ public final class Names {
      * memoised by, and a caller that kept one would be holding the compilation it was made from. It
      * is built where it is used and dropped there.
      */
-    public static Answer<Symbols> derivedSymbols(Db db, String name) {
-        return symbols(db, name, derivedRegistry(db));
+    public static Answer<DerivedSymbols> derivedSymbols(
+            Db db, String name) {
+        return symbols(db, name, (names, stdlib) -> DerivedSymbols
+                .over(name, derivedRegistry(db), normalizedRegistry(db), resolvedRegistry(db),
+                        names, stdlib));
     }
 
     /** The same, over the declarations as they were written — what {@code Resolve} resolves
@@ -579,7 +620,7 @@ public final class Names {
 
         @Override
         public Answer<Map<String, Hir.Def>> compute(Db db) {
-            Answer<Symbols> symbols = resolvedSymbols(db, name);
+            Answer<ResolvedSymbols> symbols = resolvedSymbols(db, name);
             return symbols.present() ? Answer.of(symbols.value().reachable()) : Answer.absent();
         }
     }

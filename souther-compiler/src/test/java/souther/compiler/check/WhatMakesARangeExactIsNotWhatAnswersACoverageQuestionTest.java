@@ -53,7 +53,7 @@ class WhatMakesARangeExactIsNotWhatAnswersACoverageQuestionTest {
         Symbols symbols = Scopes.derived(compilation.db(), module).value();
         assertNotNull(symbols);
         TypeSymbol.AtModule named = TypeSymbols.declared(new TypeKey(module, type));
-        Hir.Data data = (Hir.Data) symbols.declarations().declaration(named.key());
+        Hir.Data data = (Hir.Data) symbols.declaredNode(named.key());
         assertNotNull(data, "no `" + type + "` declared");
         return FieldDomains.of(named, data, symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
     }
@@ -301,9 +301,9 @@ class WhatMakesARangeExactIsNotWhatAnswersACoverageQuestionTest {
                 domains.placedAt(RuleKey.THE_VALUE).stream().filter(FieldDomains.Placed::lower)
                         .findFirst().orElseThrow().end(),
                 "`floor` writes the end at none");
-        assertEquals(Endpoint.inclusive(Count.of(1)), domains.leftAt(RuleKey.THE_VALUE, new FieldDomains.CoordinateKind.OfWhatAnOperationAnswers(souther.compiler.types.ValueName.Stdlib.operation("List", "length"))).min(),
+        assertEquals(Endpoint.inclusive(Count.of(1)), domains.leftAt(RuleKey.THE_VALUE, new NumberAt.OfWhatNumber.OfWhatAnOperationAnswers(souther.compiler.types.ValueName.Stdlib.operation("List", "length"))).min(),
                 "and the rules leave the count at one");
-        assertEquals(null, domains.leftAt(RuleKey.THE_VALUE, new FieldDomains.CoordinateKind.OfItsOwnValue()),
+        assertEquals(null, domains.leftAt(RuleKey.THE_VALUE, new NumberAt.OfWhatNumber.OfItsOwnValue()),
                 "while the position's own values have no range for a line to be clamped by");
     }
 

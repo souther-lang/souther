@@ -106,7 +106,7 @@ public final class AtomSpace {
     private static void descend(Iterable<TypeSymbol> names, Symbols symbols,
                                 Set<TypeSymbol> atoms, Set<TypeSymbol> expanded) {
         for (TypeSymbol name : names) {
-            if (symbols.declarations().declaration(name) instanceof Hir.SumData sum) {
+            if (symbols.declaredNode(name) instanceof Hir.SumData sum) {
                 if (expanded.add(name)) {
                     descend(TypeOps.caseNames(sum), symbols, atoms, expanded);
                 }

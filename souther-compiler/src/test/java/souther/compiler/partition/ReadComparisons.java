@@ -1,7 +1,6 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.Symbols;
-import souther.compiler.coverage.CoverageSites;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
@@ -38,10 +37,9 @@ record ReadComparisons(List<ComparisonReadings.Reading> comparisons,
         Symbols symbols = Scopes.derived(compilation.db(), module).value();
         souther.compiler.inputs.InputDomain inputs =
                 compilation.db().ask(new Adequacy.Inputs(module)).value().get(behavior);
-        return new ReadComparisons(ComparisonReadings.of(behavior,
+        return new ReadComparisons(ComparisonReadings.of(
                 checked.behaviorBodies().get(behavior),
-                CoverageSites.of(checked.behaviorBodies(), checked.decisions(),
-                        checked.supplied()),
+                checked.plan(),
                 inputs.reading(symbols), InputReads.ofParameters(inputs.parameterReads(),
                         checked.elementBindings().get(behavior)),
                 // Nothing said about what arrives, so every line here is held to what the
@@ -53,7 +51,7 @@ record ReadComparisons(List<ComparisonReadings.Reading> comparisons,
      *  them by where it stands, after which a fixture could be about a rule nobody meant. */
     ComparisonReadings.Reading only() {
         assertEquals(1, comparisons.size(), () -> "the body under test writes one comparison: "
-                + comparisons.stream().map(each -> each.at().pos().toString()).toList());
+                + comparisons.stream().map(each -> each.catalogued().at().toString()).toList());
         return comparisons.get(0);
     }
 }

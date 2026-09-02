@@ -1,9 +1,6 @@
 package souther.compiler.check;
 
 import souther.compiler.ast.Hir;
-import souther.compiler.diag.CompileException;
-import souther.compiler.diag.Diagnostic;
-import souther.compiler.diag.msg.DataMessage;
 import souther.compiler.types.ConstructionOrigin;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
@@ -81,7 +78,7 @@ public final class NewtypeDesugar {
         if (def instanceof Hir.Data d && !d.invariants().isEmpty()) {
             return new Hir.Data(d.written(), d.declares(), d.newtype(), d.includes(), d.fields(),
                     Hir.mapClauses(d.invariants(), inv -> go(inv, symbols)),
-                    d.decoder(), d.encoder(), d.pos());
+                    d.pos());
         }
         return def;
     }
@@ -97,12 +94,8 @@ public final class NewtypeDesugar {
                 TypeSymbol built = call.answered() != null
                         && call.answered().denotes() instanceof ValueName.OfType named
                         ? named.type() : null;
-                if (built != null && symbols.declarations().declaration(built) instanceof Hir.Data nt && nt.newtype()) {
-                    if (args.size() != 1) {
-                        throw CompileException.of(Diagnostic
-                                        .at(call.appliedAt())
-                                        .say(new DataMessage.ANewtypeWrapsOneValue(call.written(), String.valueOf(args.size()))).build());
-                    }
+                if (built != null && symbols.declaredNode(built) instanceof Hir.Data nt
+                        && nt.newtype() && args.size() == 1) {
                     // `T(v)` is what the author wrote and a construction is what it means, so the
                     // node that replaces the application stands over the same characters.
                     yield new Hir.NewData(

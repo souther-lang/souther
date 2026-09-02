@@ -1,6 +1,7 @@
 package souther.compiler.program;
 
 import souther.compiler.ast.Hir;
+import souther.compiler.types.TypeKey;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
 import souther.compiler.core.ValueShape;
@@ -139,7 +140,8 @@ class WhatASnapshotSaysAModuleDeclaresIsWhatTheCheckerResolvedAgainstTest {
         Symbols symbols = Names.derivedSymbols(compilation.db(), "demo").value();
         assertNotNull(symbols, "the module has a declaration world");
         Map<TypeSymbol.AtModule, Hir.Def> world = new LinkedHashMap<>();
-        symbols.declarations().declaredIn("demo").values().forEach(def -> {
+        symbols.declaredNamesIn("demo").forEach(declared -> {
+            Hir.Def def = symbols.declaredNode(new TypeKey("demo", declared));
             if (def.declares() instanceof TypeSymbol.AtModule at) {
                 world.put(at, def);
             }

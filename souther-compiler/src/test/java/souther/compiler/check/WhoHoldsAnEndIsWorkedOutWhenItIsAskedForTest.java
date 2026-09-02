@@ -115,7 +115,7 @@ class WhoHoldsAnEndIsWorkedOutWhenItIsAskedForTest {
         Symbols symbols = Scopes.derived(compilation.db(), compilation.modules().get(0)).value();
         TypeSymbol.AtModule held = TypeSymbols.declared(new TypeKey("demo", "Held"));
         return FieldDomains.of(held,
-                (Hir.Data) symbols.declarations().declaration(held.key()), symbols,
+                (Hir.Data) symbols.declaredNode(held.key()), symbols,
                 souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
     }
 }

@@ -327,7 +327,8 @@ class AnArmSaysWhichCaseAValueIsAndDoesNotMakeASecondOneTest {
     }
 
     private static TypeSymbol named(Symbols symbols, String type) {
-        for (Hir.Def d : symbols.declarations().declaredIn("demo").values()) {
+        for (String declared : symbols.declaredNamesIn("demo")) {
+            Hir.Def d = symbols.declaredNode(new TypeKey("demo", declared));
             if (d.name().equals(type)) {
                 return d.declares();
             }
