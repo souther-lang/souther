@@ -57,7 +57,8 @@ public final class ResolvedCase {
         return new ResolvedCase(selector, atoms);
     }
 
-    /** What tests and reads the value — what {@code Core} carries and the backend emits. */
+    /** What tests and reads the value — the projection a backend emits. {@code Core} carries this
+     *  whole value, because what it covers is the half a reader below the checker cannot rebuild. */
     public CaseSelector selector() {
         return selector;
     }

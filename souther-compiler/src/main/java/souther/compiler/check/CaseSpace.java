@@ -21,12 +21,15 @@ import java.util.Set;
  * that is an answer rather than a failure — what a reader does about a subject it cannot open is the
  * reader's ({@code E1202} for a {@code match}).
  *
- * <p>Everything a later stage needs to know about a case is on the {@link CaseSelector}: what to
- * test, and what the value is once the test answers. So a reader never asks the subject a second
- * time. That is the rule this type exists to keep — the backend used to re-derive optional-ness,
- * arity and or-pattern-ness while emitting, which is what {@code Core}'s own contract says it must
- * not do.
- *
+ * <p>What a case comes to is settled here and never asked of the subject again. Two halves of it,
+ * and they go to different readers. What to test and what the value is once the test answers is the
+ * {@link CaseSelector}, which says that much wherever it is written and is what a backend emits.
+ * What selecting the case <em>covers</em> is a fact about the declarations this compile read, and
+ * it is the half a later stage cannot work out for itself — so {@link ResolvedCase} is the pair,
+ * and it is the pair that crosses into {@code Core}. That is the rule this type exists to keep: the
+ * backend used to re-derive optional-ness, arity and or-pattern-ness while emitting, and the
+ * readings of an input used to re-derive which distinction an arm picked from its name, which one
+ * name over several leaves cannot say (#1252).
  */
 sealed interface CaseSpace {
 
@@ -242,10 +245,10 @@ sealed interface CaseSpace {
      * compile read — so it is answered here, where they are, and the value carries no way of asking
      * again.
      *
-     * <p>Also where a selector that came back from {@code Core} is made whole again. A pass reading
-     * an elaborated arm has the selector and not what it covers — {@code Core} carries nothing about
-     * the program around it — and asking here is that pass crossing back into this one rather than
-     * a second reading.
+     * <p>Also where a caller holding a selector alone gets the pair. An elaborated arm carries the
+     * resolution already, so a reader of {@code Core} asks the arm and not this; what comes here is
+     * a selector built somewhere with no arm around it, and asking is that caller crossing into
+     * this pass rather than reading the declarations a second time.
      */
     static ResolvedCase resolve(CaseSelector selector, Symbols symbols) {
         return ResolvedCase.of(selector, covers(selector, symbols));
