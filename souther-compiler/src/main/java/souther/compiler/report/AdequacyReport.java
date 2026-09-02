@@ -127,7 +127,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         return ReportMeasurement.statusOf(weakenedBy);
     }
 
-    public static final int SCHEMA_VERSION = 11;
+    public static final int SCHEMA_VERSION = 12;
 
     /**
      * Where the schema this writes documents ships.
@@ -535,28 +535,22 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         ObligationSummary<Adequacy.DeclaredDebt> account =
                 ObligationSummary.of(debts, each -> each.debt().owed());
         if (!debts.isEmpty()) {
-            out.append(String.format("  declarations   obligations %d/%d%s%n",
-                    account.met().size(), account.counted(),
-                    notes(excludedSaid(account, Surface.UNDER_THE_COUNT),
-                            each -> whyNoBoundaryItem(each.debt().owed().coverage()))));
+            out.append(String.format("  declarations   obligations %d/%d%n",
+                    account.met().size(), account.counted()));
         }
         // Every obligation the count holds and no row is at, so that the difference between the two
         // numbers is a difference a reader can walk. A point nobody can say is missed is not a gap
         // and is under no finding, and this is the only place it can be said at all.
+        //
+        // Every one of them and not the ones whose question this block finds interesting. What a
+        // reader does is walk from a number to the work it names, so an obligation inside the
+        // denominator with no line under it is a difference nothing can be done about — which holds
+        // of a point nobody read as much as of one nothing could show writable.
         for (Adequacy.DeclaredDebt each : account.undecided()) {
             for (String said : undecidedBecause(each.debt().owed().disposition(),
-                    each.debt().role() + " point " + each.said()
-                            + " (" + each.debt().describe(names, null) + ")")) {
+                    pointOf(each, each.debt().describe(names, null)))) {
                 out.append(String.format("      ? %s%n", said));
             }
-            readings(out, each.debt(), _ -> true, _ -> "");
-        }
-        // And the ones the count leaves out, said here for the reason it counts them here: a line
-        // a declaration drew is nobody's behavior's, so a block above has nothing to say about it
-        // and this is the only place it can be said at all.
-        for (Adequacy.DeclaredDebt each : excludedSaid(account, Surface.ON_ITS_OWN_LINE)) {
-            out.append(String.format("      · not known to be writable: the %s point %s (%s)%n",
-                    each.debt().role(), each.said(), each.debt().describe(names, null)));
             readings(out, each.debt(), _ -> true, at -> whatWasTried(
                     at.owedAt(each.debt().at()).searches(), names, null));
         }
@@ -571,12 +565,27 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                     // What the point asks, in its own words. A point against the line names a value
                     // and a point beside it names a run, and a sentence that wrote `=` for both said
                     // a run was one value.
-                    out.append(String.format("      %s no row is at the %s point%s %s (%s)%n",
-                            mark(f), owed.debt().role(), owed.debt().whichSide(), owed.said(),
-                            owed.debt().id().named()));
+                    out.append(String.format("      %s no row is at the %s%n",
+                            mark(f), pointOf(owed, owed.debt().id().named())));
                 }
             }
         });
+    }
+
+    /**
+     * One point of a declaration's line, as a sentence names it.
+     *
+     * <p>Two shapes, and which it is is the debt's answer rather than a reading of the words. A
+     * point on a quantity the declaration has a name for says what a row there has to do and then
+     * which rule drew the line; a point on a line between two positions has no such quantity — the
+     * level is a distance from the other position, which is a reading's name for it — so the line
+     * and the role on it is the whole of what there is to say (issue #1251).
+     */
+    private static String pointOf(Adequacy.DeclaredDebt owed, String rule) {
+        return owed.namesItsQuantity()
+                ? owed.debt().role() + " point" + owed.debt().whichSide() + " " + owed.said()
+                        + " (" + rule + ")"
+                : owed.debt().role() + " point of " + rule;
     }
 
     /** This report with only the modules and behaviors the caller asked about. A name that matches
@@ -661,7 +670,18 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * does not show.
      *
      * <p>A gap is answered before anything about how much was measured: one is enough, whatever else
-     * could not be measured, which is what {@link AdequacyStatus#NOT_SATISFIED} says it means.
+     * could not be measured, which is what {@link AdequacyStatus#NOT_SATISFIED} says it means. That
+     * order is the whole of what a gap and a doubt are: {@code NOT_SATISFIED} is something shown and
+     * {@code UNDETERMINED} is the absence of a showing, so a point nobody could decide does not
+     * weaken a gap somebody found.
+     *
+     * <p><b>And an obligation nobody could decide is read from the obligation.</b> What the readings
+     * came to is one of the two answers a point stands on; whether anything showed a row could be
+     * written there is the other, and a verdict resting on the first alone called a model satisfied
+     * over a point where every row was read, none was at it, and nothing could say whether one could
+     * be (issue #1249). Which obligations the verdict is about is still the bar's — that is the
+     * selection {@link #requiredObligations()} makes — and this reads the standing of the ones it
+     * selected.
      *
      * <p>No measure to be short of is not a doubt. A model the bar can refuse nothing about — every
      * measure it reads inapplicable — has been asked what the bar asks and has nothing to answer
@@ -685,7 +705,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         return Stream.concat(requiredSupport().stream(),
                                 requiredEvidence().stream())
                         .allMatch(m -> m instanceof Measurement.Complete<?>)
-                        && requiredObligations().stream().allMatch(ObligationCoverage::settled)
+                        && requiredObligations().stream().noneMatch(
+                                owed -> owed.disposition() instanceof ObligationDisposition.Undecided)
                 ? AdequacyStatus.SATISFIED : AdequacyStatus.UNDETERMINED;
     }
 
@@ -820,9 +841,14 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * What the verdict rests on that is owed rather than measured: every obligation the bar asks a
      * row at.
      *
-     * <p>Beside {@link #requiredEvidence()} and not among it, because an obligation's coverage is a
+     * <p>Beside {@link #requiredEvidence()} and not among it, because an obligation's standing is a
      * fold of the readings and not a measurement ({@link ObligationCoverage}) — it has what it went
      * without and no status, so what "made in full" means of it is its own answer.
+     *
+     * <p><b>A selection and nothing more.</b> Which obligations this build is held to answer for is
+     * the bar's, and leaving one out here says the verdict is not about it — never that the model
+     * does not owe it. What the model owes is settled where a border decides whether to owe a point
+     * at all, and no policy of a build's reaches that.
      *
      * <p>One entry per thing a row is owed for, since each of them is an obligation: a place two of
      * a body's rules drew a line at leaves a run owed to each, and a verdict counting the role once
@@ -830,8 +856,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * and not their findings, since a line a row already stands at has no finding and a denominator
      * made of the findings is a denominator made of the gaps.
      */
-    private List<ObligationCoverage> requiredObligations() {
-        List<ObligationCoverage> owed = new ArrayList<>();
+    private List<ObligationAssessment> requiredObligations() {
+        List<ObligationAssessment> owed = new ArrayList<>();
         for (ModuleReport module : modules) {
             for (BehaviorReport behavior : module.behaviors()) {
                 if (behavior.partition() == null) {
@@ -839,11 +865,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 }
                 behavior.account().stream()
                         .filter(point -> held.requires(point.role()))
-                        .forEach(point -> owed.add(point.owed().coverage()));
+                        .forEach(point -> owed.add(point.owed()));
             }
             for (Adequacy.DeclaredDebt debt : module.debts()) {
                 if (held.requires(debt.debt().role())) {
-                    owed.add(debt.debt().owed().coverage());
+                    owed.add(debt.debt().owed());
                 }
             }
         }
@@ -1229,10 +1255,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             // The points the model's own rules discharged are not on this line. They are not
             // obligations, so a count of them beside the obligations would be two units in one
             // sentence; each is said under the block, by the reading it is a point of.
-            out.append(String.format("    border      borders %d   obligations %d/%d%s%s%n",
+            out.append(String.format("    border      borders %d   obligations %d/%d%s%n",
                     lines.size(), owed.met().size(), owed.counted(),
-                    notes(excludedSaid(owed, Surface.UNDER_THE_COUNT),
-                            p -> whyNoBoundaryItem(p.owed().coverage())),
                     inFull(bounded.status())));
         }
         // Every obligation the count holds and no row is at, said here or under the findings below:
@@ -1243,7 +1267,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                     point.role() + " point (" + point.describe(names, declaredIn) + ")")) {
                 out.append(String.format("      ? %s%n", said));
             }
-            readings(out, point, _ -> true, _ -> "");
+            readings(out, point, _ -> true, at -> whatWasTried(
+                    at.owedAt(point.at()).searches(), names, declaredIn));
         }
         // A border the model drew that nothing here answered for, said whether or not one came of
         // it. It is exactly where none did that the question stands, so this cannot be written by
@@ -1299,21 +1324,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 readings(out, point, at -> !at.owedAt(point.at()).hasRowWitness(), _ -> "");
             }
         }
-        // Said and not counted. Nothing has shown a row can be written at these — the projection
-        // could not read every rule of the value, and nothing built one either — so they are not
-        // rows anybody is owed, and they are still the only thing there is to say about the
-        // position.
-        for (BorderObligationPointAssessment p : excludedSaid(owed, Surface.ON_ITS_OWN_LINE)) {
-            out.append(String.format("      · not known to be writable: the %s point (%s)%n",
-                    p.role(), p.describe(names, declaredIn)));
-            // What each reading's search came to, beside the verdict none of them decided. Whether
-            // this point is counted turns on whether a concrete value was accepted at it, so a
-            // reader looking at two models that differ here is looking at what the compiler could
-            // establish — and without this the difference reads as the tool being arbitrary.
-            readings(out, p, _ -> true, at -> whatWasTried(
-                    at.owedAt(p.at()).searches(), names, declaredIn));
-        }
-        // And what the model itself answered, which is not a row anybody is behind on. Named by the
+        // What the model itself answered, which is not a row anybody is behind on. Named by the
         // reason rather than left blank: a point the rules refuse and a point this language cannot
         // write down are counted out for opposite reasons, and a reader acts on them differently.
         for (BorderAssessment.Point p : BorderAssessment.pointsOf(lines)) {
@@ -1398,7 +1409,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                                   SourceNameResolver names, SourceId declaredIn) {
         for (Adequacy.Finding f : behavior.findings()) {
             if (f.about() instanceof About.APositionNoLineDivides(var position)) {
-                out.append(String.format("      %s not derivable: %s%n", mark(f), position.at()));
+                // What was found and not what was missed. This line is written from
+                // {@code Why.Absent}, which is every reading having run to the end and none of them
+                // dividing the position — a conclusion about the model. It said `not derivable`,
+                // which is the word for a derivation this compiler could not make, so the sentence
+                // said the opposite of the value it was written from (issue #1249).
+                out.append(String.format("      %s divided no way: %s%n", mark(f), position.at()));
             }
         }
         // Said apart from the line above it, which is the whole of what this pair is for: one names
@@ -1477,6 +1493,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             case RULE_ABOUT_A_RUN ->
                     "it is about what the values here come to rather than about any one of them,"
                             + " so it draws its line and divides none of them";
+            // The one sentence here that is about this compiler's measure rather than about the
+            // rule. Said as a division that has no line, because that is what it is: an author
+            // reading "this compiler does not read it" would go and rewrite a rule that was read.
+            case PARTITION_NOT_REPRESENTABLE ->
+                    "it divides this position into values this measure draws no line between";
             case RULE_ABOUT_A_DERIVED_VALUE ->
                     "it is about a value made from this one, and what it says about the values here"
                             + " is not worked out";
@@ -1647,29 +1668,6 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         return out.toString();
     }
 
-    /** Where a reason an obligation is out of the count is said. */
-    private enum Surface {
-        /** Grouped into a note beside the two numbers, since what a reader does about it is
-         *  nothing: the measure was not made and no row would change that. */
-        UNDER_THE_COUNT,
-        /** A line of its own, since what a reader is owed is the point and what was tried there. */
-        ON_ITS_OWN_LINE
-    }
-
-    /**
-     * Which surface each reason is said on.
-     *
-     * <p>Exhaustive, and the only place a reason is put on a surface. A reason added to
-     * {@link ObligationDisposition.Reason} arrives here as a compile error rather than as an
-     * obligation that leaves the count and is said nowhere.
-     */
-    private static Surface surfaceOf(ObligationDisposition.Reason reason) {
-        return switch (reason) {
-            case NOTHING_WAS_READ -> Surface.UNDER_THE_COUNT;
-            case NOT_KNOWN_TO_BE_WRITABLE -> Surface.ON_ITS_OWN_LINE;
-        };
-    }
-
     /**
      * What is undecided about one obligation, a sentence per open question.
      *
@@ -1696,16 +1694,31 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 // The reading carried whether a value was stopped or never arrived all the way
                 // here, and a sentence that stopped at "undecided" would be the last step of the
                 // carrying dropping it.
-                case ObligationDisposition.Uncertainty.WhetherARowIsThere(ReadingReasons met) ->
+                case ObligationDisposition.Uncertainty.WhetherARowIsThere.ReadingsStopped(
+                        ReadingReasons met) ->
                         "undecided whether a row is at the " + point + whatTheReadingsMet(met);
+                // And why nobody read, where nobody did. Off the question and not off the coverage
+                // beside it: what a question is open on travels with the question, so a sentence
+                // that reached past it for the evidence would be one more reader working the
+                // answer out on its own terms.
+                case ObligationDisposition.Uncertainty.WhetherARowIsThere.NothingWasRead(
+                        MeasureReason why) ->
+                        "undecided whether a row is at the " + point + " — "
+                                + ReasonProse.of(why).clause();
                 // Named for what happened, which is not one thing. A reading that did not come
                 // back is of a row this compiler composed; a composing that stopped never had one
                 // — and an opening written for the first says a row was built at a point where
                 // none was. So the sentence is the gap's, and the gaps say which they are.
-                case ObligationDisposition.Uncertainty.WhetherARowCanBeWritten(
+                case ObligationDisposition.Uncertainty.WhetherARowCanBeWritten.Stopped(
                         WritabilityKnowledge.Prevented stopped) ->
                         "nothing could show a row can be written at the " + point
                                 + " — " + why(stopped);
+                // And where nothing was stopped there is no budget to name. What the searches came
+                // to is said under the point, a line per reading, so a summary here would be that
+                // sentence written twice with less in it.
+                case ObligationDisposition.Uncertainty.WhetherARowCanBeWritten.NothingShowedIt _ ->
+                        "nothing could show a row can be written at the " + point
+                                + " — no search of it established one";
             });
         }
         return said;
@@ -1777,15 +1790,6 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                     "an observation of a composed value stopped for a reason it cannot have: "
                             + code);
         };
-    }
-
-    /** The obligations this block says on {@code surface}, in the order the account holds them. */
-    private static <T> List<T> excludedSaid(ObligationSummary<T> account, Surface surface) {
-        return account.excluded().stream()
-                .filter(each -> each.because().stream()
-                        .anyMatch(reason -> surfaceOf(reason) == surface))
-                .map(ObligationSummary.Excluded::item)
-                .toList();
     }
 
     /**
@@ -2833,9 +2837,14 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         // schema is written against.
         ArrayNode undivided = out.putArray("notDerivable");
         ArrayNode unread = out.putArray("notRead");
+        // Only the positions the model divides no way. The list is what a consumer reads for that
+        // claim, and the other two answers are about a reading that stopped and about a rule this
+        // measure has no line for — neither of which is the model saying nothing.
         partition.notDerivable().forEach(each -> {
-            if (each.isAbsent()) {
-                undivided.add(each.at().toString());
+            switch (each.why()) {
+                case UndividedPosition.Why.Absent _ -> undivided.add(each.at().toString());
+                case UndividedPosition.Why.CannotDerive _,
+                     UndividedPosition.Why.StatedWithoutALine _ -> { }
             }
         });
         // The position and what stopped it, kept as the product they are. Which limit a position is
@@ -2998,9 +3007,15 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             // What the line is on, where the author wrote a word for it. A body's line has none,
             // and the readings below say what each position it was met at has to hold.
             String axis = axes == null ? null : axes.get(point.point());
-            if (axis != null) {
+            // Both or neither, which the schema holds them to. A line between two positions writes
+            // its level as a distance from the other one — a reading's name for it and not the
+            // declaration's — so there is nothing here in the author's words to put, and a document
+            // carrying the rule's own name under `axis` would be answering with the wrong thing
+            // (issue #1251).
+            String against = axis == null ? null : point.against(axis);
+            if (axis != null && against != null) {
                 o.put("axis", axis);
-                o.put("against", point.against(axis));
+                o.put("against", against);
             }
             owedIn(o, point.owed());
             // The readings, each as the position it met the line at and what a row there has to
@@ -3316,12 +3331,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             of.put("hit", coverage.hasRowWitness());
         }
         of.put("disposition", wire(owed.disposition()));
-        if (owed.disposition() instanceof ObligationDisposition.NotCounted out) {
-            ArrayNode left = of.putArray("notCountedBecause");
-            for (ObligationDisposition.Reason reason : ObligationDisposition.Reason.values()) {
-                if (out.because().contains(reason)) {
-                    left.add(wire(reason));
-                }
+        if (owed.disposition() instanceof ObligationDisposition.Undecided open) {
+            // In the order the questions are said in, which the disposition holds them to. A
+            // document ordering them again would be a second answer to which comes first.
+            ArrayNode left = of.putArray("undecidedAbout");
+            for (ObligationDisposition.Uncertainty question : open.because()) {
+                left.add(wire(question));
             }
         }
     }
@@ -3450,15 +3465,23 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             case ObligationDisposition.Met _ -> "met";
             case ObligationDisposition.Unmet _ -> "unmet";
             case ObligationDisposition.Undecided _ -> "undecided";
-            case ObligationDisposition.NotCounted _ -> "not_counted";
         };
     }
 
-    /** Why an account leaves an obligation out, likewise exhaustive. */
-    public static String wire(ObligationDisposition.Reason reason) {
-        return switch (reason) {
-            case NOTHING_WAS_READ -> "nothing_was_read";
-            case NOT_KNOWN_TO_BE_WRITABLE -> "not_known_to_be_writable";
+    /**
+     * Which question about an obligation nothing answered, likewise exhaustive.
+     *
+     * <p>The question and not what it is open on. What left it open is said in the sentence under
+     * the point, where a reader can act on it; a document keys on which question stands, and the
+     * two halves of one question are one word here because a consumer asking "is whether a row is
+     * there open" is asking one thing.
+     */
+    public static String wire(ObligationDisposition.Uncertainty question) {
+        return switch (question) {
+            case ObligationDisposition.Uncertainty.WhetherARowIsThere _ ->
+                    "whether_a_row_is_at_it";
+            case ObligationDisposition.Uncertainty.WhetherARowCanBeWritten _ ->
+                    "whether_a_row_can_be_written";
         };
     }
 

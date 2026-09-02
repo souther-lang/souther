@@ -1379,6 +1379,24 @@ public final class InvariantChecker {
         // would depend on what this reading could make of the conjuncts before it, and two readings
         // of one clause would disagree about which line is which.
         int part = conjunct[0]++;
+        // A rule that divides the position by something no order carries, said as that. The
+        // reading took it in — which strings stand here is an answer, and this walk is the one that
+        // would have drawn a line from it — so what is absent is a line and not a reading. Passed
+        // over in silence, the position came back with no classes and nothing saying why, and every
+        // reader downstream took the silence for the model dividing it no way at all (issue #1249).
+        //
+        // Asked here and not inside one of the shapes below, because which shape the clause is
+        // written as is exactly what does not decide it: `String.contains(s, value)` is a call and
+        // `String.contains(s, value) == true` is a comparison, and both divide the position the
+        // same way.
+        Coordinate divided = dividedOutsideAnOrder(clause, at, byName);
+        if (divided != null) {
+            FieldDomains.NoLine said = new FieldDomains.NoLine(divided.at(), from, clause, part,
+                    new BlockReason.RuleDividingOutsideAnOrder());
+            if (!noLines.contains(said)) {
+                noLines.add(said);
+            }
+        }
         if (!(clause instanceof Core.Binary bin)) {
             settle(clause, from, states(clause, at, byName, null),
                     new InvariantBound.Read.NoEnd(),
@@ -1718,6 +1736,55 @@ public final class InvariantChecker {
      */
     private static RuleAt<RuleKey> ruleAt(Coordinate where, Places left, Places right) {
         return UnreadComparison.subjectAt(where.path(), left.origin(), right.origin());
+    }
+
+    /**
+     * The position a clause divides by something that is not an order, or null where it is no such
+     * clause.
+     *
+     * <p>Which calls those are is {@link StringPredicates}' and is asked rather than spelled: the
+     * same table says what such a call means about the strings at a position, and a second list of
+     * spellings here would be a second answer to which rules this compiler reads (issue #1249).
+     *
+     * <p>Only where the position is one this reading names. A predicate about something deeper than
+     * the coordinates in hand states nothing this walk can file, and filing it against the position
+     * above would put a rule's name on a division of something else.
+     */
+    private Coordinate dividedOutsideAnOrder(Core clause, Denotations at,
+                                             Map<FactSubject, Coordinate> byName) {
+        // Through the one reading of what a spelling comes to, so that a predicate stated and one
+        // denied are the same rule here as they are everywhere else. Asked of the clause as
+        // written, `String.contains(s, value) == true` is a comparison and never reached this
+        // question, so one of the ways of writing a rule went on dividing a position nobody said
+        // was divided.
+        Core atom = clause;
+        for (Conditions.Restated under = Conditions.restated(atom); under != null;
+                under = Conditions.restated(atom)) {
+            atom = under.condition();
+        }
+        // Whether the predicate is read, and whether what it says is a division, are the reading's
+        // answers and neither is a membership test. A pattern this compiler cannot take apart is a
+        // rule it did not read, and one whose strings are all of them or none of them divides
+        // nothing — filed as a division either way, the sentence would say the reading finished
+        // where it stopped, or that the model tells values apart where it does not.
+        StringPredicates.Stated stated = StringPredicates.statedByChecked(atom, symbols);
+        if (stated == null) {
+            return null;
+        }
+        return switch (StringPredicates.divides(atom, symbols)) {
+            case StringPredicates.Divides.IntoTwo _ -> byName.get(nameOf(stated.subject(), at));
+            // Every string, so the rule tells no value here from another and the position is one
+            // the model divides no way — which is what it comes back as when nothing is filed.
+            case StringPredicates.Divides.NothingIsRuledOut _ -> null;
+            // No string, so the rules leave no value here. That is a fact about the values and is
+            // said where emptiness is, not as a division with no line through it.
+            case StringPredicates.Divides.NothingIsLeft _ -> null;
+            // And where this compiler could not tell, it says nothing here: the reading that spent
+            // the allowance is the one that reports being stopped, and a second account of it from
+            // this side would be a limit filed as a fact about the model.
+            case StringPredicates.Divides.CouldNotTell _ -> null;
+            case null -> null;
+        };
     }
 
     /** One finding, kept once. A coordinate reached twice is one place with one thing to say. */

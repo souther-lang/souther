@@ -232,7 +232,8 @@ class CompileExampleBoundaryTest {
         // worth — so this asks the answer what it is.
         assertEquals(1, keep.notDerivable().size());
         assertEquals(TermPath.of("note"), keep.notDerivable().get(0).at());
-        assertTrue(keep.notDerivable().get(0).isAbsent(),
+        assertTrue(keep.notDerivable().get(0).why()
+                        instanceof souther.compiler.partition.UndividedPosition.Why.Absent,
                 "the model divides it no way, which is established rather than assumed");
         assertEquals(List.of(), keep.axes());
         assertEquals(List.of(),

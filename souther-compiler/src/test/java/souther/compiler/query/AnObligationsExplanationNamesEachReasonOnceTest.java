@@ -253,10 +253,10 @@ class AnObligationsExplanationNamesEachReasonOnceTest {
                 "the order says every question that can be open about an obligation");
 
         ObligationDisposition.Uncertainty there =
-                new ObligationDisposition.Uncertainty.WhetherARowIsThere(
+                new ObligationDisposition.Uncertainty.WhetherARowIsThere.ReadingsStopped(
                         new ReadingReasons(List.of(ReadingGap.NO_VALUE)));
         ObligationDisposition.Uncertainty written =
-                new ObligationDisposition.Uncertainty.WhetherARowCanBeWritten(prevented());
+                new ObligationDisposition.Uncertainty.WhetherARowCanBeWritten.Stopped(prevented());
 
         assertThrows(IllegalArgumentException.class,
                 () -> new ObligationDisposition.Undecided(List.of(written, there)),
@@ -280,7 +280,8 @@ class AnObligationsExplanationNamesEachReasonOnceTest {
         ObligationDisposition.Undecided undecided =
                 assertInstanceOf(ObligationDisposition.Undecided.class, disposition,
                         "a point whose readings did not run out is one nobody can decide");
-        return assertInstanceOf(ObligationDisposition.Uncertainty.WhetherARowIsThere.class,
+        return assertInstanceOf(
+                ObligationDisposition.Uncertainty.WhetherARowIsThere.ReadingsStopped.class,
                 undecided.because().getFirst(),
                 "and the question the readings left open is whether a row is there").met();
     }

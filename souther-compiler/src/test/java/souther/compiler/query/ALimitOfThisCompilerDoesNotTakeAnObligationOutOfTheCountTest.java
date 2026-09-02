@@ -5,24 +5,32 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.partition.ReadingGap;
 
+import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * A budget of this compiler's may leave an obligation undecided and may never take it out of the
+ * A limit of this compiler's may leave an obligation undecided and may never take it out of the
  * count.
  *
- * <p>What the account is for is telling an author what the model owes. A row the rows do not answer
- * and nothing shows can be written is left out of it, because asking for a row that may not exist
- * is asking for work nobody can do — and that is a statement about the model. A row this compiler
- * composed and could not read back is not: the value went through the module's own decoders, and
- * what is missing is the reading. Counted the same way, the numbers a report prints move with how
- * much of a value an observation happens to keep.
+ * <p>What the account is for is telling an author what the model owes. Whether a row is owed at a
+ * point is settled by the rules — a border that owes no row says so with a reason read off them
+ * ({@link souther.compiler.partition.NotOwedReason}) — and nothing this compiler managed or failed
+ * to do reaches that decision. So what is left for this fold to say is what is known about a point
+ * that is owed, and none of its answers is "no longer owed".
+ *
+ * <p>It was not so for one pair. A point every row was read against and none was at, with nothing
+ * to show a row could be written there, was dropped from the account — on the reading that asking
+ * for a row nothing promises is asking for work nobody can do. What is composed for a point is
+ * composed out of the whole value it sits in, so one rule this compiler could not read anywhere
+ * under a parameter emptied the grounds for every point beneath it, and a field nobody could build
+ * a value for took its siblings' obligations out of the denominator with it (issue #1249). The
+ * corpus that was measured on holds no obligation dropped for a reason the model gave: every one of
+ * them was a value this compiler could not compose or could not read back.
  *
  * <p>Put to the fold directly and not through a model. Reaching every row of the table from source
  * takes a model per row, and the one for a point whose showing was stopped takes a value of about
@@ -34,41 +42,39 @@ class ALimitOfThisCompilerDoesNotTakeAnObligationOutOfTheCountTest {
     /**
      * A point the rows ran out on, where the value built for it could not be read back.
      *
-     * <p>The row the table exists for. Nothing has shown the point writable — the reading that
-     * would have is the one that did not come back — and the obligation stays counted all the same,
-     * because what stopped the showing is this compiler's own budget and not the model refusing a
-     * row.
+     * <p>Nothing has shown the point writable — the reading that would have is the one that did not
+     * come back — and the obligation stands, because what stopped the showing is this compiler's own
+     * budget and not the model refusing a row.
      */
     @Test
-    void aShowingStoppedByALimitLeavesTheObligationCountedAndUndecided() {
-        ObligationDisposition disposition =
-                ObligationDisposition.of(new ObligationCoverage.Missed(), prevented());
-
-        assertInstanceOf(ObligationDisposition.Counted.class, disposition,
-                "a point whose showing a limit stopped is one the model still owes a row at");
+    void aShowingStoppedByALimitLeavesTheObligationUndecided() {
         assertEquals(new ObligationDisposition.Undecided(List.of(
-                        new ObligationDisposition.Uncertainty.WhetherARowCanBeWritten(
+                        new ObligationDisposition.Uncertainty.WhetherARowCanBeWritten.Stopped(
                                 prevented()))),
-                disposition,
-                "and the question left open is whether a row can be written, not whether one is");
+                ObligationDisposition.of(new ObligationCoverage.Missed(), prevented()),
+                "the question left open is whether a row can be written, not whether one is,"
+                        + " and it says what stopped the showing");
     }
 
     /**
      * The same coverage with nothing behind it at all, which is the row beside it.
      *
      * <p>The pair is the measurement. Both are points every row was read against and none is at;
-     * they differ in whether anything was stopped from showing a row could be written there. Held
-     * on one of them alone, a fold that ignored the difference would pass.
+     * they differ in whether anything was stopped from showing a row could be written there, which
+     * is a difference between two things this compiler did and not between two models. So the
+     * standing is the same, and what tells them apart is said where it is known — by the knowledge
+     * itself, which says whether a budget ended the showing or nothing ever composed a value.
      */
     @Test
-    void aShowingNothingEverMadeLeavesTheObligationOutOfTheCount() {
-        ObligationDisposition disposition = ObligationDisposition.of(
-                new ObligationCoverage.Missed(), new WritabilityKnowledge.NoEvidence());
-
-        assertEquals(new ObligationDisposition.NotCounted(
-                        Set.of(ObligationDisposition.Reason.NOT_KNOWN_TO_BE_WRITABLE)),
-                disposition,
-                "a point nothing promises a row at is not one an author is behind on");
+    void aShowingNothingEverMadeLeavesTheObligationUndecidedToo() {
+        assertEquals(new ObligationDisposition.Undecided(List.of(
+                        new ObligationDisposition.Uncertainty
+                                .WhetherARowCanBeWritten.NothingShowedIt())),
+                ObligationDisposition.of(new ObligationCoverage.Missed(),
+                        new WritabilityKnowledge.NoEvidence()),
+                "a point nothing promises a row at is a point nobody could decide, not a point"
+                        + " the model stopped owing — and what it is open on is that nothing"
+                        + " showed it, which is not a budget having stopped anything");
     }
 
     /** And the same coverage where something did show it, which is the only finding of the three. */
@@ -82,8 +88,8 @@ class ALimitOfThisCompilerDoesNotTakeAnObligationOutOfTheCountTest {
     /**
      * Both questions open at one point are both said.
      *
-     * <p>A reading that stopped short and a showing that was stopped are about different things,
-     * and either one alone is a choice of which to tell.
+     * <p>A reading that came to nothing and a showing that came to nothing are about different
+     * things, and either one alone is a choice of which to tell.
      */
     @Test
     void twoOpenQuestionsAtOnePointAreBothSaid() {
@@ -94,79 +100,92 @@ class ALimitOfThisCompilerDoesNotTakeAnObligationOutOfTheCountTest {
                 prevented());
 
         assertEquals(new ObligationDisposition.Undecided(List.of(
-                        new ObligationDisposition.Uncertainty.WhetherARowIsThere(
+                        new ObligationDisposition.Uncertainty.WhetherARowIsThere.ReadingsStopped(
                                 new ReadingReasons(List.of(
                                         ReadingGap.of(Incompleteness.Code.VALUE_TRUNCATED)))),
-                        new ObligationDisposition.Uncertainty.WhetherARowCanBeWritten(
+                        new ObligationDisposition.Uncertainty.WhetherARowCanBeWritten.Stopped(
                                 prevented()))),
                 disposition,
                 "the rows left one question open and the search left the other");
     }
 
     /**
-     * A point nothing was read against keeps both reasons it is out of the count.
+     * A point nothing was read against is undecided about both questions, and stays owed.
      *
-     * <p>They are independent facts about the point and a reader is owed both: one says there was
-     * nothing to find, the other says nothing promises there is anything to find.
+     * <p>Nothing was read is a fact about this build — it asked for no rows, or no row names the
+     * behavior — and not about the model. Which of those it was is the coverage's own to say and is
+     * carried there; what a verdict does with such an obligation is a policy of the build's, made
+     * where the verdict selects what it is about, and not by the account quietly holding fewer
+     * obligations than the model owes.
      */
     @Test
-    void aPointNothingWasReadAgainstKeepsEveryReasonItIsOut() {
-        ObligationDisposition disposition = ObligationDisposition.of(
-                new ObligationCoverage.NotMeasured(ItemAssessment.Coverage.NotAsked.NO_ROWS),
-                new WritabilityKnowledge.NoEvidence());
-
-        assertEquals(new ObligationDisposition.NotCounted(Set.of(
-                        ObligationDisposition.Reason.NOTHING_WAS_READ,
-                        ObligationDisposition.Reason.NOT_KNOWN_TO_BE_WRITABLE)),
-                disposition,
-                "nothing was read and nothing promises a row, and both are true of it");
+    void aPointNothingWasReadAgainstIsUndecidedAboutBoth() {
+        assertEquals(new ObligationDisposition.Undecided(List.of(
+                        new ObligationDisposition.Uncertainty.WhetherARowIsThere.NothingWasRead(
+                                ItemAssessment.Coverage.NotAsked.NO_ROWS),
+                        new ObligationDisposition.Uncertainty
+                                .WhetherARowCanBeWritten.NothingShowedIt())),
+                ObligationDisposition.of(
+                        new ObligationCoverage.NotMeasured(ItemAssessment.Coverage.NotAsked.NO_ROWS),
+                        new WritabilityKnowledge.NoEvidence()),
+                "nothing was read and nothing promises a row, both are open about it, and each"
+                        + " says which of the two left it so");
     }
 
     /**
-     * Tightening what an observation keeps may weaken what is known and may not empty the count.
+     * The law the table is for: no pair of answers leaves the account holding less.
      *
-     * <p>The law the table is for, said over the states rather than over one pair. A budget of this
-     * compiler's turns what was established into what was prevented; every disposition that was
-     * counted under the first is counted under the second.
+     * <p>Said over the states rather than over one pair. Every coverage crossed with every state of
+     * the knowledge lands somewhere, and nowhere is an obligation dropped — a fold that grew a
+     * fourth answer for a pair this compiler found hard would be answering a question about the
+     * model with what it managed to do.
      */
     @Test
-    void everyObligationCountedWithGroundsIsStillCountedWhenALimitStopsThem() {
+    void noPairOfAnswersTakesAnObligationOutOfTheAccount() {
+        List<String> reached = new ArrayList<>();
         for (ObligationCoverage coverage : everyCoverage()) {
-            ObligationDisposition withGrounds = ObligationDisposition.of(coverage, established());
-            if (!(withGrounds instanceof ObligationDisposition.Counted)) {
-                continue;
+            for (WritabilityKnowledge knowledge : everyKnowledge()) {
+                ObligationDisposition it = ObligationDisposition.of(coverage, knowledge);
+                reached.add(it.getClass().getSimpleName());
+                assertTrue(it instanceof ObligationDisposition.Met
+                                || it instanceof ObligationDisposition.Unmet
+                                || it instanceof ObligationDisposition.Undecided,
+                        () -> coverage + " with " + knowledge + " is " + it
+                                + ", which is not one of the three an owed point stands in");
             }
-            assertInstanceOf(ObligationDisposition.Counted.class,
-                    ObligationDisposition.of(coverage, prevented()),
-                    () -> "a limit took " + coverage + " out of the count");
         }
+        assertTrue(reached.contains("Met") && reached.contains("Unmet")
+                        && reached.contains("Undecided"),
+                "every state is reached by the table: " + reached);
     }
 
     /**
-     * And it may not turn one verdict into the other, which is what a resource policy cannot say.
+     * Weakening what is known may take a claim away and may not put one there.
      *
-     * <p>What a limit may do is take knowledge away, and the states are ordered by how much they
-     * claim: a row is there, no row is there, nobody can say. Moving along that order downwards is
-     * a limit doing its job; moving across it — a miss becoming a hit, or either becoming a point
-     * the account no longer holds — is the policy answering a question about the model.
+     * <p>The states are ordered by how much they claim: a row is there, no row is there, nobody can
+     * say. A limit moves along that order downwards; moving across it — a miss becoming a hit — is
+     * a resource policy answering a question about the model.
      */
     @Test
     void aLimitDoesNotTurnAMissIntoAHitOrBack() {
         for (ObligationCoverage coverage : everyCoverage()) {
             ObligationDisposition withGrounds = ObligationDisposition.of(coverage, established());
-            ObligationDisposition stopped = ObligationDisposition.of(coverage, prevented());
-            assertTrue(weakensTo(withGrounds, stopped),
-                    () -> "a limit moved " + coverage + " from " + withGrounds + " to " + stopped
-                            + ", which is a verdict and not a loss of knowledge");
+            for (WritabilityKnowledge weaker : List.of(prevented(),
+                    new WritabilityKnowledge.NoEvidence())) {
+                ObligationDisposition stopped = ObligationDisposition.of(coverage, weaker);
+                assertTrue(weakensTo(withGrounds, stopped),
+                        () -> "a limit moved " + coverage + " from " + withGrounds + " to " + stopped
+                                + ", which is a verdict and not a loss of knowledge");
+            }
         }
     }
 
     /**
      * Whether {@code after} claims no more than {@code before}.
      *
-     * <p>A verdict may stand or become the one that claims nothing; a point already outside the
-     * count stays outside it, and may be outside it for more reasons than before, since a reason is
-     * something known about the point rather than a claim about the model.
+     * <p>A verdict may stand or become the one that claims nothing, and one that already claims
+     * nothing may be open about more questions than before, since an open question is something
+     * known about the point rather than a claim about the model.
      */
     private static boolean weakensTo(ObligationDisposition before, ObligationDisposition after) {
         return switch (before) {
@@ -174,9 +193,6 @@ class ALimitOfThisCompilerDoesNotTakeAnObligationOutOfTheCountTest {
                     after.equals(before) || after instanceof ObligationDisposition.Undecided;
             case ObligationDisposition.Undecided it ->
                     after instanceof ObligationDisposition.Undecided then
-                            && then.because().containsAll(it.because());
-            case ObligationDisposition.NotCounted it ->
-                    after instanceof ObligationDisposition.NotCounted then
                             && then.because().containsAll(it.because());
         };
     }
@@ -188,6 +204,10 @@ class ALimitOfThisCompilerDoesNotTakeAnObligationOutOfTheCountTest {
                         new Weakening.BorderValueUnreadable(null,
                                 ReadingGap.of(Incompleteness.Code.VALUE_TRUNCATED)))),
                 new ObligationCoverage.NotMeasured(ItemAssessment.Coverage.NotAsked.NO_ROWS));
+    }
+
+    private static List<WritabilityKnowledge> everyKnowledge() {
+        return List.of(established(), prevented(), new WritabilityKnowledge.NoEvidence());
     }
 
     private static WritabilityKnowledge established() {

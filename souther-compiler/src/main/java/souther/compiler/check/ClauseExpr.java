@@ -91,9 +91,9 @@ sealed interface ClauseExpr {
     private static ClauseExpr of(Core clause, boolean positive, List<Core> above) {
         List<Core> spelled = new ArrayList<>(above);
         spelled.add(clause);
-        Core under = Conditions.negated(clause);
+        Conditions.Restated under = Conditions.restated(clause);
         if (under != null) {
-            return of(under, !positive, spelled);
+            return of(under.condition(), under.denied() != positive, spelled);
         }
         if (clause instanceof Core.Binary bin) {
             // Stated, a conjunction gives both sides; denied, it gives the choice between their

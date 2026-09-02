@@ -60,10 +60,26 @@ class AnEdgeNothingPromisesSaysWhatWasTriedTest {
 
         // Under the declarations, whose line it is, in the words the declaration wrote — and the
         // positions that read it under that.
-        assertTrue(human.contains(
-                "not known to be writable: the ON point value = 0 (invariant Amount (range))"),
-                human);
+        assertTrue(human.contains("nothing could show a row can be written at the ON point"
+                + " value = 0 (invariant Amount (range))"), human);
         assertTrue(human.contains("read as check/p.low: = 0"), human);
+    }
+
+    /**
+     * And the edge is inside the count, which is what a reader walks from.
+     *
+     * <p>Four obligations and two rows, over a model whose one uncomposable rule is about a field
+     * the four have nothing to do with. Left out of the count, they made the same model read as
+     * fully answered — so the number moved with what this compiler could build rather than with
+     * what the model owes, and a model measured one day stopped being measured the next by a
+     * neighbour's rule.
+     */
+    @Test
+    void theEdgeIsCountedAndTheVerdictSaysNobodyCouldDecideIt() {
+        String human = report();
+
+        assertTrue(human.contains("declarations   obligations 2/4"), human);
+        assertTrue(human.contains("adequacy: undetermined"), human);
     }
 
     /** And it says what the search came to, so the verdict is legible rather than surprising. */

@@ -37,6 +37,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class AChoiceIsDecidedByEveryClauseAndAnsweredByItsOwnTest {
 
+    private static final String UNREAD_TAG = souther.compiler.ARuleNoReadingTakesIn.about("tag");
+    private static final String UNREAD_S = souther.compiler.ARuleNoReadingTakesIn.about("s");
+
     /**
      * A branch live on its own clause and impossible under the next one.
      *
@@ -49,10 +52,10 @@ class AChoiceIsDecidedByEveryClauseAndAnsweredByItsOwnTest {
 
             data Pair = { code: String, tag: String }
                 invariant one =
-                    (code == "a" && String.startsWith("q", tag))
+                    (code == "a" && UNREAD_TAG)
                     || code == "c"
                 invariant two = code == "c"
-            """;
+            """.replace("UNREAD_TAG", UNREAD_TAG);
 
     /**
      * One written choice standing in both branches of another, live in one and dead in the other.
@@ -67,9 +70,9 @@ class AChoiceIsDecidedByEveryClauseAndAnsweredByItsOwnTest {
             data N = { x: Int, s: String }
                 invariant a = x == 0 || x == 1
                 invariant b =
-                    (x == 0 && String.startsWith("q", s))
+                    (x == 0 && UNREAD_S)
                     || x == 1
-            """;
+            """.replace("UNREAD_S", UNREAD_S);
 
     /**
      * A branch dead in every place it stands.
@@ -84,9 +87,9 @@ class AChoiceIsDecidedByEveryClauseAndAnsweredByItsOwnTest {
             data M = { x: Int, s: String }
                 invariant a = x == 0 || x == 1
                 invariant b =
-                    (x == 2 && String.startsWith("q", s))
+                    (x == 2 && UNREAD_S)
                     || x == 0 || x == 1
-            """;
+            """.replace("UNREAD_S", UNREAD_S);
 
     /** The same two rules with the clauses the other way round. */
     private static final String THE_OTHER_CLAUSE_ORDER = """
@@ -94,10 +97,10 @@ class AChoiceIsDecidedByEveryClauseAndAnsweredByItsOwnTest {
 
             data M = { x: Int, s: String }
                 invariant b =
-                    (x == 2 && String.startsWith("q", s))
+                    (x == 2 && UNREAD_S)
                     || x == 0 || x == 1
                 invariant a = x == 0 || x == 1
-            """;
+            """.replace("UNREAD_S", UNREAD_S);
 
     /**
      * A question a rule of a dead branch raised is settled, not left standing.

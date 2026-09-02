@@ -32,21 +32,24 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  */
 class EveryPartAReadingStoppedOnSaysWhyTest {
 
+    private static final String UNREAD_A = souther.compiler.ARuleNoReadingTakesIn.about("a");
+    private static final String UNREAD_B = souther.compiler.ARuleNoReadingTakesIn.about("b");
+
     /** A relation and a pattern about one position, in one clause. */
     private static final String TWO_PARTS_AT_ONE_POSITION = """
             module demo
 
             data N = { a: String, b: String }
-                invariant both = a /= b && String.startsWith("x", a)
-            """;
+                invariant both = a /= b && UNREAD_A
+            """.replace("UNREAD_A", UNREAD_A);
 
     /** The two written the other way round, which is the same clause. */
     private static final String THE_OTHER_ORDER = """
             module demo
 
             data N = { a: String, b: String }
-                invariant both = String.startsWith("x", a) && a /= b
-            """;
+                invariant both = UNREAD_A && a /= b
+            """.replace("UNREAD_A", UNREAD_A);
 
     /**
      * Two rules about the one position, stopped in two ways.
@@ -60,9 +63,9 @@ class EveryPartAReadingStoppedOnSaysWhyTest {
             module demo
 
             data N = { a: String, b: String }
-                invariant shape = String.startsWith("x", a)
-                invariant either = a == "q" || String.startsWith("x", b)
-            """;
+                invariant shape = UNREAD_A
+                invariant either = a == "q" || UNREAD_B
+            """.replace("UNREAD_A", UNREAD_A).replace("UNREAD_B", UNREAD_B);
 
     /**
      * Two conjuncts drawing one line, each of them stopped.

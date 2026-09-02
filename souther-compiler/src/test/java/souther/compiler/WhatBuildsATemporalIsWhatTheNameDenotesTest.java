@@ -145,9 +145,9 @@ class WhatBuildsATemporalIsWhatTheNameDenotesTest {
      *  a behavior was asked for one. */
     @Test
     void aLineIsDrawnOnlyWhereADateIsWritten() {
-        assertTrue(report(CONSTRUCTED).contains("border      borders 1   obligations 0/0   (4 not measured"),
+        assertTrue(report(CONSTRUCTED).contains("border      borders 1   obligations 0/4"),
                 report(CONSTRUCTED));
-        assertFalse(report(ANSWERS_ONE).contains("obligations 0/0"), report(ANSWERS_ONE));
+        assertFalse(report(ANSWERS_ONE).contains("obligations 0/4"), report(ANSWERS_ONE));
         assertTrue(report(ANSWERS_ONE).contains(
                         "written in a form this compiler does not read, about `on`"),
                 report(ANSWERS_ONE));

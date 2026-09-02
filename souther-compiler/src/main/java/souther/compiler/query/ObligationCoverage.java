@@ -59,9 +59,11 @@ public sealed interface ObligationCoverage {
     /**
      * Whether the readings came to an answer about this point at all.
      *
-     * <p>Not whether an account counts it. That is {@link ObligationDisposition}'s, and it reads
-     * this beside what has shown a row can be written here: a point read to the end and missed has
-     * an answer and is out of the count where nothing promises a row could stand there.
+     * <p>Not what became of the obligation. That is {@link ObligationDisposition}'s, and it reads
+     * this beside what has shown a row can be written here: a point read to the end and missed is
+     * a gap where something promises a row could stand there and one nobody could decide where
+     * nothing does. Neither reading takes the obligation away — what the model owes is settled
+     * before either of them.
      */
     default boolean hasAnswer() {
         return !(this instanceof NotMeasured);

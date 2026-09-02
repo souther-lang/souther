@@ -305,12 +305,20 @@ class ALineDrawnOnASharedNameFallsUnderEachCaseTest {
                 () -> "nothing was filed, so no pairing was ever in question:\n" + report);
     }
 
-    /** What a model with no sum in the way answers, which is what the fan-out has to come to. */
+    /**
+     * What a model with no sum in the way answers, which is what the fan-out has to come to.
+     *
+     * <p>Named by the case rather than by the {@code @} it is written with. A rule this report
+     * cites by where it was written is spelled {@code comparison@14:19}, so a report holding no
+     * narrowing at all holds that character — and the check that read it as one was passing on a
+     * model whose points nothing printed.
+     */
     @Test
     void nothingChangesWhereNoNameCrosses() throws Exception {
         assertEquals(report(guarded("A")), report(guarded("A")));
-        assertFalse(report(guarded("A")).contains("@"),
-                "no narrowing is named anywhere in this one");
+        String report = report(guarded("A"));
+        assertFalse(report.contains("@A") || report.contains("@B"),
+                () -> "no narrowing is named anywhere in this one:\n" + report);
     }
 
     private static String report(String model, String... extra) throws Exception {

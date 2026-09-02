@@ -139,15 +139,16 @@ class ADistinctionIsMeasuredHoweverItIsSpelledTest {
                 module g
 
                 data Email = String
-                    invariant String.startsWith("a", value)
+                    invariant UNREAD
 
                 data Accepted = { at: String }
 
                 behavior classify : (email: Email) -> Accepted
-                """, "classify").undivided();
+                """.replace("UNREAD", souther.compiler.ARuleNoReadingTakesIn.about("value")),
+                "classify").undivided();
 
         assertEquals(1, undivided.size(), undivided.toString());
-        assertFalse(undivided.get(0).isAbsent(),
+        assertFalse(undivided.get(0).why() instanceof UndividedPosition.Why.Absent,
                 "the model states a rule about this position, so nothing here may say it states none");
     }
 
@@ -170,6 +171,6 @@ class ADistinctionIsMeasuredHoweverItIsSpelledTest {
                 """, "classify").undivided();
 
         assertEquals(1, undivided.size(), undivided.toString());
-        assertTrue(undivided.get(0).isAbsent());
+        assertTrue(undivided.get(0).why() instanceof UndividedPosition.Why.Absent);
     }
 }

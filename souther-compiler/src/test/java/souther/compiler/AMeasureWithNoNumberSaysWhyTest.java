@@ -199,13 +199,13 @@ class AMeasureWithNoNumberSaysWhyTest {
                   widen                    implemented   rows 0    pending 0
                     signature   not applicable (this behavior's output is not a sum)
                     partition   not applicable (the rules of this behavior divide no position)
-                      · not derivable: w.v
+                      · divided no way: w.v
                     border      not applicable (the rules of this behavior draw no line)
                     branch      not applicable (this body owes no arm)
                   narrow                   implemented   rows 0    pending 0
                     signature   not applicable (this behavior's output is not a sum)
                     partition   not applicable (the rules of this behavior divide no position)
-                      · not derivable: m.v
+                      · divided no way: m.v
                     border      not applicable (the rules of this behavior draw no line)
                     branch      not applicable (this body owes no arm)
                   both                     implemented   rows 1    pending 0
@@ -242,7 +242,19 @@ class AMeasureWithNoNumberSaysWhyTest {
                     partition   axes 2   equivalence partitions 0/0   (2 not measured: no row names this behavior)
                     border      not applicable (the rules of this behavior draw no line)
                     branch      not measured (no row names this behavior)
-                  declarations   obligations 0/0   (4 not measured: no row names this behavior)
+                  declarations   obligations 0/4
+                      ? undecided whether a row is at the ON point value = 0 (invariant Amount #1) — no row names this behavior
+                          · read as baseRate/r.cost: = 0
+                          · read as rated/r.cost: = 0
+                      ? undecided whether a row is at the IN point value in 0 < value <= 1000 (invariant Amount #1) — no row names this behavior
+                          · read as baseRate/r.cost: in 0 < r.cost <= 1000
+                          · read as rated/r.cost: in 0 < r.cost <= 1000
+                      ? undecided whether a row is at the ON point value = 1000 (invariant Amount #1) — no row names this behavior
+                          · read as baseRate/r.cost: = 1000
+                          · read as rated/r.cost: = 1000
+                      ? undecided whether a row is at the IN point value in 0 <= value < 1000 (invariant Amount #1) — no row names this behavior
+                          · read as baseRate/r.cost: in 0 <= r.cost < 1000
+                          · read as rated/r.cost: in 0 <= r.cost < 1000
 
                 7 behaviors: 6 implemented, 0 unimplemented, 1 injected; 0 rows waiting for a `let`.
                 adequacy: undetermined
