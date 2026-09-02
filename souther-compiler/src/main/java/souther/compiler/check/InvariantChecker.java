@@ -404,10 +404,10 @@ public final class InvariantChecker {
      *                 those are {@link #handedOn()}, and they are somebody's to read rather than
      *                 nobody's
      *
-     *                 <p><b>And what stopped, not only where.</b> Six things leave a position here
+     *                 <p><b>And what stopped, not only where.</b> Seven things leave a position here
      *                 and they are not one fact: a walk that went as far as the fields it could
      *                 afford is one a run allowed more would go past, and a clause nothing could
-     *                 type is not. Held as the paths alone, the six arrived downstream as one word
+     *                 type is not. Held as the paths alone, the seven arrived downstream as one word
      *                 and anything asking a question the paths do not answer had nothing to read.
      *                 More than one per position, because a position can be short in more than one
      *                 way
@@ -569,7 +569,7 @@ public final class InvariantChecker {
         //
         // With what stopped, and not the paths alone. One position can be short in more than one
         // way — a walk that went no further and a clause of its own nobody could type — and a set
-        // of paths is where the six causes became one.
+        // of paths is where the seven causes became one.
         Map<RuleKey, Set<RulesMissed>> notGathered = new LinkedHashMap<>();
         // And of those, the ones a construction cannot get out of: what a position admits and
         // whether an edge of it may be promised are two questions, and a stop answers them apart.

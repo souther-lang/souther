@@ -40,7 +40,6 @@ import souther.compiler.observe.MeasureReason;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.FindingSubject;
 import souther.compiler.query.InputCaseEvidence;
-import souther.compiler.observe.RunSensitivity;
 import souther.compiler.query.Measure;
 import souther.compiler.query.Measurement;
 import souther.compiler.query.SearchOutcomes;
@@ -712,7 +711,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
     }
 
     /**
-     * What the verdict is open on: the facts the three things it rests on went without.
+     * What the verdict is open on: what the things it rests on went without, and the ones nobody
+     * made.
      *
      * <p>Read from the same three lists {@link #adequacy()} is decided by, and never from
      * {@code weakenedBy}. What left this whole report weaker than it looks and what holds this
@@ -724,11 +724,17 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * compiler could not read is one thing to tell a person whichever measure noticed, and counting
      * the measures would be counting the paths a fact arrived by ({@link WeakeningSet}).
      *
-     * <p>Not only where the verdict is undetermined. A gap outranks everything about how much was
-     * measured, so a refused build's verdict says nothing about what was also unmeasured — and what
-     * was unmeasured is still true and still worth being able to ask for.
+     * <p><b>Empty where the verdict is settled, and that is what the name says.</b> A gap outranks
+     * everything about how much was measured, so a refused build has an answer and is open on
+     * nothing — whatever else about it went unmeasured, which the measures themselves say. Answered
+     * the other way, this said a settled verdict was held open by something; asked only where a
+     * reader was rendering, the same report came to one answer on the page and another in the
+     * document.
      */
     public List<AdequacyOpening> whatKeepsTheVerdictOpen() {
+        if (adequacy() != AdequacyStatus.UNDETERMINED) {
+            return List.of();
+        }
         // The facts first, folded once. Two measures that went without the same thing went without
         // one thing, and putting them together is what says so.
         WeakeningSet facts = WeakeningSet.none();
@@ -746,20 +752,17 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         // And the measures nobody made, one entry each and not folded on the reason. Two measures
         // both waiting on rows are two measures nobody made, and a fold on `no_rows` would say a
         // model with one behavior unmeasured and a model with forty were the same news.
-        for (Measurement<?> each : requiredSupport()) {
-            notMeasured(out, each);
-        }
+        //
+        // The domain measures alone. A reading of the rows nobody made is left out of what the
+        // verdict rests on before it gets here — this build says it makes no measurement over rows,
+        // and a bar asking for one was never going to be answered — so asking the support for one
+        // of these is asking a list that cannot hold one.
         for (Measure<?> each : requiredEvidence()) {
-            notMeasured(out, each);
+            if (each instanceof Measurement.NotMeasured<?> never) {
+                out.add(new AdequacyOpening.NotMeasured(never.why()));
+            }
         }
         return out;
-    }
-
-    /** {@code measure} as what it contributes to the verdict being open, where it was never made. */
-    private static void notMeasured(List<AdequacyOpening> out, Measure<?> measure) {
-        if (measure instanceof Measurement.NotMeasured<?> never) {
-            out.add(new AdequacyOpening.NotMeasured(never.why()));
-        }
     }
 
     /**
@@ -793,10 +796,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         int mayChange = 0;
         int unaffected = 0;
         for (AdequacyOpening each : whatKeepsTheVerdictOpen()) {
-            if (each.runSensitivity() == RunSensitivity.MAY_CHANGE) {
-                mayChange++;
-            } else {
-                unaffected++;
+            // A switch with no default, so a third answer is a compile error here rather than one
+            // more thing silently counted among what no allowance reaches.
+            switch (each.runSensitivity()) {
+                case MAY_CHANGE -> mayChange++;
+                case UNAFFECTED -> unaffected++;
             }
         }
         return new UnderAWiderRun(mayChange, unaffected);
@@ -1063,7 +1067,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         // that verdict rests on. What left the whole report weaker than it looks is the other
         // question and is said per module, where the measures are.
         UnderAWiderRun open = underAWiderRun();
-        if (adequacy() == AdequacyStatus.UNDETERMINED && !open.isEmpty()) {
+        if (!open.isEmpty()) {
             out.append("  what keeps it open\n");
             out.append(String.format("    may change in a wider run   %3d%n", open.mayChange()));
             out.append(String.format("    unaffected by a wider run   %3d%n", open.unaffected()));
@@ -3514,9 +3518,6 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      */
     private void keptOpenBy(ObjectNode root) {
         ArrayNode out = root.putArray("keptOpenBy");
-        if (adequacy() != AdequacyStatus.UNDETERMINED) {
-            return;
-        }
         for (AdequacyOpening each : whatKeepsTheVerdictOpen()) {
             ObjectNode fact = out.addObject();
             switch (each) {

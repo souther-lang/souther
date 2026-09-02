@@ -149,8 +149,8 @@ public record Incompleteness(Code code, Target target, Optional<Citation> at) {
          *
          * <p>One switch and no {@code default}, rather than a flag beside {@link #leftNoRowRead}.
          * The two questions are asked the same way for different reasons: that one is a fact about
-         * one code and reads as one, and this one is a division of the whole vocabulary into two,
-         * which is only reviewable where every answer is visible at once.
+         * one code and reads as one, and this one is a division of all eight into two, which is
+         * only reviewable where every answer is visible at once.
          */
         public RunSensitivity runSensitivity() {
             return switch (this) {

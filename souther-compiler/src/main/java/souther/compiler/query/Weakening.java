@@ -55,9 +55,9 @@ public sealed interface Weakening {
      * exists to stop, one level up: an observation's code already knows, and a second reading of it
      * here is a second thing to keep in step.
      *
-     * <p>So four ask ({@link ObservationIncomplete}, {@link BorderValueUnreadable},
-     * {@link ModelReadingIncomplete}, and the border ones through their reading) and the rest
-     * answer, because for the rest there is nothing further in to ask.
+     * <p>So three ask — {@link ObservationIncomplete} asks its code, {@link BorderValueUnreadable}
+     * asks its reading, {@link ModelReadingIncomplete} asks its gap — and the other eight answer,
+     * because for those there is nothing further in to ask.
      */
     RunSensitivity runSensitivity();
 

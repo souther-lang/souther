@@ -182,16 +182,55 @@ class WhatKeepsAnUndeterminedVerdictOpenIsSaidTest {
      * And the invariant the two halves are for: an open verdict is open on something.
      *
      * <p>What the conformance corpus found a counterexample to, before a measure nobody made was
-     * one of these. Held over the three models here rather than as a sentence: a settled verdict is
-     * open on nothing, and an unsettled one names what it is unsettled by.
+     * one of these. Held over the models here rather than as a sentence: a settled verdict is open
+     * on nothing, and an unsettled one names what it is unsettled by.
+     *
+     * <p>{@link #refused()} is the half that is easy to leave out and is the one this passed
+     * without. A model with a gap is settled — a refusal is an answer — and the rules of it can
+     * still hold a comparison nothing read, so the facts are there to be listed and listing them
+     * would be saying a verdict nobody is waiting on is being waited on. Over the other three
+     * models alone, this passed while the page and the document said different things about
+     * exactly that report.
      */
     @Test
     void anOpenVerdictIsOpenOnSomethingAndASettledOneIsNot() {
-        for (AdequacyReport each : List.of(measured(), settled(), noRows())) {
+        for (AdequacyReport each : List.of(measured(), settled(), noRows(), refused())) {
             assertEquals(each.adequacy() == AdequacyReport.AdequacyStatus.UNDETERMINED,
                     !each.whatKeepsTheVerdictOpen().isEmpty(),
                     () -> each.human(SourceNameResolver.identity()));
         }
+    }
+
+    /**
+     * And the three surfaces say one thing about it, which is what asking once buys.
+     *
+     * <p>The count, the page and the document were three readings of the verdict being open, and
+     * two of them worked it out where they were rendering. So a refused report answered {@code 0/1}
+     * to a caller, printed nothing to a person, and wrote {@code []} to a build — three answers, of
+     * which the first two say a settled verdict is held open.
+     */
+    @Test
+    void theCountThePageAndTheDocumentAgreeOnARefusedReport() {
+        AdequacyReport report = refused();
+        JsonNode root = JSON.readTree(report.json(SourceNameResolver.identity()));
+
+        assertEquals(AdequacyReport.AdequacyStatus.NOT_SATISFIED, report.adequacy(),
+                () -> report.human(SourceNameResolver.identity()));
+        assertEquals(new AdequacyReport.UnderAWiderRun(0, 0), report.underAWiderRun());
+        assertFalse(report.human(SourceNameResolver.identity()).contains("what keeps it open"),
+                report.human(SourceNameResolver.identity()));
+        assertTrue(root.get("keptOpenBy").isEmpty(), root.get("keptOpenBy").toString());
+    }
+
+    /**
+     * The issue's model with a row taken out, which a build refuses over.
+     *
+     * <p>The same comparison nothing read is still there, so the facts a verdict could be open on
+     * are there too — and the verdict is settled all the same, because a gap outranks everything
+     * about how much was measured.
+     */
+    private static AdequacyReport refused() {
+        return reportOf(MODEL.substring(0, MODEL.lastIndexOf("    | \"管理職には理由がない\"")));
     }
 
     /**

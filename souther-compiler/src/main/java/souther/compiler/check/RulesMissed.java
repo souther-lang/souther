@@ -5,8 +5,8 @@ package souther.compiler.check;
  *
  * <p>What {@link InvariantChecker.Gathering#missed} used to say with a {@link
  * InvariantChecker.Borne} and a path. That pair says what a stop costs a construction and where it
- * happened, and says nothing about what stopped — so the six ways a rule goes ungathered arrived at
- * the far end as one set of paths, and anything asking a question the pair does not answer had
+ * happened, and says nothing about what stopped — so the seven ways a rule goes ungathered arrived
+ * at the far end as one set of paths, and anything asking a question the pair does not answer had
  * nothing to read.
  *
  * <p>Which is a question that turned up: whether a wider run of this compiler could get past it. A

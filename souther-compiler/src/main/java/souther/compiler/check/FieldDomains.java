@@ -1157,16 +1157,28 @@ public final class FieldDomains {
      * <p>Taken apart from the walk over the paths so that what the coarsening is can be held to a
      * table. Which stops reach a position is arithmetic on paths; which reason a set of stops comes
      * to is the decision, and it is the one worth writing down.
+     *
+     * <p>Two switches and no {@code default} on either, rather than one figure picked out and
+     * everything else falling past it. A way of going ungathered added later, or a fourth way for
+     * the walk to stop, would otherwise be answered here as one no allowance changes — silently,
+     * and by the arm nobody wrote.
      */
     static UnreadReason whyNothingReached(Set<RulesMissed> stops) {
         boolean depth = false;
         for (RulesMissed why : stops) {
-            if (why instanceof RulesMissed.WalkStopped(GuaranteeWalk.Stop stop)
-                    && stop == GuaranteeWalk.Stop.PAST_THE_DEPTH) {
-                depth = true;
-            } else {
+            boolean afford = switch (why) {
+                case RulesMissed.WalkStopped(GuaranteeWalk.Stop stop) -> switch (stop) {
+                    case PAST_THE_DEPTH -> true;
+                    case ASKED_TO_STOP, ALREADY_ENTERED -> false;
+                };
+                case RulesMissed.ClauseNotTyped _, RulesMissed.ClauseLost _,
+                     RulesMissed.PositionNotOpened _, RulesMissed.ClauseNotAsked _,
+                     RulesMissed.NoReadingWasMade _, RulesMissed.ReadingFellOver _ -> false;
+            };
+            if (!afford) {
                 return UnreadReason.NOT_REACHED;
             }
+            depth = true;
         }
         return depth ? UnreadReason.NOT_REACHED_PAST_DEPTH_LIMIT : UnreadReason.NOT_REACHED;
     }

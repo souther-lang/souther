@@ -272,7 +272,7 @@ public sealed interface BlockReason {
      */
     sealed interface AboutThePosition extends ReadingStopReason {
 
-        /** The same switch over the four ways a reading never got to a position's rules. */
+        /** The same switch over the five ways a reading never got to a position's rules. */
         @Override
         default RunSensitivity runSensitivity() {
             return switch (this) {
