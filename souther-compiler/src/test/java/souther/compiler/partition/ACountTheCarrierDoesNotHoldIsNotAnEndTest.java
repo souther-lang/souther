@@ -2,12 +2,12 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.query.Scopes;
 import souther.compiler.ast.Hir;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
 import souther.compiler.check.Prepared;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.Sig;
-import souther.compiler.check.Symbols;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.DateTimes;
@@ -193,10 +193,10 @@ class ACountTheCarrierDoesNotHoldIsNotAnEndTest {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
         String module = compilation.modules().get(0);
-        Symbols symbols = Scopes.derived(compilation.db(), module).value();
+        RuleReadingSource rules = RuleReadings.of(compilation, module);
         return Partitions.representativesOf(
                         souther.compiler.types.Type.ref(
-                                souther.compiler.types.TypeSymbols.declared(new souther.compiler.types.TypeKey(module, name))), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES)
+                                souther.compiler.types.TypeSymbols.declared(new souther.compiler.types.TypeKey(module, name))), rules, souther.compiler.query.ReadAs.THE_COMPILATION_DOES)
                 .stream().map(FixtureTemplate::text).toList();
     }
 
@@ -206,15 +206,15 @@ class ACountTheCarrierDoesNotHoldIsNotAnEndTest {
         compilation.answerEverything();
         String module = compilation.modules().get(0);
         Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
-        Symbols symbols = Scopes.derived(compilation.db(), module).value();
+        RuleReadingSource rules = RuleReadings.of(compilation, module);
         Map<String, Sig> sigs = compilation.db().ask(new Bodies.Signatures(module)).value();
         Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().get(0);
         assertNotNull(sigs.get(spec.name()), "the model under test compiles");
-        InputDomain domain = InputDomain.of(spec, sigs.get(spec.name()), symbols,
+        InputDomain domain = InputDomain.of(spec, sigs.get(spec.name()), rules,
                 souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
-        souther.compiler.inputs.Quantities reading = domain.quantities(symbols);
+        souther.compiler.inputs.Quantities reading = domain.quantities(rules);
         Partitions.Partitioning p =
-                Partitions.of(spec.name(), domain, symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+                Partitions.of(spec.name(), domain, rules, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         return p.axes().stream()
                 .flatMap(axis -> Partitions.bordersOf(axis, reading,
                         reading.runsBetween(axis.term()), new LinesRead()).stream())

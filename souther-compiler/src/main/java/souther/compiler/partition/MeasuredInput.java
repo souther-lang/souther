@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.Symbols;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.PositionId;
@@ -236,6 +237,12 @@ public final class MeasuredInput {
 
     public Symbols symbols() {
         return written.symbols();
+    }
+
+    /** The scope and the clause representation this was read with, for whatever reads a
+     *  declaration's rules again under it. */
+    public RuleReadingSource rules() {
+        return written.rules();
     }
 
     /** How many the rules leave the container at {@code at}, or every number where they leave it

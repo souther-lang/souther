@@ -3,12 +3,12 @@ package souther.compiler.inputs;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.ast.Hir;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
 import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
-import souther.compiler.check.Symbols;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
-import souther.compiler.query.Scopes;
 import souther.compiler.query.Shapes;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
@@ -76,8 +76,8 @@ class AnUpperBoundIsNotAnAdmissionTest {
         assertNotNull(prepared);
         Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().stream()
                 .filter(b -> b.name().equals("take")).findFirst().orElseThrow();
-        Symbols symbols = Scopes.derived(compilation.db(), module).value();
-        return InputDomain.of(spec, sigs.get("take"), symbols, policy).positions().stream()
+        RuleReadingSource rules = RuleReadings.of(compilation, module);
+        return InputDomain.of(spec, sigs.get("take"), rules, policy).positions().stream()
                 .filter(p -> p.path().toString().equals(path))
                 .findFirst().orElseThrow();
     }
@@ -85,8 +85,8 @@ class AnUpperBoundIsNotAnAdmissionTest {
     private static TypeSymbol named(String name) {
         Compilation compilation = Compilation.ofSource(SOURCE, "Main");
         compilation.answerEverything();
-        Symbols symbols = Scopes.derived(compilation.db(), compilation.modules().get(0)).value();
-        return TypeSymbols.declared(new TypeKey(symbols.module(), name));
+        RuleReadingSource rules = RuleReadings.of(compilation, compilation.modules().get(0));
+        return TypeSymbols.declared(new TypeKey(rules.symbols().module(), name));
     }
 
     /**

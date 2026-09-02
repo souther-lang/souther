@@ -62,7 +62,11 @@ class WhatOneDeclarationComesToUnderWhatIsKnownTest {
         }
         for (Hir.Def def : compilation.module("demo").defs().stream().map(each -> each.declaration().node()).toList()) {
             if (def.name().equals(name)) {
-                return CardinalityTransfer.upperOf(TypeSymbols.declared(new TypeKey(symbols.module(), name)), as.apply(def), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES, Answers.settled(solution), _ -> false);
+                return CardinalityTransfer.upperOf(
+                        TypeSymbols.declared(new TypeKey(symbols.module(), name)), as.apply(def),
+                        RuleReadings.of(compilation, "demo"),
+                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES,
+                        Answers.settled(solution), _ -> false);
             }
         }
         throw new IllegalArgumentException("no such declaration: " + name);

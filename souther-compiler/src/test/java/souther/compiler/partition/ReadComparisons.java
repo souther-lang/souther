@@ -1,11 +1,11 @@
 package souther.compiler.partition;
 
-import souther.compiler.check.Symbols;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
-import souther.compiler.query.Scopes;
 
 import java.util.List;
 
@@ -23,7 +23,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * nothing and every claim below would be about an empty list.
  */
 record ReadComparisons(List<ComparisonReadings.Reading> comparisons,
-                       souther.compiler.inputs.InputDomain inputs, Symbols symbols) {
+                       souther.compiler.inputs.InputDomain inputs, RuleReadingSource rules) {
 
     static ReadComparisons of(String source, String behavior) {
         Compilation compilation = Compilation.ofSource(source, "Main");
@@ -34,17 +34,17 @@ record ReadComparisons(List<ComparisonReadings.Reading> comparisons,
                 "the model under test compiles");
         String module = compilation.modules().get(0);
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
-        Symbols symbols = Scopes.derived(compilation.db(), module).value();
+        RuleReadingSource rules = RuleReadings.of(compilation, module);
         souther.compiler.inputs.InputDomain inputs =
                 compilation.db().ask(new Adequacy.Inputs(module)).value().get(behavior);
         return new ReadComparisons(ComparisonReadings.of(
                 checked.behaviorBodies().get(behavior),
                 checked.plan(),
-                inputs.reading(symbols), InputReads.ofParameters(inputs.parameterReads(),
+                inputs.reading(rules), InputReads.ofParameters(inputs.parameterReads(),
                         checked.elementBindings().get(behavior)),
                 // Nothing said about what arrives, so every line here is held to what the
                 // declarations leave — which is what a fixture about standing wants.
-                souther.compiler.check.PathReachability.Answers.NONE).all(), inputs, symbols);
+                souther.compiler.check.PathReachability.Answers.NONE).all(), inputs, rules);
     }
 
     /** The one comparison the body writes. A body writing two would leave a caller picking one of

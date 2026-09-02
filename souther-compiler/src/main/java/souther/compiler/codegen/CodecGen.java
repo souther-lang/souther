@@ -707,8 +707,8 @@ final class CodecGen {
      * decoder is generated where the type is declared.
      */
     private List<Hir.InvariantClause> dischargeForm(Hir.Data data) {
-        return TypeOps.effectiveInvariants(data.declares(), data, symbols,
-                ctx.dischargeInvariants()::get);
+        return TypeOps.analysisInvariants(data.declares(), data, symbols,
+                ctx.dischargeInvariants());
     }
 
     /** Collects the named types used as map keys anywhere in a derived decoder. */

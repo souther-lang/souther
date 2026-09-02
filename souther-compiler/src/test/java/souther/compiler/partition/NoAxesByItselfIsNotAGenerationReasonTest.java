@@ -3,6 +3,8 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.DefaultStdlib;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
 import souther.compiler.check.Symbols;
 import souther.compiler.query.ReadAs;
 import souther.compiler.reading.CoverageRead;
@@ -31,7 +33,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  */
 class NoAxesByItselfIsNotAGenerationReasonTest {
 
-    private static final Symbols SYMBOLS = Symbols.none(DefaultStdlib.get());
+    private static final RuleReadingSource SYMBOLS =
+            RuleReadings.ofNoClauseFiled(Symbols.none(DefaultStdlib.get()));
 
     private static final PathAccess NOT_ENUMERABLE =
             new PathAccess.Unsupported(PathAccess.Unsupported.Why.WAYS_NOT_ENUMERABLE);

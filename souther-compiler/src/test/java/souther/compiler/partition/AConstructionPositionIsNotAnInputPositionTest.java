@@ -5,9 +5,10 @@ import org.junit.jupiter.api.Test;
 import souther.test.RepositoryLayout;
 
 import souther.compiler.ast.Hir;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
 import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
-import souther.compiler.check.Symbols;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.Position;
 import souther.compiler.inputs.Refinement;
@@ -16,7 +17,6 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
-import souther.compiler.query.Scopes;
 import souther.compiler.query.Shapes;
 import souther.compiler.types.CaseSelector;
 import souther.compiler.types.Type;
@@ -67,7 +67,7 @@ class AConstructionPositionIsNotAnInputPositionTest {
     /** Read once: what this asks of it does not change between its checks. */
     private static final RepositoryLayout REPOSITORY = RepositoryLayout.ofWorkingDirectory();
 
-    private record Read(Hir.SpecBehavior spec, Sig sig, Symbols symbols) {}
+    private record Read(Hir.SpecBehavior spec, Sig sig, RuleReadingSource rules) {}
 
     private static Read of(String source, String behavior) {
         Compilation compilation =
@@ -76,21 +76,22 @@ class AConstructionPositionIsNotAnInputPositionTest {
         String module = compilation.modules().get(0);
         Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
         Map<String, Sig> sigs = compilation.db().ask(new Bodies.Signatures(module)).value();
-        Symbols symbols = Scopes.derived(compilation.db(), module).value();
+        RuleReadingSource rules = RuleReadings.of(compilation, module);
         Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().stream()
                 .filter(b -> b.name().equals(behavior)).findFirst().orElseThrow();
-        return new Read(spec, sigs.get(behavior), symbols);
+        return new Read(spec, sigs.get(behavior), rules);
     }
 
     private static InputDomain reading(Read read) {
-        return InputDomain.of(read.spec(), read.sig(), read.symbols(), ReadAs.THE_COMPILATION_DOES);
+        return InputDomain.of(read.spec(), read.sig(), read.rules(), ReadAs.THE_COMPILATION_DOES);
     }
 
     /** The plan for the behavior's one parameter, with nothing decided and the given
      *  requirements. */
     private static ConstructionPlan plan(Read read, Requirements required) {
         ConstructionPlan.Result planned = ConstructionPlan.of(read.sig().inputTypes().get(0),
-                TermPath.of(read.spec().params().get(0).name()), read.symbols(), Set.of(), required,
+                TermPath.of(read.spec().params().get(0).name()), read.rules().symbols(), Set.of(),
+                required,
                 (_, _) -> 0);
         return assertInstanceOf(ConstructionPlan.Result.Planned.class, planned,
                 "nothing here asks one position to be two things").plan();

@@ -184,7 +184,7 @@ public record ComparedNumber(NumericTerm term, TermOrders orders, ComparisonPlac
     /** The number an expression names together with the orders it is read and counted on, or null
      *  where it names none. */
     private static Named namedBy(Core e, InputReading read, InputReads reads) {
-        NumericTerm term = InputNumber.of(e, read.domain(), reads, read.symbols());
+        NumericTerm term = InputNumber.of(e, read.domain(), reads, read.rules());
         if (term == null) {
             return null;
         }

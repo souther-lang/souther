@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.Comparison;
+import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.ComparisonCatalog;
@@ -116,6 +117,10 @@ final class ComparisonReadings {
         Symbols symbols() {
             return read.symbols();
         }
+
+        RuleReadingSource rules() {
+            return read.rules();
+        }
     }
 
     /**
@@ -149,6 +154,7 @@ final class ComparisonReadings {
                              List<OnTheWay> assumed, boolean live, List<Reading> out) {
         CoverageSites.Plan plan = in.plan();
         Symbols symbols = in.symbols();
+        RuleReadingSource ruleSource = in.rules();
         ComparisonCatalog.Catalogued catalogued = e instanceof Core.Binary binary
                 ? plan.comparisons().at(binary).orElse(null) : null;
         if (catalogued != null) {
@@ -186,12 +192,12 @@ final class ComparisonReadings {
             case Core.Binary both when both.op() == BinOp.AND -> {
                 walk(both.left(), in, reads, flow, assumed, live, out);
                 walk(both.right(), in, reads, flow,
-                        taking(both.left(), true, in.read().domain(), reads, assumed, symbols), live, out);
+                        taking(both.left(), true, in.read().domain(), reads, assumed, ruleSource), live, out);
             }
             case Core.Binary either when either.op() == BinOp.OR -> {
                 walk(either.left(), in, reads, flow, assumed, live, out);
                 walk(either.right(), in, reads, flow,
-                        taking(either.left(), false, in.read().domain(), reads, assumed, symbols),
+                        taking(either.left(), false, in.read().domain(), reads, assumed, ruleSource),
                         live, out);
             }
             // The condition under what stood above the fork, and each arm under what that arm proves
@@ -199,9 +205,9 @@ final class ComparisonReadings {
             case Core.If iff -> {
                 walk(iff.cond(), in, reads, flow, assumed, live, out);
                 walk(iff.then(), in, reads, flow,
-                        taking(iff.cond(), true, in.read().domain(), reads, assumed, symbols), live, out);
+                        taking(iff.cond(), true, in.read().domain(), reads, assumed, ruleSource), live, out);
                 walk(iff.els(), in, reads, flow,
-                        taking(iff.cond(), false, in.read().domain(), reads, assumed, symbols), live, out);
+                        taking(iff.cond(), false, in.read().domain(), reads, assumed, ruleSource), live, out);
             }
             // What a `let` computes is read on the way to the answer only where the name is read;
             // everywhere else a value stands in a body it is consumed by what it stands in. And its
@@ -224,7 +230,7 @@ final class ComparisonReadings {
                 walk(match.scrutinee(), in, reads, flow, assumed, live, out);
                 for (Core.Case arm : match.cases()) {
                     walk(arm.body(), in, reads.insideArm(match, arm, symbols), flow,
-                            entering(match, arm, in.read().domain(), reads, assumed, symbols), live, out);
+                            entering(match, arm, in.read().domain(), reads, assumed, ruleSource), live, out);
                 }
             }
             default -> Core.forEachChild(e, child ->
@@ -244,10 +250,10 @@ final class ComparisonReadings {
     private static List<OnTheWay> taking(Core node, boolean holding,
                                          souther.compiler.inputs.InputDomain inputs,
                                          InputReads reads, List<OnTheWay> assumed,
-                                         Symbols symbols) {
+                                         RuleReadingSource ruleSource) {
         List<OnTheWay> out = new ArrayList<>(assumed);
-        out.addAll(ReachingCuts.stating(Condition.of(node, reads, symbols), inputs, holding,
-                symbols));
+        out.addAll(ReachingCuts.stating(Condition.of(node, reads, ruleSource.symbols()), inputs,
+                holding, ruleSource));
         return List.copyOf(out);
     }
 
@@ -256,9 +262,9 @@ final class ComparisonReadings {
     private static List<OnTheWay> entering(Core.Match match, Core.Case arm,
                                            souther.compiler.inputs.InputDomain inputs,
                                            InputReads reads, List<OnTheWay> assumed,
-                                           Symbols symbols) {
+                                           RuleReadingSource ruleSource) {
         List<OnTheWay> out = new ArrayList<>(assumed);
-        out.add(ReachingCuts.entering(match, arm, inputs, reads, symbols));
+        out.add(ReachingCuts.entering(match, arm, inputs, reads, ruleSource));
         return List.copyOf(out);
     }
 }

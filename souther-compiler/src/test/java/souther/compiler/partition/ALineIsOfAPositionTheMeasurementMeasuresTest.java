@@ -3,6 +3,8 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.DefaultStdlib;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.Clause;
 import souther.compiler.check.ClauseName;
@@ -48,7 +50,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class ALineIsOfAPositionTheMeasurementMeasuresTest {
 
-    private static final Symbols SYMBOLS = Symbols.none(DefaultStdlib.get());
+    private static final RuleReadingSource SYMBOLS =
+            RuleReadings.ofNoClauseFiled(Symbols.none(DefaultStdlib.get()));
 
     private static final Carrier WHOLE = new Carrier.Whole();
 

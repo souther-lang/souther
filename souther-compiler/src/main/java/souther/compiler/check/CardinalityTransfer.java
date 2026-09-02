@@ -67,7 +67,7 @@ final class CardinalityTransfer {
      *                reached: a record holding it would otherwise be told it holds nothing by the
      *                very rules the supposing was about.
      */
-    static Cardinality upperOf(TypeSymbol named, Hir.Def def, Symbols symbols,
+    static Cardinality upperOf(TypeSymbol named, Hir.Def def, RuleReadingSource source,
                                ReadingPolicy policy, Answers answers,
                                Predicate<TypeSymbol> granted) {
         return switch (def) {
@@ -77,7 +77,7 @@ final class CardinalityTransfer {
             // one, so a name reaching here that is not a module's is a declaration world and a
             // graph of names that have stopped agreeing.
             case Hir.Data data -> named instanceof TypeSymbol.AtModule at
-                    ? ofData(at, data, symbols, policy, answers, granted)
+                    ? ofData(at, data, source, policy, answers, granted)
                     : Declared.notAModules(named, data);
         };
     }
@@ -123,27 +123,27 @@ final class CardinalityTransfer {
         return across != null ? across : Cardinality.none(new Emptiness.AcrossEveryCase(without));
     }
 
-    private static Cardinality ofData(TypeSymbol.AtModule named, Hir.Data data, Symbols symbols,
+    private static Cardinality ofData(TypeSymbol.AtModule named, Hir.Data data, RuleReadingSource source,
                                       ReadingPolicy policy, Answers answers,
                                       Predicate<TypeSymbol> granted) {
         // Rules that cannot all hold leave nothing to count, and the ends they would have been
         // counted between are gone with them. Asked before the positions, which have nothing to say
         // about a value the declaration as a whole refuses, and nearer than anything they could say.
         Optional<Emptiness> contradiction =
-                FieldDomains.granting(named, data, symbols, policy, granted).holdsNothing();
+                FieldDomains.granting(named, data, source, policy, granted).holdsNothing();
         if (contradiction.isPresent()) {
             return Cardinality.none(contradiction.get());
         }
-        OccurrenceCounts counts = OccurrenceCounts.of(named, data, symbols, policy, granted);
-        OccurrenceValues values = OccurrenceValues.of(named, data, symbols, policy, granted);
-        Map<String, Type> fields = TypeOps.fieldTypes(data, symbols);
+        OccurrenceCounts counts = OccurrenceCounts.of(named, data, source, policy, granted);
+        OccurrenceValues values = OccurrenceValues.of(named, data, source, policy, granted);
+        Map<String, Type> fields = TypeOps.fieldTypes(data, source.symbols());
         if (data.newtype()) {
             // A newtype is one value under a name, so its value sits where it sits: the rules written
             // on the name are about what the value holds, and the value is at no path of its own.
             Type representation = fields.get("value");
             return representation == null ? Cardinality.UNKNOWN
                     : at(RuleKey.THE_VALUE, upperAt(representation, RuleKey.THE_VALUE,
-                            counts, values, symbols, answers, granted, new HashSet<>(Set.of(named))));
+                            counts, values, source, answers, granted, new HashSet<>(Set.of(named))));
         }
         RuleKey emptiestAt = null;
         Emptiness emptiest = null;
@@ -153,7 +153,7 @@ final class CardinalityTransfer {
             // carries is settled by how near the proofs are and by the order the fields are declared
             // in, and a reading that stopped at the first would answer with whichever the traversal
             // reached — the same model refused for a different reason each time the fields moved.
-            switch (upperAt(each.getValue(), RuleKey.of(each.getKey()), counts, values, symbols,
+            switch (upperAt(each.getValue(), RuleKey.of(each.getKey()), counts, values, source,
                     answers, granted, new HashSet<>())) {
                 case Cardinality.None it -> {
                     if (emptiest == null || it.why().category().compareTo(emptiest.category()) < 0) {
@@ -203,7 +203,7 @@ final class CardinalityTransfer {
      *              itself is answered from {@code answers} rather than unwrapped again
      */
     static Cardinality upperAt(Type type, RuleKey path, OccurrenceCounts counts,
-                               OccurrenceValues values, Symbols symbols,
+                               OccurrenceValues values, RuleReadingSource source,
                                Answers answers, Predicate<TypeSymbol> granted,
                                Set<TypeSymbol> worn) {
         return switch (type) {
@@ -211,23 +211,23 @@ final class CardinalityTransfer {
                 // As many as it has values, which is a question with an answer of its own. Written
                 // here as a number, the count and the values would be two records of one fact with
                 // nothing holding them together.
-                case BOOL -> howManyValues(type, symbols);
+                case BOOL -> howManyValues(type, source.symbols());
                 case INT -> values.wholeValuesAt(path);
                 // Spaced too finely to count between two ends, or not spaced at all. A string bounded
                 // in length and a date bounded at both ends are finite and are not counted here: what
                 // it would take is a reading of each carrier's own values, and nothing asks yet.
                 case STRING, DECIMAL, DATE, TIME, DATETIME, INSTANT, RAW -> Cardinality.UNKNOWN;
             };
-            case Type.Ref ref -> ofRef(ref, path, counts, values, symbols, answers, granted, worn);
+            case Type.Ref ref -> ofRef(ref, path, counts, values, source, answers, granted, worn);
             // A `None` is a value of it whatever it wraps, so this is the one position that is never
             // empty. What it wraps is a value of its own type and nothing was written about it here.
             case Type.OptionOf option ->
-                    ofType(option.element(), symbols, answers, granted, worn)
+                    ofType(option.element(), source, answers, granted, worn)
                             instanceof Cardinality.Standing wrapped
                             ? Cardinality.atMost(1).plus(wrapped) : Cardinality.atMost(1);
-            case Type.ListOf list -> ofList(list.element(), path, counts, symbols, answers, granted, worn);
-            case Type.SetOf set -> ofSet(set.element(), path, counts, symbols, answers, granted, worn);
-            case Type.MapOf map -> ofMap(map, path, counts, symbols, answers, granted, worn);
+            case Type.ListOf list -> ofList(list.element(), path, counts, source, answers, granted, worn);
+            case Type.SetOf set -> ofSet(set.element(), path, counts, source, answers, granted, worn);
+            case Type.MapOf map -> ofMap(map, path, counts, source, answers, granted, worn);
             // Several values carried together, which is a product like a record's fields. Written only
             // inside a computation — a field of one is refused — so nothing in a declaration reaches
             // this, and a part with no value is carried up as it stands: the parts sit at no path of
@@ -236,7 +236,7 @@ final class CardinalityTransfer {
                 Cardinality.Standing across = Cardinality.atMost(1);
                 Cardinality.None without = null;
                 for (Type each : tuple.elements()) {
-                    switch (ofType(each, symbols, answers, granted, worn)) {
+                    switch (ofType(each, source, answers, granted, worn)) {
                         case Cardinality.None it -> {
                             if (without == null
                                     || it.why().category().compareTo(without.why().category()) < 0) {
@@ -269,24 +269,25 @@ final class CardinalityTransfer {
      * without one, and the granting would be undone one step in.
      */
     private static Cardinality ofRef(Type.Ref ref, RuleKey path, OccurrenceCounts counts,
-                                     OccurrenceValues values, Symbols symbols,
+                                     OccurrenceValues values, RuleReadingSource source,
                                      Answers answers, Predicate<TypeSymbol> granted,
                                      Set<TypeSymbol> worn) {
         Cardinality named = answers.of(ref.name());
         if (granted.test(ref.name())
-                || !(symbols.declaredNode(ref.name()) instanceof Hir.Data data) || !data.newtype()
+                || !(source.symbols().declaredNode(ref.name()) instanceof Hir.Data data)
+                || !data.newtype()
                 || !worn.add(ref.name())) {
             return named;
         }
         // The name is not a step of the path: a rule the record wrote about this field reaches what
         // the name wraps, and reading the wrapped type without it would leave a floor written here
         // saying nothing. Both readings bound the same values, so the narrower of them holds.
-        Type representation = TypeOps.fieldTypes(data, symbols).get("value");
+        Type representation = TypeOps.fieldTypes(data, source.symbols()).get("value");
         if (representation == null) {
             return named;
         }
         Cardinality unwrapped =
-                upperAt(representation, path, counts, values, symbols, answers, granted, worn);
+                upperAt(representation, path, counts, values, source, answers, granted, worn);
         if (named instanceof Cardinality.Standing here
                 && unwrapped instanceof Cardinality.Standing there) {
             return Cardinality.Standing.narrower(here, there);
@@ -301,10 +302,10 @@ final class CardinalityTransfer {
     }
 
     /** A value a collection holds, which no rule of the collection's own was written about. */
-    private static Cardinality ofType(Type type, Symbols symbols, Answers answers,
+    private static Cardinality ofType(Type type, RuleReadingSource source, Answers answers,
                                       Predicate<TypeSymbol> granted, Set<TypeSymbol> worn) {
         return upperAt(type, RuleKey.THE_VALUE, OccurrenceCounts.NOTHING_READ,
-                OccurrenceValues.NOTHING_READ, symbols, answers, granted, worn);
+                OccurrenceValues.NOTHING_READ, source, answers, granted, worn);
     }
 
     /**
@@ -328,13 +329,13 @@ final class CardinalityTransfer {
     }
 
     private static Cardinality ofSet(Type element, RuleKey path, OccurrenceCounts counts,
-                                     Symbols symbols, Answers answers,
+                                     RuleReadingSource source, Answers answers,
                                      Predicate<TypeSymbol> granted, Set<TypeSymbol> worn) {
         if (!counts.mayHoldAtLeast(path, 1)) {
             return noSizeLeft(counts, path);
         }
         Cardinality.Standing each;
-        switch (ofType(element, symbols, answers, granted, worn)) {
+        switch (ofType(element, source, answers, granted, worn)) {
             case Cardinality.None it -> { return nothingToHold(counts, path, it.why()); }
             case Cardinality.Standing it -> each = it;
         }
@@ -367,13 +368,13 @@ final class CardinalityTransfer {
     }
 
     private static Cardinality ofList(Type element, RuleKey path, OccurrenceCounts counts,
-                                      Symbols symbols, Answers answers,
+                                      RuleReadingSource source, Answers answers,
                                       Predicate<TypeSymbol> granted, Set<TypeSymbol> worn) {
         if (!counts.mayHoldAtLeast(path, 1)) {
             return noSizeLeft(counts, path);
         }
         Cardinality.Standing each;
-        switch (ofType(element, symbols, answers, granted, worn)) {
+        switch (ofType(element, source, answers, granted, worn)) {
             case Cardinality.None it -> { return nothingToHold(counts, path, it.why()); }
             case Cardinality.Standing it -> each = it;
         }
@@ -393,7 +394,7 @@ final class CardinalityTransfer {
     }
 
     private static Cardinality ofMap(Type.MapOf map, RuleKey path, OccurrenceCounts counts,
-                                     Symbols symbols, Answers answers,
+                                     RuleReadingSource source, Answers answers,
                                      Predicate<TypeSymbol> granted, Set<TypeSymbol> worn) {
         if (!counts.mayHoldAtLeast(path, 1)) {
             return noSizeLeft(counts, path);
@@ -404,7 +405,7 @@ final class CardinalityTransfer {
         // A key is a string and there is no end of those, so a map holding anything at all holds it
         // under more keys than can be counted. Only a map with nothing to hold is finite here, and
         // one that must hold something has no value.
-        return ofType(map.value(), symbols, answers, granted, worn) instanceof Cardinality.None it
+        return ofType(map.value(), source, answers, granted, worn) instanceof Cardinality.None it
                 ? nothingToHold(counts, path, it.why()) : Cardinality.UNKNOWN;
     }
 }

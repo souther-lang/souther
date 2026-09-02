@@ -75,7 +75,8 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
         Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
         TypeSymbol.AtModule name = TypeSymbols.declared(new TypeKey(symbols.module(), named));
         return new Read(FieldDomains.of(name,
-                (Hir.Data) symbols.declaredNode(name.key()), symbols, policy), symbols);
+                (Hir.Data) symbols.declaredNode(name.key()),
+                RuleReadings.of(compilation, "demo"), policy), symbols);
     }
 
     private static FieldDomains of(String source, String named) {
@@ -99,7 +100,8 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
         Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
         TypeSymbol.AtModule name = TypeSymbols.declared(new TypeKey(symbols.module(), named));
         return FieldDomains.of(name,
-                (Hir.Data) symbols.declaredNode(name.key()), symbols,
+                (Hir.Data) symbols.declaredNode(name.key()),
+                RuleReadings.of(compilation, "demo"),
                 ReadAs.THE_COMPILATION_DOES);
     }
 

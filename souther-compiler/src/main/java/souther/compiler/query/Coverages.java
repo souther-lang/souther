@@ -3,6 +3,7 @@ package souther.compiler.query;
 import souther.compiler.check.ReadingPolicy;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.PathReachability;
+import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.Symbols;
 import souther.compiler.numeric.Place;
 import souther.compiler.core.Core;
@@ -81,6 +82,7 @@ final class Coverages {
                                       PathReachability.Answers arrives,
                                       souther.compiler.check.StatedContract stated) {
         Symbols symbols = read.symbols();
+        RuleReadingSource ruleSource = read.rules();
         ReadingPolicy policy = read.domain().policy();
         souther.compiler.inputs.Quantities quantities = read.quantities();
         Partitions.Partitioning partitioning =
@@ -109,7 +111,7 @@ final class Coverages {
                         both(clauses.evidence(), guards.evidence()),
                         both(declared, both(clauses.between(), guards.between())));
         return new Partitioned(Partitions.withEvidence(partitioning, quantities,
-                filed.evidence(), symbols, policy,
+                filed.evidence(), ruleSource, policy,
                 // And the lines this had nowhere to put, which are findings of the same kind: a rule
                 // of the model that came to no line at a position it is about.
                 both(both(clauses.rulesWithoutALine(), guards.rulesWithoutALine()),

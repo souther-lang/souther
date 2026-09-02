@@ -2,11 +2,11 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.query.Scopes;
 import souther.compiler.ast.Hir;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
 import souther.compiler.check.FieldDomains;
 import souther.compiler.check.RuleKey;
-import souther.compiler.check.Symbols;
 import souther.compiler.query.Compilation;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
@@ -28,13 +28,13 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
  */
 class AFloorHoldsWhereverItIsWrittenTest {
 
-    private record Model(Symbols symbols, String module) {
+    private record Model(RuleReadingSource rules, String module) {
 
         FieldDomains domainsOf(String type) {
             TypeSymbol.AtModule named = TypeSymbols.declared(new TypeKey(module, type));
-            Hir.Data data = (Hir.Data) symbols.declaredNode(named.key());
+            Hir.Data data = (Hir.Data) rules.symbols().declaredNode(named.key());
             assertNotNull(data, "no `" + type + "`");
-            return FieldDomains.of(named, data, symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+            return FieldDomains.of(named, data, rules, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         }
 
         Type ref(String type) {
@@ -49,12 +49,12 @@ class AFloorHoldsWhereverItIsWrittenTest {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
         String module = compilation.modules().get(0);
-        Symbols symbols = Scopes.derived(compilation.db(), module).value();
-        assertNotNull(symbols, "the model did not compile");
+        RuleReadingSource rules = RuleReadings.of(compilation, module);
+        assertNotNull(rules, "the model did not compile");
         assertEquals(List.of(), compilation.diagnostics().values().stream()
                         .flatMap(List::stream).map(each -> each.diagnostic().code()).toList(),
                 "the model under test is a program that can be written");
-        return new Model(symbols, module);
+        return new Model(rules, module);
     }
 
     /** The record's rule, at a field whose own type says nothing. */
@@ -69,7 +69,7 @@ class AFloorHoldsWhereverItIsWrittenTest {
                     invariant atLeastTwo = List.length(xs) >= 2
                 """);
 
-        assertEquals(2, Partitions.leastHeld(new Type.ListOf(Type.INT), model.symbols(),
+        assertEquals(2, Partitions.leastHeld(new Type.ListOf(Type.INT), model.rules(),
                 model.domainsOf("Bag").heldAt(RuleKey.of("xs"))));
     }
 
@@ -86,7 +86,7 @@ class AFloorHoldsWhereverItIsWrittenTest {
                 data Bag = { xs: NonEmpty }
                 """);
 
-        assertEquals(1, Partitions.leastHeld(model.ref("NonEmpty"), model.symbols(),
+        assertEquals(1, Partitions.leastHeld(model.ref("NonEmpty"), model.rules(),
                 model.domainsOf("Bag").heldAt(RuleKey.of("xs"))));
     }
 
@@ -111,7 +111,7 @@ class AFloorHoldsWhereverItIsWrittenTest {
                     invariant atLeastTwo = List.length(xs.value) >= 2
                 """);
 
-        assertEquals(3, Partitions.leastHeld(model.ref("AtLeastThree"), model.symbols(),
+        assertEquals(3, Partitions.leastHeld(model.ref("AtLeastThree"), model.rules(),
                 model.domainsOf("Bag").heldAt(RuleKey.of("xs"))));
     }
 
@@ -135,9 +135,9 @@ class AFloorHoldsWhereverItIsWrittenTest {
                 """);
         FieldDomains domains = model.domainsOf("Possible");
 
-        assertEquals(0, Partitions.leastHeld(new Type.ListOf(Type.INT), model.symbols(),
+        assertEquals(0, Partitions.leastHeld(new Type.ListOf(Type.INT), model.rules(),
                 domains.heldAt(RuleKey.of("accounts"))), "an empty list of accounts stands beside a contact");
-        assertEquals(0, Partitions.leastHeld(new Type.ListOf(Type.INT), model.symbols(),
+        assertEquals(0, Partitions.leastHeld(new Type.ListOf(Type.INT), model.rules(),
                 domains.heldAt(RuleKey.of("contacts"))), "and the same the other way round");
     }
 
@@ -154,7 +154,7 @@ class AFloorHoldsWhereverItIsWrittenTest {
                     invariant atLeastOne = List.length(value) >= 1
                 """);
 
-        assertEquals(1, Partitions.leastHeld(model.ref("Kids"), model.symbols()));
+        assertEquals(1, Partitions.leastHeld(model.ref("Kids"), model.rules()));
     }
 
     /**
@@ -174,6 +174,6 @@ class AFloorHoldsWhereverItIsWrittenTest {
                     invariant nonEmpty = String.length(value) >= 1
                 """);
 
-        assertEquals(1, Partitions.leastHeld(model.ref("Name"), model.symbols()));
+        assertEquals(1, Partitions.leastHeld(model.ref("Name"), model.rules()));
     }
 }

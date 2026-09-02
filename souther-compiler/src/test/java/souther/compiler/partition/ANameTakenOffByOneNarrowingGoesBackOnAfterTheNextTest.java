@@ -3,16 +3,16 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.ast.Hir;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
 import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
-import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
-import souther.compiler.query.Scopes;
 import souther.compiler.query.Shapes;
 
 import java.util.List;
@@ -100,7 +100,7 @@ class ANameTakenOffByOneNarrowingGoesBackOnAfterTheNextTest {
     private static List<String> wornAt(String source, String path, String classId) {
         Read read = read(source);
         Partitions.Partitioning partitioning =
-                Partitions.of("look", read.domain(), read.symbols(), ReadAs.THE_COMPILATION_DOES);
+                Partitions.of("look", read.domain(), read.rules(), ReadAs.THE_COMPILATION_DOES);
         Axis axis = partitioning.axes().stream()
                 .filter(each -> each.path().toString().equals(path)).findFirst()
                 .orElseThrow(() -> new AssertionError("no axis at " + path + ": "
@@ -111,7 +111,7 @@ class ANameTakenOffByOneNarrowingGoesBackOnAfterTheNextTest {
 
         ConstructionPlan plan = assertInstanceOf(ConstructionPlan.Result.Planned.class,
                 ConstructionPlan.of(read.sig().inputTypes().get(0),
-                        TermPath.of(read.parameter()), read.symbols(), Set.of(),
+                        TermPath.of(read.parameter()), read.rules().symbols(), Set.of(),
                         axis.requiring(cls), (_, _) -> 1),
                 "nothing here asks one position to be two things").plan();
 
@@ -140,7 +140,7 @@ class ANameTakenOffByOneNarrowingGoesBackOnAfterTheNextTest {
         return worn.stream().map(each -> each.named().name()).toList();
     }
 
-    private record Read(String parameter, Sig sig, Symbols symbols, InputDomain domain) {}
+    private record Read(String parameter, Sig sig, RuleReadingSource rules, InputDomain domain) {}
 
     private static Read read(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
@@ -148,9 +148,9 @@ class ANameTakenOffByOneNarrowingGoesBackOnAfterTheNextTest {
         String module = compilation.modules().get(0);
         Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
         Map<String, Sig> sigs = compilation.db().ask(new Bodies.Signatures(module)).value();
-        Symbols symbols = Scopes.derived(compilation.db(), module).value();
+        RuleReadingSource rules = RuleReadings.of(compilation, module);
         Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().get(0);
-        return new Read(spec.params().get(0).name(), sigs.get("look"), symbols,
-                InputDomain.of(spec, sigs.get("look"), symbols, ReadAs.THE_COMPILATION_DOES));
+        return new Read(spec.params().get(0).name(), sigs.get("look"), rules,
+                InputDomain.of(spec, sigs.get("look"), rules, ReadAs.THE_COMPILATION_DOES));
     }
 }

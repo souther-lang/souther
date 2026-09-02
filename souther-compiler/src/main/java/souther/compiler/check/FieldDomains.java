@@ -150,7 +150,10 @@ public final class FieldDomains {
     /** What this was read from, so that it can be read again without one declaration's clauses. */
     private final TypeSymbol.AtModule named;
     private final Hir.Data data;
-    private final Symbols symbols;
+    /** The scope and the representation together, so that a second reading of this declaration reads
+     *  the same tree. Held apart, a counterfactual could be taken against the other form and what
+     *  moved would be read as what a rule did. */
+    private final RuleReadingSource source;
     private final Map<NumberAt<RuleKey>, Count> settled;
     /** What this value was read under, so that reading it again for what one rule did reads it the
      *  same way. A second reading of one declaration under another policy would answer a name
@@ -182,7 +185,7 @@ public final class FieldDomains {
                          Map<RuleKey, Set<RulesMissed>> notGathered, Set<RuleKey> handedOn,
                          SequencedMap<FactSubject, RuleKey> namedBy,
                          ConstraintState<FactSubject> constraints, TypeSymbol.AtModule named,
-                         Hir.Data data, Symbols symbols, ReadingPolicy policy,
+                         Hir.Data data, RuleReadingSource source, ReadingPolicy policy,
                          Map<NumberAt<RuleKey>, Count> settled,
                          Set<RuleKey> unreadOfEveryValue,
                          Map<RuleKey, FactSubject> atomAt, Map<RuleKey, Counted> countAt,
@@ -209,7 +212,7 @@ public final class FieldDomains {
         this.constraints = constraints;
         this.named = named;
         this.data = data;
-        this.symbols = symbols;
+        this.source = source;
         this.policy = policy;
         this.settled = settled;
         this.unreadOfEveryValue = unreadOfEveryValue;
@@ -282,9 +285,9 @@ public final class FieldDomains {
     }
 
     /** What {@code data}, declared as {@code named}, leaves its fields able to hold. */
-    public static FieldDomains of(TypeSymbol.AtModule named, Hir.Data data, Symbols symbols,
+    public static FieldDomains of(TypeSymbol.AtModule named, Hir.Data data, RuleReadingSource source,
                                   ReadingPolicy policy) {
-        return of(named, data, symbols, policy, Map.of());
+        return of(named, data, source, policy, Map.of());
     }
 
     /**
@@ -295,9 +298,9 @@ public final class FieldDomains {
      * not read off {@code endsAt}'s own range — which still runs from 1 — but off what is left of it
      * once the other end is fixed, which is 1440 and nothing else.
      */
-    public static FieldDomains of(TypeSymbol.AtModule named, Hir.Data data, Symbols symbols,
+    public static FieldDomains of(TypeSymbol.AtModule named, Hir.Data data, RuleReadingSource source,
                                   ReadingPolicy policy, Map<RuleKey, Count> settled) {
-        return of(named, data, symbols, policy, atValues(settled),
+        return of(named, data, source, policy, atValues(settled),
                 InvariantChecker.Reach.EVERYTHING);
     }
 
@@ -318,15 +321,15 @@ public final class FieldDomains {
      * record holding it is otherwise told it holds nothing by the very rules the supposing was
      * about.
      */
-    static FieldDomains granting(TypeSymbol.AtModule named, Hir.Data data, Symbols symbols,
+    static FieldDomains granting(TypeSymbol.AtModule named, Hir.Data data, RuleReadingSource source,
                                  ReadingPolicy policy,
                                  java.util.function.Predicate<TypeSymbol> granted) {
-        return of(named, data, symbols, policy, Map.of(),
+        return of(named, data, source, policy, Map.of(),
                 InvariantChecker.Reach.stoppingAt(granted));
     }
 
     /** The same, reading only as far as {@code reach} says — see {@link #narrowedBy}. */
-    private static FieldDomains of(TypeSymbol.AtModule named, Hir.Data data, Symbols symbols,
+    private static FieldDomains of(TypeSymbol.AtModule named, Hir.Data data, RuleReadingSource source,
                                    ReadingPolicy policy, Map<NumberAt<RuleKey>, Count> settled,
                                    InvariantChecker.Reach reach) {
         // A newtype is read the same way, and only its bounds are not worth handing back: its value
@@ -335,7 +338,7 @@ public final class FieldDomains {
         // answers were being given away by treating it as a value with nothing to say.
         READINGS.incrementAndGet();
         InvariantChecker.Seeded seeded =
-                InvariantChecker.seedFields(named, data, symbols, policy, settled, reach);
+                InvariantChecker.seedFields(named, data, source, policy, settled, reach);
         Map<RuleKey, NumericDomain.Bounds> out = new LinkedHashMap<>();
         seeded.atoms().forEach((field, atom) -> {
             // The value itself is at no name of its own, and its range is the one thing not worth
@@ -447,7 +450,7 @@ public final class FieldDomains {
                 seeded.reading().standing(), seeded.took(),
                 seeded.reading().narrowers(),
                 seeded.notGathered(), seeded.handedOn(), placeOf,
-                seeded.constraints(), named, data, symbols, policy, settled,
+                seeded.constraints(), named, data, source, policy, settled,
                 seeded.unreadOfEveryValue(), seeded.atoms(), seeded.held(),
                 seeded.readBy(), seeded.spacing());
     }
@@ -708,7 +711,7 @@ public final class FieldDomains {
 
     /** This value read again without the clauses of the declarations {@code skip} names. */
     private FieldDomains without(java.util.function.Predicate<TypeSymbol> skip) {
-        return of(named, data, symbols, policy, settled,
+        return of(named, data, source, policy, settled,
                 InvariantChecker.Reach.withoutClausesOf(skip));
     }
 
@@ -1289,7 +1292,7 @@ public final class FieldDomains {
 
     /** This value read again without some conjuncts of its rules. */
     private FieldDomains without(Set<AboutOneCoordinate> removed) {
-        return of(named, data, symbols, policy, settled,
+        return of(named, data, source, policy, settled,
                 InvariantChecker.Reach.withoutParts(removed.stream()
                         .map(each -> new PartsLeftOut.AuthoredPart(each.from(), each.part()))
                         .collect(java.util.stream.Collectors.toSet())));
@@ -1327,9 +1330,9 @@ public final class FieldDomains {
      *
      */
     public static boolean mayHoldNothingAt(TypeSymbol.AtModule named, Hir.Data data, RuleKey path,
-                                           Symbols symbols, ReadingPolicy policy) {
+                                           RuleReadingSource source, ReadingPolicy policy) {
         // A count is never below none, so leaving it no room above none is leaving it at none.
-        return OccurrenceCounts.of(named, data, symbols, policy).mayHoldAtMost(path, 0);
+        return OccurrenceCounts.of(named, data, source, policy).mayHoldAtMost(path, 0);
     }
 
     /**

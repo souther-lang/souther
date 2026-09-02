@@ -65,29 +65,40 @@ public final class ClauseHelpers {
     /**
      * Each declaration's invariant in the representation the invariant-discharge analysis reads: the
      * helpers it can name expanded, the language's own operations left standing
-     * ({@link InliningPolicy#DISCHARGE}). Keyed by the declaration's name in {@code m}.
+     * ({@link InliningPolicy#DISCHARGE}), for every declaration {@code m} makes.
      *
      * <p>This is the same settling {@link #withSettledInvariants} does, stopped one step earlier, and
      * it reads the same table: what the clause names is substituted whether this module declared it or
-     * imported it. An importer reads an imported invariant in the settled form and finds nothing here
-     * for it, which is where an imported clause falls outside the statically dischargeable fragment
-     * (spec §invariant-discharge).
+     * imported it. What another module declares is not in here and is read in the settled form that
+     * travels with it, which is where an imported clause falls outside the statically dischargeable
+     * fragment (spec §invariant-discharge) — a rule {@link AnalysisInvariants} states off where the
+     * declaration was written rather than off whether a lookup found anything.
      */
-    public static Map<TypeSymbol, List<Hir.InvariantClause>> invariantsForDischarge(
+    public static AnalysisInvariants invariantsForDischarge(
             Expandable expandable, Symbols symbols, Map<String, Hir.FnDef> published) {
         Hir.Module m = expandable.module();
         Hir.Module settled = settled(m, symbols);
         HelperInliner inliner = HelperInliner.forHelpers(m.name(), HelperInliner.helpersOf(settled),
                 published, InliningPolicy.DISCHARGE, symbols.library());
-        Map<TypeSymbol, List<Hir.InvariantClause>> out = new LinkedHashMap<>();
+        Map<TypeSymbol.AtModule, List<Hir.InvariantClause>> out = new LinkedHashMap<>();
+        // The declarations that wrote a clause, which is what there is a reading of. A declaration
+        // that wrote none is left out and is not a gap: whether one is missing is asked of the
+        // declaration rather than of this map ({@link AnalysisInvariants#clausesOf}), so that
+        // writing a declaration with no clause leaves this answer where it was — and everything a
+        // module's clauses are read by with it.
         for (Hir.Def def : settled.defs()) {
-            if (def instanceof Hir.Data d && !d.invariants().isEmpty()) {
-                TypeSymbol.AtModule declared = d.declares();
-                out.put(declared, Hir.mapClauses(d.invariants(),
-                        clause -> inliner.inline(clause, new BindingOwner.OfData(declared))));
+            // Expanded first and the constructions written as constructions after, which is the
+            // order the settled form is put together in: it inlines ({@link InvariantSettled}) and
+            // normalises the result ({@link Normalized.Def}). Normalising first would leave a
+            // construction that appears only inside a helper's body written as an application
+            // here and as a construction there, and what tells the two representations apart is
+            // what {@link InliningPolicy} says and nothing else.
+            if (NewtypeDesugar.rewriteInvariantsOf(withInlinedInvariants(inliner, def), symbols)
+                    instanceof Hir.Data d && !d.invariants().isEmpty()) {
+                out.put(d.declares(), d.invariants());
             }
         }
-        return out;
+        return new AnalysisInvariants(m.name(), out);
     }
 
     /** {@code m} with its helper parameter types settled and the names in its invariants written
@@ -105,14 +116,7 @@ public final class ClauseHelpers {
     private static Hir.Module withInlinedInvariants(HelperInliner inliner, Hir.Module m) {
         List<Hir.Def> defs = new ArrayList<>();
         for (Hir.Def def : m.defs()) {
-            if (def instanceof Hir.Data d && !d.invariants().isEmpty()) {
-                BindingOwner declared = new BindingOwner.OfData(d.declares());
-                defs.add(new Hir.Data(d.written(), d.declares(), d.newtype(), d.includes(), d.fields(),
-                        Hir.mapClauses(d.invariants(), clause -> inliner.inline(clause, declared)),
-                        d.pos()));
-            } else {
-                defs.add(def);
-            }
+            defs.add(withInlinedInvariants(inliner, def));
         }
         List<Hir.BehaviorDef> behaviors = new ArrayList<>();
         for (Hir.BehaviorDef behavior : m.behaviors()) {
@@ -120,6 +124,24 @@ public final class ClauseHelpers {
                     ? withInlinedEnsures(inliner, m.name(), spec) : behavior);
         }
         return m.withDefs(defs).withBehaviors(behaviors);
+    }
+
+    /**
+     * {@code def} with the helper calls in its clauses expanded as {@code inliner} expands them.
+     *
+     * <p>The one step both representations take. Written once so that what either does before it
+     * and after it is done at the same point of the same walk: a step one of them takes on the
+     * clause as written and the other on the clause with the helpers in it would tell the two
+     * apart by something other than {@link InliningPolicy}.
+     */
+    private static Hir.Def withInlinedInvariants(HelperInliner inliner, Hir.Def def) {
+        if (!(def instanceof Hir.Data d) || d.invariants().isEmpty()) {
+            return def;
+        }
+        BindingOwner declared = new BindingOwner.OfData(d.declares());
+        return new Hir.Data(d.written(), d.declares(), d.newtype(), d.includes(), d.fields(),
+                Hir.mapClauses(d.invariants(), clause -> inliner.inline(clause, declared)),
+                d.pos());
     }
 
     /** {@code spec} with the helper calls in its {@code ensures} expanded as {@code inliner} expands

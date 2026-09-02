@@ -1,5 +1,6 @@
 package souther.compiler.codegen;
 
+import souther.compiler.check.AnalysisInvariants;
 import souther.compiler.check.AtomSpace;
 import souther.compiler.check.ReqSig;
 import souther.compiler.core.EnsuresEnforcement;
@@ -94,11 +95,15 @@ final class CodegenContext {
 
     /**
      * This module's declarations' invariant clauses in the representation the language's own operations
-     * survive in ({@link souther.compiler.check.InliningPolicy#DISCHARGE}), keyed by declaration. The
-     * constraint mapping a derived decoder does is written against those operations, so it reads this
-     * rather than the settled form the rest of the backend emits from.
+     * survive in ({@link souther.compiler.check.InliningPolicy#DISCHARGE}). The constraint mapping a
+     * derived decoder does is written against those operations, so it reads this rather than the
+     * settled form the rest of the backend emits from.
+     *
+     * <p>Null until it is set, and not an empty one. A module reading as stating nothing and a module
+     * whose representation never arrived are the same empty map and opposite facts, and a decoder
+     * built from the second would silently constrain nothing.
      */
-    private Map<TypeSymbol, List<Hir.InvariantClause>> dischargeInvariants = Map.of();
+    private AnalysisInvariants dischargeInvariants;
 
     /**
      * Where each behavior's declared relation is checked, as it was decided before emission.
@@ -125,11 +130,15 @@ final class CodegenContext {
         return EnsuresEnforcement.in(ensuresChecks, pkg, behavior);
     }
 
-    void setDischargeInvariants(Map<TypeSymbol, List<Hir.InvariantClause>> clauses) {
+    void setDischargeInvariants(AnalysisInvariants clauses) {
         this.dischargeInvariants = clauses;
     }
 
-    Map<TypeSymbol, List<Hir.InvariantClause>> dischargeInvariants() {
+    AnalysisInvariants dischargeInvariants() {
+        if (dischargeInvariants == null) {
+            throw new IllegalStateException(
+                    "the analysis representation of " + pkg + "'s clauses was never handed over");
+        }
         return dischargeInvariants;
     }
 

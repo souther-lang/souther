@@ -236,7 +236,8 @@ class AChoiceIsDecidedByEveryClauseAndAnsweredByItsOwnTest {
         Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
         TypeSymbol.AtModule at = TypeSymbols.declared(new TypeKey(symbols.module(), name));
         return FieldDomains.of(at,
-                (Hir.Data) symbols.declaredNode(at.key()), symbols,
+                (Hir.Data) symbols.declaredNode(at.key()),
+                RuleReadings.of(compilation, "demo"),
                 souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
     }
 }

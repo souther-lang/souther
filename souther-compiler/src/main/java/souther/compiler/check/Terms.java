@@ -57,6 +57,11 @@ final class Terms {
 
     private final Symbols symbols;
 
+    /** The scope and the clause representation this reading was made with, for the readings below
+     *  that ask what a declaration states. Held rather than rebuilt: a reader composing its own
+     *  would be free to compose a different one. */
+    private final RuleReadingSource rules;
+
     /** The symbols this reading was made against — what a reader holding this reading folds an
      *  expression of it against, rather than reaching for a library of its own. */
     Symbols symbols() {
@@ -311,22 +316,6 @@ final class Terms {
     }
 
     /**
-     * A reading over the discharge tree, reading every declaration's clauses off the declaration.
-     *
-     * <p>Which is what a type another module declares is read by either way (spec
-     * §invariant-discharge-representation). A reading of the module being checked has its clauses in
-     * the representation the discharge rules are written at and passes them.
-     */
-    Terms(Symbols symbols, ReadingPolicy policy) {
-        this(symbols, Of.THE_DISCHARGE_TREE, policy);
-    }
-
-    /** The same, over {@code reading}'s tree. */
-    Terms(Symbols symbols, Of reading, ReadingPolicy policy) {
-        this(symbols, reading, policy, new Clauses(symbols, Map.of()));
-    }
-
-    /**
      * A reading over {@code reading}'s tree, told where the declarations' invariants are.
      *
      * <p>{@code clauses} is what lets a recipe say what choosing an arm settles where the arm binds
@@ -335,6 +324,7 @@ final class Terms {
      */
     Terms(Symbols symbols, Of reading, ReadingPolicy policy, Clauses clauses) {
         this.symbols = symbols;
+        this.rules = new RuleReadingSource(symbols, clauses.analysisRepresentation());
         this.reading = reading;
         this.policy = policy;
         this.predicates = new Predicates(this);
@@ -975,7 +965,7 @@ final class Terms {
         // this has to keep, so the reaching is taken over both kinds of edge and not over the
         // recipes alone ({@link #reached}).
         InductiveBounds.Walk made = new InductiveBounds.Walk(seed, accumulator, step,
-                StepInputFacts.of(walk, inside, this, symbols, policy, reached(step)));
+                StepInputFacts.of(walk, inside, this, rules, policy, reached(step)));
         computedBy(atom, new AtomKnowledge.Computation.Reduction(made));
     }
 
@@ -1012,7 +1002,7 @@ final class Terms {
             return;
         }
         UniversalElementFacts elements =
-                UniversalElementFacts.of(accumulating.container(), at, this, symbols, policy);
+                UniversalElementFacts.of(accumulating.container(), at, this, rules, policy);
         computedBy(atom, new AtomKnowledge.Computation.Reduction(new InductiveBounds.Walk(
                 seed, accumulator, step,
                 StepInputFacts.ofTheElement(elements, element, this, reached(step)))));

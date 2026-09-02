@@ -4,6 +4,8 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.DefaultStdlib;
 import souther.compiler.ast.Hir;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.NumericAnswers;
 import souther.compiler.check.ReadingPolicy;
@@ -47,6 +49,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class WhatIsRealizedForANumberReadsBackAsThatNumberTest {
 
     private static final Symbols SYMBOLS = Symbols.none(DefaultStdlib.get());
+
+    private static final RuleReadingSource RULES = RuleReadings.ofNoClauseFiled(SYMBOLS);
     private static final ReadingPolicy POLICY = new ReadingPolicy(64, 12);
     private static final TermPath AT = TermPath.of("x");
 
@@ -133,7 +137,7 @@ class WhatIsRealizedForANumberReadsBackAsThatNumberTest {
                 Place asked = Count.of(each);
                 TermRealizations.Realization made =
                         TermRealizations.at(source,
-                                orders, asked, NothingTheRulesSay.REGION, SYMBOLS, POLICY);
+                                orders, asked, NothingTheRulesSay.REGION, RULES, POLICY);
                 // An operation that builds nothing at a number is not a failure of this: whether
                 // anything answers it is `EveryAnswerItCanGiveHasASourceValue`, asked below.
                 if (!(made instanceof TermRealizations.Realization.Built built)) {
@@ -177,7 +181,7 @@ class WhatIsRealizedForANumberReadsBackAsThatNumberTest {
             for (long each : answerable(term)) {
                 assertInstanceOf(TermRealizations.Realization.Built.class,
                         TermRealizations.at(source,
-                                orders, Count.of(each), NothingTheRulesSay.REGION, SYMBOLS,
+                                orders, Count.of(each), NothingTheRulesSay.REGION, RULES,
                                 POLICY),
                         operation + " says every number it answers is one some value answers, and"
                                 + " nothing was built for " + each);
@@ -286,7 +290,7 @@ class WhatIsRealizedForANumberReadsBackAsThatNumberTest {
             Place asked = Count.of(each);
             TermRealizations.Realization made =
                     TermRealizations.at(source,
-                            orders, asked, NothingTheRulesSay.REGION, SYMBOLS, POLICY);
+                            orders, asked, NothingTheRulesSay.REGION, RULES, POLICY);
             TermRealizations.Realization.Built built = assertInstanceOf(
                     TermRealizations.Realization.Built.class, made,
                     qualified + " answers " + each + " of some date, so there is one to offer");

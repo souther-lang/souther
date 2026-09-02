@@ -3,9 +3,10 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.core.Contract;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
 import souther.compiler.check.Comparison;
 import souther.compiler.check.StatedContract;
-import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.diag.Citation;
 import souther.compiler.inputs.InputDomain;
@@ -13,7 +14,6 @@ import souther.compiler.inputs.InputReads;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
-import souther.compiler.query.Scopes;
 import souther.compiler.types.BindingId;
 
 import java.util.LinkedHashMap;
@@ -60,7 +60,7 @@ class WhatAComparisonIsARuleAboutTest {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
         String module = compilation.modules().get(0);
-        Symbols symbols = Scopes.derived(compilation.db(), module).value();
+        RuleReadingSource rules = RuleReadings.of(compilation, module);
         StatedContract stated =
                 compilation.db().ask(new Bodies.StatedContracts(module)).value().get("f");
         InputDomain inputs =
@@ -80,7 +80,7 @@ class WhatAComparisonIsARuleAboutTest {
             roots.putIfAbsent(param.binding(), param.name());
         }
         return ComparisonAssessment.of("f", comparison, Citation.of(binary.pos()),
-                inputs.reading(symbols),
+                inputs.reading(rules),
                 InputReads.ofWhatIsDeclared(roots), rule.value(), false,
                 new souther.compiler.reach.ComparisonArrival.NoProjection());
     }

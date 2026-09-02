@@ -2,6 +2,7 @@ package souther.compiler.inputs;
 
 import souther.compiler.ast.Hir;
 import souther.compiler.check.NumberAt;
+import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.FieldDomains;
 import souther.compiler.check.NarrowedBounds;
 import souther.compiler.check.RuleKey;
@@ -76,20 +77,21 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
      * lifted as ends alone, a wrapper relating two of the record's fields narrowed nothing and a
      * wrapper clause nothing could read left every edge under it looking certain.
      */
-    static PlacedRules of(TermPath root, Type type, Symbols symbols, ReadingPolicy policy) {
-        return of(root, type, symbols, policy, null);
+    static PlacedRules of(TermPath root, Type type, RuleReadingSource source,
+                          ReadingPolicy policy) {
+        return of(root, type, source, policy, null);
     }
 
     /** The same, of a value narrowed out of another whose rules name some of the same positions. */
-    static PlacedRules of(TermPath root, Type type, Symbols symbols, ReadingPolicy policy,
+    static PlacedRules of(TermPath root, Type type, RuleReadingSource source, ReadingPolicy policy,
                           Reaching alsoReaching) {
-        TypeSymbol read = readAs(type, symbols);
+        TypeSymbol read = readAs(type, source.symbols());
         // One composer for this reading, made where the reading is. What {@link #admits} builds is
         // the set a position of this value finally admits, met out of the rules here and the rules
         // of the value this was narrowed from — one answer, however many paths are asked about it.
         // Made per call instead, every ask would get its own allowance and the whole of what a
         // reading costs would be bounded by nothing.
-        return new PlacedRules(root, read, Rules.of(read, symbols, policy), alsoReaching,
+        return new PlacedRules(root, read, Rules.of(read, source, policy), alsoReaching,
                 souther.compiler.values.Allowance.ofAdmittedValues());
     }
 

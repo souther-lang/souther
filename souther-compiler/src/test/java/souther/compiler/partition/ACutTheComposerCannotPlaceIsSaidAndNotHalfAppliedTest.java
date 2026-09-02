@@ -2,10 +2,11 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
-import souther.compiler.check.Symbols;
 import souther.compiler.diag.Citation;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.inputs.InputDomain;
@@ -19,7 +20,6 @@ import souther.compiler.numeric.Place;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
-import souther.compiler.query.Scopes;
 import souther.compiler.query.Shapes;
 import souther.compiler.source.SourceId;
 
@@ -142,7 +142,7 @@ class ACutTheComposerCannotPlaceIsSaidAndNotHalfAppliedTest {
     private static Generator.BoundaryAttempt composing(Axis axis, Place at, OnTheWay.TakenIn taken) {
         return Generator.probeFixing(subject(), axis.path() + " = " + at,
                 Map.of(new RealizationTarget.AtOnePosition(axis.term()), at),
-                new Reachability.Reaching(domain().quantities(symbols()).region(),
+                new Reachability.Reaching(domain().quantities(rules()).region(),
                         Requirements.NONE, List.of(taken)),
                 Generator.CandidateCheck.ANY);
     }
@@ -171,8 +171,8 @@ class ACutTheComposerCannotPlaceIsSaidAndNotHalfAppliedTest {
         return COMPILATION.modules().get(0);
     }
 
-    private static Symbols symbols() {
-        return Scopes.derived(COMPILATION.db(), module()).value();
+    private static RuleReadingSource rules() {
+        return RuleReadings.of(COMPILATION, module());
     }
 
     private static Hir.SpecBehavior spec() {
@@ -195,7 +195,7 @@ class ACutTheComposerCannotPlaceIsSaidAndNotHalfAppliedTest {
     }
 
     private static List<Axis> axes() {
-        return Partitions.of(spec().name(), domain(), symbols(), ReadAs.THE_COMPILATION_DOES)
+        return Partitions.of(spec().name(), domain(), rules(), ReadAs.THE_COMPILATION_DOES)
                 .axes();
     }
 
@@ -203,7 +203,7 @@ class ACutTheComposerCannotPlaceIsSaidAndNotHalfAppliedTest {
         Map<String, Sig> sigs = COMPILATION.db().ask(new Bodies.Signatures(module())).value();
         List<String> names = new ArrayList<>();
         spec().params().forEach(each -> names.add(each.name()));
-        return MeasuredInput.of(spec().name(), domain().reading(symbols()),
-                Partitions.of(spec().name(), domain(), symbols(), ReadAs.THE_COMPILATION_DOES));
+        return MeasuredInput.of(spec().name(), domain().reading(rules()),
+                Partitions.of(spec().name(), domain(), rules(), ReadAs.THE_COMPILATION_DOES));
     }
 }

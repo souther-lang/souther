@@ -1,6 +1,7 @@
 package souther.compiler.inputs;
 
 import souther.compiler.check.NumericMeasures;
+import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.types.Type;
@@ -35,7 +36,9 @@ public final class InputNumber {
      * <p>The argument of a taking has to be a location: {@code List.length(List.map(f, xs))} counts
      * something no path names, and a boundary on it could not be looked for in a row.
      */
-    public static NumericTerm of(Core e, InputDomain inputs, InputReads reads, Symbols symbols) {
+    public static NumericTerm of(Core e, InputDomain inputs, InputReads reads,
+                                 RuleReadingSource source) {
+        Symbols symbols = source.symbols();
         NumericMeasures.Measured measured = NumericMeasures.takenIn(e);
         if (measured != null) {
             // A taking is of a location, so an argument that stands at none is one there is no
@@ -46,12 +49,12 @@ public final class InputNumber {
             };
             if (of != null) {
                 return NumericTerm.TakenOf.of(measured.operation(), of,
-                        inputs.typeAt(of, symbols), symbols);
+                        inputs.typeAt(of, source), symbols);
             }
             // A location the operation is not taken of, or a value standing at none. The second is
             // a walk's answer, and a number over the values it walked is a term of its own where
             // those values are read from a place.
-            return overARun(measured, inputs, reads, symbols);
+            return overARun(measured, inputs, reads, source);
         }
         // And a number of the input is the value at a position, so an expression naming none names
         // no number here.
@@ -92,7 +95,8 @@ public final class InputNumber {
      * reading short rather than a line somewhere it does not go.
      */
     private static NumericTerm overARun(NumericMeasures.Measured measured, InputDomain inputs,
-                                        InputReads reads, Symbols symbols) {
+                                        InputReads reads, RuleReadingSource source) {
+        Symbols symbols = source.symbols();
         Core walk = measured.of();
         InputReads where = reads;
         // By the bindings met, so a name that came round to itself stops rather than being followed
@@ -131,7 +135,7 @@ public final class InputNumber {
         if (over == null) {
             return null;
         }
-        Type stands = inputs.typeAt(under, symbols);
+        Type stands = inputs.typeAt(under, source);
         return stands == null ? null
                 : NumericTerm.TakenOver.of(measured.operation(), over, stands, symbols);
     }

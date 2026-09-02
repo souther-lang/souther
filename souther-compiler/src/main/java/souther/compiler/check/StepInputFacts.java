@@ -73,12 +73,12 @@ record StepInputFacts(Map<FactSubject, Bounds> at, Map<FactSubject, Granularity>
      * one of the things {@link UniversalElementFacts} reads to answer it.
      */
     static StepInputFacts of(Reductions.Reducing r, Denotations inside, Terms terms,
-                             Symbols symbols, ReadingPolicy policy,
+                             RuleReadingSource source, ReadingPolicy policy,
                              Set<FactSubject> namedByTheStep) {
         Gathering gathering = new Gathering(terms, namedByTheStep);
         List<Core.Binder> params = r.step().params();
         UniversalElementFacts elements =
-                UniversalElementFacts.of(r.container(), inside, terms, symbols, policy);
+                UniversalElementFacts.of(r.container(), inside, terms, source, policy);
         for (int i = 0; i < params.size(); i++) {
             Core.Binder param = params.get(i);
             if (param == r.accumulator()) {
@@ -88,7 +88,7 @@ record StepInputFacts(Map<FactSubject, Bounds> at, Map<FactSubject, Granularity>
                 elements.at(inside.subject(param.binding()), terms).forEach(gathering::holds);
                 continue;
             }
-            guaranteed(param, handedAt(r, i), inside, terms, symbols, policy, gathering);
+            guaranteed(param, handedAt(r, i), inside, terms, source, policy, gathering);
         }
         return gathering.gathered();
     }
@@ -135,12 +135,13 @@ record StepInputFacts(Map<FactSubject, Bounds> at, Map<FactSubject, Granularity>
      * on the other, and nothing here reads a declaration.
      */
     private static void guaranteed(Core.Binder param, Type handed, Denotations inside, Terms terms,
-                                   Symbols symbols, ReadingPolicy policy, Gathering gathering) {
+                                   RuleReadingSource source, ReadingPolicy policy,
+                                   Gathering gathering) {
         FactSubject root = inside.subject(param.binding());
         if (root == null) {
             return;
         }
-        ValueGuarantees.of(handed, symbols, policy).forEach(
+        ValueGuarantees.of(handed, source, policy).forEach(
                 (path, bounds) -> gathering.holds(terms.under(root, path), bounds));
     }
 

@@ -4,7 +4,7 @@ import souther.compiler.check.Carrier;
 import souther.compiler.check.DeclaredBounds;
 import souther.compiler.check.MatchedEndAttribution;
 import souther.compiler.check.NarrowedBounds;
-import souther.compiler.check.Symbols;
+import souther.compiler.check.RuleReadingSource;
 import souther.compiler.inputs.Position;
 import souther.compiler.numeric.EndSide;
 import souther.compiler.numeric.Endpoint;
@@ -37,13 +37,13 @@ final class LocalInspection {
      * widening that hands the declared ones back belongs to the position, so a reader applying one
      * of its own here would be making that decision a second time and in another place.
      */
-    static LocalPartition of(Position position, Symbols symbols,
+    static LocalPartition of(Position position, RuleReadingSource ruleSource,
                              souther.compiler.check.ReadingPolicy policy) {
         // Said to be classes of this position's own measure as they are built. What a class means is
         // the same wherever it stands; which number's values it divides is this reading's answer,
         // and a reader working it back out of the meaning would be answering it again.
         List<PartitionClass> classes =
-                PartitionClasses.of(position.obligationCases(), position.view(), symbols, policy)
+                PartitionClasses.of(position.obligationCases(), position.view(), ruleSource, policy)
                         .stream().map(each -> each.ofTheNumber(position.term())).toList();
         DeclaredBounds.Bounds axis = position.nothingExists() ? null
                 : axisBounds(position.ownEnds(), position.rangeLeft());

@@ -2,10 +2,11 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
-import souther.compiler.check.Symbols;
 import souther.compiler.diag.Citation;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.inputs.InputDomain;
@@ -17,7 +18,6 @@ import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
-import souther.compiler.query.Scopes;
 import souther.compiler.query.Shapes;
 import souther.compiler.source.SourceId;
 
@@ -111,7 +111,7 @@ class AConditionOverASharedNameIsOneTheComposerCanPlaceTest {
         Axis fixed = axisAt("n");
         return Generator.probeFixing(subject(), "n = " + at,
                 Map.of(new RealizationTarget.AtOnePosition(fixed.term()), at),
-                new Reachability.Reaching(domain().quantities(symbols()).region(),
+                new Reachability.Reaching(domain().quantities(rules()).region(),
                         Requirements.NONE,
                         List.of(new OnTheWay.TakenIn(WHERE, new ReachingCuts.Cut(
                                 LinearForm.atom(new NumericTerm.ValueOf(DEADLINE)), Rel.GE)))),
@@ -134,8 +134,8 @@ class AConditionOverASharedNameIsOneTheComposerCanPlaceTest {
         return COMPILATION.modules().get(0);
     }
 
-    private static Symbols symbols() {
-        return Scopes.derived(COMPILATION.db(), module()).value();
+    private static RuleReadingSource rules() {
+        return RuleReadings.of(COMPILATION, module());
     }
 
     private static Hir.SpecBehavior spec() {
@@ -172,7 +172,7 @@ class AConditionOverASharedNameIsOneTheComposerCanPlaceTest {
         List<String> names = new ArrayList<>();
         spec().params().forEach(each -> names.add(each.name()));
         assertTrue(names.contains("n"), "the model takes the position the row is fixed at");
-        return MeasuredInput.of(spec().name(), domain().reading(symbols()),
+        return MeasuredInput.of(spec().name(), domain().reading(rules()),
                 AxesATestWrote.asAMeasurement(spec().name(), axes()));
     }
 }

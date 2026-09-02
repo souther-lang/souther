@@ -15,6 +15,7 @@ import souther.compiler.diag.Citation;
 import souther.compiler.examples.FixtureReader;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.AtomSpace;
+import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.CheckSurface;
 import souther.compiler.check.Sig;
 import souther.compiler.check.DerivedSymbols;
@@ -656,9 +657,11 @@ public final class Adequacy {
             Answer<CheckSurface> prepared =
                     db.ask(new Shapes.CheckSurface(name));
             Answer<DerivedSymbols> scope = Names.derivedSymbols(db, name);
+            Answer<RuleReadingSource> reading = Shapes.ruleReading(db, name);
             Answer<Map<String, Sig>> sigs = db.ask(new Bodies.Signatures(name));
             Answer<Hir.Module> settled = db.ask(new Bodies.Settled(name));
-            if (!prepared.present() || !scope.present() || !sigs.present() || !settled.present()) {
+            if (!prepared.present() || !scope.present() || !sigs.present() || !settled.present()
+                    || !reading.present()) {
                 return Answer.absent();
             }
             // A module a declaration of which has no boundary representation is one this says
@@ -687,7 +690,7 @@ public final class Adequacy {
                     // all the same.
                     Answer<Hir.FnDef> fn = db.ask(new Bodies.SettledFn(name, spec.name()));
                     out.put(spec.name(), InputDomain.of(spec, fn.present() ? fn.value() : null,
-                            sig, scope.value(), db.ask(new Front.Reading()).value(),
+                            sig, reading.value(), db.ask(new Front.Reading()).value(),
                             // What this behavior's body reads, so the reading is closed over the
                             // paths its measurement names as well as the ones the enumeration
                             // finds. Asked as the reading is made and never after it: one that
@@ -816,8 +819,9 @@ public final class Adequacy {
         souther.compiler.partition.Partitions.Partitioning divided =
                 db.ask(new Divided(module, spec.name())).value();
         Answer<DerivedSymbols> scope = Names.derivedSymbols(db, module);
+        Answer<RuleReadingSource> reading = Shapes.ruleReading(db, module);
         Answer<Map<String, Sig>> sigs = db.ask(new Bodies.Signatures(module));
-        if (divided == null || !scope.present() || !sigs.present()) {
+        if (divided == null || !scope.present() || !sigs.present() || !reading.present()) {
             return null;
         }
         // The reading is the one the classification holds, not one looked up beside it. Both this
@@ -829,7 +833,7 @@ public final class Adequacy {
             return null;
         }
         return souther.compiler.partition.MeasuredInput.of(spec.name(),
-                domain.reading(scope.value()), divided);
+                domain.reading(reading.value()), divided);
     }
 
     /** What one behavior states about its answer, or nothing where it states none. A behavior
@@ -866,7 +870,8 @@ public final class Adequacy {
             Answer<CheckSurface> prepared =
                     db.ask(new Shapes.CheckSurface(name));
             Answer<DerivedSymbols> scope = Names.derivedSymbols(db, name);
-            if (!prepared.present() || !scope.present()) {
+            Answer<RuleReadingSource> reading = Shapes.ruleReading(db, name);
+            if (!prepared.present() || !scope.present() || !reading.present()) {
                 return Answer.absent();
             }
             souther.compiler.query.Bodies.Elaborated checked =
@@ -918,7 +923,7 @@ public final class Adequacy {
                 }
                 out.put(spec.name(), souther.compiler.check.PathReachability.of(
                         body, db.ask(new Front.Reading()).value(), spec, fn, plan, read,
-                        scope.value()));
+                        reading.value()));
             }
             return Answer.of(Ordered.map(out));
         }
@@ -1403,8 +1408,10 @@ public final class Adequacy {
             Answer<CheckSurface> prepared =
                     db.ask(new Shapes.CheckSurface(name));
             Answer<DerivedSymbols> scope = Names.derivedSymbols(db, name);
+            Answer<RuleReadingSource> reading = Shapes.ruleReading(db, name);
             Answer<Map<String, Sig>> sigs = db.ask(new Bodies.Signatures(name));
-            if (!prepared.present() || !scope.present() || !sigs.present()) {
+            if (!prepared.present() || !scope.present() || !sigs.present()
+                    || !reading.present()) {
                 return Answer.absent();
             }
             Hir.SpecBehavior spec = specOf(prepared.value(), behavior);
@@ -1436,7 +1443,7 @@ public final class Adequacy {
                     checked == null
                             ? souther.compiler.coverage.CoverageSites.Plan.NONE : checked.plan();
             return Answer.of(Coverages.partitioningOf(spec,
-                    domain.reading(scope.value()), bodies.get(behavior),
+                    domain.reading(reading.value()), bodies.get(behavior),
                     checked == null ? souther.compiler.check.ElementBindings.NONE
                             : checked.elementBindings().getOrDefault(behavior,
                                     souther.compiler.check.ElementBindings.NONE),
@@ -1711,9 +1718,9 @@ public final class Adequacy {
                 db.ask(new Obligations(module, scope)).value();
         java.util.SequencedMap<souther.compiler.partition.BorderObligationPoint,
                 BorderAccount.Answer> resolved = new LinkedHashMap<>();
-        Symbols symbols = Names.derivedSymbols(db, module).value();
+        RuleReadingSource ruleReading = Shapes.ruleReading(db, module).value();
         souther.compiler.check.ReadingPolicy policy = db.ask(new Front.Reading()).value();
-        if (points == null || symbols == null || policy == null) {
+        if (points == null || ruleReading == null || policy == null) {
             return new BorderAccount(module, scope, resolved);
         }
         // What the declarations wrote their lines on, for the points that have a declaration.
@@ -1736,7 +1743,7 @@ public final class Adequacy {
             }
             resolved.put(debt.point(), new BorderAccount.Answer(debt,
                     debt.id().owedToTheDeclaration().isPresent()
-                            ? axisOf(debt.id(), declarations, symbols, policy) : null,
+                            ? axisOf(debt.id(), declarations, ruleReading, policy) : null,
                     PointResolver.resolveAt(debt.owed(), List.copyOf(debt.met().keySet()),
                             reading -> readingOf(db, module, scope, debt, debt.at(), reading))));
         }
@@ -2787,7 +2794,7 @@ public final class Adequacy {
                     planFor(subject, owed, partitions.get(behavior));
             souther.compiler.partition.FillResult composed;
             try {
-                composed = rowsFor(spec, sig, symbols, asked,
+                composed = rowsFor(spec, sig, Shapes.ruleReading(db, name).value(), asked,
                         baselines(name, spec, sig,
                                 db.ask(new Bodies.ModuleDefinitions(name)).value(),
                                 prepared.value(), symbols,
@@ -3293,7 +3300,7 @@ public final class Adequacy {
         }
 
         private static souther.compiler.partition.FillResult rowsFor(
-                Hir.SpecBehavior spec, Sig sig, Symbols symbols,
+                Hir.SpecBehavior spec, Sig sig, RuleReadingSource reading,
                 souther.compiler.partition.GenerationPlan asked,
                 List<Generator.Baseline> baselines,
                 souther.compiler.partition.Partitions.Partitioning partitioning,
@@ -3327,7 +3334,7 @@ public final class Adequacy {
                     .toList();
             return Generator.fill(asked, existing, check,
                     souther.compiler.reading.CoverageRead
-                            .of(spec.name(), body, plan, domain, symbols),
+                            .of(spec.name(), body, plan, domain, reading),
                     trial, baselines, budget);
         }
 
@@ -3986,9 +3993,9 @@ public final class Adequacy {
             // Where a declaration is, which is what an owner is named by and is no part of what the
             // points are. Asked here, once, and its absence is this measure having no answer rather
             // than a debt built without it.
-            Symbols symbols = Names.derivedSymbols(db, name).value();
+            RuleReadingSource reading = Shapes.ruleReading(db, name).value();
             souther.compiler.check.ReadingPolicy policy = db.ask(new Front.Reading()).value();
-            if (symbols == null || policy == null) {
+            if (reading == null || policy == null) {
                 return Answer.absent();
             }
             Map<TypeSymbol, souther.compiler.check.DeclaredBorders> declarations =
@@ -4004,7 +4011,7 @@ public final class Adequacy {
                 List<DeclaredDebt.Owner> owners = new ArrayList<>();
                 for (TypeSymbol.AtModule owner : debt.ownersIn(name)) {
                     owners.add(new DeclaredDebt.Owner(owner,
-                            declarationRead(declarations, owner, symbols, policy).at()));
+                            declarationRead(declarations, owner, reading, policy).at()));
                 }
                 // A point this module keeps no account of: a row its own reading settled, which
                 // is that body's to write, or a line owed to declarations elsewhere. Left out here
@@ -4014,7 +4021,7 @@ public final class Adequacy {
                     continue;
                 }
                 out.add(new DeclaredDebt(debt,
-                        axisOf(debt.id(), declarations, symbols, policy), owners));
+                        axisOf(debt.id(), declarations, reading, policy), owners));
             }
             return Answer.of(new DeclaredBoundaries(out, went));
         }
@@ -4036,11 +4043,12 @@ public final class Adequacy {
      */
     private static String axisOf(souther.compiler.partition.BorderObligationId id,
                                  Map<TypeSymbol, souther.compiler.check.DeclaredBorders> read,
-                                 Symbols symbols, souther.compiler.check.ReadingPolicy policy) {
+                                 RuleReadingSource reading,
+                                 souther.compiler.check.ReadingPolicy policy) {
         TypeSymbol declaredOn = id.owedToTheDeclaration().orElseThrow(
                 () -> new IllegalStateException("what a line with no declaration is on is not"
                         + " something anybody wrote: " + id));
-        String named = declarationRead(read, declaredOn, symbols, policy)
+        String named = declarationRead(read, declaredOn, reading, policy)
                 // Which line of the declaration this is, asked of the rule. Taken apart
                 // here, a reader would be deciding which rules have a clause and a
                 // conjunct, which is the rule's own answer.
@@ -4054,9 +4062,9 @@ public final class Adequacy {
      *  clauses have ends, and each of them would otherwise read the declaration again. */
     private static souther.compiler.check.DeclaredBorders declarationRead(
             Map<TypeSymbol, souther.compiler.check.DeclaredBorders> kept, TypeSymbol declaredOn,
-            Symbols symbols, souther.compiler.check.ReadingPolicy policy) {
+            RuleReadingSource reading, souther.compiler.check.ReadingPolicy policy) {
         return kept.computeIfAbsent(declaredOn,
-                each -> souther.compiler.check.DeclaredBorders.of(each, symbols, policy));
+                each -> souther.compiler.check.DeclaredBorders.of(each, reading, policy));
     }
 
 

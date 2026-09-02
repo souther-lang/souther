@@ -52,9 +52,9 @@ public final class DeclaredClauses {
     }
 
     /** Every conjunct of every rule written on {@code type} and on the types it wraps. */
-    public static List<Conjunct> of(Type type, Symbols symbols) {
+    public static List<Conjunct> of(Type type, RuleReadingSource source) {
         List<Conjunct> out = new ArrayList<>();
-        for (TypeOps.Layer layer : TypeOps.newtypeChain(type, symbols)) {
+        for (TypeOps.Layer layer : TypeOps.newtypeChain(type, source.symbols())) {
             // A layer wraps a declaration a module wrote, which is what having a `Hir.Data` for it
             // says; the pattern is where the layer's name says so.
             if (!(layer.named() instanceof TypeSymbol.AtModule named)) {
@@ -63,8 +63,8 @@ public final class DeclaredClauses {
             // The clauses with the declaration each was written on, which is what names the line
             // (ADR-0090). Read flat, every clause a spread brought in was named after the type that
             // spread it, and two clauses of one declaration were one rule.
-            for (TypeOps.Declared declared
-                    : TypeOps.declaredInvariants(named, layer.data(), symbols, _ -> null)) {
+            for (TypeOps.Declared declared : TypeOps.declaredForAnalysis(
+                    named, layer.data(), source.symbols(), source.invariants())) {
                 RuleRef.Invariant rule = new RuleRef.Invariant(Clause.Ref.of(declared));
                 int conjunct = -1;
                 for (Hir.Expr each : ClauseHelpers.conjunctsOf(declared.clause().expr())) {

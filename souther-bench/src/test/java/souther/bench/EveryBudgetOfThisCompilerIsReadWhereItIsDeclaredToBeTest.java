@@ -62,7 +62,8 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
             Map.entry("souther.compiler.partition.Witnesses#<clinit>()V",
                     "how many elements and characters a proposal holds, and how many pairings"),
             Map.entry("souther.compiler.partition.Witnesses#sized("
-                            + "Lsouther/compiler/types/Type;ILsouther/compiler/check/Symbols;"
+                            + "Lsouther/compiler/types/Type;I"
+                            + "Lsouther/compiler/check/RuleReadingSource;"
                             + "Lsouther/compiler/check/ReadingPolicy;Ljava/util/Set;)"
                             + "Lsouther/compiler/partition/Witnesses$Built;",
                     "stops at the elements and the characters, and says which"),
@@ -72,7 +73,7 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/numeric/Place;Lsouther/compiler/types/Type;"
                             + "Lsouther/compiler/inputs/TermOrders;"
                             + "Lsouther/compiler/inputs/SearchRegion;"
-                            + "Lsouther/compiler/check/Symbols;"
+                            + "Lsouther/compiler/check/RuleReadingSource;"
                             + "Lsouther/compiler/check/ReadingPolicy;)"
                             + "Lsouther/compiler/partition/TermRealizations$Realization;",
                     "records the three a total can be short of, where each decides not to go on"),

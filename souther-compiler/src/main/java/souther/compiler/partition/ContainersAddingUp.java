@@ -5,6 +5,7 @@ import souther.compiler.check.DeclaredBounds;
 import souther.compiler.check.ReadingPolicy;
 import souther.compiler.check.Shape;
 import souther.compiler.check.NumericMeasures;
+import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeView;
 import souther.compiler.inputs.BoundaryDomain;
@@ -83,7 +84,7 @@ final class ContainersAddingUp {
      */
     static TermRealizations.Realization to(Place answer, Type container,
                                            TermOrders orders, SearchRegion within,
-                                           Symbols symbols, ReadingPolicy policy) {
+                                           RuleReadingSource ruleSource, ReadingPolicy policy) {
         // Which number is being built for, read off the answer that says which number it is of.
         // Named beside it, the two were free to be about two numbers and this would fill a
         // container found under one path with elements counted on another's order.
@@ -92,13 +93,15 @@ final class ContainersAddingUp {
         if (!(answer instanceof Count total) || elements == null) {
             return none(Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
         }
-        if (!(TypeView.of(container, symbols).shape() instanceof Shape.Sequence holding)) {
+        if (!(TypeView.of(container, ruleSource.symbols()).shape()
+                instanceof Shape.Sequence holding)) {
             // A total is taken of a container, and what is declared at the root is not one. Which is
             // a term nobody should have been able to build; said here rather than by composing a
             // value of whatever shape is there.
             return none(Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
         }
-        DeclaredBounds.CountRange howMany = howMany(container, target.writeRoot(), within, symbols);
+        DeclaredBounds.CountRange howMany =
+                howMany(container, target.writeRoot(), within, ruleSource);
         NumericDomain.Bounds runs =
                 within.runsBetween(new NumericTerm.ValueOf(occurrences(target)));
         Ends ends = Ends.of(runs == null ? NumericDomain.Bounds.OPEN : runs, elements);
@@ -133,7 +136,7 @@ final class ContainersAddingUp {
             for (Spread how : Spread.values()) {
                 List<BigDecimal> split = splitting(total.at(), many, ends, how, elements);
                 FixtureTemplate one = split == null ? null
-                        : filled(split, holding, container, under, elements, symbols, policy);
+                        : filled(split, holding, container, under, elements, ruleSource, policy);
                 if (one == null || built.contains(one)) {
                     continue;
                 }
@@ -169,9 +172,11 @@ final class ContainersAddingUp {
      * would be a second reading of the rules, free to part from the one the search was run against.
      */
     private static DeclaredBounds.CountRange howMany(Type container, TermPath root,
-                                                     SearchRegion within, Symbols symbols) {
+                                                     SearchRegion within,
+                                                     RuleReadingSource ruleSource) {
+        Symbols symbols = ruleSource.symbols();
         DeclaredBounds.CountRange declared =
-                DeclaredBounds.countsHeld(container, symbols, null);
+                DeclaredBounds.countsHeld(container, ruleSource, null);
         ValueName.Stdlib counts = NumericMeasures.takenOf(container, symbols);
         NumericTerm.FromOnePosition term = counts == null ? null
                 : NumericTerm.TakenOf.of(counts, root, container, symbols);
@@ -327,21 +332,22 @@ final class ContainersAddingUp {
      */
     private static FixtureTemplate filled(List<BigDecimal> split, Shape.Sequence holding,
                                           Type container, List<TermPath.Step> under,
-                                          Carrier elements, Symbols symbols, ReadingPolicy policy) {
+                                          Carrier elements, RuleReadingSource ruleSource, ReadingPolicy policy) {
         if (holding.kind() != Shape.Sequence.Kind.LIST) {
             return null;
         }
         List<FixtureTemplate> values = new ArrayList<>();
         for (BigDecimal each : split) {
             FixtureTemplate one = Partitions.carrying(holding.element(), under,
-                    FixtureTemplate.on(elements, Count.of(each), symbols.scope()::reach),
-                    symbols, policy);
+                    FixtureTemplate.on(elements, Count.of(each),
+                            ruleSource.symbols().scope()::reach),
+                    ruleSource, policy);
             if (one == null) {
                 return null;
             }
             values.add(one);
         }
-        return Witnesses.wrapped(container, FixtureTemplate.collection(values), symbols);
+        return Witnesses.wrapped(container, FixtureTemplate.collection(values), ruleSource);
     }
 
     /**

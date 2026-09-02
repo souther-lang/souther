@@ -36,10 +36,10 @@ import java.util.Set;
 public final class DeclaredSubjects {
 
     /** The numbers the rules on {@code type} and on the types it wraps are written about. */
-    public static Set<NumberAt.OfWhatNumber> of(Type type, Symbols symbols,
+    public static Set<NumberAt.OfWhatNumber> of(Type type, RuleReadingSource source,
                                                 ReadingPolicy policy) {
         Set<NumberAt.OfWhatNumber> out = new LinkedHashSet<>();
-        for (NumberAt<RuleKey> each : Rules.of(type, symbols, policy).bounds().writtenAbout()) {
+        for (NumberAt<RuleKey> each : Rules.of(type, source, policy).bounds().writtenAbout()) {
             if (each.position().isTheValueItself()) {
                 out.add(each.of());
             }

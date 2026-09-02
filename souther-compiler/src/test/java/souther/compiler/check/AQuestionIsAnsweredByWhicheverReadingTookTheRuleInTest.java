@@ -54,7 +54,8 @@ class AQuestionIsAnsweredByWhicheverReadingTookTheRuleInTest {
         TypeSymbol.AtModule named = TypeSymbols.declared(new TypeKey(module, type));
         Hir.Data data = (Hir.Data) symbols.declaredNode(named.key());
         assertNotNull(data, "no `" + type + "` declared");
-        return FieldDomains.of(named, data, symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES).accounting();
+        return FieldDomains.of(named, data, RuleReadings.of(compilation, module),
+                souther.compiler.query.ReadAs.THE_COMPILATION_DOES).accounting();
     }
 
     /** What the author called the clause, of a rule that is a declaration's invariant. */
@@ -136,7 +137,8 @@ class AQuestionIsAnsweredByWhicheverReadingTookTheRuleInTest {
         Symbols symbols = Scopes.derived(compilation.db(), module).value();
         TypeSymbol.AtModule holder = TypeSymbols.declared(new TypeKey(module, "Holder"));
         return FieldDomains.of(holder,
-                        (Hir.Data) symbols.declaredNode(holder.key()), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES)
+                        (Hir.Data) symbols.declaredNode(holder.key()), RuleReadings.of(compilation, module),
+                souther.compiler.query.ReadAs.THE_COMPILATION_DOES)
                 .at(RuleKey.of("len")).bounds().min().at().toString();
     }
 
@@ -358,7 +360,8 @@ class AQuestionIsAnsweredByWhicheverReadingTookTheRuleInTest {
         Symbols symbols = Scopes.derived(compilation.db(), module).value();
         TypeSymbol.AtModule named = TypeSymbols.declared(new TypeKey(module, "Length"));
         FieldDomains read = FieldDomains.of(named,
-                (Hir.Data) symbols.declaredNode(named.key()), symbols, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+                (Hir.Data) symbols.declaredNode(named.key()), RuleReadings.of(compilation, module),
+                souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
 
         assertFalse(read.projection().isCertified(), "the bounds hold no hole");
         assertEquals(Set.of(), rule(read.accounting(), "said").unaccounted(),

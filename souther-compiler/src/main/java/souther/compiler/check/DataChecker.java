@@ -82,7 +82,7 @@ public final class DataChecker {
 
     public static boolean isInvariantBearing(TypeSymbol typeName, Symbols symbols) {
         return typeName != null && symbols.declaredNode(typeName) instanceof Hir.Data d
-                && !TypeOps.effectiveInvariants(d, symbols).isEmpty();
+                && !TypeOps.settledInvariants(d, symbols).isEmpty();
     }
 
     /**
@@ -93,7 +93,7 @@ public final class DataChecker {
      */
     private static void checkClauseNames(Hir.Data data, Symbols symbols) {
         Set<String> seen = new HashSet<>();
-        for (Hir.InvariantClause clause : TypeOps.effectiveInvariants(data, symbols)) {
+        for (Hir.InvariantClause clause : TypeOps.settledInvariants(data, symbols)) {
             String name = clause.name().orElse(null);
             if (name != null && !seen.add(name)) {
                 throw CompileException.of(Diagnostic
@@ -443,17 +443,30 @@ public final class DataChecker {
      *
      * <p>What that count is and how it is reached is {@link TypeCardinality}; which of the
      * declarations with no value to say so about, and what showed it of the one the report sits at,
-     * is {@link UninhabitableTypes}. What is left here is saying it.
+     * is {@link UninhabitableTypes}, asked for as an answer of its own. What is left here is saying
+     * it: the groups arrive worked out, and this writes the sentence and places it.
      *
      * <p>The proof arrives with the group and nothing here reads the declaration again to work out
      * which sentence to write. That is the whole of why it arrives: a reader that picked between two
      * sentences by looking at the declaration a second time would be a second reader of a question
      * the count already answered, free to pick the sentence the count did not mean.
+     *
+     * <p>What arrives says whether there was a count at all ({@link UninhabitableTypes.WithNoValue}),
+     * and what stopped one that was tried is reported where it was tried. Nothing is concluded here
+     * from there being no count: a module whose declarations could not be counted is one this says
+     * nothing about, and it still has everything else about it to report.
      */
-    static List<CompileException> typesWithNoValue(List<Hir.Def> declarations, Symbols symbols,
-                                                   ReadingPolicy policy) {
-        List<UninhabitableTypes.UninhabitableGroup> groups = UninhabitableTypes.withNoValueOfTheirOwn(
-                declarations, TypeCardinality.solve(declarations, symbols, policy));
+    static List<CompileException> typesWithNoValue(
+            UninhabitableTypes.WithNoValue counted, Symbols symbols) {
+        // A count that found nothing and no count at all are one empty list of sentences and two
+        // different facts. Nothing here needs to tell them apart — what would be written is nothing
+        // either way — and the difference is kept because the reader that does need it is the one
+        // deciding whether a declaration may be refused for having no value.
+        List<UninhabitableTypes.UninhabitableGroup> groups = switch (counted) {
+            case UninhabitableTypes.WithNoValue.Counted(List<UninhabitableTypes
+                    .UninhabitableGroup> found) -> found;
+            case UninhabitableTypes.WithNoValue.NotCounted _ -> List.of();
+        };
         // How many of the lacks reported here each declaration is part of. A declaration in one of
         // them is a declaration whose lack the group accounts for entirely, and a suggestion about
         // that group is a way out. A declaration in two is in neither's: what a group is established

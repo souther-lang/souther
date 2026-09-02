@@ -50,7 +50,9 @@ class FollowingWhatANameWasGivenCostsTheChainOnceTest {
     /** The steps taken following names while the arithmetic of {@code x(links)} is read, where each
      * link is a name for the one before it and the first is arithmetic. */
     private static long followedOver(int links) {
-        PathEngine engine = new PathEngine(Symbols.none(DefaultStdlib.get()), Map.of(), Terms.Of.THE_DISCHARGE_TREE, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+        PathEngine engine = new PathEngine(Symbols.none(DefaultStdlib.get()),
+                RuleReadings.noClauseFiled(Symbols.none(DefaultStdlib.get())),
+                Terms.Of.THE_DISCHARGE_TREE, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         Hir.Binders binders = new Hir.Binders(OWNER);
         Core.Binder first = CoreBinders.of(binders.binder("x0", POS));
         Denotations at = engine.enter(Terms.read(CoreBinders.of(binders.binder("a", POS)), Type.INT, POS),

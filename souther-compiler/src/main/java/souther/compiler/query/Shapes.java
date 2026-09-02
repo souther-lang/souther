@@ -1,8 +1,12 @@
 package souther.compiler.query;
 
 import souther.compiler.ast.Hir;
+import souther.compiler.check.AnalysisInvariants;
 import souther.compiler.check.ClauseDischarge;
+import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.InvariantSettled;
+import souther.compiler.check.Lower;
+import souther.compiler.check.UninhabitableTypes;
 import souther.compiler.check.ClauseHelpers;
 import souther.compiler.check.ClausesForDischarge;
 import souther.compiler.check.ExecutableInvariants;
@@ -459,7 +463,9 @@ public final class Shapes {
         public Answer<Map<TypeSymbol, List<ClauseDischarge>>> compute(Db db) {
             Answer<souther.compiler.check.Expandable> expandable = db.ask(new Expandable(name));
             Answer<ResolvedSymbols> scope = Names.resolvedSymbols(db, name);
-            if (!expandable.present() || !scope.present()) {
+            Answer<RuleReadingSource> reading =
+                    ruleReading(db, name);
+            if (!expandable.present() || !scope.present() || !reading.present()) {
                 return Answer.absent();
             }
             Answer<Map<String, Hir.FnDef>> imported = db.ask(new Bodies.ImportedDefinitions(name));
@@ -484,7 +490,8 @@ public final class Shapes {
                         for (ClausesForDischarge.ClauseReading written
                                 : declaring.conjunctsOf(declared.expr(), new BindingOwner.OfData(named))) {
                             clauses.add(InvariantChecker.capabilityOf(written, named, data,
-                                    scope.value(), db.ask(new Front.Reading()).value()).named(declared.name()));
+                                    reading.value(),
+                                    db.ask(new Front.Reading()).value()).named(declared.name()));
                         }
                     }
                     out.put(named, List.copyOf(clauses));
@@ -497,6 +504,76 @@ public final class Shapes {
     }
 
     /**
+     * Which of this module's declarations no value satisfies, and what shows it.
+     *
+     * <p>An answer of its own so that what a body's check depends on is this and not the clauses it
+     * was worked out from. A body is refused where a type it names has no value, so the fact is one
+     * a body's check reads; the clauses of every declaration beside it are not, and a check that
+     * reached for them would be re-run by a declaration that cannot change its answer.
+     *
+     * <p>What is answered is the groups and not the diagnostics they are rendered as. A group is
+     * some names and what showed them empty, which two readings of the same module settle the same
+     * way; a diagnostic carries a position and a sentence, and comparing those would make this
+     * answer differ whenever the file moved.
+     */
+    public record TypesWithNoValue(String name) implements Key<UninhabitableTypes.WithNoValue> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<UninhabitableTypes.WithNoValue> compute(Db db) {
+            Answer<Lower.Lowered> lowering = db.ask(new Bodies.Lowering(name));
+            Answer<RuleReadingSource> reading = ruleReading(db, name);
+            Answer<souther.compiler.check.ReadingPolicy> policy = db.ask(new Front.Reading());
+            if (!lowering.present() || !policy.present()) {
+                return Answer.absent();
+            }
+            // Answered either way, because what a reader of this does about a count it has not been
+            // given is that reader's: a module whose declarations could not be checked still has
+            // everything else about it to report, and going absent here would take that with it.
+            if (!reading.present()) {
+                return Answer.of(new UninhabitableTypes.WithNoValue.NotCounted());
+            }
+            List<Hir.Def> declarations = lowering.value().settled().defs();
+            try {
+                return Answer.of(new UninhabitableTypes.WithNoValue.Counted(
+                        UninhabitableTypes.withNoValueOfTheirOwn(declarations,
+                                souther.compiler.check.TypeCardinality.solve(
+                                        declarations, reading.value(), policy.value()))));
+            } catch (CompileException e) {
+                // Said here, as what this attempt found, and not handed on in the answer: a reader
+                // of the answer is told there was no count and concludes nothing from it, which is
+                // the whole of what it may do with a count that did not happen.
+                return Answer.of(new UninhabitableTypes.WithNoValue.NotCounted(), Report.of(e));
+            }
+        }
+    }
+
+    /**
+     * What reading this module's declarations as a static analysis takes: its scope, and its clauses
+     * in the representation that analysis reads.
+     *
+     * <p>Where the two meet. The representation's own answer is computed from the scope, so a scope
+     * that carried it would be a query depending on itself; asked separately, a reader that needs
+     * both can be given one. What a reader below is handed is the pair or nothing.
+     *
+     * <p>Paired here and not memoised as an answer of its own. What a query answers has to say when
+     * two of them are the same thing, and a scope does not: made an answer, this pair would compare
+     * by identity, every recomputation would look like a change, and everything downstream of a
+     * module's clauses would be re-checked on a blank line. The two halves are answers and settle
+     * that between them; the pair is what a caller holds while it reads.
+     */
+    public static Answer<RuleReadingSource> ruleReading(Db db, String name) {
+        Answer<ResolvedSymbols> scope = Names.resolvedSymbols(db, name);
+        Answer<AnalysisInvariants> clauses = db.ask(new InvariantsForDischarge(name));
+        return scope.present() && clauses.present()
+                ? Answer.of(new RuleReadingSource(scope.value(), clauses.value()))
+                : Answer.absent();
+    }
+
+    /**
      * The invariants this module declares, in the representation the invariant-discharge analysis
      * reads ({@link souther.compiler.check.InliningPolicy#DISCHARGE}) — beside the settled form that
      * every other stage sees on the declaration itself.
@@ -506,16 +583,21 @@ public final class Shapes {
      * analysis reads what it is given, and there the operations have already become the folds they
      * are. A clause declared here that names an imported definition is this module's clause and stays
      * inside the fragment — the definition is substituted, as it is everywhere the invariant is read.
+     *
+     * <p>Answered as {@link AnalysisInvariants} and not as the map it holds, so that a caller with no
+     * answer cannot write an empty one. The two are the same shape and mean opposite things — a
+     * module whose representation could not be built, and one that reads as stating nothing — and
+     * nothing about a map stops a reader confusing them.
      */
     public record InvariantsForDischarge(String name)
-            implements Key<Map<TypeSymbol, List<Hir.InvariantClause>>> {
+            implements Key<AnalysisInvariants> {
         @Override
         public String module() {
             return name;
         }
 
         @Override
-        public Answer<Map<TypeSymbol, List<Hir.InvariantClause>>> compute(Db db) {
+        public Answer<AnalysisInvariants> compute(Db db) {
             Answer<souther.compiler.check.Expandable> expandable = db.ask(new Expandable(name));
             Answer<ResolvedSymbols> scope = Names.resolvedSymbols(db, name);
             if (!expandable.present() || !scope.present()) {

@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
 import souther.compiler.check.TypeView;
@@ -33,8 +34,8 @@ final class ValueClasses {
      *             wears and written back under them
      */
     static PartitionClass classAt(Value value, TypeView view, List<TypeSymbol> worn,
-                                  Symbols symbols) {
-        FixtureTemplate bare = written(value, view.declared(), symbols);
+                                  RuleReadingSource ruleSource) {
+        FixtureTemplate bare = written(value, view.declared(), ruleSource.symbols());
         if (bare == null) {
             throw new IllegalStateException(
                     "the reading of `" + Type.show(view.declared()) + "` states a distinction at a"
@@ -42,8 +43,9 @@ final class ValueClasses {
                             + " about what stands at it");
         }
         Recognition is = Recognition.Under.of(worn,
-                new Recognition.AtAValue(value, placeOf(value, view.declared(), symbols)));
-        FixtureTemplate stands = Witnesses.wrapped(view.declared(), bare, symbols);
+                new Recognition.AtAValue(value,
+                        placeOf(value, view.declared(), ruleSource.symbols())));
+        FixtureTemplate stands = Witnesses.wrapped(view.declared(), bare, ruleSource);
         return (stands == null
                 // A name the position wears that nothing here writes. The class is the position's
                 // either way and a row already sitting in it still covers it; what is absent is the

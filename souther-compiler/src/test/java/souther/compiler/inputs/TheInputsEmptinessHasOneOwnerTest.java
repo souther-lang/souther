@@ -3,18 +3,18 @@ package souther.compiler.inputs;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.ast.Hir;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
 import souther.compiler.check.Emptiness;
 import souther.compiler.check.FieldDomains;
 import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
-import souther.compiler.check.Symbols;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 import souther.compiler.values.AdmissibleValues;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
-import souther.compiler.query.Scopes;
 import souther.compiler.query.Shapes;
 
 import java.lang.reflect.Method;
@@ -133,7 +133,7 @@ class TheInputsEmptinessHasOneOwnerTest {
 
                 behavior take : (p: P, q: Q) -> Taken
                 """, "take");
-        Quantities asked = read.inputs().quantities(read.symbols());
+        Quantities asked = read.inputs().quantities(read.rules());
 
         // Neither parameter's rules leave nothing, and neither can be told about the other.
         assertTrue(asked.emptiness().isEmpty());
@@ -180,7 +180,7 @@ class TheInputsEmptinessHasOneOwnerTest {
         source.append(") -> Taken\n");
 
         Read read = read(source.toString(), "take");
-        Quantities asked = read.inputs().quantities(read.symbols());
+        Quantities asked = read.inputs().quantities(read.rules());
         assertTrue(asked.emptiness().isEmpty(), "nothing here contradicts");
 
         List<?> factors = factorsOf(asked);
@@ -247,11 +247,11 @@ class TheInputsEmptinessHasOneOwnerTest {
     /** What proves the input holds nothing, read off the one thing that answers. */
     private static Emptiness why(String source) {
         Read read = read(source, "take");
-        EmptyInput held = read.inputs().quantities(read.symbols()).emptiness().orElseThrow();
+        EmptyInput held = read.inputs().quantities(read.rules()).emptiness().orElseThrow();
         return ((EmptyInput.ProvedByTheRules) held).why();
     }
 
-    private record Read(InputDomain inputs, Symbols symbols) {}
+    private record Read(InputDomain inputs, RuleReadingSource rules) {}
 
     private static Read read(String source, String behavior) {
         Compilation compilation = Compilation.ofSource(source, "Main");
@@ -261,8 +261,8 @@ class TheInputsEmptinessHasOneOwnerTest {
         Map<String, Sig> sigs = compilation.db().ask(new Bodies.Signatures(module)).value();
         Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().stream()
                 .filter(b -> b.name().equals(behavior)).findFirst().orElseThrow();
-        Symbols symbols = Scopes.derived(compilation.db(), module).value();
-        return new Read(InputDomain.of(spec, sigs.get(behavior), symbols,
-                ReadAs.THE_COMPILATION_DOES), symbols);
+        RuleReadingSource rules = RuleReadings.of(compilation, module);
+        return new Read(InputDomain.of(spec, sigs.get(behavior), rules,
+                ReadAs.THE_COMPILATION_DOES), rules);
     }
 }

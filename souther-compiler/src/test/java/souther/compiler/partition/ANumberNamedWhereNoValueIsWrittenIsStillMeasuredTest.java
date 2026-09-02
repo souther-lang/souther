@@ -3,10 +3,11 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.ast.Hir;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.Sig;
 import souther.compiler.check.Prepared;
-import souther.compiler.check.Symbols;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Quantities;
@@ -14,7 +15,6 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
-import souther.compiler.query.Scopes;
 import souther.compiler.query.Shapes;
 import souther.compiler.types.Type;
 
@@ -82,7 +82,7 @@ class ANumberNamedWhereNoValueIsWrittenIsStillMeasuredTest {
     void theOrderIsAnsweredWhereThereIsNoPosition() {
         Read read = of();
 
-        assertEquals(Carrier.ofValue(Type.INT, read.symbols()),
+        assertEquals(Carrier.ofValue(Type.INT, read.rules().symbols()),
                 read.quantities().ordersOf(new NumericTerm.ValueOf(DEADLINE)).answered(),
                 "the declarations put a whole number at the name every case spreads");
     }
@@ -119,23 +119,23 @@ class ANumberNamedWhereNoValueIsWrittenIsStillMeasuredTest {
     /** What the model under test comes to: the reading of the input, what it answers about numbers,
      *  and the traversal a value is written by. */
     private record Read(InputDomain domain, Quantities quantities, BehaviorInputs written,
-                        Symbols symbols) {}
+                        RuleReadingSource rules) {}
 
     private static Read of() {
         Compilation compilation = Compilation.ofSource(SPREAD, "Main");
         compilation.answerEverything();
         String module = compilation.modules().get(0);
         Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
-        Symbols symbols = Scopes.derived(compilation.db(), module).value();
+        RuleReadingSource rules = RuleReadings.of(compilation, module);
         Map<String, Sig> sigs = compilation.db().ask(new Bodies.Signatures(module)).value();
         Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().stream()
                 .filter(each -> each.name().equals("check")).findFirst().orElseThrow();
         InputDomain domain = compilation.db()
                 .ask(new souther.compiler.query.Adequacy.Inputs(module)).value().get("check");
         assertNotNull(domain, "the model under test compiles and its input is read");
-        return new Read(domain, domain.quantities(symbols),
+        return new Read(domain, domain.quantities(rules),
                 new BehaviorInputs(spec.params().stream().map(Hir.Param::name).toList(),
-                        sigs.get("check").inputTypes(), symbols, ReadAs.THE_COMPILATION_DOES),
-                symbols);
+                        sigs.get("check").inputTypes(), rules, ReadAs.THE_COMPILATION_DOES),
+                rules);
     }
 }

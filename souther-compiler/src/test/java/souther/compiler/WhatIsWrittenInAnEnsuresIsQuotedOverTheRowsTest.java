@@ -2,6 +2,8 @@ package souther.compiler;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
 import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
@@ -265,13 +267,13 @@ class WhatIsWrittenInAnEnsuresIsQuotedOverTheRowsTest {
 
     /** A behavior nothing was asked for and nothing composed for, which is what an empty offer is. */
     private static Adequacy.Filling nothingOffered() {
-        souther.compiler.check.Symbols symbols =
-                souther.compiler.check.Symbols.none(DefaultStdlib.get());
+        RuleReadingSource rules = RuleReadings.ofNoClauseFiled(
+                souther.compiler.check.Symbols.none(DefaultStdlib.get()));
         souther.compiler.partition.MeasuredInput subject =
                 souther.compiler.partition.MeasuredInput.of("findTodo",
-                        souther.compiler.inputs.InputDomain.of(List.of(), symbols,
+                        souther.compiler.inputs.InputDomain.of(List.of(), rules,
                                 souther.compiler.query.ReadAs.THE_COMPILATION_DOES)
-                                .reading(symbols),
+                                .reading(rules),
                         souther.compiler.partition.AxesATestWrote.asAMeasurement(
                                 "findTodo", List.of()));
         return new Adequacy.Filling(
