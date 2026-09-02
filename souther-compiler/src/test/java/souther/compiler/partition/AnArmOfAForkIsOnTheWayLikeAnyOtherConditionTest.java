@@ -143,12 +143,11 @@ class AnArmOfAForkIsOnTheWayLikeAnyOtherConditionTest {
         assertNotNull(checked, "the model under test compiles");
         Core body = checked.behaviorBodies().get(behavior);
         assertNotNull(body, () -> "the model under test writes " + behavior);
-        CoverageSites.Plan plan = CoverageSites.of(checked.behaviorBodies(), checked.decisions(),
-                checked.supplied());
+        CoverageSites.Plan plan = checked.plan();
         Map<String, souther.compiler.inputs.InputDomain> inputs =
                 compilation.db().ask(new Adequacy.Inputs(module)).value();
         GuardThresholds.Guards guards =
-                GuardThresholds.of(behavior, body, plan, inputs.get(behavior), symbols);
+                GuardThresholds.of(body, plan, inputs.get(behavior), symbols);
         return List.copyOf(guards.reaching().byComparison().values());
     }
 }

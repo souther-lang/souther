@@ -39,7 +39,7 @@ public record Observation(Set<Integer> taken, Set<ComparisonOutcome> comparisons
         // place a run comes back to is evaluated more than once, and a recording that held only
         // which way it went the first time would be saying less than it saw.
         for (ComparisonOutcome way : comparisons) {
-            if (!taken.contains(way.at().emissionSite())) {
+            if (!taken.contains(way.at().value())) {
                 throw new IllegalArgumentException(
                         "a run that saw " + way + " is one that reached " + way.at());
             }
@@ -57,8 +57,8 @@ public record Observation(Set<Integer> taken, Set<ComparisonOutcome> comparisons
         return comparisons.contains(way);
     }
 
-    /** Whether the run reached {@code comparison} at all, whichever way it came out. */
-    public boolean reached(ComparisonOccurrence comparison) {
-        return lit(comparison.emissionSite());
+    /** Whether the run reached {@code site} at all, whichever way the comparison there came out. */
+    public boolean reached(ComparisonEmissionSite site) {
+        return lit(site.value());
     }
 }

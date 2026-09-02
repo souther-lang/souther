@@ -3,6 +3,7 @@ package souther.compiler.check;
 import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
+import souther.compiler.coverage.ComparisonOccurrence;
 import souther.compiler.coverage.ControlPointId;
 import souther.compiler.inputs.Admits;
 import souther.compiler.inputs.InputDomain;
@@ -236,6 +237,18 @@ public final class PathReachability {
     }
 
     /**
+     * Which comparison {@code node} is, where this plan instruments it, or null.
+     *
+     * <p>Two questions and two answers, asked of whichever holds each. Which comparison a node is,
+     * the catalog says, for every comparison the bodies hold; whether a run through it is written
+     * down anywhere, the plan says, for the ones it numbered. What is filed under one of these is
+     * about a place a run can be observed at, so both have to answer.
+     */
+    private static ComparisonOccurrence numbered(Core.Binary node, CoverageSites.Plan plan) {
+        return plan.comparisons().occurrenceAt(node).filter(plan::instruments).orElse(null);
+    }
+
+    /**
      * That the walk answered for every comparison the plan numbered in this body.
      *
      * <p>What the reading owes, checked rather than left to the shape of the walk. Absent and
@@ -257,31 +270,13 @@ public final class PathReachability {
             Core body, CoverageSites.Plan plan, Map<ControlPointId, Reachability> out,
             Map<souther.compiler.coverage.ComparisonOccurrence,
                     souther.compiler.reach.ComparisonArrival> arriving) {
+        // Which comparison this is, and only where the plan numbers one there: what is owed is
+        // owed for the places a run could be recorded at, and a node that is no comparison of this
+        // plan is a node there was nothing to answer about.
         if (body instanceof Core.Binary comparison) {
-            for (boolean result : new boolean[] {true, false}) {
-                ControlPointId where = plan.outcomeOf(comparison, result).orElse(null);
-                if (where != null && !out.containsKey(where)) {
-                    return java.util.Optional.of(
-                            "this reading answered for no run through " + comparison.op()
-                                    + " at " + comparison.pos() + " coming out " + result
-                                    + "; the plan numbered it and a reader below cannot tell an "
-                                    + "answer that was never made from one that settled nothing");
-                }
-            }
-            // And the arrival beside the outcomes: filed with them or not at all, and a finished
-            // walk owes it for the same reason it owes them — a reader below reads an absence as
-            // the answer that restricts nothing, so only an audit here can tell the two apart.
-            //
-            // Which comparison this is, asked of the plan. Read off an outcome's own name instead,
-            // this would say a comparison is numbered where the plan numbered a way out of it, and
-            // the two are the plan's to keep in step rather than a reader's to assume.
-            var at = plan.comparisonAt(comparison).orElse(null);
-            if (at != null && !arriving.containsKey(at)) {
-                return java.util.Optional.of(
-                        "this reading said nothing about what arrives at " + comparison.op()
-                                + " at " + comparison.pos()
-                                + "; the plan numbered it and a reader below cannot tell an "
-                                + "answer that was never made from one that restricts nothing");
+            java.util.Optional<String> here = unansweredAt(comparison, plan, out, arriving);
+            if (here.isPresent()) {
+                return here;
             }
         }
         List<String> missed = new ArrayList<>();
@@ -289,6 +284,44 @@ public final class PathReachability {
                 unanswered(child, plan, out, arriving).ifPresent(missed::add));
         return missed.isEmpty() ? java.util.Optional.empty()
                 : java.util.Optional.of(missed.get(0));
+    }
+
+    /**
+     * What one comparison of the body was owed and did not get, or empty where it was owed nothing.
+     *
+     * <p>Owed only where the plan numbers one here. A node that is no comparison of this plan is a
+     * place no run is recorded at, so there was never an answer for the walk to have missed.
+     */
+    private static java.util.Optional<String> unansweredAt(
+            Core.Binary comparison, CoverageSites.Plan plan,
+            Map<ControlPointId, Reachability> out,
+            Map<souther.compiler.coverage.ComparisonOccurrence,
+                    souther.compiler.reach.ComparisonArrival> arriving) {
+        ComparisonOccurrence which = numbered(comparison, plan);
+        if (which == null) {
+            return java.util.Optional.empty();
+        }
+        for (boolean result : new boolean[] {true, false}) {
+            ControlPointId where = plan.outcomeOf(which, result).orElse(null);
+            if (where != null && !out.containsKey(where)) {
+                return java.util.Optional.of(
+                        "this reading answered for no run through " + comparison.op()
+                                + " at " + comparison.pos() + " coming out " + result
+                                + "; the plan numbered it and a reader below cannot tell an "
+                                + "answer that was never made from one that settled nothing");
+            }
+        }
+        // And the arrival beside the outcomes: filed with them or not at all, and a finished walk
+        // owes it for the same reason it owes them — a reader below reads an absence as the answer
+        // that restricts nothing, so only an audit here can tell the two apart.
+        if (!arriving.containsKey(which)) {
+            return java.util.Optional.of(
+                    "this reading said nothing about what arrives at " + comparison.op()
+                            + " at " + comparison.pos()
+                            + "; the plan numbered it and a reader below cannot tell an answer"
+                            + " that was never made from one that restricts nothing");
+        }
+        return java.util.Optional.empty();
     }
 
     private final PathEngine engine;
@@ -471,10 +504,14 @@ public final class PathReachability {
                             List<PathDecision> decided) {
         // What arrives is about the comparison and not about either way out of it, so it is filed
         // under the comparison the plan names and asked of the plan directly.
-        plan.comparisonAt(comparison).ifPresent(site ->
-                arriving.put(site, arrivalAt(comparison, k, at, reads)));
+        ComparisonOccurrence which = numbered(comparison, plan);
+        if (which == null) {
+            return;
+        }
+        arriving.put(which, arrivalAt(comparison, k, at, reads));
         for (boolean result : new boolean[] {true, false}) {
-            var where = plan.outcomeOf(comparison, result);
+            java.util.Optional<ControlPointId.ComparisonPoint> where =
+                    plan.outcomeOf(which, result);
             if (where.isEmpty()) {
                 continue;
             }

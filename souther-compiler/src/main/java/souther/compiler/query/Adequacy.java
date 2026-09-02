@@ -884,11 +884,8 @@ public final class Adequacy {
                 return Answer.of(Ordered.map(Map.of()));
             }
             souther.compiler.coverage.CoverageSites.Plan plan =
-                    souther.compiler.coverage.CoverageSites.of(bodies,
-                            checked == null
-                                    ? souther.compiler.coverage.DecisionSources.NONE
-                                    : checked.decisions(),
-                            checked == null ? souther.compiler.coverage.SuppliedRules.NONE : checked.supplied());
+                    checked == null
+                            ? souther.compiler.coverage.CoverageSites.Plan.NONE : checked.plan();
             // Asked here and not above, because this is where one is needed: what a behavior's
             // boundary came to is asked of the signatures and the readings together, and the
             // answer above is about there being no places to ask it of. Asked at the way in, a
@@ -1235,11 +1232,9 @@ public final class Adequacy {
             Map<String, souther.compiler.core.Core> producing =
                     checkedBodies == null ? Map.of() : checkedBodies.behaviorBodies();
             souther.compiler.coverage.CoverageSites.Plan producingPlan =
-                    souther.compiler.coverage.CoverageSites.of(producing,
-                            checkedBodies == null
-                                    ? souther.compiler.coverage.DecisionSources.NONE
-                                    : checkedBodies.decisions(),
-                            checkedBodies == null ? souther.compiler.coverage.SuppliedRules.NONE : checkedBodies.supplied());
+                    checkedBodies == null
+                            ? souther.compiler.coverage.CoverageSites.Plan.NONE
+                            : checkedBodies.plan();
             Map<String, souther.compiler.check.PathReachability.Answers.AsRun> reachableArms = db.ask(new Arrived(name)).value();
             return answerEveryBehavior(prepared.value(), behavior ->
                     // What this measure works from, or the fact that it has none. A behavior left
@@ -1293,11 +1288,8 @@ public final class Adequacy {
             Map<String, souther.compiler.check.ElementBindings> elementsOf =
                     checked == null ? Map.of() : checked.elementBindings();
             souther.compiler.coverage.CoverageSites.Plan plan =
-                    souther.compiler.coverage.CoverageSites.of(bodies,
-                            checked == null
-                                    ? souther.compiler.coverage.DecisionSources.NONE
-                                    : checked.decisions(),
-                            checked == null ? souther.compiler.coverage.SuppliedRules.NONE : checked.supplied());
+                    checked == null
+                            ? souther.compiler.coverage.CoverageSites.Plan.NONE : checked.plan();
             Level level = levelOf(db);
             Map<String, RowReading> byTarget = db.ask(new RowReadings(name)).value();
             Map<String, InputDomain> readInputs = db.ask(new Inputs(name)).value();
@@ -1440,12 +1432,8 @@ public final class Adequacy {
             Map<String, souther.compiler.core.Core> bodies =
                     checked == null ? Map.of() : checked.behaviorBodies();
             souther.compiler.coverage.CoverageSites.Plan plan =
-                    souther.compiler.coverage.CoverageSites.of(bodies,
-                            checked == null
-                                    ? souther.compiler.coverage.DecisionSources.NONE
-                                    : checked.decisions(),
-                            checked == null ? souther.compiler.coverage.SuppliedRules.NONE
-                                    : checked.supplied());
+                    checked == null
+                            ? souther.compiler.coverage.CoverageSites.Plan.NONE : checked.plan();
             return Answer.of(Coverages.partitioningOf(spec,
                     domain.reading(scope.value()), bodies.get(behavior),
                     checked == null ? souther.compiler.check.ElementBindings.NONE
@@ -2734,11 +2722,8 @@ public final class Adequacy {
             Map<String, souther.compiler.check.ElementBindings> elementsOf =
                     checked == null ? Map.of() : checked.elementBindings();
             souther.compiler.coverage.CoverageSites.Plan plan =
-                    souther.compiler.coverage.CoverageSites.of(bodies,
-                            checked == null
-                                    ? souther.compiler.coverage.DecisionSources.NONE
-                                    : checked.decisions(),
-                            checked == null ? souther.compiler.coverage.SuppliedRules.NONE : checked.supplied());
+                    checked == null
+                            ? souther.compiler.coverage.CoverageSites.Plan.NONE : checked.plan();
             Map<String, RowReading> byTarget = db.ask(new RowReadings(name)).value();
             Map<String, InputDomain> readInputs = db.ask(new Inputs(name)).value();
             // What the guards above each place leave, asked once for the module and read by
@@ -4050,15 +4035,14 @@ public final class Adequacy {
         TypeSymbol declaredOn = id.owedToTheDeclaration().orElseThrow(
                 () -> new IllegalStateException("what a line with no declaration is on is not"
                         + " something anybody wrote: " + id));
-        souther.compiler.check.FieldDomains.Coordinate at =
-                declarationRead(read, declaredOn, symbols, policy)
-                        // Which line of the declaration this is, asked of the rule. Taken apart
-                        // here, a reader would be deciding which rules have a clause and a
-                        // conjunct, which is the rule's own answer.
-                        .at(id.declaredLine().orElseThrow());
+        String named = declarationRead(read, declaredOn, symbols, policy)
+                // Which line of the declaration this is, asked of the rule. Taken apart
+                // here, a reader would be deciding which rules have a clause and a
+                // conjunct, which is the rule's own answer.
+                .nameOf(id.declaredLine().orElseThrow());
         // A clause whose end this could not read from the declaration has no form to print, and
         // the rule's own name is the whole of what there is to call the line.
-        return at == null ? id.named() : written(at);
+        return named == null ? id.named() : named;
     }
 
     /** The declaration's own reading of its own rules, kept: it draws as many lines as its
@@ -4070,14 +4054,6 @@ public final class Adequacy {
                 each -> souther.compiler.check.DeclaredBorders.of(each, symbols, policy));
     }
 
-    /** The coordinate as a line is named by, which spells the value a newtype wraps the way the
-     *  clause does. */
-    private static String written(souther.compiler.check.FieldDomains.Coordinate at) {
-        String where = at.path().isTheValueItself() ? "value" : at.path().toString();
-        return at.kind() instanceof souther.compiler.check.FieldDomains
-                .CoordinateKind.OfWhatAnOperationAnswers taken
-                ? taken.operation() + "(" + where + ")" : where;
-    }
 
     /**
      * Every point this module's lines are owed a row at, with all the readings of each.

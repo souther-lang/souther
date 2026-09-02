@@ -25,7 +25,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
  * being one. A selector written that way again passes every test that only compares identities.
  *
  * <p>{@link DeclaredBounds#placed} is where that selector is. It took a boolean and takes a
- * {@link FieldDomains.CoordinateKind}, and the path is the caller's already — {@code placedAt(path)}
+ * {@link NumberAt.OfWhatNumber}, and the path is the caller's already — {@code placedAt(path)}
  * is what the list is — so the kind is the whole of what it has to tell apart.
  *
  * <p>Two operations over one path is not a shape the language writes today, because a shape declares
@@ -52,20 +52,21 @@ class AskingForOneNumbersEndsDoesNotAnswerWithAnothersTest {
     }
 
     /** An end above one number of `names`, placed by the clause at {@code by}. */
-    private static FieldDomains.Placed upTo(FieldDomains.Coordinate on, int by, int at) {
+    private static FieldDomains.Placed upTo(NumberAt<RuleKey> on, int by, int at) {
         return new FieldDomains.Placed(on, rule(by), false, Endpoint.inclusive(Count.of(at)), 0);
     }
 
     /** And one below it. */
-    private static FieldDomains.Placed from(FieldDomains.Coordinate on, int by, int at) {
+    private static FieldDomains.Placed from(NumberAt<RuleKey> on, int by, int at) {
         return new FieldDomains.Placed(on, rule(by), true, Endpoint.inclusive(Count.of(at)), 0);
     }
 
-    private static final FieldDomains.Coordinate HOW_LONG =
-            FieldDomains.Coordinate.takenBy(RuleKey.of("names"), LENGTH);
-    private static final FieldDomains.Coordinate HOW_MANY =
-            FieldDomains.Coordinate.takenBy(RuleKey.of("names"), SIZE);
-    private static final FieldDomains.Coordinate ITSELF = FieldDomains.Coordinate.value(RuleKey.of("names"));
+    private static final NumberAt<RuleKey> HOW_LONG =
+            NumberAt.takenOf(RuleKey.of("names"), LENGTH);
+    private static final NumberAt<RuleKey> HOW_MANY =
+            NumberAt.takenOf(RuleKey.of("names"), SIZE);
+    private static final NumberAt<RuleKey> ITSELF =
+            NumberAt.valueOf(RuleKey.of("names"));
 
     /** Both, at one path, each with an end of its own and each named by a clause of its own. */
     private static final List<FieldDomains.Placed> AT_ONE_PATH =
@@ -80,9 +81,9 @@ class AskingForOneNumbersEndsDoesNotAnswerWithAnothersTest {
      */
     @Test
     void eachNumbersEndIsItsOwn() {
-        DeclaredBounds.Bounds howLong = DeclaredBounds.placed(AT_ONE_PATH, HOW_LONG.kind(),
+        DeclaredBounds.Bounds howLong = DeclaredBounds.placed(AT_ONE_PATH, HOW_LONG.of(),
                 Carrier.WHOLE);
-        DeclaredBounds.Bounds howMany = DeclaredBounds.placed(AT_ONE_PATH, HOW_MANY.kind(),
+        DeclaredBounds.Bounds howMany = DeclaredBounds.placed(AT_ONE_PATH, HOW_MANY.of(),
                 Carrier.WHOLE);
 
         assertEquals(Count.of(3), howLong.max().at().at(), "the end the rule about the length drew");
@@ -100,7 +101,7 @@ class AskingForOneNumbersEndsDoesNotAnswerWithAnothersTest {
      */
     @Test
     void andWhatThePositionHoldsIsNeither() {
-        assertNull(DeclaredBounds.placed(AT_ONE_PATH, ITSELF.kind(), Carrier.WHOLE),
+        assertNull(DeclaredBounds.placed(AT_ONE_PATH, ITSELF.of(), Carrier.WHOLE),
                 "no rule here says where the values of the list itself stop");
     }
 
@@ -117,7 +118,7 @@ class AskingForOneNumbersEndsDoesNotAnswerWithAnothersTest {
         List<FieldDomains.Placed> bothSides = List.of(
                 upTo(HOW_LONG, 0, 3), from(HOW_LONG, 1, 1), from(HOW_MANY, 2, 5));
 
-        DeclaredBounds.Bounds howLong = DeclaredBounds.placed(bothSides, HOW_LONG.kind(),
+        DeclaredBounds.Bounds howLong = DeclaredBounds.placed(bothSides, HOW_LONG.of(),
                 Carrier.WHOLE);
 
         assertEquals(Count.of(3), howLong.max().at().at(), "the length's own upper end");
