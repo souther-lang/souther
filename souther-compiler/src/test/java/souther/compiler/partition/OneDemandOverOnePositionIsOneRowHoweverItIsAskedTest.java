@@ -7,7 +7,6 @@ import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
-import souther.compiler.coverage.CoverageSites;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.reading.Interaction;
 import souther.compiler.reading.CoverageRead;
@@ -163,8 +162,7 @@ class OneDemandOverOnePositionIsOneRowHoweverItIsAskedTest {
                     Partitions.of(spec.name(), inputs, symbols,
                             souther.compiler.query.ReadAs.THE_COMPILATION_DOES)),
                     CoverageRead.of(spec.name(), body,
-                            CoverageSites.of(checked.behaviorBodies(), checked.decisions(),
-                checked.supplied()), inputs,
+                            checked.plan(), inputs,
                             symbols));
         }
     }

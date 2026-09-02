@@ -102,7 +102,8 @@ final class CoverageNaming implements Naming<Outcome> {
             // it, so there is nothing here to say. The fork on it is named where the way in is.
             return null;
         }
-        ComparisonOccurrence site = plan.comparisonAt(comparison).orElse(null);
+        ComparisonOccurrence site = plan.comparisons().occurrenceAt(comparison)
+                .filter(plan::instruments).orElse(null);
         // The one reading of this comparison, which is the reading whatever admitted the way used.
         // Read again here, the decision would be said of a number the admission never saw.
         ComparedNumber drawn = numbers.of(comparison, reads);
@@ -110,7 +111,7 @@ final class CoverageNaming implements Naming<Outcome> {
             return null;
         }
         NumericTerm at = drawn.term();
-        return plan.outcomeOf(comparison, held)
+        return plan.outcomeOf(site, held)
                 .flatMap(ControlClaim::of)
                 .map(claim -> one(new Decision(new Condition.Side(at, site, held), claim)))
                 .orElse(null);

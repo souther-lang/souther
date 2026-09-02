@@ -2009,8 +2009,10 @@ public final class Bodies {
      * out has been reported on for that.
      */
     private static Map<String, souther.compiler.claims.Claims> judged(
-            Db db, String module, Hir.Module settled, Map<String, Core> bodies,
+            Db db, souther.compiler.coverage.ModuleBodies of, Hir.Module settled,
             souther.compiler.coverage.DecisionSources decisions, souther.compiler.coverage.SuppliedRules supplied) {
+        String module = of.module();
+        Map<String, Core> bodies = of.bodies();
         ReadingPolicy policy = db.ask(new Front.Reading()).value();
         Answer<DerivedSymbols> scope = Names.derivedSymbols(db, module);
         Answer<Map<String, InputDomain>> inputs =
@@ -2026,7 +2028,7 @@ public final class Bodies {
         // query that answers it for a report depends on this one and cannot be asked from inside
         // it. Both routes call one function over one input; what is not shared is the memo.
         souther.compiler.coverage.CoverageSites.Plan plan =
-                souther.compiler.coverage.CoverageSites.of(bodies, decisions, supplied);
+                souther.compiler.coverage.CoverageSites.of(of, decisions, supplied);
         Map<String, souther.compiler.claims.Claims> out = new LinkedHashMap<>();
         for (Hir.BehaviorDef behavior : settled.behaviors()) {
             Core body = bodies.get(behavior.name());
@@ -2196,20 +2198,21 @@ public final class Bodies {
      */
     public static final class Elaborated {
 
-        private final Map<String, Core> behaviorBodies;
+        private final souther.compiler.coverage.ModuleBodies of;
         private final Map<String, Core> emittedHelpers;
         private final Map<String, souther.compiler.claims.Claims> claims;
         private final Map<String, souther.compiler.check.ElementBindings> elements;
         private final souther.compiler.coverage.DecisionSources decisions;
         private final souther.compiler.coverage.SuppliedRules supplied;
 
-        private Elaborated(Map<String, Core> behaviorBodies, Map<String, Core> emittedHelpers,
+        private Elaborated(souther.compiler.coverage.ModuleBodies of,
+                           Map<String, Core> emittedHelpers,
                            Map<String, souther.compiler.claims.Claims> claims,
                            Map<String, souther.compiler.check.ElementBindings> elements,
                            souther.compiler.coverage.DecisionSources decisions,
                            souther.compiler.coverage.SuppliedRules supplied) {
+            this.of = of;
             this.supplied = supplied;
-            this.behaviorBodies = behaviorBodies;
             this.emittedHelpers = emittedHelpers;
             this.claims = claims;
             this.elements = elements;
@@ -2224,14 +2227,16 @@ public final class Bodies {
          * it replaces leaves everything downstream of the check running again — the emitter, what
          * a report says about a claim, and every measure that reads a body.
          *
-         * <p>All six and not the bodies alone. What a body means to whoever reads it is the Core
-         * together with what was decided about it, so two checks that produced one tree and
-         * disagreed about which rule a fork decides by produced two modules.
+         * <p>Everything it holds, and not the bodies alone. What a body means to whoever reads it is
+         * the Core together with what was decided about it, so two checks that produced one tree and
+         * disagreed about which rule a fork decides by produced two modules — and whose module the
+         * bodies are is as much part of that as the trees, since a name read off these is a name in
+         * that module's words.
          */
         @Override
         public boolean equals(Object other) {
             return other instanceof Elaborated that
-                    && behaviorBodies.equals(that.behaviorBodies)
+                    && of.equals(that.of)
                     && emittedHelpers.equals(that.emittedHelpers)
                     && claims.equals(that.claims)
                     && elements.equals(that.elements)
@@ -2241,8 +2246,25 @@ public final class Bodies {
 
         @Override
         public int hashCode() {
-            return java.util.Objects.hash(behaviorBodies, emittedHelpers, claims, elements,
+            return java.util.Objects.hash(of, emittedHelpers, claims, elements,
                     decisions, supplied);
+        }
+
+        /** Whose module these are the bodies of. */
+        public String module() {
+            return of.module();
+        }
+
+        /**
+         * Where every arm and every comparison of these bodies is, numbered.
+         *
+         * <p>Made from one value, because a plan is of a module's bodies and a name it hands out
+         * says which module. Built from the bodies and the module handed over separately, the two
+         * are only as true as the caller made them — and there are a dozen callers, each holding
+         * one of these and taking the parts off it.
+         */
+        public souther.compiler.coverage.CoverageSites.Plan plan() {
+            return souther.compiler.coverage.CoverageSites.of(of, decisions, supplied);
         }
 
         /** Who owns the rule each fork of this module's bodies decides by. */
@@ -2262,7 +2284,7 @@ public final class Bodies {
 
         /** The Core of each behavior body, by the behavior's name. */
         public Map<String, Core> behaviorBodies() {
-            return behaviorBodies;
+            return of.bodies();
         }
 
         /** The Core of each helper the module emits as a method of its own. */
@@ -2344,7 +2366,8 @@ public final class Bodies {
             for (Hir.FnDef fn : settled.value().fns()) {
                 implemented.add(fn.name());
             }
-            Map<String, Core> bodies = new LinkedHashMap<>();
+            // In the order the module declares them, which is what the numbering below is of.
+            java.util.SequencedMap<String, Core> bodies = new LinkedHashMap<>();
             Map<String, souther.compiler.check.ElementBindings> elements = new LinkedHashMap<>();
             // One reading for the module. Every behavior's check walks the same declarations, so the
             // entries agree wherever two of them wrote one fork; kept as one map so a reader asking
@@ -2401,11 +2424,16 @@ public final class Bodies {
             souther.compiler.coverage.DecisionSources read =
                     new souther.compiler.coverage.DecisionSources(decisions);
             souther.compiler.coverage.SuppliedRules handed = new souther.compiler.coverage.SuppliedRules(supplied);
+            // Whose module these bodies are, said once and here: this is where a module's name and
+            // its trees are both in hand for the first and only time, and everything below takes
+            // the pair rather than two things to put together again.
+            souther.compiler.coverage.ModuleBodies of =
+                    new souther.compiler.coverage.ModuleBodies(name, bodies);
             Map<String, souther.compiler.claims.Claims> claims =
-                    judged(db, name, settled.value(), bodies, read, handed);
+                    judged(db, of, settled.value(), read, handed);
             return Answer.of(
-                    new Elaborated(bodies, module.value().emittedHelpers(), claims, elements, read,
-                            handed),
+                    new Elaborated(of, module.value().emittedHelpers(), claims, elements,
+                            read, handed),
                     contradicted(db, name, claims));
         }
     }

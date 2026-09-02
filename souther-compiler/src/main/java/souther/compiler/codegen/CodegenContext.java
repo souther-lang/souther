@@ -231,8 +231,13 @@ final class CodegenContext {
      * other nodes; a comparison it does not hold is any comparison written outside a condition, which
      * is most of them.
      */
-    java.util.OptionalInt comparisonSiteOf(souther.compiler.core.Core comparison) {
-        return coverage.comparisonSiteOf(comparison);
+    java.util.Optional<souther.compiler.coverage.ComparisonEmissionSite> comparisonSiteOf(
+            souther.compiler.core.Core comparison) {
+        // Which comparison the node is, then where a run through it is written down: the catalog
+        // answers the first for every comparison the bodies hold, and the plan the second for the
+        // ones it instruments. The emitter is walking the tree, so the node is how it gets in.
+        return coverage.comparisons().occurrenceAt(comparison)
+                .flatMap(coverage::emissionSiteOf);
     }
 
     /** Records that one planned arm was emitted. */

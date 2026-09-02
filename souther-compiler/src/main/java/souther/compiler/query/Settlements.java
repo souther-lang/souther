@@ -497,7 +497,7 @@ public record Settlements(List<OfferItem> requested,
             for (AtAPoint one : here) {
                 Settlement said = switch (StandingAtAPoint.met(subject.at(one.line()),
                         List.of(observed), one.criterion(),
-                        one.line().origin().comparisonAt())) {
+                        one.line().origin().recordedAt())) {
                     case StandingAtAPoint.Met.Reached _ -> new Settlement.Settles();
                     case StandingAtAPoint.Met.NotAtPoint _ -> new Settlement.DoesNotSettle();
                     case StandingAtAPoint.Met.NotWatched _ ->

@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import souther.compiler.check.Comparison;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
+import souther.compiler.diag.Citation;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.ReadMeaning;
 import souther.compiler.semantics.ConditionJoin;
@@ -51,15 +52,18 @@ import souther.compiler.semantics.ConditionJoin;
 sealed interface Condition {
 
     /**
-     * The node this is a reading of.
+     * Where this is written, as a report may say it.
      *
      * <p>Kept by every shape, because a reader that could not take one in owes the place it is
      * written. Recovered afterwards from what is under a node, the place would be a child's — a
      * conjunction nothing could turn into a region would be reported at whichever operand happened
      * to be first, which is a second account of where a condition stands and is the kind of thing
      * this vocabulary exists to have one of.
+     *
+     * <p>The place and not the node it was read from. Every reader of this wants somewhere to point
+     * at, and the node would let one ask the tree what the reading has already answered.
      */
-    Core at();
+    Citation at();
 
     /**
      * Two conditions put together, and what the connective makes of them.
@@ -69,7 +73,7 @@ sealed interface Condition {
      *            reads it again for the same answer, and the two readings can be taught different
      *            ones
      */
-    record Joined(Core.Binary at, ConditionJoin how, Condition left, Condition right)
+    record Joined(Citation at, ConditionJoin how, Condition left, Condition right)
             implements Condition {}
 
     /**
@@ -83,16 +87,11 @@ sealed interface Condition {
      *                   an expanded helper is about the argument the call handed it, and read
      *                   against the outer names it is about nothing
      */
-    record Compares(Comparison comparison, InputReads reads) implements Condition {
-
-        @Override
-        public Core at() {
-            return comparison.at();
-        }
-    }
+    record Compares(Comparison comparison, Citation at, InputReads reads)
+            implements Condition {}
 
     /** Where this reading stops: a condition of a shape it has no words for. */
-    record NotRead(Core at) implements Condition {}
+    record NotRead(Citation at) implements Condition {}
 
     /**
      * {@code e} read as a condition, under {@code reads}.
@@ -123,15 +122,15 @@ sealed interface Condition {
         if (e instanceof Core.Binary binary) {
             ConditionJoin joined = ConditionJoin.of(binary.op()).orElse(null);
             if (joined != null) {
-                return new Joined(binary, joined, of(binary.left(), reads, symbols),
-                        of(binary.right(), reads, symbols));
+                return new Joined(Citation.of(binary.pos()), joined,
+                        of(binary.left(), reads, symbols), of(binary.right(), reads, symbols));
             }
             Comparison comparison = Comparison.of(binary).orElse(null);
             if (comparison != null) {
-                return new Compares(comparison, reads);
+                return new Compares(comparison, Citation.of(binary.pos()), reads);
             }
         }
-        return new NotRead(e);
+        return new NotRead(Citation.of(e.pos()));
     }
 
     // Which binaries are comparisons is `Comparison#of`'s answer and is asked rather than spelled

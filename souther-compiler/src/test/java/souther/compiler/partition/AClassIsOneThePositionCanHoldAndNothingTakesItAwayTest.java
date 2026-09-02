@@ -8,7 +8,6 @@ import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
-import souther.compiler.coverage.CoverageSites;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
@@ -80,9 +79,8 @@ class AClassIsOneThePositionCanHoldAndNothingTakesItAwayTest {
         InputDomain inputs = read.compilation().db()
                 .ask(new souther.compiler.query.Adequacy.Inputs(read.module())).value()
                 .get(behavior);
-        GuardThresholds.Guards guards = GuardThresholds.of(behavior, body,
-                CoverageSites.of(checked.behaviorBodies(), checked.decisions(),
-                checked.supplied()), inputs, read.symbols());
+        GuardThresholds.Guards guards = GuardThresholds.of(body,
+                checked.plan(), inputs, read.symbols());
         Partitions.Partitioning base =
                 Partitions.of(read.spec().name(), inputs, read.symbols(), souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         return classesOf(Partitions.withThresholds(base, inputs.quantities(read.symbols()),
@@ -401,9 +399,8 @@ class AClassIsOneThePositionCanHoldAndNothingTakesItAwayTest {
         assertNotNull(checked, "the model under test compiles");
         Core body = checked.behaviorBodies().get(read.spec().name());
         assertNotNull(body, "the behavior under test has a body");
-        GuardThresholds.Guards guards = GuardThresholds.of(read.spec().name(), body,
-                CoverageSites.of(checked.behaviorBodies(), checked.decisions(),
-                checked.supplied()),
+        GuardThresholds.Guards guards = GuardThresholds.of(body,
+                checked.plan(),
                 read.compilation().db()
                         .ask(new souther.compiler.query.Adequacy.Inputs(read.module())).value()
                         .get(read.spec().name()),

@@ -7,7 +7,6 @@ import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
-import souther.compiler.coverage.CoverageSites;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
@@ -70,8 +69,8 @@ class AnArmsBinderNamesTheNarrowedPositionTest {
         Core body = checked.behaviorBodies().get("read");
         assertNotNull(body, "the behavior under test has a body");
         InputDomain inputs = compilation.db().ask(new Adequacy.Inputs(module)).value().get("read");
-        GuardThresholds.Guards guards = GuardThresholds.of("read", body,
-                CoverageSites.of(checked.behaviorBodies(), checked.decisions(), checked.supplied()),
+        GuardThresholds.Guards guards = GuardThresholds.of(body,
+                checked.plan(),
                 inputs, symbols);
         InputDomain read = InputDomain.of(spec, sigs.get("read"), symbols,
                 ReadAs.THE_COMPILATION_DOES);

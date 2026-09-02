@@ -55,7 +55,17 @@ class CoverageSitesTest {
     }
 
     private static CoverageSites.Plan planOf(String source) {
-        return CoverageSites.of(bodiesOf(source), souther.compiler.coverage.DecisionSources.NONE, souther.compiler.coverage.SuppliedRules.NONE);
+        return planOf(bodiesOf(source));
+    }
+
+    /** A plan of {@code bodies}, under a module name this fixture supplies. What the name is does
+     *  not matter to anything here — every question asked below is of one plan, and a name only
+     *  has to tell one module's comparisons from another's. */
+    private static CoverageSites.Plan planOf(Map<String, Core> bodies) {
+        return CoverageSites.of(
+                new ModuleBodies("example", new java.util.LinkedHashMap<>(bodies)),
+                souther.compiler.coverage.DecisionSources.NONE,
+                souther.compiler.coverage.SuppliedRules.NONE);
     }
 
     private static List<String> labels(CoverageSites.Plan plan) {
@@ -186,7 +196,7 @@ class CoverageSitesTest {
                                 | No  -> Score(3)
                         }
                 """);
-        CoverageSites.Plan plan = CoverageSites.of(bodies, souther.compiler.coverage.DecisionSources.NONE, souther.compiler.coverage.SuppliedRules.NONE);
+        CoverageSites.Plan plan = planOf(bodies);
 
         Core.Match outer = (Core.Match) unwrap(bodies.get("scoreFor"));
         Core.Match inner = innerMatch(outer.cases().get(1).body());
@@ -315,7 +325,7 @@ class CoverageSitesTest {
                         | Yes -> unreachable "the caller has already refused a yes"
                         | No  -> Score(0)
                 """);
-        CoverageSites.Plan plan = CoverageSites.of(bodies, souther.compiler.coverage.DecisionSources.NONE, souther.compiler.coverage.SuppliedRules.NONE);
+        CoverageSites.Plan plan = planOf(bodies);
 
         Core.Match match = (Core.Match) unwrap(bodies.get("scoreFor"));
         assertArrayEquals(new int[] {CoverageSites.NO_SITE, 0}, plan.probesOf(match),
@@ -383,7 +393,7 @@ class CoverageSitesTest {
     @Test
     void aSiteIsFoundByTheNodeInstanceTheEmitterHolds() {
         Map<String, Core> bodies = bodiesOf(MODEL);
-        CoverageSites.Plan plan = CoverageSites.of(bodies, souther.compiler.coverage.DecisionSources.NONE, souther.compiler.coverage.SuppliedRules.NONE);
+        CoverageSites.Plan plan = planOf(bodies);
 
         Core body = bodies.get("daysFor");
         Core.Match match = (Core.Match) unwrap(body);
@@ -466,6 +476,6 @@ class CoverageSitesTest {
 
     @Test
     void aModuleWithNoBodiesPlansNothing() {
-        assertSame(true, CoverageSites.of(Map.of(), souther.compiler.coverage.DecisionSources.NONE, souther.compiler.coverage.SuppliedRules.NONE).hasNoProbes());
+        assertSame(true, planOf(Map.<String, Core>of()).hasNoProbes());
     }
 }

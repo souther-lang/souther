@@ -238,18 +238,17 @@ sealed interface ComparisonAssessment {
      * form written two ways agree as arithmetic and are made of different things, so the rule they
      * state would come back as one about no input at all.
      */
-    static ComparisonAssessment of(String behavior, Comparison comparison,
+    static ComparisonAssessment of(String behavior, Comparison comparison, Citation at,
                                    InputReading read, InputReads reads,
                                    BindingId answer,
                                    boolean drawnByAnInvariant,
                                    souther.compiler.reach.ComparisonArrival arrival) {
         Quantities quantities = read.quantities();
-        Core.Binary at = comparison.at();
         // Asked first, and of the whole comparison. A rule that reads the answer anywhere in it is
         // one this reading does not put on the input space, whichever side the answer is on and
         // whatever else stands beside it: `value.n + query.offset <= 20` is about the answer and
         // about an input, and the input is no more measurable here for the input being named.
-        if (readsAnswer(at, answer)) {
+        if (readsAnswer(comparison.left(), answer) || readsAnswer(comparison.right(), answer)) {
             return new AnswerDependent();
         }
         return switch (Cutting.read(behavior, comparison, read, reads)) {
@@ -261,14 +260,14 @@ sealed interface ComparisonAssessment {
             // either, there is no rule about a position to say it of — `2 > 1` is a comparison of
             // constants and states nothing anywhere.
             case Cutting.Read.CutsNothing over -> over.read().isEmpty()
-                    ? aboutNoPosition(at, reads, read.symbols())
+                    ? aboutNoPosition(comparison, reads, read.symbols())
                     : new CutsNothing(AffineReading.filedAt(over.read()));
             // And where the reading stopped, its own answer for having stopped — decided where it
             // stopped rather than worked out again from the comparison afterwards. Here the walk
             // over the expression is the only account of what the rule is about, which is what it
             // is for.
             case Cutting.Read.Stopped stopped -> stopped.why().isEmpty()
-                    ? aboutNoPosition(at, reads, read.symbols())
+                    ? aboutNoPosition(comparison, reads, read.symbols())
                     : new Unread(stopped.why());
             // And where the quantity was read and stands on no order this counts, the carrier is
             // what a reader is owed — at the quantity's own coordinates, because the quantity is
@@ -276,7 +275,7 @@ sealed interface ComparisonAssessment {
             // left when several answers were absent: it says the values here carry no order to
             // draw a line on, and that is exactly what was found.
             case Cutting.Read.NoOrderToCountOn over -> over.over().isEmpty()
-                    ? aboutNoPosition(at, reads, read.symbols())
+                    ? aboutNoPosition(comparison, reads, read.symbols())
                     : new Unread(atEachOf(over.over(),
                             new BlockReason.UnreadComparisonDomain()));
         };
@@ -306,7 +305,7 @@ sealed interface ComparisonAssessment {
      * the second went out as a rule about nothing, and the position it plainly concerns came back
      * as one the model states nothing about.
      */
-    private static ComparisonAssessment aboutNoPosition(Core.Binary comparison, InputReads reads,
+    private static ComparisonAssessment aboutNoPosition(Comparison comparison, InputReads reads,
                                                         Symbols symbols) {
         List<souther.compiler.inputs.TermPath> from = new java.util.ArrayList<>();
         GuardThresholds.cameFrom(comparison, reads, symbols, from);
@@ -322,7 +321,7 @@ sealed interface ComparisonAssessment {
 
     /** What a line comes to on the input space, from the quantity it is on. */
     private static ComparisonAssessment onTheQuantity(
-            Core.Binary comparison, Cutting cutting, Quantities quantities,
+            Citation at, Cutting cutting, Quantities quantities,
             boolean drawnByAnInvariant, souther.compiler.reach.ComparisonArrival arrival) {
         // Whether there is an input at all, before anything is asked about where its values run.
         // A quantity is a function of the input, so where the rules admit no input they admit no
@@ -361,7 +360,7 @@ sealed interface ComparisonAssessment {
             // Named by the comparison that drew it, which is the one thing about such a place this
             // compiler can always say exactly. It is on no position, and writing it out would be as
             // much of it as a pretty-printer got.
-            return new AcrossPositions(cutting, Citation.of(comparison.pos()), places(cutting));
+            return new AcrossPositions(cutting, at, places(cutting));
         }
         Place value = cutting.singles() ? cutting.singledValue() : cutting.dividedValue();
         return new AtAPosition(cutting, divided, value, places(cutting));

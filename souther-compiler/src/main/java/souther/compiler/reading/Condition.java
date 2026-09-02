@@ -47,7 +47,7 @@ public sealed interface Condition {
 
         @Override
         public String toString() {
-            return at + (held ? " holds" : " fails") + "@" + comparison.emissionSite();
+            return at + (held ? " holds" : " fails") + " at " + comparison;
         }
     }
 
