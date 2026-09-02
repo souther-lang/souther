@@ -9,6 +9,7 @@ import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
 import souther.compiler.types.CaseSelector;
 import souther.compiler.types.ReachName;
+import souther.compiler.types.ResolvedCase;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
@@ -63,7 +64,7 @@ class AnArmSaysWhichCaseAValueIsAndDoesNotMakeASecondOneTest {
         Core.Binder x = CoreBinders.of(binders.binder("x", POS));
 
         PathEngine.Entered in = engine.enteringArm(
-                arm(new Core.ResolvedPattern.Single(CaseSelector.direct(FOUND)), x),
+                arm(new Core.ResolvedPattern.Single(aLeaf(FOUND)), x),
                 answer, Known.top(), Denotations.none());
 
         FactSubject opened = in.at().subject(x.binding());
@@ -79,7 +80,7 @@ class AnArmSaysWhichCaseAValueIsAndDoesNotMakeASecondOneTest {
 
         PathEngine.Entered in = engine.enteringArm(
                 arm(new Core.ResolvedPattern.AnyOf(
-                        List.of(CaseSelector.direct(FOUND), CaseSelector.direct(MISSING)),
+                        List.of(aLeaf(FOUND), aLeaf(MISSING)),
                         Type.ref(FOUND)), x),
                 answer, Known.top(), Denotations.none());
 
@@ -96,10 +97,10 @@ class AnArmSaysWhichCaseAValueIsAndDoesNotMakeASecondOneTest {
         Core.Binder second = CoreBinders.of(binders.binder("b", POS));
 
         FactSubject one = engine.enteringArm(
-                arm(new Core.ResolvedPattern.Single(CaseSelector.direct(FOUND)), first),
+                arm(new Core.ResolvedPattern.Single(aLeaf(FOUND)), first),
                 answer, Known.top(), Denotations.none()).at().subject(first.binding());
         FactSubject other = engine.enteringArm(
-                arm(new Core.ResolvedPattern.Single(CaseSelector.direct(FOUND)), second),
+                arm(new Core.ResolvedPattern.Single(aLeaf(FOUND)), second),
                 answer, Known.top(), Denotations.none()).at().subject(second.binding());
 
         assertEquals(one, other);
@@ -113,7 +114,7 @@ class AnArmSaysWhichCaseAValueIsAndDoesNotMakeASecondOneTest {
         Core.Binder x = CoreBinders.of(binders.binder("x", POS));
 
         PathEngine.Entered in = engine.enteringArm(
-                arm(new Core.ResolvedPattern.Single(CaseSelector.optionPresent(Type.INT)), x),
+                arm(new Core.ResolvedPattern.Single(aCarrier(CaseSelector.optionPresent(Type.INT), TypeSymbol.SOME)), x),
                 answer, Known.top(), Denotations.none());
 
         FactSubject optional = engine.terms().subjectOf(answer, Denotations.none());
@@ -132,10 +133,10 @@ class AnArmSaysWhichCaseAValueIsAndDoesNotMakeASecondOneTest {
         Core.Binder second = CoreBinders.of(binders.binder("b", POS));
 
         FactSubject one = engine.enteringArm(
-                arm(new Core.ResolvedPattern.Single(CaseSelector.optionPresent(Type.INT)), first),
+                arm(new Core.ResolvedPattern.Single(aCarrier(CaseSelector.optionPresent(Type.INT), TypeSymbol.SOME)), first),
                 answer, Known.top(), Denotations.none()).at().subject(first.binding());
         FactSubject other = engine.enteringArm(
-                arm(new Core.ResolvedPattern.Single(CaseSelector.optionPresent(Type.INT)), second),
+                arm(new Core.ResolvedPattern.Single(aCarrier(CaseSelector.optionPresent(Type.INT), TypeSymbol.SOME)), second),
                 answer, Known.top(), Denotations.none()).at().subject(second.binding());
 
         assertEquals(one, other);
@@ -150,7 +151,7 @@ class AnArmSaysWhichCaseAValueIsAndDoesNotMakeASecondOneTest {
         Core.Binder x = CoreBinders.of(binders.binder("x", POS));
 
         PathEngine.Entered in = engine.enteringArm(
-                arm(new Core.ResolvedPattern.Single(CaseSelector.optionPresent(Type.INT)), x),
+                arm(new Core.ResolvedPattern.Single(aCarrier(CaseSelector.optionPresent(Type.INT), TypeSymbol.SOME)), x),
                 written, Known.top(), Denotations.none());
 
         assertEquals(engine.terms().subjectOf(three, Denotations.none()),
@@ -165,7 +166,7 @@ class AnArmSaysWhichCaseAValueIsAndDoesNotMakeASecondOneTest {
         Core.Binder x = CoreBinders.of(binders.binder("x", POS));
 
         PathEngine.Entered in = engine.enteringArm(
-                arm(new Core.ResolvedPattern.Single(CaseSelector.direct(FOUND)), x),
+                arm(new Core.ResolvedPattern.Single(aLeaf(FOUND)), x),
                 answer, Known.top(), Denotations.none());
 
         assertEquals(answer, in.at().valueOf(x.binding()),
@@ -190,10 +191,10 @@ class AnArmSaysWhichCaseAValueIsAndDoesNotMakeASecondOneTest {
 
         Denotations outer = reading.enteringArm(
                 arm(new Core.ResolvedPattern.AnyOf(
-                        List.of(CaseSelector.direct(AN_INT), CaseSelector.direct(MISSING)),
+                        List.of(aLeaf(AN_INT), aLeaf(MISSING)),
                         answer.type()), x),
                 answer, Known.top(), Denotations.none()).at();
-        Core.Case inner = arm(new Core.ResolvedPattern.Single(CaseSelector.direct(AN_INT)), y);
+        Core.Case inner = arm(new Core.ResolvedPattern.Single(aLeaf(AN_INT)), y);
         PathEngine.Entered in = reading.enteringArm(inner,
                 new Core.Read("x", x.binding(), answer.type(), POS), Known.top(), outer);
 
@@ -297,8 +298,11 @@ class AnArmSaysWhichCaseAValueIsAndDoesNotMakeASecondOneTest {
         TypeSymbol station = named(symbols, "Station");
         TypeSymbol hospital = named(symbols, "Hospital");
         Type visitKind = Type.ref(named(symbols, "VisitKind"));
+        // Resolved the way the checker resolves an arm, so what the alternatives cover is this
+        // compile's answer rather than one written here.
         Core.ResolvedPattern both = new Core.ResolvedPattern.AnyOf(
-                List.of(CaseSelector.direct(station), CaseSelector.direct(hospital)), visitKind);
+                List.of(CaseSpace.resolve(CaseSelector.direct(station), symbols),
+                        CaseSpace.resolve(CaseSelector.direct(hospital), symbols)), visitKind);
 
         assertTrue(reading.impliedBy(
                         new Guard.Case(CaseSpace.resolve(CaseSelector.direct(once), symbols)), both),
@@ -309,7 +313,17 @@ class AnArmSaysWhichCaseAValueIsAndDoesNotMakeASecondOneTest {
     }
 
     private static Core.ResolvedPattern single(TypeSymbol name) {
-        return new Core.ResolvedPattern.Single(CaseSelector.direct(name));
+        return new Core.ResolvedPattern.Single(aLeaf(name));
+    }
+
+    /** A leaf as this compile would resolve it: a case that covers itself. */
+    private static ResolvedCase aLeaf(TypeSymbol leaf) {
+        return ResolvedCase.of(CaseSelector.direct(leaf), List.of(leaf));
+    }
+
+    /** One of an optional's carriers, which covers itself and no leaf of anything. */
+    private static ResolvedCase aCarrier(CaseSelector carrier, TypeSymbol covers) {
+        return ResolvedCase.of(carrier, List.of(covers));
     }
 
     private static TypeSymbol named(Symbols symbols, String type) {

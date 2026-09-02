@@ -353,11 +353,10 @@ final class PathEngine {
      * holds of every one of them. Nothing special is done about that: the union is what the arm
      * covers.
      *
-     * <p>{@code Core} carries the selector and not what it covers, so the arm's side is resolved
-     * back here. That is this pass crossing into the one that resolves a case, and not a second
-     * reading of what a case means: {@link CaseSpace#resolve} is where that is worked out, and
-     * the selector is what it is asked about — a carrier of an optional is not the case a name of
-     * the same spelling would be.
+     * <p>What the arm covers is taken off the arm. {@code Core} carries each case as this compile
+     * resolved it, so the atoms are already there; resolved again here they would be the same
+     * answer worked out twice, and the day the two differed one side of an inclusion would be
+     * reading a case the other side never saw.
      *
      * <p>A rule under no case applies to every answer, so any arm reaching it is an arm it holds of.
      *
@@ -374,8 +373,8 @@ final class PathEngine {
             return false;
         }
         Set<TypeSymbol> ruleCovers = new LinkedHashSet<>(selected.atoms());
-        for (CaseSelector armCase : pattern.selectors()) {
-            if (!ruleCovers.containsAll(CaseSpace.resolve(armCase, symbols).atoms())) {
+        for (ResolvedCase armCase : pattern.cases()) {
+            if (!ruleCovers.containsAll(armCase.atoms())) {
                 return false;
             }
         }

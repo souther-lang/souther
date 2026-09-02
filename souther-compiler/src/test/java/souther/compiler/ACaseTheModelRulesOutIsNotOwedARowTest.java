@@ -265,6 +265,52 @@ class ACaseTheModelRulesOutIsNotOwedARowTest {
         assertEquals(List.of("E1326"), errorsIn(throughHelper));
     }
 
+    /**
+     * An arm is held to the rules whichever name it is written by.
+     *
+     * <p>What a position divides into is the leaves its subject reaches, so an arm naming a case
+     * that is itself a sum names none of them and an arm over an optional names neither of its
+     * presences. Asked of the position by name, both came back as a position that had settled
+     * nothing — and a claim nothing settles is judged unproven, so {@code unreachable} written on
+     * an arm the model admits went unreported. The leaf spelling of the same claim was reported all
+     * along, which is what made the hole quiet: one of the two spellings of one model was checked.
+     */
+    @Test
+    void anArmNamingACaseAboveLeavesIsHeldToTheRulesToo() {
+        String bySpelling = """
+                module m
+
+                data Station
+                data Hospital
+                data Renkei
+                data OnceKind  = Station | Hospital
+                data VisitKind = OnceKind | Renkei
+
+                data Box = { k: VisitKind }
+                    invariant k == Station
+
+                data Ack = { at: String }
+
+                behavior byLeaf : (b: Box) -> Ack
+                    constructs Ack
+                let byLeaf (b) =
+                    match b.k with
+                        | Station -> unreachable "but the invariant leaves exactly this one"
+                        | Hospital -> Ack { at = "h" }
+                        | Renkei -> Ack { at = "r" }
+
+                behavior byInnerSum : (b: Box) -> Ack
+                    constructs Ack
+                let byInnerSum (b) =
+                    match b.k with
+                        | OnceKind -> unreachable "but the invariant leaves Station, under this"
+                        | Renkei -> Ack { at = "r" }
+                """;
+
+        assertEquals(List.of("E1326", "E1326"), errorsIn(bySpelling),
+                "the arm over the inner sum reaches Station as surely as the arm naming it");
+    }
+
     /** The codes of whatever this model is refused for, in the order they are reported. */
     private static List<String> errorsIn(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");

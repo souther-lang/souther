@@ -15,6 +15,7 @@ import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
 import souther.compiler.query.Scopes;
 import souther.compiler.query.Shapes;
+import souther.compiler.types.CaseSelector;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbols;
 
@@ -75,8 +76,16 @@ class AClassUnderACaseIsOfferedARowAtThatCaseTest {
     }
 
     private static TermPath under(String leaf) {
-        return TermPath.of("query").refine(Refinement.sumCase(
-                TypeSymbols.declared(new TypeKey("example.q", leaf))));
+        return TermPath.of("query").refine(toLeaf(leaf));
+    }
+
+    /** The narrowing to one leaf, spelled the way the checker's resolution of an arm spells it: a
+     *  leaf is a case that covers itself, so selecting it narrows to that one distinction. */
+    private static Refinement toLeaf(String leaf) {
+        souther.compiler.types.TypeSymbol named =
+                TypeSymbols.declared(new TypeKey("example.q", leaf));
+        return Refinement.of(souther.compiler.types.ResolvedCase.of(
+                CaseSelector.direct(named), java.util.List.of(named)));
     }
 
     /** Every class of every position, including the ones only one case has. */
@@ -128,9 +137,7 @@ class AClassUnderACaseIsOfferedARowAtThatCaseTest {
                 "a row that is a GlobalQuery is at the positions the case declares");
         assertFalse(tag.requirements().compatibleWith(sum.requiring(classOf(sum, "FeedQuery"))),
                 "and a row that is a FeedQuery is at none of them");
-        assertEquals(Requirements.NONE.and(TermPath.of("query"),
-                        Refinement.sumCase(
-                                TypeSymbols.declared(new TypeKey("example.q", "GlobalQuery")))),
+        assertEquals(Requirements.NONE.and(TermPath.of("query"), toLeaf("GlobalQuery")),
                 tag.requirements(),
                 "which the path says on its own, with nothing kept beside it");
     }

@@ -179,11 +179,18 @@ class APositionUnderACaseIsAPositionTest {
 
                 behavior open : (b: Box) -> Ack
                 """, "open");
-        Position least = read.at(TermPath.of("b").refine(
-                Refinement.sumCase(caseNamed(read, "Held"))).then("least"));
+        Position least = read.at(TermPath.of("b")
+                .refine(toLeaf(caseNamed(read, "Held"))).then("least"));
         assertNotNull(least, "a field of the case is a position");
         assertTrue(least.rulesLeftUnread().isEmpty(),
                 "and the clause relating it to the field beside it was reached");
+    }
+
+    /** The narrowing to one leaf, spelled the way the checker's resolution of an arm spells it: a
+     *  leaf is a case that covers itself, so selecting it narrows to that one distinction. */
+    private static Refinement toLeaf(souther.compiler.types.TypeSymbol leaf) {
+        return Refinement.of(souther.compiler.types.ResolvedCase.of(
+                souther.compiler.types.CaseSelector.direct(leaf), java.util.List.of(leaf)));
     }
 
     /** The case's own name, taken off the reading that holds it. */

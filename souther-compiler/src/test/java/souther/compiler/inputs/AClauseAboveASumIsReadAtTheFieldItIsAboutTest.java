@@ -446,7 +446,7 @@ class AClauseAboveASumIsReadAtTheFieldItIsAboutTest {
     private static Refinement caseNamedAt(InputDomain read, TermPath sum, String name) {
         for (Case each : read.at(sum).obligationCases()) {
             if (each instanceof Case.SumCase one && one.leaf().name().equals(name)) {
-                return Refinement.sumCase(one.leaf());
+                return Refinement.of(one);
             }
         }
         throw new IllegalStateException("no case named " + name);
@@ -463,7 +463,7 @@ class AClauseAboveASumIsReadAtTheFieldItIsAboutTest {
     private static Refinement caseNamed(InputDomain read, String name) {
         for (Case each : read.at(TermPath.of("h").then("q")).obligationCases()) {
             if (each instanceof Case.SumCase one && one.leaf().name().equals(name)) {
-                return Refinement.sumCase(one.leaf());
+                return Refinement.of(one);
             }
         }
         throw new IllegalStateException("no case named " + name);

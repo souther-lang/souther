@@ -126,9 +126,13 @@ class OneReadingTakesBothRoadsToAPositionTest {
         assertEquals(spelled(reading(List.of(head, tail))), spelled(reading(List.of(tail, head))));
     }
 
+    /** The narrowing to one leaf, spelled the way the checker's resolution of an arm spells it: a
+     *  leaf is a case that covers itself, so selecting it narrows to that one distinction. */
     private static Refinement caseOf(InputDomain read, String name) {
-        return Refinement.sumCase(souther.compiler.types.TypeSymbols.declared(
-                new souther.compiler.types.TypeKey("g", name)));
+        souther.compiler.types.TypeSymbol leaf = souther.compiler.types.TypeSymbols.declared(
+                new souther.compiler.types.TypeKey("g", name));
+        return Refinement.of(souther.compiler.types.ResolvedCase.of(
+                souther.compiler.types.CaseSelector.direct(leaf), List.of(leaf)));
     }
 
     private static InputDomain reading(TermPath demanded) {
