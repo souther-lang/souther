@@ -142,7 +142,7 @@ public record DeclaredTypeEvidence(Symbols symbols, FieldTypes fields,
      */
     public boolean heldToARule(Type type) {
         return type instanceof Type.Ref(TypeSymbol named)
-                && symbols.declarations().declaration(named) instanceof Hir.Data data
+                && symbols.declaredNode(named) instanceof Hir.Data data
                 && !TypeOps.effectiveInvariants(data, symbols).isEmpty();
     }
 
@@ -177,7 +177,7 @@ public record DeclaredTypeEvidence(Symbols symbols, FieldTypes fields,
      */
     public static boolean isNewtype(TypeSymbol name, Symbols symbols) {
         return name != null
-                && symbols.declarations().declaration(name) instanceof Hir.Data d && d.newtype();
+                && symbols.declaredNode(name) instanceof Hir.Data d && d.newtype();
     }
 
 }

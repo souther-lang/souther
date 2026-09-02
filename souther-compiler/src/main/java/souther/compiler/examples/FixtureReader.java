@@ -499,7 +499,7 @@ public final class FixtureReader {
     }
 
     private Hir.Data declared(TypeSymbol name) {
-        return symbols.declarations().declaration(name) instanceof Hir.Data data ? data : null;
+        return symbols.declaredNode(name) instanceof Hir.Data data ? data : null;
     }
 
     /**
@@ -685,7 +685,7 @@ public final class FixtureReader {
         // applies may be one another module published, and what it answered with is that module's
         // type however this module spells the same name.
         TypeSymbol type = typeOf(live);
-        if (type != null && symbols.declarations().declaration(type) instanceof Hir.Data) {
+        if (type != null && symbols.declaredNode(type) instanceof Hir.Data) {
             Map<String, Asserted> fields = new LinkedHashMap<>();
             // A newtype's `value` is among these, since that is the field it is written with.
             for (String each : neutral.fieldTypes(type).keySet()) {
@@ -1458,7 +1458,7 @@ public final class FixtureReader {
         List<String> forms = new ArrayList<>();
         for (TypeSymbol name : admits) {
             forms.add(neutral.isNewtype(name) ? "`" + name.name() + "(...)`"
-                    : symbols.declarations().declaration(name) instanceof Hir.Data ? "`" + name.name() + " { ... }`"
+                    : symbols.declaredNode(name) instanceof Hir.Data ? "`" + name.name() + " { ... }`"
                     : "`" + name.name() + "`");
         }
         return admits.size() == 1 ? forms.get(0) : "as one of " + String.join(", ", forms);
@@ -1494,7 +1494,7 @@ public final class FixtureReader {
             // (spec §absence-is-written-as-null, absent/null -> None), the same as omitting a `T?` field
             case ValueName.Builtin b when b.name().equals("None") -> null;
             case ValueName.OfType named
-                    when symbols.declarations().declaration(named.type()) instanceof Hir.UnitData ->
+                    when symbols.declaredNode(named.type()) instanceof Hir.UnitData ->
                     unitInput(named.type(), at);
             case ValueName.Local local -> {
                 Hir.Expr held = bindings.get(local.id());

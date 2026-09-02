@@ -4,7 +4,7 @@ import souther.compiler.ast.Hir;
 import souther.compiler.check.Lower;
 import souther.compiler.check.PipelineSigs;
 import souther.compiler.check.Sig;
-import souther.compiler.check.Symbols;
+import souther.compiler.check.DerivedSymbols;
 import souther.compiler.check.Unanswerable;
 import souther.compiler.core.Composition;
 import souther.compiler.types.ValueName;
@@ -40,7 +40,7 @@ public final class Compositions {
         public Answer<Map<ValueName.Behavior, Composition>> compute(Db db) {
             Answer<Lower.Lowered> lowering = db.ask(new Bodies.Lowering(name));
             Answer<Map<ValueName.Behavior, Sig>> sigs = db.ask(new Bodies.Reachable(name));
-            Answer<Symbols> scope = Names.derivedSymbols(db, name);
+            Answer<DerivedSymbols> scope = Names.derivedSymbols(db, name);
             if (!lowering.present() || !sigs.present() || !scope.present()) {
                 return Answer.absent();
             }

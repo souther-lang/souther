@@ -298,7 +298,7 @@ public final class TypeCardinality {
         }
         while (!left.isEmpty()) {
             TypeSymbol name = left.remove(left.size() - 1);
-            if (declared.containsKey(name) || !(symbols.declarations().declaration(name) instanceof Hir.Def def)) {
+            if (declared.containsKey(name) || !(symbols.declaredNode(name) instanceof Hir.Def def)) {
                 continue;
             }
             declared.put(name, def);

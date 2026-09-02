@@ -492,7 +492,7 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
     private static TypeSymbol readAs(Type type, Symbols symbols) {
         TypeSymbol written = nameOf(type);
         return written != null
-                && symbols.declarations().declaration(written) instanceof Hir.Data
+                && symbols.declaredNode(written) instanceof Hir.Data
                 ? written : heldIn(type, symbols);
     }
 

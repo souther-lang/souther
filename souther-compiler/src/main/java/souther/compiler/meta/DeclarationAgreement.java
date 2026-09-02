@@ -408,10 +408,12 @@ public final class DeclarationAgreement {
     private static List<Object> crossingParts(Hir.Def def) {
         return switch (def) {
             // Everything a product is: which declaration it is, whether it is a newtype (which is
-            // what it is represented as), what it includes and holds, what it admits, and how it is
-            // read and written.
+            // what it is represented as), what it includes and holds, and what it admits. How a
+            // value of it crosses is read off exactly those, so comparing the derived
+            // representation as well would be comparing the same fact twice — and this reads
+            // declarations as resolution left them, where nothing has derived one.
             case Hir.Data d -> List.of(d.declares(), d.newtype(), d.includes(), named(d.fields()),
-                    d.invariants(), d.decoder(), d.encoder());
+                    d.invariants());
             // Which cases a sum has. How one is told from another is derived from that and from
             // what each case is (`check.Boundary`), and both are reached: a case is followed to its
             // own declaration, where a unit and a product are compared as the different forms they

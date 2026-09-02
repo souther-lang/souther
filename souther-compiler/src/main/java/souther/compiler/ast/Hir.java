@@ -915,8 +915,6 @@ public interface Hir {
                 List<Name> includes,
                 List<Field> fields,
                 List<InvariantClause> invariants,
-                Optional<DecoderDef> decoder,
-                Optional<EncoderDef> encoder,
                 SourcePos pos) implements Def {}
 
     /**

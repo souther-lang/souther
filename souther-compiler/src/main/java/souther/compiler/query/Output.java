@@ -20,7 +20,7 @@ import souther.compiler.check.DataChecker;
 import souther.compiler.check.Lower;
 import souther.compiler.check.ReqSig;
 import souther.compiler.check.Sig;
-import souther.compiler.check.Symbols;
+import souther.compiler.check.DerivedSymbols;
 import souther.compiler.check.TypeOps;
 import souther.compiler.core.EnsuresEnforcement;
 import souther.compiler.codegen.Backend;
@@ -120,7 +120,7 @@ public final class Output {
          * ran. Two copies of this would be two chances for the measured classes and the shipped ones to
          * stop being the same program, which is the one thing a measurement of them may not do.
          */
-        record Inputs(Hir.Module lowered, Symbols scope, Map<String, String> typePackages,
+        record Inputs(Hir.Module lowered, DerivedSymbols scope, Map<String, String> typePackages,
                       Map<ValueName.Behavior, Sig> sigs, Map<ValueName.Behavior, Sig> imported,
                       Set<ValueName.Behavior> injected,
                       Map<ValueName.Behavior, ReqSig> callees,
@@ -141,7 +141,7 @@ public final class Output {
             Answer<Map<ValueName.Behavior, souther.compiler.core.Composition>> compositions =
                     db.ask(new Compositions.Of(name));
             Answer<Lower.Lowered> lowering = db.ask(new Bodies.Lowering(name));
-            Answer<Symbols> scope = Names.derivedSymbols(db, name);
+            Answer<DerivedSymbols> scope = Names.derivedSymbols(db, name);
             // The same answer the check read. The backend replays the composition walk and emits
             // the codecs a signature says are needed, so building its own would be the boundary's
             // question answered a third time.
@@ -229,7 +229,7 @@ public final class Output {
             // How this module writes a type down, which is what a computed signature is published
             // in. Asked of the module rather than taken off the type: what a declaration is and
             // what this module calls it are two things, and only the second may be published.
-            Answer<Symbols> scope = Names.derivedSymbols(db, name);
+            Answer<DerivedSymbols> scope = Names.derivedSymbols(db, name);
             if (written == null || !sigs.present() || implementations == null
                     || !resolved.present() || !scope.present()) {
                 return;
@@ -571,7 +571,7 @@ public final class Output {
         @Override
         public Answer<Boolean> compute(Db db) {
             Answer<souther.compiler.check.Prepared> prepared = db.ask(new Shapes.Prepared(name));
-            Answer<Symbols> scope = Names.derivedSymbols(db, name);
+            Answer<DerivedSymbols> scope = Names.derivedSymbols(db, name);
             if (!prepared.present() || !scope.present()) {
                 return Answer.absent();
             }
@@ -624,14 +624,15 @@ public final class Output {
                 DataChecker.ConstCheck check) {
             Answer<souther.compiler.check.Prepared> declaring =
                     db.ask(new Shapes.Prepared(check.type().module()));
-            Answer<Symbols> scope = Names.derivedSymbols(db, check.type().module());
+            Answer<DerivedSymbols> scope = Names.derivedSymbols(db, check.type().module());
             if (!declaring.present() || !scope.present()) {
                 return List.of();
             }
             List<Hir.InvariantClause> clauses = null;
             for (souther.compiler.check.Derived.Def declared : declaring.value().defs()) {
-                if (declared.read() instanceof Hir.Data d && d.name().equals(check.type().name())) {
-                    clauses = TypeOps.effectiveInvariants(d, scope.value());
+                if (declared instanceof souther.compiler.check.Derived.Data data
+                        && data.declaration().node().name().equals(check.type().name())) {
+                    clauses = TypeOps.effectiveInvariants(data.declaration().node(), scope.value());
                 }
             }
             if (clauses == null) {

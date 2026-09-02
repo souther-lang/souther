@@ -1,7 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.ast.Hir;
-import souther.compiler.diag.CompileException;
+import souther.compiler.derive.Deriver;
 import souther.compiler.types.TypeKey;
 
 import java.util.ArrayList;
@@ -9,13 +9,18 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * A declaration in the form every later stage resolves a type against, and the module where every
- * one of them is in it.
+ * A normalized declaration with the boundary representation derived for it, and the module where
+ * every declaration it writes has one.
  *
- * <p>What is established here is that a newtype construction written {@code 金額(500)} is the
- * construction it is, wherever it is written in what the declaration says about itself. A reader
- * below this compares a construction against what a declaration declares; one that met the
- * application form instead would be reading a call to something no module declares.
+ * <p>What is established here is the representation and only that: a product data has the decoder
+ * and encoder derived from its declared shape, so a reader asking how a value of it crosses is
+ * answered rather than left to find out that nothing had worked it out yet. That the constructions
+ * in the clauses are constructions was established one rung up ({@link Normalized}), and is what
+ * every reader of a declaration gets whether or not a representation could be derived for it.
+ *
+ * <p>Not the boundary representation in general. What a sum's alternatives are called as they cross
+ * is derived where it is read ({@code check.Boundary}) and a unit has none, so the two of them are
+ * carried here as the declarations they are and nothing more.
  *
  * <p>Two members and they say different things. {@link Def} is one declaration's answer, and a
  * declaration that has no answer costs the readers that name it and no others. {@link Module} is
@@ -28,66 +33,185 @@ public final class Derived {
     private Derived() {}
 
     /**
-     * One declaration with the newtype constructions in what it says written as constructions.
+     * One normalized declaration with the representation derived for it.
      *
-     * <p>Reached from {@link InvariantSettled.Def} and from nothing else, which is what the measured
-     * dependency is: the rewrite reads the clauses of the declaration it is handed, so a declaration
-     * whose clauses still name a helper has its constructions left as they were — the helper's body
-     * is where they are written, and it is not read.
+     * <p>Reached from {@link Normalized.Def} and from nothing else. What one of these depends on is
+     * the normalized declaration; that the normalizing and the settling behind it are worked out a
+     * module at a time is the query graph's business and not a fact about this.
      *
-     * <p>That the settling is worked out for a whole module is a fact about the computation and not
-     * about this. What one of these depends on is the settled declaration; where that came from is
-     * the query graph's business, and it may go on answering for a module at a time.
+     * <p>Which kind of declaration it is, is what the three cases say, and a reader that has to tell
+     * them apart switches over them rather than over the node inside. The kinds are the ones a
+     * declaration can be, so what a later stage adds to one of them has somewhere to go that the
+     * others do not reach.
      */
-    public static final class Def {
+    public sealed interface Def permits Data, Sum, Unit {
 
-        private final Hir.Def def;
-
-        private Def(Hir.Def def) {
-            this.def = def;
+        /**
+         * {@code declaration} with, where it is a product, the boundary representation derived for
+         * it — or null where a field of it does not name a type, which is a product no reader below
+         * can be told how a value of crosses.
+         *
+         * <p>Built over a declaration already normalized rather than over the settled one. What is
+         * added here is the representation and only that, so the one thing a failure here decides is
+         * whether a reader can be told how a value crosses. Normalizing again would put a second
+         * producer of the normalized form beside {@link Normalized.Def#of}, and a declaration read
+         * through the two could come back in two forms.
+         */
+        static Def derive(Normalized.Def declaration, ResolvedSymbols scope) {
+            return switch (declaration) {
+                case Normalized.Data d -> {
+                    Deriver.Codecs codecs = Deriver.derive(d.node(), scope);
+                    yield codecs == null ? null : new Data(d, codecs);
+                }
+                case Normalized.Sum s -> new Sum(s);
+                case Normalized.Unit u -> new Unit(u);
+            };
         }
 
         /**
-         * {@code settled} with its constructions written as constructions.
+         * What the language itself declares, for which there is nothing to derive.
          *
-         * @throws CompileException where what the declaration says cannot be read that way
+         * <p>A second way in, and it is one because the proposition this state carries is empty of a
+         * sum and of a unit. What deriving establishes is the boundary representation read off a
+         * product's shape; a sum's is worked out where it is read ({@code check.Boundary}) and a
+         * unit has none to carry. So the two cases hold of the declaration as it stands, and there
+         * is nothing for a pass to have done to it.
+         *
+         * <p>Which is why a product is refused rather than admitted the same way. The library
+         * declares none today, and one written tomorrow would need its codec derived like any other
+         * — admitted here it would be a declaration this state says came out and nothing derived,
+         * and every reader below would be told otherwise by the type it holds. The refusal is a
+         * fault in the compiler, because the library is this compiler's own source.
+         *
+         * @throws IllegalStateException where the language declares a product
          */
-        public static Def derive(InvariantSettled.Def settled, Symbols scope) {
-            return new Def(NewtypeDesugar.rewriteInvariantsOf(settled.def(), scope));
+        static Def ofLanguage(Normalized.Def declaration) {
+            return switch (declaration) {
+                case Normalized.Sum s -> new Sum(s);
+                case Normalized.Unit u -> new Unit(u);
+                case Normalized.Data d -> throw new IllegalStateException(
+                        "the standard library declares the product `" + d.declaredKey()
+                                + "`, which needs its boundary representation derived before a"
+                                + " reader below the derivation can be given it");
+            };
         }
 
+        /**
+         * The declaration a representation was derived for.
+         *
+         * <p>One declaration at a time and never a table. A table of these turned back into a table
+         * of nodes is the other thing entirely: it hands every reader below the stage a declaration
+         * with nothing left saying it reached it.
+         */
+        Normalized.Def declaration();
+
         /** The name it is declared under. */
-        public String name() {
-            return def.name();
+        default String name() {
+            return declaration().name();
         }
 
         /** Which declaration it is — the module that wrote it and the name it was written under. */
-        public TypeKey declaredKey() {
-            return def.declaredKey();
+        default TypeKey declaredKey() {
+            return declaration().declaredKey();
+        }
+    }
+
+    /**
+     * A product declaration that came out, and the boundary representation derived for it.
+     *
+     * <p>Both, and never one without the other. What a reader below the derivation asks of a product
+     * is how a value of it is read and written, and the answer is here because deriving it is what
+     * made one of these — there is no state in which a product has reached this stage and has none.
+     */
+    public static final class Data implements Def {
+
+        private final Normalized.Data declaration;
+        private final Hir.DecoderDef decoder;
+        private final Hir.EncoderDef encoder;
+
+        private Data(Normalized.Data declaration, Deriver.Codecs codecs) {
+            this.declaration = declaration;
+            this.decoder = codecs.decoder();
+            this.encoder = codecs.encoder();
         }
 
-        /**
-         * The node.
-         *
-         * <p>What a registry hands over, and what settles that is the second source it is read
-         * beside. {@link Declarations} answers an identity from the compilation's registry and from
-         * the language's own vocabulary, and the prelude's declarations are loaded resolved and kept
-         * out of derivation — so a vocabulary of these could only be made by claiming of a
-         * declaration nothing derived what deriving it would have established. The representation
-         * both sources can be in is the node, and this is where the compilation's side reaches it.
-         */
-        public Hir.Def read() {
-            return def;
+        /** How a value of it is read at the boundary. */
+        public Hir.DecoderDef decoder() {
+            return decoder;
+        }
+
+        /** And how one is written. */
+        public Hir.EncoderDef encoder() {
+            return encoder;
         }
 
         @Override
+        public Normalized.Data declaration() {
+            return declaration;
+        }
+
+        /** Both of what it holds. The representation is derived from the declaration, so two of
+         * these over equal declarations hold equal representations — compared all the same, because
+         * what makes them equal is what they say and not how they were made. */
+        @Override
         public boolean equals(Object o) {
-            return o instanceof Def other && def.equals(other.def);
+            return o instanceof Data other && declaration.equals(other.declaration)
+                    && decoder.equals(other.decoder) && encoder.equals(other.encoder);
         }
 
         @Override
         public int hashCode() {
-            return def.hashCode();
+            return declaration.hashCode() * 31 + decoder.hashCode();
+        }
+    }
+
+    /** A sum declaration that came out. */
+    public static final class Sum implements Def {
+
+        private final Normalized.Sum declaration;
+
+        private Sum(Normalized.Sum declaration) {
+            this.declaration = declaration;
+        }
+
+        @Override
+        public Normalized.Sum declaration() {
+            return declaration;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            return o instanceof Sum other && declaration.equals(other.declaration);
+        }
+
+        @Override
+        public int hashCode() {
+            return declaration.hashCode();
+        }
+    }
+
+    /** A unit declaration that came out. */
+    public static final class Unit implements Def {
+
+        private final Normalized.Unit declaration;
+
+        private Unit(Normalized.Unit declaration) {
+            this.declaration = declaration;
+        }
+
+        @Override
+        public Normalized.Unit declaration() {
+            return declaration;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            return o instanceof Unit other && declaration.equals(other.declaration);
+        }
+
+        @Override
+        public int hashCode() {
+            return declaration.hashCode();
         }
     }
 
@@ -147,6 +271,23 @@ public final class Derived {
             return new Module(settled, defs);
         }
 
+        /**
+         * Whether this was derived from {@code settling}.
+         *
+         * <p>Asked rather than answered with the settling itself. What a rung was made from is its
+         * provenance and not a value on offer: handed it, a reader could read the declarations as
+         * they were before this rung, and the two are the same type so nothing would say which it
+         * got.
+         *
+         * <p>The state and not its tree, because a settling answers a module beside the recursive
+         * calls its clauses left standing and says so itself. Two settlings over one tree that left
+         * different calls standing are two answers, and a caller comparing the trees would be
+         * comparing the half they share.
+         */
+        boolean settledFrom(InvariantSettled settling) {
+            return settled.equals(settling);
+        }
+
         /** What the module is called. */
         public String name() {
             return settled.name();
@@ -180,7 +321,7 @@ public final class Derived {
             if (built == null) {
                 List<Hir.Def> nodes = new ArrayList<>();
                 for (Def def : defs) {
-                    nodes.add(def.def);
+                    nodes.add(def.declaration().node());
                 }
                 projected = built = settled.module().withDefs(nodes);
             }

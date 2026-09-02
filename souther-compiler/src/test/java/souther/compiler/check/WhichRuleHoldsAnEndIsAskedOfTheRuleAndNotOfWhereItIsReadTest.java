@@ -59,7 +59,7 @@ class WhichRuleHoldsAnEndIsAskedOfTheRuleAndNotOfWhereItIsReadTest {
     }
 
     private FieldDomains reading() {
-        Hir.Data data = (Hir.Data) symbols.declarations().declaration(named("Held"));
+        Hir.Data data = (Hir.Data) symbols.declaredNode(named("Held"));
         return FieldDomains.of(named("Held"), data, symbols,
                 souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
     }

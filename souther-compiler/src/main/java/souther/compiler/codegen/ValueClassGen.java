@@ -1,7 +1,7 @@
 package souther.compiler.codegen;
 
 import souther.compiler.check.Boundary;
-import souther.compiler.check.Symbols;
+import souther.compiler.check.DerivedSymbols;
 import souther.compiler.ast.Hir;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
@@ -51,7 +51,7 @@ final class ValueClassGen {
 
     private final CodegenContext ctx;
     private final String pkg;
-    private final Symbols symbols;
+    private final DerivedSymbols symbols;
     private final CodecGen codec;
 
     ValueClassGen(CodegenContext ctx, CodecGen codec) {
@@ -132,27 +132,24 @@ final class ValueClassGen {
             }
             emitConstructMethod(cb, cdName, data, fields);
             emitAccessors(cb, cdName, fields);
-            data.decoder().ifPresent(d -> {
-                boolean mapInput = codec.isMapInput(data);
-                codec.emitFactory(cb, "decoder", CD_RDecoder, data, new GeneratedClass.Decoder(valueOf(data), DecoderKind.VALUE));
-                codec.emitSourceFactory(cb, data, CodecGen.Src.JSON, mapInput);
-                if (codec.recordCompatible(data)) codec.emitSourceFactory(cb, data, CodecGen.Src.JOOQ, mapInput);
-            });
-            data.encoder().ifPresent(e -> codec.emitFactory(cb, "encoder", CD_REncoder, data, new GeneratedClass.Encoder(valueOf(data))));
+            boolean mapInput = codec.isMapInput(data);
+            codec.emitFactory(cb, "decoder", CD_RDecoder, data, new GeneratedClass.Decoder(valueOf(data), DecoderKind.VALUE));
+            codec.emitSourceFactory(cb, data, CodecGen.Src.JSON, mapInput);
+            if (codec.recordCompatible(data)) codec.emitSourceFactory(cb, data, CodecGen.Src.JOOQ, mapInput);
+            codec.emitFactory(cb, "encoder", CD_REncoder, data, new GeneratedClass.Encoder(valueOf(data)));
         }));
 
-        data.decoder().ifPresent(dec -> {
-            out.put(new GeneratedClass.Decoder(valueOf(data), DecoderKind.VALUE),
-                    codec.generateDecoderClass(cdName, data, dec, fields, CodecGen.Src.NEUTRAL));
-            out.put(new GeneratedClass.Decoder(valueOf(data), DecoderKind.JSON),
-                    codec.generateDecoderClass(cdName, data, dec, fields, CodecGen.Src.JSON));
-            if (codec.recordCompatible(data)) {
-                out.put(new GeneratedClass.Decoder(valueOf(data), DecoderKind.RECORD),
-                        codec.generateDecoderClass(cdName, data, dec, fields, CodecGen.Src.JOOQ));
-            }
-        });
-        data.encoder().ifPresent(enc ->
-                out.put(new GeneratedClass.Encoder(valueOf(data)), codec.generateEncoderClass(cdName, data, enc)));
+        Hir.DecoderDef dec = symbols.derived(data).decoder();
+        out.put(new GeneratedClass.Decoder(valueOf(data), DecoderKind.VALUE),
+                codec.generateDecoderClass(cdName, data, dec, fields, CodecGen.Src.NEUTRAL));
+        out.put(new GeneratedClass.Decoder(valueOf(data), DecoderKind.JSON),
+                codec.generateDecoderClass(cdName, data, dec, fields, CodecGen.Src.JSON));
+        if (codec.recordCompatible(data)) {
+            out.put(new GeneratedClass.Decoder(valueOf(data), DecoderKind.RECORD),
+                    codec.generateDecoderClass(cdName, data, dec, fields, CodecGen.Src.JOOQ));
+        }
+        out.put(new GeneratedClass.Encoder(valueOf(data)),
+                codec.generateEncoderClass(cdName, data, symbols.derived(data).encoder()));
 
         // A helper for an invariant-bearing newtype: a Raoh-free `boolean check(value)` that runs the
         // same invariant bytecode as __construct — the checker's, which both read. Two callers: a constant construction

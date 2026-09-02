@@ -61,7 +61,7 @@ public final class ResolvedFieldTypes implements FieldTypes {
      */
     static Map<String, Hir.TypeRef> written(TypeSymbol typeName, Symbols symbols) {
         Map<String, Hir.TypeRef> out = new LinkedHashMap<>();
-        if (symbols.declarations().declaration(typeName) instanceof Hir.Data d) {
+        if (symbols.declaredNode(typeName) instanceof Hir.Data d) {
             for (Hir.Name inc : d.includes()) {
                 if (inc.answered() instanceof Hir.Name.Denoting named) {
                     out.putAll(written(named.type(), symbols));

@@ -4,7 +4,6 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.DefaultStdlib;
 import souther.compiler.ast.Hir;
-import souther.compiler.derive.Deriver;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Names;
@@ -138,7 +137,7 @@ class AnEnumerationIsOneAnswerToTheLanguageAndTheBoundaryTest {
     private static Hir.Module derive(String source) {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put("m.sou", source);
-        return Deriver.derive(Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY)
-                .db().ask(new Names.Resolved("m")).value(), DefaultStdlib.get());
+        return Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY)
+                .db().ask(new Names.Resolved("m")).value();
     }
 }

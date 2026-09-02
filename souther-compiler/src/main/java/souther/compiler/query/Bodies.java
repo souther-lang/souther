@@ -5,6 +5,8 @@ import souther.compiler.ast.Ast;
 import souther.compiler.ast.DefinitionName;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.BehaviorChecker;
+import souther.compiler.check.CheckSurface;
+import souther.compiler.check.InvariantSettled;
 import souther.compiler.check.BehaviorContract;
 import souther.compiler.check.CheckedEnsures;
 import souther.compiler.core.EnsuresEnforcement;
@@ -32,7 +34,7 @@ import souther.compiler.check.Scoping;
 import souther.compiler.check.BehaviorImplementation;
 import souther.compiler.check.Sig;
 import souther.compiler.check.SpecChecker;
-import souther.compiler.check.Symbols;
+import souther.compiler.check.DerivedSymbols;
 import souther.compiler.check.TypeChecker;
 import souther.compiler.check.TypeOps;
 import souther.compiler.check.Unanswerable;
@@ -356,15 +358,19 @@ public final class Bodies {
 
         @Override
         public Answer<Map<ValueName.Behavior, Sig>> compute(Db db) {
-            Answer<souther.compiler.check.Desugared.Module> desugared =
-                    db.ask(new Shapes.Desugared(name));
-            Answer<Symbols> scope = Names.derivedSymbols(db, name);
+            // The behaviors the module declares, taken where they are settled and not from the
+            // assembly: what a row's positions are read against is worked out here, so the assembly
+            // asks this and this cannot ask the assembly. No rung at or below the settling rewrites
+            // a behavior, and what each takes and answers with is read off its declaration — so a
+            // module one of whose data did not come out has signatures all the same.
+            Answer<InvariantSettled> settling = db.ask(new Shapes.Settling(name));
+            Answer<DerivedSymbols> scope = Names.derivedSymbols(db, name);
             Answer<Map<ValueName.Behavior, Sig>> imported = db.ask(new Imported(name));
-            if (!desugared.present() || !scope.present() || !imported.present()) {
+            if (!settling.present() || !scope.present() || !imported.present()) {
                 return Answer.absent();
             }
             try {
-                return Answer.of(PipelineSigs.signatures(name, desugared.value().behaviors(),
+                return Answer.of(PipelineSigs.signatures(name, settling.value().behaviors(),
                         scope.value(), imported.value()));
             } catch (CompileException e) {
                 return Answer.absent(e);
@@ -441,7 +447,7 @@ public final class Bodies {
         @Override
         public Answer<Map<String, CheckedEnsures>> compute(Db db) {
             Answer<Lower.Lowered> lowering = db.ask(new Lowering(name));
-            Answer<Symbols> scope = Names.derivedSymbols(db, name);
+            Answer<DerivedSymbols> scope = Names.derivedSymbols(db, name);
             Answer<Map<String, Sig>> signatures = db.ask(new Signatures(name));
             Answer<Map<String, Type>> helpers = db.ask(new RecursiveCallSigs(name, InliningPolicy.FULL));
             if (!lowering.present() || !scope.present() || !signatures.present()
@@ -498,7 +504,7 @@ public final class Bodies {
         @Override
         public Answer<Map<String, ContractDischarge>> compute(Db db) {
             Answer<Map<String, StatedContract>> stated = db.ask(new StatedContracts(name));
-            Answer<Symbols> scope = Names.derivedSymbols(db, name);
+            Answer<DerivedSymbols> scope = Names.derivedSymbols(db, name);
             if (!stated.present() || !scope.present()) {
                 return Answer.absent();
             }
@@ -729,7 +735,7 @@ public final class Bodies {
         @Override
         public Answer<Map<String, StatedContract>> compute(Db db) {
             Answer<souther.compiler.check.Expandable> expandable = db.ask(new Shapes.Expandable(name));
-            Answer<Symbols> scope = Names.derivedSymbols(db, name);
+            Answer<DerivedSymbols> scope = Names.derivedSymbols(db, name);
             Answer<Map<String, Sig>> signatures = db.ask(new Signatures(name));
             Answer<Map<String, Type>> helpers = db.ask(new RecursiveCallSigs(name, InliningPolicy.FULL));
             if (!expandable.present() || !scope.present() || !signatures.present()
@@ -917,17 +923,20 @@ public final class Bodies {
 
         @Override
         public Answer<Map<ValueName.Behavior, ReqSig>> compute(Db db) {
-            Answer<souther.compiler.check.Prepared> prepared = db.ask(new Shapes.Prepared(name));
-            Answer<Symbols> scope = Names.derivedSymbols(db, name);
+            // The behaviors, which the assembly carries and no rung rewrites: what each requires is
+            // read off its declaration, and a module one of whose data did not come out declares
+            // them all the same.
+            Answer<CheckSurface> surface = db.ask(new Shapes.CheckSurface(name));
+            Answer<DerivedSymbols> scope = Names.derivedSymbols(db, name);
             Answer<Map<ValueName.Behavior, Sig>> imported = db.ask(new Imported(name));
             Answer<Set<String>> own = db.ask(new Dependencies(name));
             Answer<Set<ValueName.Behavior>> borrowed = db.ask(new ImportedDependencies(name));
-            if (!prepared.present() || !scope.present() || !imported.present()
+            if (!surface.present() || !scope.present() || !imported.present()
                     || !own.present() || !borrowed.present()) {
                 return Answer.absent();
             }
             try {
-                return Answer.of(InjectionSigs.dependencies(name, prepared.value().behaviors(),
+                return Answer.of(InjectionSigs.dependencies(name, surface.value().behaviors(),
                         scope.value(), own.value(), imported.value(), borrowed.value()));
             } catch (CompileException _) {
                 return Answer.of(Map.of());
@@ -951,17 +960,17 @@ public final class Bodies {
 
         @Override
         public Answer<Map<ValueName.Behavior, ReqSig>> compute(Db db) {
-            Answer<souther.compiler.check.Prepared> prepared = db.ask(new Shapes.Prepared(name));
-            Answer<Symbols> scope = Names.derivedSymbols(db, name);
+            Answer<CheckSurface> surface = db.ask(new Shapes.CheckSurface(name));
+            Answer<DerivedSymbols> scope = Names.derivedSymbols(db, name);
             Answer<Map<ValueName.Behavior, Sig>> imported = db.ask(new Imported(name));
             Answer<Set<String>> own = db.ask(new Callable(name));
             Answer<Set<ValueName.Behavior>> borrowed = db.ask(new ImportedCallable(name));
-            if (!prepared.present() || !scope.present() || !imported.present()
+            if (!surface.present() || !scope.present() || !imported.present()
                     || !own.present() || !borrowed.present()) {
                 return Answer.absent();
             }
             try {
-                return Answer.of(InjectionSigs.callable(name, prepared.value().behaviors(),
+                return Answer.of(InjectionSigs.callable(name, surface.value().behaviors(),
                         scope.value(), own.value(), imported.value(), borrowed.value()));
             } catch (CompileException _) {
                 return Answer.of(Map.of());
@@ -1007,14 +1016,17 @@ public final class Bodies {
 
         @Override
         public Answer<Hir.Module> compute(Db db) {
-            Answer<souther.compiler.check.Prepared> prepared = db.ask(new Shapes.Prepared(name));
-            Answer<Symbols> scope = Names.derivedSymbols(db, name);
+            // The assembly and not the state built on it. What this settles is helper parameter
+            // types across a tree, which says nothing about whether every declaration came out —
+            // and a module where one did not is still read for what its other definitions say.
+            Answer<CheckSurface> surface = db.ask(new Shapes.CheckSurface(name));
+            Answer<DerivedSymbols> scope = Names.derivedSymbols(db, name);
             Answer<Map<ValueName.Behavior, ReqSig>> reqSigs = db.ask(new ReqSigs(name));
-            if (!prepared.present() || !scope.present() || !reqSigs.present()) {
+            if (!surface.present() || !scope.present() || !reqSigs.present()) {
                 return Answer.absent();
             }
             try {
-                return Answer.of(Lower.settle(prepared.value(), scope.value(), reqSigs.value()));
+                return Answer.of(Lower.settle(surface.value(), scope.value(), reqSigs.value()));
             } catch (CompileException e) {
                 return Answer.absent(e);
             }
@@ -1365,12 +1377,12 @@ public final class Bodies {
 
         @Override
         public Answer<Map<String, Hir.FnDef>> compute(Db db) {
-            Answer<souther.compiler.check.Prepared> prepared = db.ask(new Shapes.Prepared(name));
-            if (!prepared.present()) {
+            Answer<CheckSurface> surface = db.ask(new Shapes.CheckSurface(name));
+            if (!surface.present()) {
                 return Answer.absent();
             }
             Map<String, Hir.FnDef> out = new LinkedHashMap<>();
-            for (Hir.FnDef def : prepared.value().rowDefs()) {
+            for (Hir.FnDef def : surface.value().rowDefs()) {
                 out.put(def.name(), def);
             }
             return Answer.of(Ordered.map(out));
@@ -1397,9 +1409,12 @@ public final class Bodies {
 
         @Override
         public Answer<Set<String>> compute(Db db) {
-            Answer<souther.compiler.check.Prepared> prepared = db.ask(new Shapes.Prepared(name));
-            return prepared.present()
-                    ? Answer.of(new LinkedHashSet<>(prepared.value().operandMethods().values()))
+            // The assembly decided these, so this asks the assembly. Asked of the state built on it,
+            // a module one of whose declarations did not come out would have no row methods rather
+            // than the ones its rows were given, and every reading below would stop there.
+            Answer<CheckSurface> surface = db.ask(new Shapes.CheckSurface(name));
+            return surface.present()
+                    ? Answer.of(new LinkedHashSet<>(surface.value().operandMethods().values()))
                     : Answer.absent();
         }
     }
@@ -1654,7 +1669,7 @@ public final class Bodies {
         @Override
         public Answer<Map<String, Type>> compute(Db db) {
             Answer<Expanding.Of> against = db.ask(new Expanding(name, policy));
-            Answer<Symbols> scope = Names.derivedSymbols(db, name);
+            Answer<DerivedSymbols> scope = Names.derivedSymbols(db, name);
             if (!against.present() || !scope.present()) {
                 return Answer.absent();
             }
@@ -1711,8 +1726,7 @@ public final class Bodies {
         public Answer<SequencedSet<ReachName.Declaration>> compute(Db db) {
             Answer<Expanding.Of> against = db.ask(new Expanding(name, InliningPolicy.FULL));
             Answer<Hir.Module> settled = db.ask(new Settled(name));
-            Answer<souther.compiler.check.InvariantSettled> settling =
-                    db.ask(new Shapes.Settling(name));
+            Answer<InvariantSettled> settling = db.ask(new Shapes.Settling(name));
             Answer<Set<String>> rows = db.ask(new RowMethods(name));
             if (!against.present() || !settled.present() || !settling.present()
                     || !rows.present()) {
@@ -1825,7 +1839,7 @@ public final class Bodies {
             // wider answer — it says what a call could be typed against, including a recursion
             // nothing here reaches — and a body for one of those is a body nobody wrote.
             Answer<SequencedSet<ReachName.Declaration>> required = db.ask(new RequiredRecursiveDefs(name));
-            Answer<Symbols> scope = Names.derivedSymbols(db, name);
+            Answer<DerivedSymbols> scope = Names.derivedSymbols(db, name);
             if (!inliner.present() || !required.present() || !scope.present()) {
                 return Answer.absent();
             }
@@ -1902,7 +1916,7 @@ public final class Bodies {
             Answer<Hir.FnDef> fn = db.ask(new SettledFn(module, behavior));
             Answer<Expansion<Hir.FnDef>> body =
                     db.ask(new LoweredBody(module, new DefinitionName(behavior)));
-            Answer<Symbols> scope = Names.derivedSymbols(db, module);
+            Answer<DerivedSymbols> scope = Names.derivedSymbols(db, module);
             // What this body names, and not what its module happens to have callable in it: a
             // signature it never names is no part of what it is checked against, and depending on
             // the module's index would re-check this body whenever a behavior beside it was declared.
@@ -1998,7 +2012,7 @@ public final class Bodies {
             Db db, String module, Hir.Module settled, Map<String, Core> bodies,
             souther.compiler.coverage.DecisionSources decisions, souther.compiler.coverage.SuppliedRules supplied) {
         ReadingPolicy policy = db.ask(new Front.Reading()).value();
-        Answer<Symbols> scope = Names.derivedSymbols(db, module);
+        Answer<DerivedSymbols> scope = Names.derivedSymbols(db, module);
         Answer<Map<String, InputDomain>> inputs =
                 db.ask(new souther.compiler.query.Adequacy.Inputs(module));
         Answer<Map<String, Sig>> sigs = db.ask(new Signatures(module));
@@ -2085,7 +2099,7 @@ public final class Bodies {
         @Override
         public Answer<Of> compute(Db db) {
             Answer<Lower.Lowered> lowering = db.ask(new Lowering(name));
-            Answer<Symbols> scope = Names.derivedSymbols(db, name);
+            Answer<DerivedSymbols> scope = Names.derivedSymbols(db, name);
             // The signatures the check reads are the ones every other reader reads. Asked for here
             // rather than built here: a second construction would answer the boundary's question a
             // second time, and what a phase below the check is handed would be a different answer
@@ -2123,8 +2137,6 @@ public final class Bodies {
                         settled.add(def.name());
                     }
                 }
-                Answer<souther.compiler.check.Prepared> prepared =
-                        db.ask(new Shapes.Prepared(name));
                 reported = TypeChecker.checkModule(lowering.value().settled(), scope.value(),
                         db.ask(new Front.Reading()).value(),
                         signatures.present() ? signatures.value() : null,

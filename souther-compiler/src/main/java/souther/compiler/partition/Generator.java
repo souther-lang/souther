@@ -2238,7 +2238,7 @@ public final class Generator {
      * spread would drop the included ones with it.
      */
     private static List<String> fieldsOf(MeasuredInput subject, TypeSymbol built) {
-        return subject.symbols().declarations().declaration(built) instanceof Hir.Data data
+        return subject.symbols().declaredNode(built) instanceof Hir.Data data
                 && !data.newtype()
                 ? List.copyOf(TypeOps.fieldTypes(data, subject.symbols()).keySet())
                 : null;
@@ -4034,7 +4034,7 @@ public final class Generator {
     private static FieldDomains rulesOf(Type type, Symbols symbols, ReadingPolicy policy,
                                         Map<RuleKey, Count> settled) {
         return type instanceof Type.Ref(TypeSymbol.AtModule named)
-                && symbols.declarations().declaration(named) instanceof Hir.Data data
+                && symbols.declaredNode(named) instanceof Hir.Data data
                 && !data.newtype()
                 ? FieldDomains.of(named, data, symbols, policy, settled) : FieldDomains.NONE;
     }
