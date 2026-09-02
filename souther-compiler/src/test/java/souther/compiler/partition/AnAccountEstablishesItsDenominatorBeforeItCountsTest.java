@@ -99,7 +99,7 @@ class AnAccountEstablishesItsDenominatorBeforeItCountsTest {
                 new RuleRef.Comparison("f", new souther.compiler.types.CoverageOrigin(
                         "example.one", 2, 0, souther.compiler.types.CoverageConstruct.BINARY)),
                 new OriginRef.ComparisonOrigin.Read(
-                        new souther.compiler.coverage.ComparisonOccurrence("f", 0),
+                        new souther.compiler.coverage.ComparisonOccurrence("example.one", "f", 0),
                         new RuleCitation.WrittenAt(Citation.of(
                                 new souther.compiler.diag.SourcePos(1, 1))),
                         new souther.compiler.coverage.ComparisonEmissionSite(0)),

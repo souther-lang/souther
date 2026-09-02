@@ -4,7 +4,6 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
-import souther.compiler.coverage.CoverageSites;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
@@ -98,8 +97,7 @@ class AWayInIsHeldToWhatAlreadyHeldTest {
         Symbols symbols = Scopes.derived(compilation.db(), module).value();
         InputDomain inputs = compilation.db().ask(new Adequacy.Inputs(module)).value().get(behavior);
         return CoverageRead.of(behavior, body,
-                CoverageSites.of(checked.behaviorBodies(), checked.decisions(),
-                checked.supplied()), inputs, symbols).interactions();
+                checked.plan(), inputs, symbols).interactions();
     }
 
     /**

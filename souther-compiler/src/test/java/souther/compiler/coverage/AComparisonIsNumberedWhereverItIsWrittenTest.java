@@ -60,8 +60,7 @@ class AComparisonIsNumberedWhereverItIsWrittenTest {
         assertNotNull(checked, "the model under test compiles");
         Core body = checked.behaviorBodies().get("twice");
         assertNotNull(body, "twice has a body");
-        CoverageSites.Plan plan = CoverageSites.of(checked.behaviorBodies(), checked.decisions(),
-                checked.supplied());
+        CoverageSites.Plan plan = checked.plan();
         Map<CoverageOrigin, ComparisonOccurrence> out = new LinkedHashMap<>();
         for (Core each : comparisonsIn(body)) {
             Core.Binary comparison = (Core.Binary) each;

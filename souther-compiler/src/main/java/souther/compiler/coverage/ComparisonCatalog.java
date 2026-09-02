@@ -84,14 +84,34 @@ public final class ComparisonCatalog {
         this.byOccurrence = byOccurrence;
     }
 
-    /** The comparisons of every behavior body of one module. */
-    public static ComparisonCatalog of(Map<String, Core> behaviorBodies) {
+    /**
+     * The comparisons of every behavior body of {@code module}.
+     *
+     * <p>The module is here because a name this issues has to tell one comparison from every other
+     * there is, and a behavior's name is one module's word. Left out, two modules each declaring a
+     * behavior of one name would name their first comparisons the same thing, and a reading of one
+     * would join to the other's.
+     */
+    public static ComparisonCatalog of(String module, Map<String, Core> behaviorBodies) {
         IdentityHashMap<Core, ComparisonOccurrence> occurrenceAtNode = new IdentityHashMap<>();
         Map<ComparisonOccurrence, Catalogued> byOccurrence = new LinkedHashMap<>();
         for (Map.Entry<String, Core> body : behaviorBodies.entrySet()) {
-            walk(body.getValue(), body.getKey(), new int[] {0}, occurrenceAtNode, byOccurrence);
+            walk(body.getValue(), module, body.getKey(), new int[] {0},
+                    occurrenceAtNode, byOccurrence);
         }
         return new ComparisonCatalog(occurrenceAtNode, byOccurrence);
+    }
+
+    /**
+     * Whether {@code which} is one this issued.
+     *
+     * <p>What tells a comparison this catalog does not instrument from one it never held. The two
+     * read alike to whoever asks about runs — neither has a site — and they are not the same thing:
+     * the first is a comparison of this module that no run reaches, and the second is somebody
+     * asking this module about another module's comparison.
+     */
+    public boolean holds(ComparisonOccurrence which) {
+        return byOccurrence.containsKey(which);
     }
 
     /**
@@ -103,7 +123,7 @@ public final class ComparisonCatalog {
      * names, one of them reachable from nothing, and every comparison after it in the body would be
      * called by a number one out from what a second walk of the same body would call it.
      */
-    private static void walk(Core e, String behavior, int[] ordinal,
+    private static void walk(Core e, String module, String behavior, int[] ordinal,
                              IdentityHashMap<Core, ComparisonOccurrence> occurrenceAtNode,
                              Map<ComparisonOccurrence, Catalogued> byOccurrence) {
         // What a representation kept standing for an analysis to read. What a run does is measured
@@ -119,14 +139,15 @@ public final class ComparisonCatalog {
             // the same question asked twice about one binary, with a case to answer for the second
             // answer being different.
             Comparison.of(binary).ifPresent(comparison -> {
-                ComparisonOccurrence which = new ComparisonOccurrence(behavior, ordinal[0]++);
+                ComparisonOccurrence which =
+                        new ComparisonOccurrence(module, behavior, ordinal[0]++);
                 occurrenceAtNode.put(binary, which);
                 byOccurrence.put(which, new Catalogued(which, comparison,
                         Citation.of(binary.pos()), binary.origin()));
             });
         }
         Core.forEachChild(e, child ->
-                walk(child, behavior, ordinal, occurrenceAtNode, byOccurrence));
+                walk(child, module, behavior, ordinal, occurrenceAtNode, byOccurrence));
     }
 
     /**

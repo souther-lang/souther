@@ -221,7 +221,8 @@ class ABorderDebtIsTheLineTheAuthorWroteTest {
                                 souther.compiler.types.CoverageConstruct.BINARY));
         return new OriginRef.ComparisonOrigin(rule,
                 new OriginRef.ComparisonOrigin.Read(
-                        new souther.compiler.coverage.ComparisonOccurrence("twice", occurrence),
+                        new souther.compiler.coverage.ComparisonOccurrence(
+                                "example.banding", "twice", occurrence),
                         new souther.compiler.check.RuleCitation.WrittenAt(
                                 souther.compiler.diag.Citation.of(
                                         new souther.compiler.diag.SourcePos(15, 16))),

@@ -7,7 +7,6 @@ import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
-import souther.compiler.coverage.CoverageSites;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
@@ -95,8 +94,7 @@ class AClassThatNarrowsStatesTheNarrowingAndNotAValueTest {
         // models is for.
         if (body != null) {
             GuardThresholds.Guards guards = GuardThresholds.of("use", body,
-                    CoverageSites.of(checked.behaviorBodies(), checked.decisions(),
-                            checked.supplied()),
+                    checked.plan(),
                     compilation.db().ask(new Adequacy.Inputs(module)).value().get("use"), symbols);
             axes = Partitions.withThresholds(axes, domain.quantities(symbols), guards.thresholds(),
                     symbols, ReadAs.THE_COMPILATION_DOES, guards.rulesWithoutALine(), guards.singled(),

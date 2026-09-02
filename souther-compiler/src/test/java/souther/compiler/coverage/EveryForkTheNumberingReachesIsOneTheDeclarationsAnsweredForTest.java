@@ -70,8 +70,7 @@ class EveryForkTheNumberingReachesIsOneTheDeclarationsAnsweredForTest {
                 compilation.db().ask(new Bodies.Checked(MODULE)).value();
         assertNotNull(checked, "the model under test compiles");
 
-        CoverageSites.Plan plan = CoverageSites.of(checked.behaviorBodies(), checked.decisions(),
-                checked.supplied());
+        CoverageSites.Plan plan = checked.plan();
         List<CoverageOrigin> forks = new ArrayList<>();
         for (CoverageSites.Site site : plan.sites()) {
             CoverageOrigin origin = site.obligation().origin();

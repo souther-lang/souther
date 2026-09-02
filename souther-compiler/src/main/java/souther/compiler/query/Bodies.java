@@ -2012,7 +2012,7 @@ public final class Bodies {
         // query that answers it for a report depends on this one and cannot be asked from inside
         // it. Both routes call one function over one input; what is not shared is the memo.
         souther.compiler.coverage.CoverageSites.Plan plan =
-                souther.compiler.coverage.CoverageSites.of(bodies, decisions, supplied);
+                souther.compiler.coverage.CoverageSites.of(module, bodies, decisions, supplied);
         Map<String, souther.compiler.claims.Claims> out = new LinkedHashMap<>();
         for (Hir.BehaviorDef behavior : settled.behaviors()) {
             Core body = bodies.get(behavior.name());
@@ -2184,6 +2184,7 @@ public final class Bodies {
      */
     public static final class Elaborated {
 
+        private final String module;
         private final Map<String, Core> behaviorBodies;
         private final Map<String, Core> emittedHelpers;
         private final Map<String, souther.compiler.claims.Claims> claims;
@@ -2191,11 +2192,13 @@ public final class Bodies {
         private final souther.compiler.coverage.DecisionSources decisions;
         private final souther.compiler.coverage.SuppliedRules supplied;
 
-        private Elaborated(Map<String, Core> behaviorBodies, Map<String, Core> emittedHelpers,
+        private Elaborated(String module,
+                           Map<String, Core> behaviorBodies, Map<String, Core> emittedHelpers,
                            Map<String, souther.compiler.claims.Claims> claims,
                            Map<String, souther.compiler.check.ElementBindings> elements,
                            souther.compiler.coverage.DecisionSources decisions,
                            souther.compiler.coverage.SuppliedRules supplied) {
+            this.module = module;
             this.supplied = supplied;
             this.behaviorBodies = behaviorBodies;
             this.emittedHelpers = emittedHelpers;
@@ -2212,13 +2215,16 @@ public final class Bodies {
          * it replaces leaves everything downstream of the check running again — the emitter, what
          * a report says about a claim, and every measure that reads a body.
          *
-         * <p>All six and not the bodies alone. What a body means to whoever reads it is the Core
-         * together with what was decided about it, so two checks that produced one tree and
-         * disagreed about which rule a fork decides by produced two modules.
+         * <p>Everything it holds, and not the bodies alone. What a body means to whoever reads it is
+         * the Core together with what was decided about it, so two checks that produced one tree and
+         * disagreed about which rule a fork decides by produced two modules — and whose module the
+         * bodies are is as much part of that as the trees, since a name read off these is a name in
+         * that module's words.
          */
         @Override
         public boolean equals(Object other) {
             return other instanceof Elaborated that
+                    && module.equals(that.module)
                     && behaviorBodies.equals(that.behaviorBodies)
                     && emittedHelpers.equals(that.emittedHelpers)
                     && claims.equals(that.claims)
@@ -2229,8 +2235,26 @@ public final class Bodies {
 
         @Override
         public int hashCode() {
-            return java.util.Objects.hash(behaviorBodies, emittedHelpers, claims, elements,
+            return java.util.Objects.hash(module, behaviorBodies, emittedHelpers, claims, elements,
                     decisions, supplied);
+        }
+
+        /** Whose module these are the bodies of. */
+        public String module() {
+            return module;
+        }
+
+        /**
+         * Where every arm and every comparison of these bodies is, numbered.
+         *
+         * <p>Made from one value, because a plan is of a module's bodies and a name it hands out
+         * says which module. Built from the bodies and the module handed over separately, the two
+         * are only as true as the caller made them — and there are a dozen callers, each holding
+         * one of these and taking the parts off it.
+         */
+        public souther.compiler.coverage.CoverageSites.Plan plan() {
+            return souther.compiler.coverage.CoverageSites.of(
+                    module, behaviorBodies, decisions, supplied);
         }
 
         /** Who owns the rule each fork of this module's bodies decides by. */
@@ -2392,8 +2416,8 @@ public final class Bodies {
             Map<String, souther.compiler.claims.Claims> claims =
                     judged(db, name, settled.value(), bodies, read, handed);
             return Answer.of(
-                    new Elaborated(bodies, module.value().emittedHelpers(), claims, elements, read,
-                            handed),
+                    new Elaborated(name, bodies, module.value().emittedHelpers(), claims, elements,
+                            read, handed),
                     contradicted(db, name, claims));
         }
     }

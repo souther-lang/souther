@@ -254,8 +254,7 @@ class AnArmThePlanNumberedIsToldHowItIsReachedTest {
         assertNotNull(body, "the behavior under test has a body");
         Symbols symbols = Scopes.derived(compilation.db(), module).value();
         InputDomain inputs = compilation.db().ask(new Adequacy.Inputs(module)).value().get(behavior);
-        CoverageSites.Plan plan = CoverageSites.of(checked.behaviorBodies(), checked.decisions(),
-                checked.supplied());
+        CoverageSites.Plan plan = checked.plan();
         return new Read(CoverageRead.of(behavior, body, plan, inputs, symbols), plan, behavior);
     }
 }

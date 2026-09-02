@@ -370,7 +370,7 @@ public final class Output {
             Instrumentation instrumentation = Instrumentation.COUNTING;
             if (arms == ArmObservation.RECORD) {
                 instrumentation = instrumentation.measuring(
-                        CoverageSites.of(in.checked().behaviorBodies(),
+                        CoverageSites.of(module(), in.checked().behaviorBodies(),
                                 in.checked().decisions(), in.checked().supplied()));
             }
             try {
@@ -396,7 +396,7 @@ public final class Output {
         public static CoverageSites.Plan planOf(Db db, String module) {
             Bodies.Elaborated checked = db.ask(new Bodies.Checked(module)).value();
             return checked == null ? CoverageSites.Plan.NONE
-                    : CoverageSites.of(checked.behaviorBodies(), checked.decisions(),
+                    : CoverageSites.of(module, checked.behaviorBodies(), checked.decisions(),
                             checked.supplied());
         }
     }

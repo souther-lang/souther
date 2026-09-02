@@ -13,6 +13,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -46,10 +47,22 @@ class AComparisonIsHeldWhereverItIsWrittenTest {
      * with {@link ComparisonCatalog#at}, and nothing in the compiler wants one.
      */
     private static List<Core.Binary> comparisonsIn(Map<String, Core> bodies) {
-        ComparisonCatalog catalog = ComparisonCatalog.of(bodies);
+        ComparisonCatalog catalog = catalogOf(bodies);
         List<Core.Binary> out = new ArrayList<>();
         bodies.values().forEach(body -> collect(body, catalog, out));
         return out;
+    }
+
+    /** The catalog of {@code bodies}, under a module name this fixture supplies. Which name it is
+     *  does not matter here: every question below is of one catalog, and a name only has to tell
+     *  one module's comparisons from another's. */
+    private static ComparisonCatalog catalogOf(Map<String, Core> bodies) {
+        return ComparisonCatalog.of("example", bodies);
+    }
+
+    /** The plan of the same, under the same name. */
+    private static CoverageSites.Plan planOf(Map<String, Core> bodies) {
+        return CoverageSites.of("example", bodies, DecisionSources.NONE, SuppliedRules.NONE);
     }
 
     private static void collect(Core e, ComparisonCatalog catalog, List<Core.Binary> out) {
@@ -144,9 +157,8 @@ class AComparisonIsHeldWhereverItIsWrittenTest {
     @Test
     void aComparisonCanBeCataloguedWithNoSiteToRecordARunAt() {
         Map<String, Core> bodies = bodiesOf(BEHIND_AN_ABORT);
-        ComparisonCatalog catalog = ComparisonCatalog.of(bodies);
-        CoverageSites.Plan plan = CoverageSites.of(bodies, DecisionSources.NONE,
-                SuppliedRules.NONE);
+        ComparisonCatalog catalog = catalogOf(bodies);
+        CoverageSites.Plan plan = planOf(bodies);
 
         List<ComparisonOccurrence> held = catalog.all().stream()
                 .map(ComparisonCatalog.Catalogued::which).toList();
@@ -173,7 +185,7 @@ class AComparisonIsHeldWhereverItIsWrittenTest {
 
                 let positives (xs) = List.filter(x -> x > 0, xs)
                 """);
-        CoverageSites.Plan plan = CoverageSites.of(bodies, souther.compiler.coverage.DecisionSources.NONE, souther.compiler.coverage.SuppliedRules.NONE);
+        CoverageSites.Plan plan = planOf(bodies);
         Core.Binary comparison = comparisonsIn(bodies).get(0);
 
         assertTrue(plan.comparisons().occurrenceAt(comparison).filter(plan::instruments)
@@ -194,7 +206,7 @@ class AComparisonIsHeldWhereverItIsWrittenTest {
     void everyComparisonOfABodyIsOneTheCatalogNames() {
         for (String source : List.of(NAMED_BEFORE_THE_FORK, INSIDE_A_FUNCTION_VALUE, BEHIND_AN_ABORT)) {
             Map<String, Core> bodies = bodiesOf(source);
-            ComparisonCatalog catalog = ComparisonCatalog.of(bodies);
+            ComparisonCatalog catalog = catalogOf(bodies);
             bodies.values().forEach(body -> recognised(body, each ->
                     assertTrue(catalog.occurrenceAt(each).isPresent(),
                             () -> "the catalog names " + each.op() + " at " + each.pos())));
@@ -219,7 +231,7 @@ class AComparisonIsHeldWhereverItIsWrittenTest {
 
                 let band (a) = if over(a) then (if over(a) then 1 else 2) else 3
                 """);
-        ComparisonCatalog catalog = ComparisonCatalog.of(bodies);
+        ComparisonCatalog catalog = catalogOf(bodies);
 
         List<ComparisonCatalog.Catalogued> held = catalog.all();
         assertEquals(2, held.size(), "the helper is spliced into the body at both calls");
@@ -227,6 +239,59 @@ class AComparisonIsHeldWhereverItIsWrittenTest {
                 "the two are written in one place, which is the helper's");
         assertNotEquals(held.get(0).which(), held.get(1).which(),
                 "and are two occurrences all the same, each reached under its own conditions");
+    }
+
+    /**
+     * Two modules that name a behavior alike name their comparisons apart.
+     *
+     * <p>What a name has to do. A behavior's name is one module's word, so a name made of that and
+     * a number tells two modules' first comparisons apart nowhere — and the node this replaced was
+     * distinct across everything there is, being an object. A reading of one module would join to
+     * the other module's comparison and answer about it.
+     */
+    @Test
+    void twoModulesNamingABehaviorAlikeNameTheirComparisonsApart() {
+        String body = """
+                module %s
+
+                behavior check : (a: Int) -> Int
+
+                let check (a) = if a > 10 then 1 else 2
+                """;
+        ComparisonCatalog here = ComparisonCatalog.of("one", bodiesOf(body.formatted("one")));
+        ComparisonCatalog there = ComparisonCatalog.of("two", bodiesOf(body.formatted("two")));
+
+        assertEquals(1, here.all().size(), "each module writes one comparison");
+        assertEquals(1, there.all().size(), "each module writes one comparison");
+        assertNotEquals(here.all().get(0).which(), there.all().get(0).which(),
+                "and the two are not one comparison");
+    }
+
+    /**
+     * A plan is not about another module's comparison, and says so.
+     *
+     * <p>Refused rather than answered. A comparison this plan numbers no site for and one belonging
+     * to another module both have no site, and a plan that answered alike would let a reading of
+     * one module ask about the other's and take "nothing records a run through it" for an answer
+     * about its own.
+     */
+    @Test
+    void aPlanRefusesAComparisonOfAnotherModule() {
+        String body = """
+                module %s
+
+                behavior check : (a: Int) -> Int
+
+                let check (a) = if a > 10 then 1 else 2
+                """;
+        CoverageSites.Plan here = CoverageSites.of("one", bodiesOf(body.formatted("one")),
+                DecisionSources.NONE, SuppliedRules.NONE);
+        ComparisonOccurrence there =
+                ComparisonCatalog.of("two", bodiesOf(body.formatted("two"))).all().get(0).which();
+
+        IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
+                () -> here.instruments(there));
+        assertTrue(refused.getMessage().contains("not about"), refused.getMessage());
     }
 
     /** Every binary of {@code e} the language reads as a comparison, in the order it is written. */
@@ -241,7 +306,7 @@ class AComparisonIsHeldWhereverItIsWrittenTest {
     /** What the catalog holds is what the plan numbers, wherever the comparison stands. */
     @Test
     void aComparisonGivenANameBeforeTheForkIsNumbered() {
-        CoverageSites.Plan plan = CoverageSites.of(bodiesOf(NAMED_BEFORE_THE_FORK), souther.compiler.coverage.DecisionSources.NONE, souther.compiler.coverage.SuppliedRules.NONE);
+        CoverageSites.Plan plan = planOf(bodiesOf(NAMED_BEFORE_THE_FORK));
 
         assertEquals(1, plan.sites().stream()
                         .filter(site -> site.outcome() instanceof SourceOutcome.Compared)

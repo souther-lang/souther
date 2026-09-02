@@ -243,7 +243,7 @@ public final class CoverageSites {
 
         public static final Plan NONE = new Plan(List.of(), List.of(), new IdentityHashMap<>(),
                 new LinkedHashMap<>(), new IdentityHashMap<>(), new LinkedHashMap<>(),
-                java.util.Set.of(), new IdentityHashMap<>(), ComparisonCatalog.of(Map.of()));
+                java.util.Set.of(), new IdentityHashMap<>(), ComparisonCatalog.of("", Map.of()));
 
         /**
          * Whether one run of the behavior can pass {@code node} more than once.
@@ -282,7 +282,7 @@ public final class CoverageSites {
          *  numbered no comparison there. */
         public java.util.Optional<ControlPointId.ComparisonPoint> outcomeOf(
                 ComparisonOccurrence which, boolean result) {
-            Integer control = controlByComparison.get(which);
+            Integer control = controlByComparison.get(ofThisPlan(which));
             return control == null ? java.util.Optional.empty()
                     : emissionSiteOf(which).map(site -> new ControlPointId.ComparisonPoint(
                             control, new ComparisonOutcome(site, result)));
@@ -320,9 +320,28 @@ public final class CoverageSites {
          */
         public java.util.Optional<ComparisonEmissionSite> emissionSiteOf(
                 ComparisonOccurrence which) {
-            Integer site = byComparison.get(which);
+            Integer site = byComparison.get(ofThisPlan(which));
             return site == null ? java.util.Optional.empty()
                     : java.util.Optional.of(new ComparisonEmissionSite(site));
+        }
+
+        /**
+         * {@code which}, where it is a comparison this plan is about.
+         *
+         * <p>The one place a name from outside is turned away, because it is the one thing every
+         * question below cannot tell for itself. A comparison this plan numbers no site for and one
+         * belonging to another module both come back with no site, and they are not the same thing:
+         * the first is an answer about this module and the second is a question that was never
+         * about it. Answered alike, a reading of one module joins to another module's comparison
+         * and says nothing about either — which is what naming an occurrence was for.
+         */
+        private ComparisonOccurrence ofThisPlan(ComparisonOccurrence which) {
+            if (!comparisons.holds(which)) {
+                throw new IllegalArgumentException(
+                        "this plan is not about " + which + "; it holds "
+                                + comparisons.all().size() + " comparisons of its own");
+            }
+            return which;
         }
 
         /**
@@ -335,7 +354,7 @@ public final class CoverageSites {
          * differently — which is the shape this whole reading was written against.
          */
         public boolean instruments(ComparisonOccurrence which) {
-            return byComparison.containsKey(which);
+            return byComparison.containsKey(ofThisPlan(which));
         }
 
         /**
@@ -366,12 +385,12 @@ public final class CoverageSites {
 
     /** The sites of every behavior body in one module, numbered in the order the bodies are declared
      * and, within one, in the order the arms are written. */
-    public static Plan of(Map<String, Core> behaviorBodies, DecisionSources decisions,
-                          SuppliedRules supplied) {
+    public static Plan of(String module, Map<String, Core> behaviorBodies,
+                          DecisionSources decisions, SuppliedRules supplied) {
         // Which comparisons there are is not this walk's to decide. Asked here and answered once,
         // so that what gets a number and what a line is drawn on are the same collection read twice
         // rather than two descents that happen to agree.
-        ComparisonCatalog comparisons = ComparisonCatalog.of(behaviorBodies);
+        ComparisonCatalog comparisons = ComparisonCatalog.of(module, behaviorBodies);
         Walk walk = new Walk(comparisons, decisions, supplied);
         for (Map.Entry<String, Core> body : behaviorBodies.entrySet()) {
             walk.behavior(body.getKey(), body.getValue());

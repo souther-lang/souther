@@ -4,7 +4,6 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
-import souther.compiler.coverage.CoverageSites;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
@@ -86,7 +85,7 @@ class AShortCircuitOperatorsPathsToAValueAreItsOutcomesTest {
 
     /** The same three comparisons bracketed the other way round. */
     private static final String BRACKETED_RIGHT = """
-            module example.bracketed
+            module example.chain
 
             behavior fee : (a: Int, b: Int, c: Int, d: Int) -> Int
 
@@ -120,7 +119,7 @@ class AShortCircuitOperatorsPathsToAValueAreItsOutcomesTest {
 
     /** The same chain, given a name before the fork that tests it. */
     private static final String NAMED_BEFORE_THE_FORK = """
-            module example.named
+            module example.chain
 
             behavior fee : (a: Int, b: Int, c: Int, d: Int) -> Int
 
@@ -142,8 +141,7 @@ class AShortCircuitOperatorsPathsToAValueAreItsOutcomesTest {
         Symbols symbols = Scopes.derived(compilation.db(), module).value();
         InputDomain inputs = compilation.db().ask(new Adequacy.Inputs(module)).value().get(behavior);
         return CoverageRead.of(behavior, body,
-                CoverageSites.of(checked.behaviorBodies(), checked.decisions(),
-                checked.supplied()), inputs, symbols).interactions();
+                checked.plan(), inputs, symbols).interactions();
     }
 
     /** The sizes of each group's factors, which is the shape of the space a row is owed for. */
@@ -153,7 +151,15 @@ class AShortCircuitOperatorsPathsToAValueAreItsOutcomesTest {
                 .toList();
     }
 
-    /** What each factor of each group is settled by, as the conditions are written. */
+    /**
+     * What each factor of each group is settled by, as the conditions are written, for holding one
+     * model's reading against another's.
+     *
+     * <p>The three models here are one model written three ways, and they say so by declaring one
+     * module: what names a comparison is the module, the behavior and where it stands, so two
+     * spellings compiled under different module names name their comparisons apart however alike
+     * they read. That is what naming one is for, and it is not what these tests are about.
+     */
     private static List<List<List<String>>> outcomes(List<Interaction> found) {
         return found.stream()
                 .map(group -> group.factors().stream()

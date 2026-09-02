@@ -879,7 +879,7 @@ public final class Adequacy {
                 return Answer.of(Ordered.map(Map.of()));
             }
             souther.compiler.coverage.CoverageSites.Plan plan =
-                    souther.compiler.coverage.CoverageSites.of(bodies,
+                    souther.compiler.coverage.CoverageSites.of(name, bodies,
                             checked == null
                                     ? souther.compiler.coverage.DecisionSources.NONE
                                     : checked.decisions(),
@@ -1225,7 +1225,7 @@ public final class Adequacy {
             Map<String, souther.compiler.core.Core> producing =
                     checkedBodies == null ? Map.of() : checkedBodies.behaviorBodies();
             souther.compiler.coverage.CoverageSites.Plan producingPlan =
-                    souther.compiler.coverage.CoverageSites.of(producing,
+                    souther.compiler.coverage.CoverageSites.of(name, producing,
                             checkedBodies == null
                                     ? souther.compiler.coverage.DecisionSources.NONE
                                     : checkedBodies.decisions(),
@@ -1282,7 +1282,7 @@ public final class Adequacy {
             Map<String, souther.compiler.check.ElementBindings> elementsOf =
                     checked == null ? Map.of() : checked.elementBindings();
             souther.compiler.coverage.CoverageSites.Plan plan =
-                    souther.compiler.coverage.CoverageSites.of(bodies,
+                    souther.compiler.coverage.CoverageSites.of(name, bodies,
                             checked == null
                                     ? souther.compiler.coverage.DecisionSources.NONE
                                     : checked.decisions(),
@@ -1426,7 +1426,7 @@ public final class Adequacy {
             Map<String, souther.compiler.core.Core> bodies =
                     checked == null ? Map.of() : checked.behaviorBodies();
             souther.compiler.coverage.CoverageSites.Plan plan =
-                    souther.compiler.coverage.CoverageSites.of(bodies,
+                    souther.compiler.coverage.CoverageSites.of(name, bodies,
                             checked == null
                                     ? souther.compiler.coverage.DecisionSources.NONE
                                     : checked.decisions(),
@@ -2712,7 +2712,7 @@ public final class Adequacy {
             Map<String, souther.compiler.check.ElementBindings> elementsOf =
                     checked == null ? Map.of() : checked.elementBindings();
             souther.compiler.coverage.CoverageSites.Plan plan =
-                    souther.compiler.coverage.CoverageSites.of(bodies,
+                    souther.compiler.coverage.CoverageSites.of(name, bodies,
                             checked == null
                                     ? souther.compiler.coverage.DecisionSources.NONE
                                     : checked.decisions(),

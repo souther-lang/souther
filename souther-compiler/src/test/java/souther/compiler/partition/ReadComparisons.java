@@ -1,7 +1,6 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.Symbols;
-import souther.compiler.coverage.CoverageSites;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
@@ -40,8 +39,7 @@ record ReadComparisons(List<ComparisonReadings.Reading> comparisons,
                 compilation.db().ask(new Adequacy.Inputs(module)).value().get(behavior);
         return new ReadComparisons(ComparisonReadings.of(behavior,
                 checked.behaviorBodies().get(behavior),
-                CoverageSites.of(checked.behaviorBodies(), checked.decisions(),
-                        checked.supplied()),
+                checked.plan(),
                 inputs.reading(symbols), InputReads.ofParameters(inputs.parameterReads(),
                         checked.elementBindings().get(behavior)),
                 // Nothing said about what arrives, so every line here is held to what the

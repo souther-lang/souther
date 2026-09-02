@@ -10,7 +10,6 @@ import souther.compiler.core.Core;
 import souther.compiler.coverage.ComparisonOutcome;
 import souther.compiler.coverage.ControlClaim;
 import souther.compiler.coverage.ControlPointId;
-import souther.compiler.coverage.CoverageSites;
 import souther.compiler.coverage.Observation;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.reading.Interaction;
@@ -232,8 +231,7 @@ class ACandidateThatMissedIsNotOfferedTest {
                     Partitions.of(spec.name(), inputs, symbols,
                             souther.compiler.query.ReadAs.THE_COMPILATION_DOES)),
                     CoverageRead.of(spec.name(), body,
-                            CoverageSites.of(checked.behaviorBodies(), checked.decisions(),
-                checked.supplied()), inputs,
+                            checked.plan(), inputs,
                             symbols));
         }
     }

@@ -28,17 +28,27 @@ package souther.compiler.coverage;
  * so one comparison the author wrote is several here, each reached under its caller's own
  * conditions.
  *
+ * <p><b>Named in the set it travels in, which is wider than the catalog that issued it.</b> A
+ * catalog is of one module, and two modules may each declare a {@code check} whose body writes a
+ * comparison first — so a behavior's name and a number tell those two apart nowhere. The node this
+ * replaced was distinct across everything there is, being an object; a name that is distinct only
+ * within a module would be a narrower identity wearing the same job, and the crossing this exists
+ * to be the only one of would join one module's reading to another module's comparison and say
+ * nothing.
+ *
+ * @param module   whose module the body is in
  * @param behavior whose body it stands in
  * @param ordinal  which of that body's comparisons it is, in the order the source wrote them. The
  *                 order is the walk's, which is a function of the body alone — the emitter builds
  *                 one catalog and a measurement builds another, and a reading joining across the
  *                 two is joining on this
  */
-public record ComparisonOccurrence(String behavior, int ordinal) {
+public record ComparisonOccurrence(String module, String behavior, int ordinal) {
 
     public ComparisonOccurrence {
-        if (behavior == null) {
-            throw new IllegalArgumentException("a comparison of a body is one of somebody's body");
+        if (module == null || behavior == null) {
+            throw new IllegalArgumentException(
+                    "a comparison of a body is one of somebody's body, in somebody's module");
         }
         if (ordinal < 0) {
             throw new IllegalArgumentException(
@@ -48,6 +58,6 @@ public record ComparisonOccurrence(String behavior, int ordinal) {
 
     @Override
     public String toString() {
-        return "comparison " + ordinal + " of " + behavior;
+        return "comparison " + ordinal + " of " + module + "." + behavior;
     }
 }
