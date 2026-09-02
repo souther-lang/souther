@@ -972,8 +972,12 @@ class EverySchemaWordIsAccountedForTest {
         // The word itself, and not merely a word the schema happens to allow. This is here to keep
         // one reproduction alive: a fixture that stopped producing an undecided row and produced
         // some other legitimate gap instead would go on passing while covering nothing.
-        assertEquals(List.of("row_undecided"), written,
-                "the row did not come back, and this is what the report says about it");
+        //
+        // The row here is stopped by the clock it is evaluated under, which is one of the three
+        // figures this compiler compares a row against, so the word is that one and not the word
+        // for a row the evaluation had no answer for.
+        assertEquals(List.of("row_evaluation_limit_reached"), written,
+                "the row ran past its deadline, and this is what the report says about it");
         assertTrue(allowed.containsAll(written),
                 "the schema allows " + allowed + " and the report writes " + written);
     }

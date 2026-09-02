@@ -54,9 +54,26 @@ public record Incompleteness(Code code, Target target, Optional<Citation> at) {
         VALUE_UNREADABLE(false),
         /** A value was larger than the limits allow, so only its shape was kept. */
         VALUE_TRUNCATED(false),
-        /** A row could not be decided — it spent its budget, or the evaluation did not answer — so
-         * what it would have covered is unknown. */
+        /** A row could not be decided: the evaluation did not answer, so what the row would have
+         * covered is unknown. */
         ROW_UNDECIDED(false),
+        /**
+         * A row was stopped by a limit this compiler evaluates rows under, so what it would have
+         * covered is unknown.
+         *
+         * <p>Its own word beside {@link #ROW_UNDECIDED}, which is the same loss from the other
+         * cause. Both leave the measure without what the row would have decided, and a person
+         * holding them does different work: the values here are ones a run under a wider
+         * {@link souther.compiler.execute.EvaluationPolicy} keeps, and a row the evaluation had no
+         * answer for is not.
+         *
+         * <p>One word for the three limits there are — the counted steps, the recursion depth and
+         * the clock — because what a measure lost is the same for all of them and the row's own
+         * diagnostic already says which. A limit the host imposed rather than this compiler is not
+         * one of them: the stack running out is not a figure anything here compared against, and a
+         * run under a wider policy on the same host meets it again.
+         */
+        ROW_EVALUATION_LIMIT_REACHED(false),
         /**
          * A row was not handed to what was to apply it: nothing could establish that the answer's
          * declarations are the ones the row is written for.

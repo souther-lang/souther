@@ -60,6 +60,7 @@ public record ReadingReasons(List<ReadingGap> eachKindOnce) {
             ReadingGap.of(Incompleteness.Code.VALUE_UNREADABLE),
             ReadingGap.of(Incompleteness.Code.VALUE_TRUNCATED),
             ReadingGap.of(Incompleteness.Code.ROW_UNDECIDED),
+            ReadingGap.of(Incompleteness.Code.ROW_EVALUATION_LIMIT_REACHED),
             ReadingGap.of(Incompleteness.Code.ANSWERER_NOT_ESTABLISHED),
             ReadingGap.of(Incompleteness.Code.LINKAGE_FAILED),
             ReadingGap.of(Incompleteness.Code.OBSERVATION_ABSENT),
