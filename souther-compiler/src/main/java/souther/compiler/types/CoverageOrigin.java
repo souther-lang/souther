@@ -13,6 +13,9 @@ package souther.compiler.types;
  * derives them with {@link #lowered}, so what a comprehension's guards get is a function of the
  * comprehension rather than of when the lowering ran. Nothing else makes one — an origin minted after
  * expansion would give two copies of one fork two origins, which is the thing this exists to prevent.
+ * A record's constructor is public and takes every component, so that last sentence is held against
+ * the compiled classes rather than left to be read: what settles an origin is written down, with who
+ * calls it.
  *
  * <p>Not a name anything outside one compilation can be matched by. {@code ordinal} is the builder's
  * own count over the source it is reading, and the builder does not take the numbers in the order the

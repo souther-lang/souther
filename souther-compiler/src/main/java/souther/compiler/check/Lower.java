@@ -130,10 +130,11 @@ public final class Lower {
         Hir.Expr result = new Hir.ListLit(List.of(comp.element()), comp.pos(), null);
         List<Hir.Expr> guards = comp.guards();
         for (int i = guards.size() - 1; i >= 0; i--) {
-            // The fork is derived from the comprehension rather than minted here, so a
-            // comprehension a helper holds answers the same in every body that expanded it.
+            // The fork is the comprehension's answer rather than one minted here, so a
+            // comprehension a helper holds answers the same in every body that expanded it, and the
+            // reading that runs before this lowering names the fork this builds.
             result = new Hir.If(guards.get(i), result, new Hir.ListLit(List.of(), comp.pos(), null),
-                    comp.origin().lowered(i), comp.pos(), comp.region());
+                    comp.forkOfGuard(i), comp.pos(), comp.region());
         }
         return result;
     }
