@@ -6,6 +6,7 @@ import souther.compiler.ast.Hir;
 import souther.compiler.check.Combinators.Handed;
 import souther.compiler.check.PathEngine.Entered;
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.core.Core;
 import souther.compiler.core.Evaluated;
@@ -1973,7 +1974,7 @@ public final class InvariantChecker {
                         placesIn(stopped.node(), stopped.at(), byName).origin()));
             }
         }
-        NumericDomain.LinearForm<FactSubject> whole =
+        LinearForm<FactSubject> whole =
                 ((AffineForms.Outcome.Composed<FactSubject, Denotations>) left).form()
                         .minus(((AffineForms.Outcome.Composed<FactSubject, Denotations>) right)
                                 .form());

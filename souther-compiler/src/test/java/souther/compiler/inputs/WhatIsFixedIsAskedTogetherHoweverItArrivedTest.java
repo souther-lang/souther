@@ -8,6 +8,7 @@ import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
@@ -213,11 +214,11 @@ class WhatIsFixedIsAskedTogetherHoweverItArrivedTest {
                 "and one it can be told a value for");
     }
 
-    private static NumericDomain.LinearForm<NumericTerm> sum() {
+    private static LinearForm<NumericTerm> sum() {
         Map<NumericTerm, BigDecimal> coefs = new LinkedHashMap<>();
         coefs.put(X, BigDecimal.ONE);
         coefs.put(Y, BigDecimal.ONE);
-        return new NumericDomain.LinearForm<>(BigDecimal.ZERO, coefs);
+        return new LinearForm<>(BigDecimal.ZERO, coefs);
     }
 
     private static Map<NumericTerm, Count> fixing(NumericTerm one, int at,
@@ -390,7 +391,7 @@ class WhatIsFixedIsAskedTogetherHoweverItArrivedTest {
             assertEquals(readIn.leftAt(souther.compiler.check.RuleKey.of("y"),
                             new souther.compiler.check.NumberAt.OfWhatNumber.OfItsOwnValue()),
                     taken.constraints().numbers().boundsOf(
-                            NumericDomain.LinearForm.<String>atom("y")),
+                            LinearForm.<String>atom("y")),
                     "where y runs, with x at " + at);
         }
     }

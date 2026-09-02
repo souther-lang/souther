@@ -42,7 +42,7 @@ public sealed interface OperationFact {
      * says.
      */
     record AnswersAFormOfItsArguments(
-            souther.compiler.numeric.NumericDomain.LinearForm<ArgumentRef> form)
+            souther.compiler.numeric.LinearForm<ArgumentRef> form)
             implements OperationFact {
 
         public AnswersAFormOfItsArguments {
@@ -324,7 +324,7 @@ public sealed interface OperationFact {
 
     /** A relation between two arguments: {@code left rel right}. What a case is reached under,
      *  written in the arguments the operation was given and in nothing else. */
-    record ArgumentsStand(ArgumentRef left, souther.compiler.numeric.NumericDomain.Rel rel,
+    record ArgumentsStand(ArgumentRef left, souther.compiler.numeric.Rel rel,
                           ArgumentRef right) {
 
         public ArgumentsStand {

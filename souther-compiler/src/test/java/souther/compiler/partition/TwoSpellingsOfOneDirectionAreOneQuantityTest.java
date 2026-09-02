@@ -4,7 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
-import souther.compiler.numeric.NumericDomain.LinearForm;
+import souther.compiler.numeric.LinearForm;
 
 import java.math.BigDecimal;
 import java.util.LinkedHashMap;

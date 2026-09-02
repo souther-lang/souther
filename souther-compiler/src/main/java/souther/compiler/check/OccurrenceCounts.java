@@ -3,7 +3,8 @@ package souther.compiler.check;
 import souther.compiler.ast.Hir;
 import souther.compiler.numeric.CountDomain;
 import souther.compiler.numeric.Granularity;
-import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.Rel;
 import souther.compiler.types.TypeSymbol;
 
 import java.math.BigDecimal;
@@ -70,17 +71,17 @@ public final class OccurrenceCounts {
 
     /** Whether the value at {@code path} may hold no more than {@code count}. */
     public boolean mayHoldAtMost(RuleKey path, long count) {
-        return mayHold(path, count, NumericDomain.Rel.LE);
+        return mayHold(path, count, Rel.LE);
     }
 
     /** Whether the value at {@code path} may hold {@code count} and no other number. */
     public boolean mayHoldExactly(RuleKey path, long count) {
-        return mayHold(path, count, NumericDomain.Rel.EQ);
+        return mayHold(path, count, Rel.EQ);
     }
 
     /** Whether the value at {@code path} may hold {@code count} or more. */
     public boolean mayHoldAtLeast(RuleKey path, long count) {
-        return mayHold(path, count, NumericDomain.Rel.GE);
+        return mayHold(path, count, Rel.GE);
     }
 
     /**
@@ -101,7 +102,7 @@ public final class OccurrenceCounts {
                 : CountDomain.leastFrom(seeded.numbers().boundsOf(counted).min());
     }
 
-    private boolean mayHold(RuleKey path, long count, NumericDomain.Rel against) {
+    private boolean mayHold(RuleKey path, long count, Rel against) {
         if (seeded == null) {
             return true;
         }
@@ -109,8 +110,8 @@ public final class OccurrenceCounts {
         if (counted == null) {
             return true;   // nothing counts what is there, so no rule here is about how much it holds
         }
-        NumericDomain.LinearForm<FactSubject> from = NumericDomain.LinearForm.atom(counted)
-                .minus(NumericDomain.LinearForm.constant(BigDecimal.valueOf(count)));
+        LinearForm<FactSubject> from = LinearForm.atom(counted)
+                .minus(LinearForm.constant(BigDecimal.valueOf(count)));
         return !seeded.numbers()
                 .assume(from, against, Map.of(counted, Granularity.DISCRETE))
                 .isBottom();

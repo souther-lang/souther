@@ -8,7 +8,8 @@ import souther.compiler.check.FieldDomains;
 import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
-import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.Rel;
 import souther.compiler.values.AdmissibleValues;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
@@ -143,7 +144,7 @@ class TheInputsEmptinessHasOneOwnerTest {
         coefs.put(new NumericTerm.ValueOf(TermPath.of("p").then("x")), BigDecimal.ONE);
         coefs.put(new NumericTerm.ValueOf(TermPath.of("q").then("y")), BigDecimal.ONE);
         SearchRegion crossed = asked.region().assuming(
-                new NumericDomain.LinearForm<>(BigDecimal.ZERO, coefs), NumericDomain.Rel.LE);
+                new LinearForm<>(BigDecimal.ZERO, coefs), Rel.LE);
 
         assertEquals(Optional.of(new EmptyInput.ProvedByTheRules(new Emptiness.ConflictingRules())),
                 crossed.emptiness());

@@ -8,7 +8,7 @@ import souther.compiler.types.CoverageOrigin;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.NumericDomain;
-import souther.compiler.numeric.NumericDomain.LinearForm;
+import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.OrderedInterval;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;

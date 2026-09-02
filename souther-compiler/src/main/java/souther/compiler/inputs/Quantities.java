@@ -1,6 +1,7 @@
 package souther.compiler.inputs;
 
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 
 import java.util.Map;
@@ -159,7 +160,7 @@ public sealed interface Quantities permits ReadQuantities {
      * <p>The form as the rule wrote it, over this input's terms. What it comes to is asked of the
      * relations that reach its positions rather than composed from what each of them projects.
      */
-    NumericDomain.Bounds runsBetween(NumericDomain.LinearForm<NumericTerm> form);
+    NumericDomain.Bounds runsBetween(LinearForm<NumericTerm> form);
 
     /**
      * The same, of one term.
@@ -168,7 +169,7 @@ public sealed interface Quantities permits ReadQuantities {
      * one answer is what this layer exists to stop, and a form over one position is a form.
      */
     default NumericDomain.Bounds runsBetween(NumericTerm term) {
-        return runsBetween(NumericDomain.LinearForm.atom(term));
+        return runsBetween(LinearForm.atom(term));
     }
 
     /**

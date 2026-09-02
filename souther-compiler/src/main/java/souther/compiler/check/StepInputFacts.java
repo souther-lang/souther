@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import souther.compiler.core.Core;
 import souther.compiler.numeric.Granularity;
+import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.NumericDomain.Bounds;
 import souther.compiler.types.Type;
@@ -190,7 +191,7 @@ record StepInputFacts(Map<FactSubject, Bounds> at, Map<FactSubject, Granularity>
             }
             Bounds had = at.get(atom);
             at.put(atom, had == null ? bounds : had.meet(bounds));
-            kinds.putAll(terms.kindsOf(NumericDomain.LinearForm.atom(atom)));
+            kinds.putAll(terms.kindsOf(LinearForm.atom(atom)));
         }
 
         StepInputFacts gathered() {

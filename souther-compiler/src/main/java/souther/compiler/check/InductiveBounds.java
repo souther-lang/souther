@@ -3,7 +3,7 @@ package souther.compiler.check;
 import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.Induction;
 import souther.compiler.numeric.NumericDomain.Bounds;
-import souther.compiler.numeric.NumericDomain.LinearForm;
+import souther.compiler.numeric.LinearForm;
 
 import java.util.Collection;
 import java.util.Map;

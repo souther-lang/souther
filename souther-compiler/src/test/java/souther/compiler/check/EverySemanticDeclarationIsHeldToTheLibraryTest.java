@@ -7,7 +7,7 @@ import souther.compiler.semantics.ArgumentRef;
 import souther.compiler.semantics.OperationFact;
 import souther.compiler.semantics.OperationFacts;
 import souther.compiler.semantics.ResultBound;
-import souther.compiler.numeric.NumericDomain.Rel;
+import souther.compiler.numeric.Rel;
 import souther.compiler.types.ValueName;
 
 import java.math.BigDecimal;
@@ -61,7 +61,7 @@ class EverySemanticDeclarationIsHeldToTheLibraryTest {
         gained.add(new OperationFacts.Declared(
                 ValueName.Stdlib.operation("Decimal", "fromInt"),
                 new OperationFact.AnswersAFormOfItsArguments(
-                        souther.compiler.numeric.NumericDomain.LinearForm.atom(
+                        souther.compiler.numeric.LinearForm.atom(
                                 new ArgumentRef.At(7)))));
 
         IllegalStateException refused = assertThrows(IllegalStateException.class,
@@ -91,7 +91,7 @@ class EverySemanticDeclarationIsHeldToTheLibraryTest {
         gained.add(new OperationFacts.Declared(
                 ValueName.Stdlib.operation("List", "get"),
                 new OperationFact.AnswersAFormOfItsArguments(
-                        souther.compiler.numeric.NumericDomain.LinearForm.atom(
+                        souther.compiler.numeric.LinearForm.atom(
                                 new ArgumentRef.At(0)))));
 
         IllegalStateException refused = assertThrows(IllegalStateException.class,
@@ -239,7 +239,7 @@ class EverySemanticDeclarationIsHeldToTheLibraryTest {
         gained.add(new OperationFacts.Declared(
                 ValueName.Stdlib.operation("Decimal", "fromNothingAtAll"),
                 new OperationFact.AnswersAFormOfItsArguments(
-                        souther.compiler.numeric.NumericDomain.LinearForm.atom(
+                        souther.compiler.numeric.LinearForm.atom(
                                 new ArgumentRef.At(0)))));
 
         IllegalStateException refused = assertThrows(IllegalStateException.class,

@@ -1,7 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.inputs.NumericTerm;
-import souther.compiler.numeric.NumericDomain.LinearForm;
+import souther.compiler.numeric.LinearForm;
 
 import java.math.BigDecimal;
 import java.util.LinkedHashMap;

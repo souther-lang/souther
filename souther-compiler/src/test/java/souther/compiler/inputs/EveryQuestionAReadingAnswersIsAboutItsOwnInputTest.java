@@ -5,7 +5,7 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.DefaultStdlib;
 import souther.compiler.check.Symbols;
 import souther.compiler.numeric.Count;
-import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.LinearForm;
 import souther.compiler.query.ReadAs;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
@@ -108,8 +108,8 @@ class EveryQuestionAReadingAnswersIsAboutItsOwnInputTest {
             } else if (takes == PositionId.class) {
                 handed[at] = new PositionId(TermPath.of("s"));
                 names = true;
-            } else if (takes == NumericDomain.LinearForm.class) {
-                handed[at] = NumericDomain.LinearForm.atom(foreignTerm());
+            } else if (takes == LinearForm.class) {
+                handed[at] = LinearForm.atom(foreignTerm());
                 names = true;
             } else if (takes == Map.class) {
                 handed[at] = Map.of(foreignTerm(), Count.of(1));

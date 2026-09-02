@@ -1,6 +1,6 @@
 package souther.compiler.semantics;
 
-import souther.compiler.numeric.NumericDomain.Rel;
+import souther.compiler.numeric.Rel;
 import souther.compiler.types.BinOp;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
@@ -565,14 +565,14 @@ public final class OperationFacts {
     }
 
     /** {@code times} of what one argument is counted as. */
-    private static souther.compiler.numeric.NumericDomain.LinearForm<ArgumentRef> form(
+    private static souther.compiler.numeric.LinearForm<ArgumentRef> form(
             ArgumentRef argument, long times) {
-        return souther.compiler.numeric.NumericDomain.LinearForm.<ArgumentRef>atom(argument)
+        return souther.compiler.numeric.LinearForm.<ArgumentRef>atom(argument)
                 .times(java.math.BigDecimal.valueOf(times));
     }
 
     private static OperationFact answers(
-            souther.compiler.numeric.NumericDomain.LinearForm<ArgumentRef> form) {
+            souther.compiler.numeric.LinearForm<ArgumentRef> form) {
         return new OperationFact.AnswersAFormOfItsArguments(form);
     }
 
@@ -611,7 +611,7 @@ public final class OperationFacts {
 
     /** What {@code operation} answers, counted, in what its arguments are counted as — or null
      *  where it states no such form. */
-    public static souther.compiler.numeric.NumericDomain.LinearForm<ArgumentRef>
+    public static souther.compiler.numeric.LinearForm<ArgumentRef>
             answersAFormOfItsArguments(ValueName operation) {
         return Index.ANSWERS_A_FORM.get(operation);
     }
@@ -837,7 +837,7 @@ public final class OperationFacts {
     private static final class Index {
 
         private static final Map<ValueName,
-                souther.compiler.numeric.NumericDomain.LinearForm<ArgumentRef>> ANSWERS_A_FORM =
+                souther.compiler.numeric.LinearForm<ArgumentRef>> ANSWERS_A_FORM =
                 index(OperationFact.AnswersAFormOfItsArguments.class,
                         OperationFact.AnswersAFormOfItsArguments::form);
 

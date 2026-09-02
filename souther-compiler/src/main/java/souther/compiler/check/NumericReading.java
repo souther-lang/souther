@@ -1,6 +1,6 @@
 package souther.compiler.check;
 
-import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.LinearForm;
 import souther.compiler.semantics.ArgumentRef;
 import souther.compiler.semantics.NumericResult;
 import souther.compiler.semantics.TakenAs;
@@ -46,7 +46,7 @@ sealed interface NumericReading {
 
     /** The number is arithmetic over what the arguments are counted as, and {@code form} is that
      *  arithmetic. */
-    record AsAFormOfItsArguments(NumericDomain.LinearForm<ArgumentRef> form)
+    record AsAFormOfItsArguments(LinearForm<ArgumentRef> form)
             implements NumericReading {
 
         public AsAFormOfItsArguments {
