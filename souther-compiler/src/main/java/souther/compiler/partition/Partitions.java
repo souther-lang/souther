@@ -433,20 +433,16 @@ public final class Partitions {
     private static BodyCutInspection cameTo(NumericTerm.FromOnePosition term,
                                             souther.compiler.inputs.TermPath path,
                                             List<RuleWithoutALine> rules) {
-        LeftAtThePosition left = LeftAtThePosition.of(rules.stream().filter(one -> term == null
+        boolean stated = rules.stream().anyMatch(one -> term == null
                 ? one.at().path().equals(path)
                 : switch (one.at()) {
                     case souther.compiler.inputs.FilingCoordinate.OfTerm it ->
                             it.term().equals(term);
                     case souther.compiler.inputs.FilingCoordinate.AtPosition it ->
                             it.path().equals(path);
-                }).toList());
-        // Which of the two this phase was left with, and not merely that it was left with
-        // something. The verdict below tells a reading that stopped from a rule read to the end,
-        // and answered here with one word it read every rule this phase understood as one it could
-        // not read.
-        return left == null ? new BodyCutInspection.Exhausted()
-                : new BodyCutInspection.NoLine(left);
+                });
+        return stated ? new BodyCutInspection.ARuleWithNoLine()
+                : new BodyCutInspection.Exhausted();
     }
 
     /**
@@ -1118,33 +1114,30 @@ public final class Partitions {
                 // all the same: a `Map` a rule about its size divides is one nothing was read into,
                 // and taking that off the axis with the fallback is how the stop went unreported
                 // (issue #1084).
-                PositionAccount at = PositionAccount.of(behavior, position, null, null);
+                PositionAccount at = PositionAccount.of(behavior, position, null);
                 drawn.add(new Drawn(at,
                         List.of(Axis.of(behavior, term, divided.classes(),
                                 divided.cuts().cuts(), List.of(), position.narrowedEnds()))));
             }
             // Nothing local divides the position, which is what licenses asking what it is made of.
-            // Whether the reading got to the end of the rules is carried rather than acted on here:
-            // a position made of positions is given up in favour of what is under it either way,
-            // and a rule about the whole value that this could not read says nothing about which of
-            // its fields it would have divided.
-            case LocalPartition.Open _, LocalPartition.Blocked _ -> {
+            // What its rules still raise is carried rather than acted on here: a position made of
+            // positions is given up in favour of what is under it either way, and a question about
+            // the whole value says nothing about which of its fields it would have divided.
+            case LocalPartition.Open _ -> {
                 switch (position.structure()) {
                     // The one answer that takes the position away: what is under it is what the
                     // classes belong to, and those positions were read on their own.
                     case StructuralInspection.Decomposed _ -> { }
                     // A leaf and a block are both positions still to be answered for, and each
-                    // carries what it is left with if nothing answers — including a rule about this
-                    // position that the local reading could not take in, which is what keeps the
-                    // position from completing as one the model divides no way.
+                    // carries what the walk found and what its rules still raise, which is what
+                    // keeps the position from completing as one the model divides no way.
                     case StructuralInspection.Retained retained -> {
                         // The position and no measure of it. Nothing local divided the number the
                         // declarations name, and a measure with nothing in it would be a location
                         // counted among the measures — what is still to be answered for here is
                         // the position's to carry.
                         drawn.add(new Drawn(
-                                PositionAccount.of(behavior, position, retained.continuation(),
-                                        leftAt(position)),
+                                PositionAccount.of(behavior, position, retained.continuation()),
                                 List.of()));
                     }
                 }
@@ -1154,33 +1147,6 @@ public final class Partitions {
 
 
 
-
-    /**
-     * What a position with no evidence is left with, where an absence may not be concluded from it.
-     *
-     * <p>The end reading's answer ahead of the value reading's, where both have one. A rule this
-     * read for a line and could not use is the nearer of the two: lifting that limit is what would
-     * give the position an axis, and the reading that turns clauses into sets of values has no word
-     * for a range at all — so it names one limit while the report's own line names another, and one
-     * position came back with two causes for one clause.
-     *
-     * <p><b>A stop ahead of a rule read to the end, and not the first of the list.</b> Either keeps
-     * the position from completing as one the model draws no line through, and they are not alike
-     * in anything else: one is a limit somebody can lift and the other is what the model says. Taken
-     * in the order the rules happen to be in, which of the two a position came out under turned on
-     * which clause its author wrote first.
-     *
-     * <p>Which of the two it is travels with it, so nothing downstream works it out again. That is
-     * what {@link LeftAtThePosition} is for: the same distinction is drawn by a verdict, by a
-     * generation's account of why no row could answer, and by the words a claim is annotated with,
-     * and each of them used to read it off where the evidence had come from.
-     */
-    private static LeftAtThePosition leftAt(Position position) {
-        return LeftAtThePosition.outranking(
-                LeftAtThePosition.of(position.rulesWithoutALine()),
-                position.valuesUnread() == null ? null
-                        : new LeftAtThePosition.AReadingStopped(position.valuesUnread()));
-    }
 
     // --- small helpers ----------------------------------------------------------------------------
 

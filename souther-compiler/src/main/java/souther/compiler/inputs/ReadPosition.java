@@ -36,7 +36,6 @@ record ReadPosition(TermPath path, TypeView view, NumericTerm.FromOnePosition te
                     boolean nothingExists,
                     ProjectionEvidence projection, List<Case> declared, ReadingResult reading,
                     ObligationDomain obligations, AdmissibleSet.Completeness completeness,
-                    BlockReason.ReadingStopReason valuesUnread,
                     List<RuleWithoutALine> rulesWithoutALine,
                     List<StandingQuestion> unansweredQuestions,
                     Set<RulesLeftUnread> rulesLeftUnread,

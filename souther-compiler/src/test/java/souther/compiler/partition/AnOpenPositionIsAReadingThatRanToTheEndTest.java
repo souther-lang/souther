@@ -9,7 +9,6 @@ import souther.compiler.check.Resolve;
 import souther.compiler.check.SyntaxSymbols;
 import souther.compiler.check.Symbols;
 import souther.compiler.frontend.CstFrontend;
-import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.Position;
 import souther.compiler.inputs.TermPath;
@@ -129,14 +128,25 @@ class AnOpenPositionIsAReadingThatRanToTheEndTest {
         assertInstanceOf(LocalPartition.Open.class, partitionOf("Slot"));
     }
 
-    /** A rule written here that this could not read is neither. Nothing follows about the model,
-     *  which is what keeps the absence above from being claimed here. */
+    /**
+     * A rule written here that nothing could read is open as well, and the position is not an
+     * absence.
+     *
+     * <p>What this reading found is that nothing it read divides the position, which is the same
+     * answer it gives where nothing is written at all. What keeps the absence above from being
+     * claimed here is not held by this reading: the rule raises a question, and no reading answered
+     * it, so the position is one nothing about the model follows from. Answered here instead, a
+     * reading short of a rule that another reading took in wrote the position down as one this
+     * compiler could not read.
+     */
     @Test
-    void aRuleThisCouldNotReadIsNotAnOpenPosition() {
-        LocalPartition.Blocked blocked =
-                assertInstanceOf(LocalPartition.Blocked.class, partitionOf("Email"));
+    void aRuleNothingCouldReadLeavesAQuestionRatherThanAnAnswerHere() {
+        assertInstanceOf(LocalPartition.Open.class, partitionOf("Email"));
 
-        assertInstanceOf(BlockReason.UnreadValueRule.class, blocked.why());
+        assertEquals(1, read("Email").unansweredQuestions().size(),
+                "the rule nothing read raises a question, and nothing answered it");
+        assertEquals(List.of(), read("Gender").unansweredQuestions(),
+                "and a rule a reading took in raises none that stands");
     }
 
     /** The reading is there whichever answer it is: what the position is measured at, and what its

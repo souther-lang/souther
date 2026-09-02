@@ -83,7 +83,7 @@ class OneLocationMeasuredAtTwoNumbersIsStillOneLocationTest {
         PositionAccount at = new PositionAccount("f", TermPath.of("r").then("cost"), Type.BOOL,
                 new ReadingResidue(new BlockedDescent(new BlockReason.ValueRulesNotReached()),
                         java.util.Set.of()),
-                null, null);
+                null, List.of());
 
         MeasureClosure.Both closed = MeasureClosure.of(List.of(at), List.of(), List.of(),
                 new LinesRead());
@@ -114,7 +114,7 @@ class OneLocationMeasuredAtTwoNumbersIsStillOneLocationTest {
                 Type.BOOL,
                 new ReadingResidue(new BlockedDescent(new BlockReason.ValueRulesNotReached()),
                         java.util.Set.of()),
-                null, null);
+                null, List.of());
         MeasureClosure.Both closed = MeasureClosure.of(List.of(at), List.of(), List.of(),
                 new LinesRead());
         return souther.compiler.query.WeakeningSet.of(

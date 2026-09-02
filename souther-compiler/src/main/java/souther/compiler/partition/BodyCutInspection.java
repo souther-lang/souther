@@ -41,31 +41,18 @@ public sealed interface BodyCutInspection {
      * <p>Not a verdict on the position. Something else may still answer for it, and what this
      * settles is only that this phase did not.
      *
-     * <p><b>Which of the two ways that happened travels with it.</b> A reading that stopped and a
-     * rule read from end to end that draws no line are opposite sentences about this compiler, and
-     * this phase used to answer with neither — it said only that something was left, and the
-     * verdict read that as a derivation this compiler could not make. So a {@code guard} relating
-     * two positions, understood completely, came out as a position something is written at that
-     * nothing read.
-     *
-     * <p>{@link LeftAtThePosition} and not a reason, because that is the same value the reading
-     * before this one hands over: the two phases answer about one position, and a verdict has to
-     * put their answers together without either being able to say more than it knows.
+     * <p><b>That a rule states something here, and nothing about how far a reading of it got.</b>
+     * Whether the rules of the position leave a question standing is the accounting's answer, asked
+     * of every reading at once; carried here as well, this phase's own reading decided it — so a
+     * {@code guard} relating two positions, understood completely and answered for by another
+     * reading, came out as a position something is written at that nothing read.
      *
      * <p>Which rule it was is not here, and is not lost. A rule this phase could not use is a
      * {@link souther.compiler.inputs.RuleWithoutALine} made by the reader that read it, naming
      * which rule; carried through here as well, one limit at one position stood for however many
      * rules were stopped by it and the first of them was the one a report printed.
      */
-    record NoLine(LeftAtThePosition left) implements BodyCutInspection {
-
-        public NoLine {
-            if (left == null) {
-                throw new IllegalArgumentException(
-                        "a position left with nothing is what Exhausted says");
-            }
-        }
-    }
+    record ARuleWithNoLine() implements BodyCutInspection {}
 
     /**
      * What this phase came to about one position, where it answered once per number the position is
@@ -79,8 +66,7 @@ public sealed interface BodyCutInspection {
      * <p>A line anywhere outranks everything: the position is divided, whichever of its numbers the
      * line is on. Then a rule that came to nothing outranks the rules having been exhausted, for the
      * reason the arms are three and not two — a rule is written here, and saying the reading ran out
-     * would be the opposite of what that rule says. Between two of those, whichever
-     * {@link LeftAtThePosition#outranking} puts first.
+     * would be the opposite of what that rule says.
      */
     static BodyCutInspection outranking(BodyCutInspection first, BodyCutInspection second) {
         if (first == null) {
@@ -92,10 +78,6 @@ public sealed interface BodyCutInspection {
         if (first instanceof Evidence || second instanceof Evidence) {
             return new Evidence();
         }
-        if (first instanceof NoLine(LeftAtThePosition one)
-                && second instanceof NoLine(LeftAtThePosition other)) {
-            return new NoLine(LeftAtThePosition.outranking(one, other));
-        }
-        return first instanceof NoLine ? first : second;
+        return first instanceof ARuleWithNoLine ? first : second;
     }
 }

@@ -8,7 +8,6 @@ import souther.compiler.check.Prepared;
 import souther.compiler.conformance.ConformanceCorpus;
 import souther.compiler.diag.Located;
 import souther.compiler.inputs.StandingQuestion;
-import souther.compiler.inputs.StructuralInspection;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Adequacy;
@@ -155,7 +154,7 @@ class APositionIsUnderivableOnlyWhereSomethingStandsAtItTest {
             }
             Set<TermPath> unreached = new LinkedHashSet<>();
             for (PositionAccount at : divided.positions()) {
-                if (at.pending() instanceof StructuralInspection.Continuation.Blocked) {
+                if (at.notReachedInto() != null) {
                     unreached.add(at.path());
                 }
             }
