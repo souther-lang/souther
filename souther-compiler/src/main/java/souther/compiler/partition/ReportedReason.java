@@ -1,6 +1,10 @@
 package souther.compiler.partition;
 
 import souther.compiler.inputs.BlockReason;
+import souther.compiler.publish.SourceOrdered;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * The word an adequacy document writes for a reason a derivation stopped.
@@ -15,6 +19,28 @@ import souther.compiler.inputs.BlockReason;
  * projection beside this one rather than a change to what a reason is.
  */
 public final class ReportedReason {
+
+    /**
+     * The words for what a question stands on, in the order the parts that raised it were written.
+     *
+     * <p>Made here, where what the order is is still known. What a question was short of arrives in
+     * the order the author wrote the parts of the rule, a document promises a reader that order, and
+     * nothing downstream of this can tell it from the order a walk happened to take — so a reader
+     * that made the claim there would be claiming what it cannot see.
+     *
+     * <p>Each projected on its own and the words made distinct afterwards, never the other way
+     * round. What a document promises is deliberately coarser than what this compiler records, so
+     * two reasons a reader is not offered to tell apart come out as one word — and that is this
+     * projection saying they are one thing to lift, rather than a reader dropping one of them.
+     */
+    public static SourceOrdered<UndividedPosition.Reason> asWritten(
+            List<BlockReason.AboutARule> stopped) {
+        List<UndividedPosition.Reason> said = new ArrayList<>();
+        for (BlockReason.AboutARule each : stopped) {
+            said.add(of(each));
+        }
+        return SourceOrdered.asWritten(said);
+    }
 
     /**
      * Deliberately coarser than what it is given. What a reader of a document is promised is which
@@ -70,7 +96,13 @@ public final class ReportedReason {
             // form that was seen, and one wants the gathering to reach the rules at all. Collapsed
             // together, a position whose rules nothing had looked at was reported as an expression
             // the terms do not name, which is a cause it was never observed to have.
-            case BlockReason.ValueRulesNotReached _ ->
+            // One word for the two, and on purpose. Which figure stopped a walk is this compiler's
+            // business: a document promises a reader the hole under the position and not the route
+            // this took to it, and a depth it could not afford is a route. The two are apart inside
+            // because a reader of a measure asks whether a wider run would get past it, and that is
+            // a question a published word does not answer.
+            case BlockReason.ValueRulesNotReached _,
+                 BlockReason.ValueRulesNotReachedPastDepthLimit _ ->
                     UndividedPosition.Reason.RULES_NOT_READ_AT_ALL;
             case BlockReason.UnreadComparisonDomain _ ->
                     UndividedPosition.Reason.UNSUPPORTED_DOMAIN;

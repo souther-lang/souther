@@ -48,7 +48,7 @@ class ALimitOfThisCompilerDoesNotTakeAnObligationOutOfTheCountTest {
      */
     @Test
     void aShowingStoppedByALimitLeavesTheObligationUndecided() {
-        assertEquals(new ObligationDisposition.Undecided(List.of(
+        assertEquals(ObligationDisposition.Undecided.about(List.of(
                         new ObligationDisposition.Uncertainty.WhetherARowCanBeWritten.Stopped(
                                 prevented()))),
                 ObligationDisposition.of(new ObligationCoverage.Missed(), prevented()),
@@ -67,7 +67,7 @@ class ALimitOfThisCompilerDoesNotTakeAnObligationOutOfTheCountTest {
      */
     @Test
     void aShowingNothingEverMadeLeavesTheObligationUndecidedToo() {
-        assertEquals(new ObligationDisposition.Undecided(List.of(
+        assertEquals(ObligationDisposition.Undecided.about(List.of(
                         new ObligationDisposition.Uncertainty
                                 .WhetherARowCanBeWritten.NothingShowedIt())),
                 ObligationDisposition.of(new ObligationCoverage.Missed(),
@@ -99,9 +99,9 @@ class ALimitOfThisCompilerDoesNotTakeAnObligationOutOfTheCountTest {
                                 ReadingGap.of(Incompleteness.Code.VALUE_TRUNCATED)))),
                 prevented());
 
-        assertEquals(new ObligationDisposition.Undecided(List.of(
+        assertEquals(ObligationDisposition.Undecided.about(List.of(
                         new ObligationDisposition.Uncertainty.WhetherARowIsThere.ReadingsStopped(
-                                new ReadingReasons(List.of(
+                                ReadingReasons.of(List.of(
                                         ReadingGap.of(Incompleteness.Code.VALUE_TRUNCATED)))),
                         new ObligationDisposition.Uncertainty.WhetherARowCanBeWritten.Stopped(
                                 prevented()))),
@@ -120,7 +120,7 @@ class ALimitOfThisCompilerDoesNotTakeAnObligationOutOfTheCountTest {
      */
     @Test
     void aPointNothingWasReadAgainstIsUndecidedAboutBoth() {
-        assertEquals(new ObligationDisposition.Undecided(List.of(
+        assertEquals(ObligationDisposition.Undecided.about(List.of(
                         new ObligationDisposition.Uncertainty.WhetherARowIsThere.NothingWasRead(
                                 ItemAssessment.Coverage.NotAsked.NO_ROWS),
                         new ObligationDisposition.Uncertainty
@@ -193,7 +193,7 @@ class ALimitOfThisCompilerDoesNotTakeAnObligationOutOfTheCountTest {
                     after.equals(before) || after instanceof ObligationDisposition.Undecided;
             case ObligationDisposition.Undecided it ->
                     after instanceof ObligationDisposition.Undecided then
-                            && then.because().containsAll(it.because());
+                            && then.because().written().containsAll(it.because().written());
         };
     }
 
@@ -211,12 +211,12 @@ class ALimitOfThisCompilerDoesNotTakeAnObligationOutOfTheCountTest {
     }
 
     private static WritabilityKnowledge established() {
-        return new WritabilityKnowledge.Established(new ItemAssessment.WritabilityEvidence(
+        return new WritabilityKnowledge.Established(ItemAssessment.WritabilityEvidence.of(
                 Set.of(ItemAssessment.WritabilityEvidence.Ground.THE_RULES_PROVE_IT)));
     }
 
     private static WritabilityKnowledge.Prevented prevented() {
-        return WritabilityKnowledge.Prevented.by(new EstablishmentGap.Observation(
+        return WritabilityKnowledge.Prevented.by(EstablishmentGap.Observation.of(
                 EnumSet.of(Incompleteness.Code.VALUE_TRUNCATED)));
     }
 }

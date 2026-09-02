@@ -396,13 +396,21 @@ public final class InvariantChecker {
      *                        where one could not be typed or held nothing this reads — the bounds are
      *                        then weaker than what the declaration actually says, and a caller
      *                        turning one into an obligation has to know that
-     * @param notGathered where a clause of the value did not reach the readings at all, as the
-     *                 paths the stops happened at. A clause that could not be typed, and a walk that
-     *                 stopped leaving rules nobody else reads ({@link PathEngine#leftBy}): in both,
-     *                 a rule of the declaration is one no reading here ever saw, so no reading can
-     *                 say it took that part of the declaration in. Not a walk that handed the rules
-     *                 on — those are {@link #handedOn()}, and they are somebody's to read rather
-     *                 than nobody's
+     * @param notGathered where a clause of the value did not reach the readings at all, and what
+     *                 stopped it there. A clause that could not be typed, and a walk that stopped
+     *                 leaving rules nobody else reads ({@link PathEngine#leftBy}): in both, a rule
+     *                 of the declaration is one no reading here ever saw, so no reading can say it
+     *                 took that part of the declaration in. Not a walk that handed the rules on —
+     *                 those are {@link #handedOn()}, and they are somebody's to read rather than
+     *                 nobody's
+     *
+     *                 <p><b>And what stopped, not only where.</b> Seven things leave a position here
+     *                 and they are not one fact: a walk that went as far as the fields it could
+     *                 afford is one a run allowed more would go past, and a clause nothing could
+     *                 type is not. Held as the paths alone, the seven arrived downstream as one word
+     *                 and anything asking a question the paths do not answer had nothing to read.
+     *                 More than one per position, because a position can be short in more than one
+     *                 way
      *
      *                 <p>Where and not whether, because a rule that narrows what stands at a name
      *                 writes that name, and a clause written under one field writes no name outside
@@ -424,7 +432,7 @@ public final class InvariantChecker {
     record Seeded(ConstraintState<FactSubject> constraints, Map<RuleKey, FactSubject> atoms,
                   Map<RuleKey, FactSubject> keys,
                   Map<RuleKey, FieldDomains.Counted> held, Reading reading, ReadingEvidence took,
-                  boolean everyClauseRead, Set<RuleKey> notGathered,
+                  boolean everyClauseRead, Map<RuleKey, Set<RulesMissed>> notGathered,
                   Set<RuleKey> unreadOfEveryValue, Set<RuleKey> handedOn,
                   Map<RuleRef, Map<Core, PartRead>> readBy,
                   Map<FactSubject, souther.compiler.numeric.Granularity> spacing) {
@@ -439,13 +447,19 @@ public final class InvariantChecker {
         }
 
         public Seeded {
-            notGathered = Set.copyOf(notGathered);
+            // Insertion order, for the reason `readBy` keeps it: what is read off this is a list of
+            // causes a report prints, and the causes at one position are printed in the order the
+            // reading met them.
+            Map<RuleKey, Set<RulesMissed>> missed = new LinkedHashMap<>();
+            notGathered.forEach((path, why) -> missed.put(path,
+                    Collections.unmodifiableSet(new LinkedHashSet<>(why))));
+            notGathered = Collections.unmodifiableMap(missed);
             unreadOfEveryValue = Set.copyOf(unreadOfEveryValue);
             handedOn = Set.copyOf(handedOn);
             // Insertion order, which is the order the declarations write their clauses. `Map.copyOf`
             // iterates in an order salted once per JVM run, and what is read off these is a list of
             // causes a report prints.
-            readBy = java.util.Collections.unmodifiableMap(new LinkedHashMap<>(readBy));
+            readBy = Collections.unmodifiableMap(new LinkedHashMap<>(readBy));
         }
 
         /** What a walk that fell over comes to: no position named, no rule read, and saying so of
@@ -454,8 +468,9 @@ public final class InvariantChecker {
             return new Seeded(ConstraintState.<FactSubject>top(), Map.of(), Map.of(), Map.of(),
                     new Reading(List.of(), List.of(), Map.of(), Map.of(), Map.of(), Map.of()),
                     new ReadingEvidence(),
-                    false, Set.of(RuleKey.THE_VALUE), Set.of(RuleKey.THE_VALUE),
-                    Set.of(), Map.of(), Map.of());
+                    false, Map.of(RuleKey.THE_VALUE,
+                            Set.of(new RulesMissed.ReadingFellOver())),
+                    Set.of(RuleKey.THE_VALUE), Set.of(), Map.of(), Map.of());
         }
 
         /** The numbers alone, for the readers that are about intervals. Whether a value exists is
@@ -551,7 +566,11 @@ public final class InvariantChecker {
         // A clause nothing could type never reaches `written`, so no reading below sees it and none
         // of them can spoil a position for it. That is a fact about what was handed over rather
         // than about any one reading, and it is recorded here where the handing over happens.
-        Set<RuleKey> notGathered = new LinkedHashSet<>();
+        //
+        // With what stopped, and not the paths alone. One position can be short in more than one
+        // way — a walk that went no further and a clause of its own nobody could type — and a set
+        // of paths is where the seven causes became one.
+        Map<RuleKey, Set<RulesMissed>> notGathered = new LinkedHashMap<>();
         // And of those, the ones a construction cannot get out of: what a position admits and
         // whether an edge of it may be promised are two questions, and a stop answers them apart.
         Set<RuleKey> unreadOfEveryValue = new LinkedHashSet<>();
@@ -578,9 +597,9 @@ public final class InvariantChecker {
             }
 
             @Override
-            public void missed(RuleKey path, Borne borne) {
-                notGathered.add(path);
-                if (borne == Borne.BY_EVERY_VALUE) {
+            public void missed(RuleKey path, RulesMissed why) {
+                notGathered.computeIfAbsent(path, _ -> new LinkedHashSet<>()).add(why);
+                if (why.borne() == Borne.BY_EVERY_VALUE) {
                     unreadOfEveryValue.add(path);
                 }
             }
@@ -605,7 +624,7 @@ public final class InvariantChecker {
             // name any position of it.
             boolean skipped = false;
             if (!opened && !c.clauses.of(named, data).isEmpty()) {
-                gathering.missed(RuleKey.THE_VALUE, Borne.BY_EVERY_VALUE);
+                gathering.missed(RuleKey.THE_VALUE, new RulesMissed.PositionNotOpened());
             }
             for (TypeOps.Declared declared :
                     opened ? c.clauses.declared(named, data) : List.<TypeOps.Declared>of()) {
@@ -622,7 +641,7 @@ public final class InvariantChecker {
                 Core stated = c.clauses.typed(declared.clause().expr(), named, data).orNull();
                 if (stated == null) {
                     read = false;
-                    gathering.missed(RuleKey.THE_VALUE, Borne.BY_EVERY_VALUE);
+                    gathering.missed(RuleKey.THE_VALUE, new RulesMissed.ClauseNotTyped());
                     continue;
                 }
                 written.add(new Written(origin, stated));
@@ -640,7 +659,7 @@ public final class InvariantChecker {
                 // A rule of this value that no reading here took in, said once however many were
                 // left out: what is recorded is which position is short, and the position is this
                 // value either way.
-                gathering.missed(RuleKey.THE_VALUE, Borne.BY_EVERY_VALUE);
+                gathering.missed(RuleKey.THE_VALUE, new RulesMissed.ClauseNotAsked());
             }
             // And what each field's own type says of it, at the field's own location. A depth of one
             // is already spent on the record, so this reaches the field's newtype and stops where the
@@ -800,7 +819,7 @@ public final class InvariantChecker {
                 constraints = ConstraintState.settling(constraints, atom, each.getValue(), spaced);
             }
             return new Seeded(constraints, atoms, keys, held, reading, took, read,
-                    Set.copyOf(notGathered), unreadOfEveryValue, Set.copyOf(handedOn),
+                    notGathered, unreadOfEveryValue, Set.copyOf(handedOn),
                     readBy, Map.copyOf(spacing));
         } catch (RuntimeException why) {
             gaveUp("seedFields " + named.name(), why);
@@ -1049,8 +1068,13 @@ public final class InvariantChecker {
          * is one whose position is exactly what is unknown about it, and a subtree that was not
          * entered holds rules nobody here has read. What a collector does with it is the same
          * either way.
+         *
+         * <p>Which is true of the rule and was taken for true of the cause. What stopped is
+         * {@link RulesMissed}, and it is carried rather than turned into what it costs: a collector
+         * that wants to know whether a wider run would get past it has to be able to ask, and a
+         * {@link Borne} is the answer to a different question.
          */
-        void missed(RuleKey path, Borne borne);
+        void missed(RuleKey path, RulesMissed why);
 
         /**
          * A position where this reading ends and the rules under it become another reading's.
@@ -1258,9 +1282,9 @@ public final class InvariantChecker {
         // Insertion order, kept: `Map.copyOf` iterates in an order salted once per JVM run, and
         // what a report prints for a position is these in the order the declaration writes them.
         return new Reading(List.copyOf(out), List.copyOf(noLines), Map.copyOf(narrowers),
-                java.util.Collections.unmodifiableMap(new LinkedHashMap<>(raised)),
-                java.util.Collections.unmodifiableMap(new LinkedHashMap<>(raisedByPart)),
-                java.util.Collections.unmodifiableMap(new LinkedHashMap<>(standing)));
+                Collections.unmodifiableMap(new LinkedHashMap<>(raised)),
+                Collections.unmodifiableMap(new LinkedHashMap<>(raisedByPart)),
+                Collections.unmodifiableMap(new LinkedHashMap<>(standing)));
     }
 
     /** What {@code clause} raises, taken together with whatever its other conjuncts raised. */
@@ -1759,7 +1783,7 @@ public final class InvariantChecker {
      *
      * <p>Which calls those are is {@link StringPredicates}' and is asked rather than spelled: the
      * same table says what such a call means about the strings at a position, and a second list of
-     * spellings here would be a second answer to which rules this compiler reads (issue #1249).
+     * spellings here would be a second answer to which rules this compiler reads.
      *
      * <p>Only where the position is one this reading names. A predicate about something deeper than
      * the coordinates in hand states nothing this walk can file, and filing it against the position
@@ -1786,19 +1810,31 @@ public final class InvariantChecker {
         if (stated == null) {
             return null;
         }
-        return switch (StringPredicates.divides(atom, symbols)) {
-            case StringPredicates.Divides.IntoTwo _ -> byName.get(nameOf(stated.subject(), at));
+        return switch (stated.reading()) {
+            case StringPredicates.Reading.Accepting accepting ->
+                    dividedBy(accepting, stated.subject(), at, byName);
+            // A rule this did not read says nothing here: the reading that stopped is the one that
+            // reports being stopped, and a second account of it from this side would be a limit
+            // filed as a fact about the model.
+            case StringPredicates.Reading.PatternNotRead _ -> null;
+            case StringPredicates.Reading.WrittenArgumentNotKnown _ -> null;
+        };
+    }
+
+    /** The same, off the strings the rule was read as. */
+    private Coordinate dividedBy(StringPredicates.Reading.Accepting accepting, Core subject,
+                                 Denotations at, Map<FactSubject, Coordinate> byName) {
+        return switch (StringPredicates.divides(accepting)) {
+            case StringPredicates.Divides.IntoTwo _ -> byName.get(nameOf(subject, at));
             // Every string, so the rule tells no value here from another and the position is one
             // the model divides no way — which is what it comes back as when nothing is filed.
             case StringPredicates.Divides.NothingIsRuledOut _ -> null;
             // No string, so the rules leave no value here. That is a fact about the values and is
             // said where emptiness is, not as a division with no line through it.
             case StringPredicates.Divides.NothingIsLeft _ -> null;
-            // And where this compiler could not tell, it says nothing here: the reading that spent
-            // the allowance is the one that reports being stopped, and a second account of it from
-            // this side would be a limit filed as a fact about the model.
-            case StringPredicates.Divides.CouldNotTell _ -> null;
-            case null -> null;
+            // And where a limit stopped the machine, the same as above: what it cost is reported by
+            // whoever spent it.
+            case StringPredicates.Divides.StoppedByLimit _ -> null;
         };
     }
 

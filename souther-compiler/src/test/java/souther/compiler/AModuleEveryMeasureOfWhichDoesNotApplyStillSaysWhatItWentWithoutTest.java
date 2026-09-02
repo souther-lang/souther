@@ -84,8 +84,8 @@ class AModuleEveryMeasureOfWhichDoesNotApplyStillSaysWhatItWentWithoutTest {
                 AdequacyReport.of(measured()).modules().get(0).behaviors().get(0);
 
         assertInstanceOf(Measurement.Partial.class, behavior.reading().measured(),
-                "the row was read and did not come back");
-        assertEquals(List.of(Incompleteness.Code.ROW_UNDECIDED),
+                "the row was read and ran past the deadline it was evaluated under");
+        assertEquals(List.of(Incompleteness.Code.ROW_EVALUATION_LIMIT_REACHED),
                 behavior.reading().gaps().stream().map(Incompleteness::code).toList());
         assertFalse(behavior.weakenedBy().isEmpty(),
                 () -> "so the behavior went without something: " + behavior.weakenedBy());
@@ -102,7 +102,7 @@ class AModuleEveryMeasureOfWhichDoesNotApplyStillSaysWhatItWentWithoutTest {
         assertEquals(MeasurementStatus.PARTIAL, report.status());
         assertEquals(AdequacyReport.AdequacyStatus.UNDETERMINED, report.adequacy(),
                 "which the verdict already said, from a list the status could not see");
-        assertEquals(List.of(Incompleteness.Code.ROW_UNDECIDED),
+        assertEquals(List.of(Incompleteness.Code.ROW_EVALUATION_LIMIT_REACHED),
                 module.incompleteness().stream().map(Incompleteness::code).toList());
     }
 
@@ -114,7 +114,7 @@ class AModuleEveryMeasureOfWhichDoesNotApplyStillSaysWhatItWentWithoutTest {
         JsonNode module = root.get("modules").get(0);
 
         assertEquals("partial", module.get("status").asString());
-        assertEquals(List.of("row_undecided"),
+        assertEquals(List.of("row_evaluation_limit_reached"),
                 module.get("weakening").valueStream().map(JsonNode::asString).toList());
         assertEquals("row", module.get("incompleteness").get(0).get("scope").asString(),
                 "and says which row, since a behavior may have more than one");

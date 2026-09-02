@@ -126,12 +126,16 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
 
             // The readings. Each takes a figure that was handed over and says what it comes to.
             Map.entry("souther.compiler.partition.Generator$UnresolvedCombination$Reason#wordFor("
-                            + "Ljava/util/Set;)"
+                            + "Ljava/util/Collection;)"
                             + "Lsouther/compiler/partition/Generator$UnresolvedCombination$Reason;",
                     "the word a search stopped by these comes back with"),
-            Map.entry("souther.compiler.report.AdequacyReport#said(Ljava/util/Set;)"
-                            + "Ljava/lang/String;",
-                    "what a figure is called where a reader meets one")));
+            Map.entry("souther.compiler.report.AdequacyReport#said("
+                            + "Lsouther/compiler/publish/CanonicalSelection;)Ljava/lang/String;",
+                    "what a figure is called where a reader meets one"),
+            // The order. It reaches every figure and hands none of them anywhere: what it decides
+            // is which of them a reader is told about first, where two were reached.
+            Map.entry("souther.compiler.publish.PublicationOrders#<clinit>()V",
+                    "the order the figures are said in, where a search met more than one")));
 
     /**
      * The places that read a figure are the places that say they do.

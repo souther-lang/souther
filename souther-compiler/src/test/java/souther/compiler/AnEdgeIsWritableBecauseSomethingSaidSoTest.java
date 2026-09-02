@@ -11,7 +11,6 @@ import souther.compiler.query.Compilation;
 
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -125,8 +124,8 @@ class AnEdgeIsWritableBecauseSomethingSaidSoTest {
 
         assertInstanceOf(ItemAssessment.Coverage.NoHit.class,
 at.coverage().made().orElseThrow());
-        assertEquals(Set.of(ItemAssessment.WritabilityEvidence.Ground.THE_RULES_PROVE_IT),
-                at.writabilityEvidence().grounds(),
+        assertEquals(List.of(ItemAssessment.WritabilityEvidence.Ground.THE_RULES_PROVE_IT),
+                at.writabilityEvidence().grounds().written(),
                 "every rule of `Amount` was read, so 0 is a value it holds, and that is the whole"
                         + " of what showed it");
         assertInstanceOf(ItemAssessment.Attempt.Unresolved.class, at.searches().only(),
@@ -361,8 +360,8 @@ at.coverage().made().orElseThrow());
 
         ItemAssessment.Owed unbuilt = assessmentAt(HOLED, "example.holed", "f", "1",
                 Adequacy.Level.WITNESS);
-        assertEquals(Set.of(ItemAssessment.WritabilityEvidence.Ground.THE_RULES_PROVE_IT),
-                unbuilt.writabilityEvidence().grounds(),
+        assertEquals(List.of(ItemAssessment.WritabilityEvidence.Ground.THE_RULES_PROVE_IT),
+                unbuilt.writabilityEvidence().grounds().written(),
                 "and the rules prove it whether or not anything was built, which is the one ground"
                         + " left when nothing was");
         assertTrue(unbuilt.worthSearching(),

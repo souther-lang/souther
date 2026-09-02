@@ -44,7 +44,7 @@ public record ObligationSummary<T>(List<T> met, List<T> unmet, List<T> undecided
         return undecided.stream()
                 .filter(each -> owed.apply(each).disposition()
                         instanceof ObligationDisposition.Undecided it
-                        && it.because().contains(question))
+                        && it.because().written().contains(question))
                 .toList();
     }
 

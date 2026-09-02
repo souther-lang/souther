@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.partition.ReadingGap;
+import souther.compiler.publish.WeakeningWord;
 import souther.compiler.query.Weakening;
 
 import java.util.ArrayList;

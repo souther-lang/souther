@@ -88,8 +88,13 @@ public record SearchOutcomes(List<ItemAssessment.Attempt> each) {
      *
      * <p>All of them. Two searches stopped by two figures are two pieces of work, and a reader
      * asking what would have to give is owed both.
+     *
+     * <p>Kept inside this package, where the one caller is what puts them together
+     * ({@link WritabilityKnowledge#of}). They are as many as the searches were, in the order the
+     * searches are held, so a reader outside would be taking a plurality nobody has put together
+     * and saying it in an order nobody chose.
      */
-    public Set<EstablishmentGap> prevented() {
+    Set<EstablishmentGap> prevented() {
         Set<EstablishmentGap> out = new LinkedHashSet<>();
         for (ItemAssessment.Attempt attempt : each) {
             if (attempt instanceof ItemAssessment.Attempt.Prevented it) {

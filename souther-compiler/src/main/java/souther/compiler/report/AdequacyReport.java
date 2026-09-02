@@ -30,7 +30,6 @@ import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.diag.QuotedFrom;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.diag.TheCompilerDisagreesWithItself;
-import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.InputQuestion;
 import souther.compiler.meta.ModuleMetadata;
 import souther.compiler.check.Prepared;
@@ -66,7 +65,14 @@ import souther.compiler.query.ObligationSummary;
 import souther.compiler.query.ReadingReasons;
 import souther.compiler.query.EstablishmentGap;
 import souther.compiler.query.WritabilityKnowledge;
+import souther.compiler.publish.CanonicalSelection;
+import souther.compiler.publish.PublicationOrders;
+import souther.compiler.publish.SourceOrdered;
+import souther.compiler.publish.WeakeningVocabulary;
+import souther.compiler.publish.WeakeningWord;
+import souther.compiler.partition.CompositionBudget;
 import souther.compiler.partition.ReadingGap;
+import souther.compiler.partition.UndividedPosition;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.BehaviorEvidence;
 import souther.compiler.query.PartitionEvidence;
@@ -711,6 +717,154 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
     }
 
     /**
+     * What the verdict is open on: what the things it rests on went without, and the ones nobody
+     * made.
+     *
+     * <p>Read from the same three lists {@link #adequacy()} is decided by, and never from
+     * {@code weakenedBy}. What left this whole report weaker than it looks and what holds this
+     * verdict open are not one set: a measure this build is not held to may be as partial as it
+     * likes without a bar being any less settled by it, and the report says so of itself either
+     * way. Taken from the wider list, a reader would be shown causes that no answer here rests on.
+     *
+     * <p>A set and so counted once per fact, however many measures went without it. One rule this
+     * compiler could not read is one thing to tell a person whichever measure noticed, and counting
+     * the measures would be counting the paths a fact arrived by ({@link WeakeningSet}).
+     *
+     * <p><b>Empty where the verdict is settled, and that is what the name says.</b> A gap outranks
+     * everything about how much was measured, so a refused build has an answer and is open on
+     * nothing — whatever else about it went unmeasured, which the measures themselves say. Answered
+     * the other way, this said a settled verdict was held open by something; asked only where a
+     * reader was rendering, the same report came to one answer on the page and another in the
+     * document.
+     */
+    public List<AdequacyOpening> whatKeepsTheVerdictOpen() {
+        if (adequacy() != AdequacyStatus.UNDETERMINED) {
+            return List.of();
+        }
+        // The facts first, folded once. Two measures that went without the same thing went without
+        // one thing, and putting them together is what says so.
+        WeakeningSet facts = WeakeningSet.none();
+        List<AdequacyOpening> rest = new ArrayList<>();
+        for (Measurement<?> each : requiredSupport()) {
+            facts = facts.union(each.weakening());
+            openedBy(rest, each);
+        }
+        for (Measure<?> each : requiredEvidence()) {
+            facts = facts.union(each.weakening());
+            if (each instanceof Measurement<?> measured) {
+                openedBy(rest, measured);
+            }
+        }
+        for (ObligationAssessment each : requiredObligations()) {
+            facts = facts.union(each.weakening());
+            openedBy(rest, each.disposition());
+        }
+        List<AdequacyOpening> out = new ArrayList<>();
+        facts.causes().forEach(each -> out.add(new AdequacyOpening.ByWeakening(each)));
+        out.addAll(rest);
+        return out;
+    }
+
+    /**
+     * What one measurement opens the verdict on beside the facts it went without.
+     *
+     * <p>A {@code switch} over the states with no {@code default}, because this is the same question
+     * {@link #adequacy()} asks of the same value and the two must not be able to answer differently.
+     * Asked as "what did it go without", a measurement nobody made answered nothing while the
+     * verdict over it stayed open — and the arm that says so is the one a fold would never reach.
+     *
+     * <p>The other three states need nothing here. A complete measurement opens nothing, and the
+     * two that are short of something refuse an empty {@code WeakeningSet} at construction, so the
+     * union above already holds at least one fact for each of them.
+     */
+    static void openedBy(List<AdequacyOpening> out, Measurement<?> measured) {
+        switch (measured) {
+            case Measurement.NotMeasured<?> never ->
+                    out.add(new AdequacyOpening.NotMeasured(never.why()));
+            case Measurement.Complete<?> _, Measurement.Partial<?> _,
+                 Measurement.FailedToMeasure<?> _ -> { }
+        }
+    }
+
+    /**
+     * And what one obligation opens it on, which is what it is undecided about.
+     *
+     * <p>Read from the disposition and never from the coverage beneath it. Those are two questions
+     * and {@link #adequacy()} asks the first: whether a row can be written at a point is settled
+     * from the coverage <em>and</em> what showed a row is writable, so three of the four ways an
+     * obligation is undecided leave the coverage with nothing to have gone without. Asked of the
+     * coverage, a point nothing could show a row for held the verdict open and named nothing.
+     *
+     * <p>A reading that stopped adds nothing here, and that is not an omission: what it met is the
+     * coverage's own {@code WeakeningSet}, which the union above already holds. Counted again it
+     * would be one fact said twice, which is what a set is for.
+     *
+     * <p>{@code Undecided} refuses an empty list at construction and every arm below yields an
+     * entry, so an obligation that holds the verdict open cannot come back with nothing.
+     */
+    static void openedBy(List<AdequacyOpening> out, ObligationDisposition disposition) {
+        if (!(disposition instanceof ObligationDisposition.Undecided undecided)) {
+            return;
+        }
+        for (ObligationDisposition.Uncertainty each : undecided.because().written()) {
+            switch (each) {
+                case ObligationDisposition.Uncertainty.WhetherARowIsThere.ReadingsStopped _ -> { }
+                case ObligationDisposition.Uncertainty.WhetherARowIsThere.NothingWasRead it ->
+                        out.add(new AdequacyOpening.NotMeasured(it.why()));
+                case ObligationDisposition.Uncertainty.WhetherARowCanBeWritten.Stopped it ->
+                        it.by().by().written().forEach(gap ->
+                                out.add(new AdequacyOpening.ShowingStopped(gap)));
+                case ObligationDisposition.Uncertainty.WhetherARowCanBeWritten.NothingShowedIt _ ->
+                        out.add(new AdequacyOpening.NothingShowedARowCanBeWritten());
+            }
+        }
+    }
+
+    /**
+     * How much of that a run of this compiler allowed more could answer, and how much it could not.
+     *
+     * <p>The question a reader of {@code undetermined} has and the report could not answer. The
+     * word means a measure that could have found a gap and was not made, which is as true of a
+     * space too large to walk as of a rule this compiler has no reading for — and the first is a
+     * number away while nothing anybody writes reaches the second. Told apart nowhere, a person
+     * reading a model that forks on a list it computed was left to work out for themselves that
+     * measuring again would find exactly the same thing.
+     *
+     * <p>Counted over the facts and not over the words a document writes for them. Two facts a
+     * document calls the same thing can differ here — a pattern too large to build and a rule about
+     * a value made from this one are both {@code rule_unread} — so a count taken off the printed
+     * words would be a count of something else.
+     *
+     * @param mayChange how many of them an allowance of this compiler's stopped
+     * @param unaffected how many no allowance stopped, which is what allowing more does not reach.
+     *                   Not "how many it had no reading for": a measure nobody made and a point
+     *                   nothing showed a row writable at are both here and neither is a reading.
+     *                   Which kind of thing each was, is what the kind beside it says
+     */
+    public record UnderAWiderRun(int mayChange, int unaffected) {
+
+        /** Whether there is anything to say, which is whether anything is open at all. */
+        public boolean isEmpty() {
+            return mayChange == 0 && unaffected == 0;
+        }
+    }
+
+    /** {@link #whatKeepsTheVerdictOpen()}, split by whether a wider run could answer it. */
+    public UnderAWiderRun underAWiderRun() {
+        int mayChange = 0;
+        int unaffected = 0;
+        for (AdequacyOpening each : whatKeepsTheVerdictOpen()) {
+            // A switch with no default, so a third answer is a compile error here rather than one
+            // more thing silently counted among what no allowance reaches.
+            switch (each.runSensitivity()) {
+                case MAY_CHANGE -> mayChange++;
+                case UNAFFECTED -> unaffected++;
+            }
+        }
+        return new UnderAWiderRun(mayChange, unaffected);
+    }
+
+    /**
      * What the verdict rests on that is not a measure of the model: the reading of the rows.
      *
      * <p>Every domain measure below is counted over the rows, so how far they were read is what
@@ -772,11 +926,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             for (BehaviorReport behavior : module.behaviors()) {
                 // The cases of the signature, which every bar refuses over.
                 if (behavior.signature() != null
-                        && refusesAny(Adequacy.Kind.OUTPUT_CASE_UNSPECIFIED,
-                                Adequacy.Kind.INPUT_CASE_UNSPECIFIED)) {
+                        && (refuses(Adequacy.Kind.OUTPUT_CASE_UNSPECIFIED)
+                                || refuses(Adequacy.Kind.INPUT_CASE_UNSPECIFIED))) {
                     add(measures, behavior.signature().counted());
                 }
-                if (behavior.branch() != null && refusesAny(Adequacy.Kind.ARM_UNREACHED)) {
+                if (behavior.branch() != null && refuses(Adequacy.Kind.ARM_UNREACHED)) {
                     add(measures, behavior.branch().measured());
                 }
                 if (behavior.partition() == null) {
@@ -792,8 +946,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 // ordinary shape whose boundary measure is made in full, and holding the verdict
                 // open for it would say a model was unmeasured on the strength of the one measure
                 // that was.
-                if (refusesAny(Adequacy.Kind.BOUNDARY_UNMET,
-                        Adequacy.Kind.DOMAIN_POINT_UNCOVERED)) {
+                if (refuses(Adequacy.Kind.BOUNDARY_UNMET)
+                        || refuses(Adequacy.Kind.DOMAIN_POINT_UNCOVERED)) {
                     add(measures, behavior.boundaryReadings());
                 }
                 // What the rows reach of each position, which finds a class no row is in — a gap
@@ -809,7 +963,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 // was satisfied by the classes nobody had found yet. A behavior the reading proved
                 // divides nothing answers {@code NotApplicable} and is dropped below, so this holds
                 // nothing open that was never going to be measured.
-                if (refusesAny(Adequacy.Kind.AXIS_CLASS_UNCOVERED)) {
+                if (refuses(Adequacy.Kind.AXIS_CLASS_UNCOVERED)) {
                     add(measures, behavior.partition().partitioned());
                     behavior.partition().axes().forEach(axis -> add(measures, axis.reached()));
                 }
@@ -878,13 +1032,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
 
     /** Whether the bar refuses over any of {@code kinds}, which is what puts the measure that finds
      *  them among the answers a verdict needs. */
-    private boolean refusesAny(Adequacy.Kind... kinds) {
-        for (Adequacy.Kind kind : kinds) {
-            if (held.refuses(kind)) {
-                return true;
-            }
-        }
-        return false;
+    private boolean refuses(Adequacy.Kind kind) {
+        return held.refuses(kind);
     }
 
     /**
@@ -962,6 +1111,20 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         // other question, and the two were one word until they disagreed in front of a reader.
         out.append(String.format("adequacy: %s%n",
                 adequacy().name().toLowerCase(Locale.ROOT).replace('_', ' ')));
+        // And what it is open on, split by the one thing a reader of `undetermined` wants to know:
+        // whether measuring again allowing more would answer any of it. The word covers a space too
+        // large to walk and a rule this compiler has no reading for alike, and the first is a number
+        // away while nothing anybody writes reaches the second.
+        //
+        // Under the verdict and not under the measurement line above, because it is read from what
+        // that verdict rests on. What left the whole report weaker than it looks is the other
+        // question and is said per module, where the measures are.
+        UnderAWiderRun open = underAWiderRun();
+        if (!open.isEmpty()) {
+            out.append("  what keeps it open\n");
+            out.append(String.format("    may change in a wider run   %3d%n", open.mayChange()));
+            out.append(String.format("    unaffected by a wider run   %3d%n", open.unaffected()));
+        }
         // What the mark above means, said by the report that wrote it. The count was said only by
         // `--strict`, on standard error, in a run a reader had to ask for — so a reader of the report
         // alone had a mark with nothing to read it by, and one who did ask got a number pointing at a
@@ -1511,8 +1674,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                             + " line — the conditions on the way there rule those values out";
             // And the four a position reaches, written about the position, because that is all
             // there is: nothing observed a rule to name. Which reasons reach which of the two is
-            // settled by the authority a reason belongs to
-            // ({@link BlockReason}), so no reason is written both ways.
+            // settled by the authority a reason belongs to, so no reason is written both ways.
             case RULES_NOT_READ_AT_ALL -> "the rules written about it were not reached at all";
             case RULE_NOT_INTERPRETED_HERE ->
                     "it was reached, and nothing worked out what it says about the values here";
@@ -1688,7 +1850,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             return List.of();
         }
         List<String> said = new ArrayList<>();
-        for (ObligationDisposition.Uncertainty each : it.because()) {
+        for (ObligationDisposition.Uncertainty each : it.because().written()) {
             said.add(switch (each) {
                 // And what the readings met, which is what makes it undecided rather than missed.
                 // The reading carried whether a value was stopped or never arrived all the way
@@ -1736,7 +1898,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      */
     private static String whatTheReadingsMet(ReadingReasons met) {
         List<String> said = new ArrayList<>();
-        for (ReadingGap each : met.eachKindOnce()) {
+        for (ReadingGap each : met.eachKindOnce().written()) {
             said.add(atTheBorder(each));
         }
         return said.isEmpty() ? "" : ", and " + String.join(", and ", said);
@@ -1761,10 +1923,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      */
     private static String why(WritabilityKnowledge.Prevented stopped) {
         List<String> out = new ArrayList<>();
-        for (EstablishmentGap each : stopped.by()) {
+        for (EstablishmentGap each : stopped.by().written()) {
             out.add(switch (each) {
-                case EstablishmentGap.Observation(Set<Incompleteness.Code> causes) ->
-                        "a row was built for it, and " + causes.stream()
+                case EstablishmentGap.Observation(CanonicalSelection<Incompleteness.Code> causes) ->
+                        "a row was built for it, and " + causes.written().stream()
                                 .map(AdequacyReport::whatStopped)
                                 .collect(Collectors.joining(", and "));
                 // What this compiler declined to build, and which figure decided it. An author does
@@ -1936,9 +2098,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * they can act on — and a budget added arrives here as a compile error rather than as a name
      * nobody wrote a sentence for.
      */
-    private static String said(Set<CompositionBudget> budgets) {
+    private static String said(CanonicalSelection<CompositionBudget> budgets) {
         List<String> out = new ArrayList<>();
-        for (CompositionBudget each : budgets) {
+        for (CompositionBudget each : budgets.written()) {
             out.add(switch (each) {
                 case ELEMENTS_A_PROPOSAL_HOLDS -> "how many elements a proposed collection holds";
                 case CHARACTERS_A_PROPOSAL_HOLDS -> "how many characters a proposed string holds";
@@ -2122,7 +2284,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 out.append(String.format("      %s not accounted for: %s — %s %s: %s%n",
                         mark(f), cited(asked.cited(), names, declaredIn),
                         asked(asked.question()), subjectOf(asked, names, declaredIn),
-                        whyStanding(asked).stream().map(AdequacyReport::whyUnread)
+                        whyStanding(asked).written().stream().map(AdequacyReport::whyUnread)
                                 .collect(Collectors.joining("; "))));
             }
         }
@@ -2136,23 +2298,19 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * send an author to lift it and find the question still there. Which is also why nothing here
      * chooses between them — the only thing there is to choose by is which the reading met first.
      *
-     * <p>Each projected on its own and the words made distinct afterwards, never the other way
-     * round. What a document promises is deliberately coarser than what this compiler records, so
-     * two reasons a reader is not offered to tell apart come out as one word — and that is the
-     * projection saying they are one thing to lift, rather than a report dropping one of them.
+     * <p><b>In the order the author wrote the parts that raised the question</b>, which is what the
+     * schema promises a consumer of {@code stopped} and what says which of these to lift first. So
+     * it is a {@link SourceOrdered} and not an order of this compiler's: a written order over this
+     * kind would answer by a precedence nothing in the model decides.
+     *
+     * <p>Asked of the projection rather than made here. What the order is is known where the
+     * reasons still are what a walk recorded; by the time they are words a document writes, nothing
+     * left can tell the author's order from the walk's, and a claim made here would be a claim
+     * about something this cannot see.
      */
-    private static List<UndividedPosition.Reason> whyStanding(
+    private static SourceOrdered<UndividedPosition.Reason> whyStanding(
             PartitionEvidence.Unanswered asked) {
-        List<UndividedPosition.Reason> said =
-                new ArrayList<>();
-        for (BlockReason.AboutARule each : asked.stopped()) {
-            UndividedPosition.Reason word =
-                    ReportedReason.of(each);
-            if (!said.contains(word)) {
-                said.add(word);
-            }
-        }
-        return said;
+        return ReportedReason.asWritten(asked.stopped());
     }
 
     /**
@@ -2469,6 +2627,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         root.put("status", wire(status()));
         weakening(root, weakenedBy);
         root.put("adequacy", word(adequacy()));
+        // Beside the verdict rather than inside it. What `adequacy` is has not changed — a word
+        // every document since the fifth version has carried — and what is new is the facts that
+        // word is open on, which is a second thing to read and not a different spelling of the
+        // first.
+        keptOpenBy(root);
         ArrayNode modulesOut = root.putArray("modules");
         for (ModuleReport module : modules) {
             ObjectNode m = modulesOut.addObject();
@@ -2727,7 +2890,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 // report beside it is the two disagreeing about one question, and nothing would
                 // have said which of them to believe.
                 ArrayNode stopped = one.putArray("stopped");
-                whyStanding(each).forEach(reason -> stopped.add(word(reason)));
+                whyStanding(each).written().forEach(reason -> stopped.add(word(reason)));
             }
         }
         ArrayNode offAxis = out.putArray("claimsOffAxis");
@@ -2796,15 +2959,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                         // different sentences (issue #1036).
                         ItemAssessment.WritabilityEvidence evidence = owed.writabilityEvidence();
                         i.put("knownWritable", evidence.known());
-                        // In this document's own order, which is why it is written down here and
-                        // not asked of the evidence. The grounds are a set and have none, so some
-                        // order has to be chosen for the array — and chosen where the array is, the
-                        // choice is not one an editor moving two constants apart can make.
                         ArrayNode because = i.putArray("writableBecause");
-                        for (ItemAssessment.WritabilityEvidence.Ground ground : GROUND_ORDER) {
-                            if (evidence.has(ground)) {
-                                because.add(wire(ground));
-                            }
+                        for (ItemAssessment.WritabilityEvidence.Ground ground
+                                : evidence.grounds().written()) {
+                            because.add(wire(ground));
                         }
                         // Inside it, because it is. `false` here is `NoHit` — what the rows this
                         // measurement read came to — and never a measurement that was not made.
@@ -3316,10 +3474,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         ItemAssessment.WritabilityEvidence evidence = owed.writabilityEvidence();
         of.put("knownWritable", evidence.known());
         ArrayNode because = of.putArray("writableBecause");
-        for (ItemAssessment.WritabilityEvidence.Ground ground : GROUND_ORDER) {
-            if (evidence.has(ground)) {
-                because.add(wire(ground));
-            }
+        for (ItemAssessment.WritabilityEvidence.Ground ground : evidence.grounds().written()) {
+            because.add(wire(ground));
         }
         ObligationCoverage coverage = owed.coverage();
         of.put("status", wire(ReportMeasurement.statusOf(coverage)));
@@ -3335,7 +3491,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             // In the order the questions are said in, which the disposition holds them to. A
             // document ordering them again would be a second answer to which comes first.
             ArrayNode left = of.putArray("undecidedAbout");
-            for (ObligationDisposition.Uncertainty question : open.because()) {
+            for (ObligationDisposition.Uncertainty question : open.because().written()) {
                 left.add(wire(question));
             }
         }
@@ -3357,13 +3513,119 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         if (weakenedBy.isEmpty()) {
             return;
         }
-        Set<String> words = new LinkedHashSet<>();
+        List<WeakeningVocabulary> said = new ArrayList<>();
         for (Weakening each : weakenedBy.causes()) {
-            words.add(each instanceof Weakening.ObservationIncomplete gap
-                    ? word(gap.cause().code()) : word(wordFor(each)));
+            said.add(vocabularyOf(each));
         }
         ArrayNode out = of.putArray("weakening");
-        words.forEach(out::add);
+        // In the order the words are published in, which is the same one whichever readers found
+        // which weakenings. What a consumer compares against the last run is this array, so the
+        // order it comes out in may not be the order a walk arrived at them.
+        for (WeakeningVocabulary each : PublicationOrders.WEAKENING_WORDS.keep(said).written()) {
+            out.add(word(each));
+        }
+    }
+
+    /**
+     * The published word for one weakening, whichever vocabulary it is written in.
+     *
+     * <p>An observation writes the {@code Incompleteness} code's own word rather than a second
+     * spelling of it, which is what {@link #wordFor} refuses to answer for. Both surfaces that name
+     * a weakening ask this, so a reader meeting one in either place meets the same word.
+     */
+    static String kindOf(Weakening weakening) {
+        return word(vocabularyOf(weakening));
+    }
+
+    /**
+     * Which vocabulary a weakening writes its word from, and the word inside it.
+     *
+     * <p>Named as a value rather than answered as a string, because the array these go into is a
+     * sequence and a sequence takes an order — and an order is over one kind, which is what
+     * {@link WeakeningVocabulary} is the name of. A surface that wants only the word asks
+     * {@link #kindOf}, and the two cannot come apart because that one reads this.
+     */
+    private static WeakeningVocabulary vocabularyOf(Weakening weakening) {
+        return weakening instanceof Weakening.ObservationIncomplete gap
+                ? new WeakeningVocabulary.AnObservationCode(gap.cause().code())
+                : new WeakeningVocabulary.AWordOfThisDocuments(wordFor(weakening));
+    }
+
+    /** What a document calls one of them, whichever vocabulary it came from. */
+    private static String word(WeakeningVocabulary said) {
+        return switch (said) {
+            case WeakeningVocabulary.AnObservationCode it -> word(it.code());
+            case WeakeningVocabulary.AWordOfThisDocuments it -> word(it.word());
+        };
+    }
+
+    /**
+     * The facts holding the adequacy verdict open, one entry each, as what a document may say of
+     * them.
+     *
+     * <p><b>Not the array beside it, and the difference is the unit.</b> A {@code weakening} is
+     * about one measure or one module, its unit is the published kind, and it says each kind once —
+     * which is right, because which rule or which position it was is named where the document
+     * already names that thing. This is about the verdict, its unit is a fact, and it says each
+     * fact once.
+     *
+     * <p><b>So nothing here is folded.</b> Two rules this compiler could not read are two entries
+     * even where the two objects are equal, because the multiplicity is the fact's. Folded on the
+     * pair written out, two facts one document calls the same thing would come back as one, which
+     * is the collapse this whole field exists to have avoided — and the entries would then count
+     * kinds, which the other array already does.
+     *
+     * <p>The one fold there is happens before this: {@link WeakeningSet#union} keeps one of two
+     * equal facts, so a rule found from three behaviors is one thing to tell a person. That is a
+     * fold on what the facts are and not on what they are printed as.
+     *
+     * <p>Written whether or not the verdict is open, and empty where it is not. What it holds is
+     * what keeps the status undetermined, so a satisfied model has none and a refused one has none
+     * either — a build refused over a gap has a verdict, whatever else went unmeasured.
+     */
+    private void keptOpenBy(ObjectNode root) {
+        ArrayNode out = root.putArray("keptOpenBy");
+        for (AdequacyOpening each : whatKeepsTheVerdictOpen()) {
+            ObjectNode fact = out.addObject();
+            fact.put("kind", kindOf(each));
+            // The reason beside it, where the kind is one that has one. A measure nobody made says
+            // what it was waiting for, and that word is one this document already writes wherever a
+            // measure has no number — so a reader meets one vocabulary and not two.
+            if (each instanceof AdequacyOpening.NotMeasured it) {
+                fact.put("reason", word(it.why()));
+            }
+            fact.put("runSensitivity", word(each.runSensitivity()));
+        }
+    }
+
+    /**
+     * The published word for one thing keeping the verdict open.
+     *
+     * <p>Here rather than inside the writer, so that the words are a vocabulary and not a set of
+     * literals spelled where they happen to be printed. What is written and what the schema allows
+     * were kept in step by hand until this — the check that holds every other enumerated field of
+     * the document against its enum had nothing to be pointed at.
+     *
+     * <p>A {@code switch} with no {@code default}, so an opening added later has to be given a
+     * word; the word has to be one of {@link AdequacyOpeningWord}, which the schema is held
+     * against. An opening that is a measure going without something writes that weakening's own
+     * word instead, for the reason {@link AdequacyOpeningWord} gives.
+     */
+    static String kindOf(AdequacyOpening opening) {
+        return switch (opening) {
+            case AdequacyOpening.ByWeakening it -> kindOf(it.cause());
+            case AdequacyOpening.NotMeasured _ -> word(AdequacyOpeningWord.NOT_MEASURED);
+            // Two words for the two gaps, rather than one word and a reason beside it. Which of
+            // them it was is what a reader acts on and what the sensitivity is read from, so it is
+            // the kind: a value read for the point that did not come back, and a composing this
+            // compiler declined to do, are not one kind of news.
+            case AdequacyOpening.ShowingStopped it -> word(switch (it.by()) {
+                case EstablishmentGap.Observation _ -> AdequacyOpeningWord.SHOWING_STOPPED;
+                case EstablishmentGap.Composition _ -> AdequacyOpeningWord.NOTHING_WAS_COMPOSED;
+            });
+            case AdequacyOpening.NothingShowedARowCanBeWritten _ ->
+                    word(AdequacyOpeningWord.NOTHING_SHOWED_IT);
+        };
     }
 
     /**
@@ -3424,23 +3686,6 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             case NOT_APPLICABLE, NOT_MEASURED -> "unavailable";
         };
     }
-
-    /**
-     * The order this document writes the grounds of {@code writableBecause} in.
-     *
-     * <p>The document's and not the evidence's. The grounds are a set, so the array needs an order
-     * the set cannot supply — read off {@code values()} it was the order two constants happen to be
-     * declared in, and moving them apart would have moved the bytes of every document while a test
-     * comparing against {@code values()} went on seeing nothing.
-     *
-     * <p>Every ground is here, which {@code theDocumentWritesEveryGroundThereIs} holds. A ground
-     * added to the type and not to this list is one no document would carry, so the widening would
-     * be made and nothing would say it had not arrived.
-     */
-    static final List<ItemAssessment.WritabilityEvidence.Ground> GROUND_ORDER = List.of(
-            ItemAssessment.WritabilityEvidence.Ground.THE_RULES_PROVE_IT,
-            ItemAssessment.WritabilityEvidence.Ground.A_ROW_IS_AT_IT,
-            ItemAssessment.WritabilityEvidence.Ground.A_VALUE_WAS_BUILT);
 
     /** What a document calls a ground a row can be written at a point on. Written out for the same
      *  reason as the status above: widening what a consumer must handle is a decision about the

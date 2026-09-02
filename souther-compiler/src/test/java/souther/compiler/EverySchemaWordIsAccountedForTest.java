@@ -9,9 +9,11 @@ import souther.compiler.diag.SourcePos;
 import souther.compiler.diag.SourceProvenance;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.MeasurementStatus;
+import souther.compiler.observe.RunSensitivity;
 import souther.compiler.coverage.DecidedBy;
 import souther.compiler.coverage.SuppliedRules;
 import souther.compiler.query.Adequacy;
+import souther.compiler.query.NotMeasuredReason;
 import souther.compiler.query.ArmDisposition;
 import souther.compiler.query.ArmExclusion;
 import souther.compiler.query.ItemAssessment;
@@ -210,6 +212,29 @@ class EverySchemaWordIsAccountedForTest {
     private static final List<Vocabulary> VOCABULARIES = List.of(
             new Vocabulary("adequacy", List.of("properties", "adequacy"),
                     AdequacyReport.AdequacyStatus.class),
+            // What one thing keeping that verdict open says about a wider run. Its own enum and its
+            // own field: the words are the compiler's, and which of them a fact answers is decided
+            // where the fact is made rather than read back off the kind beside it here — one kind
+            // covers facts that answer differently.
+            new Vocabulary("keptOpenBy[].runSensitivity", List.of("$defs", "runSensitivity"),
+                    RunSensitivity.class),
+            // What kind of thing is keeping the verdict open. Two vocabularies and not one: an
+            // opening that is a measure going without something writes that weakening's own word,
+            // and everything else writes one of its own. Registered against both, so a word added
+            // to either side alone fails here — which is what `keptOpenBy` had instead of, while
+            // the writer spelled its words as literals and nothing could be pointed at them.
+            new Vocabulary("keptOpenBy[].kind",
+                    List.of("$defs", "adequacyOpening", "properties", "kind"),
+                    Set.of("probe_mapping_lost", "row_did_not_finish"),
+                    Incompleteness.Code.class,
+                    souther.compiler.publish.WeakeningWord.class,
+                    souther.compiler.report.AdequacyOpeningWord.class),
+            // And what a measure nobody made was waiting for. The sources are read off the seal
+            // rather than listed: which reasons mean "never started" is `NotMeasuredReason`'s own
+            // membership, and a list here would be a second copy of it that the next arm added is
+            // missing from.
+            new Vocabulary("keptOpenBy[].reason", List.of("$defs", "notMeasuredReason"),
+                    everyReasonAMeasureNobodyMadeCanGive()),
             // `status` is the one enumerated field written through a projection rather than off an
             // enum's own names. The compiler tells a measure with nothing to be about from one nobody
             // made; a document says `unavailable` for both and leaves which to the `reason` beside it.
@@ -355,7 +380,7 @@ class EverySchemaWordIsAccountedForTest {
             new Vocabulary("weakening[]", List.of("$defs", "weakening", "items"),
                     Set.of("probe_mapping_lost", "row_did_not_finish"),
                     Incompleteness.Code.class,
-                    souther.compiler.report.WeakeningWord.class),
+                    souther.compiler.publish.WeakeningWord.class),
             new Vocabulary("incompleteness.scope",
                     List.of("$defs", "incompleteness", "properties", "scope"),
                     Incompleteness.Scope.class),
@@ -454,17 +479,17 @@ class EverySchemaWordIsAccountedForTest {
         return List.of(
                 new ObligationDisposition.Met(),
                 new ObligationDisposition.Unmet(),
-                new ObligationDisposition.Undecided(List.of(
+                ObligationDisposition.Undecided.about(List.of(
                         new ObligationDisposition.Uncertainty.WhetherARowIsThere.ReadingsStopped(
-                                new ReadingReasons(List.of(ReadingGap.NO_VALUE))))),
-                new ObligationDisposition.Undecided(List.of(
+                                ReadingReasons.of(List.of(ReadingGap.NO_VALUE))))),
+                ObligationDisposition.Undecided.about(List.of(
                         new ObligationDisposition.Uncertainty.WhetherARowIsThere.NothingWasRead(
                                 ItemAssessment.Coverage.NotAsked.NO_ROWS))),
-                new ObligationDisposition.Undecided(List.of(
+                ObligationDisposition.Undecided.about(List.of(
                         new ObligationDisposition.Uncertainty.WhetherARowCanBeWritten.Stopped(
-                                WritabilityKnowledge.Prevented.by(new EstablishmentGap.Observation(
+                                WritabilityKnowledge.Prevented.by(EstablishmentGap.Observation.of(
                                         Set.of(Incompleteness.Code.VALUE_UNREADABLE)))))),
-                new ObligationDisposition.Undecided(List.of(
+                ObligationDisposition.Undecided.about(List.of(
                         new ObligationDisposition.Uncertainty
                                 .WhetherARowCanBeWritten.NothingShowedIt())));
     }
@@ -533,12 +558,22 @@ class EverySchemaWordIsAccountedForTest {
                 .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
     }
 
-    /** The questions an obligation may be undecided about, likewise spelled by the writer. */
+    /**
+     * The questions an obligation may be undecided about, likewise spelled by the writer.
+     *
+     * <p>Read off the answers sampled above rather than off the order they are said in. The word a
+     * document carries is the question's and not what left it open, so any member of a family
+     * spells it — which {@code AnObligationsExplanationNamesEachReasonOnceTest} holds the writer
+     * to — and a sample missing a question is what {@code everyDispositionHasASample} is about.
+     */
     private static Set<String> undecidedWords() {
-        return ObligationDisposition.Undecided.everyQuestion().stream()
-                .map(EverySchemaWordIsAccountedForTest::oneOf)
-                .map(AdequacyReport::wire)
-                .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+        Set<String> out = new LinkedHashSet<>();
+        for (ObligationDisposition each : dispositions()) {
+            if (each instanceof ObligationDisposition.Undecided open) {
+                open.because().written().forEach(question -> out.add(AdequacyReport.wire(question)));
+            }
+        }
+        return out;
     }
 
     /**
@@ -552,8 +587,8 @@ class EverySchemaWordIsAccountedForTest {
             Class<? extends ObligationDisposition.Uncertainty> question) {
         for (ObligationDisposition each : dispositions()) {
             if (each instanceof ObligationDisposition.Undecided open
-                    && open.because().getFirst().question() == question) {
-                return open.because().getFirst();
+                    && open.because().written().getFirst().question() == question) {
+                return open.because().written().getFirst();
             }
         }
         throw new AssertionError("no sample above is open on " + question);
@@ -778,7 +813,8 @@ class EverySchemaWordIsAccountedForTest {
      * reason a document says nothing about — a thing somebody decided rather than a thing nobody
      * noticed.
      */
-    private static final Set<Class<?>> SAID_TO_A_READER_AND_NOT_TO_A_DOCUMENT = Set.of(
+    private static Set<Class<?>> saidToAReaderAndNotToADocument() {
+        return Set.of(
             // A reading of the rows, which the human report writes as `rows not read` and the
             // document does not carry as a measure at all.
             Adequacy.RowReading.NotAsked.class,
@@ -788,6 +824,29 @@ class EverySchemaWordIsAccountedForTest {
             // of them a reason: `behavior_boundary_not_derived` is a `weakening` word, and is held
             // as one above.
             souther.compiler.query.BoundaryForMeasurement.NotDerived.class);
+    }
+
+    /**
+     * Every reason a measure the verdict rests on can give for never having been made.
+     *
+     * <p>The seal, less the ones no {@code reason} field carries. Computed rather than listed for
+     * the reason every population here is: a list would be a second copy of the membership, and the
+     * next arm added would be missing from it.
+     *
+     * <p>The subtraction is not a convenience. A reading of the rows nobody asked for is a measure
+     * this build was never going to make, and a verdict is not held open by one — so it is left out
+     * of what the verdict rests on before {@code keptOpenBy} ever sees it, and a schema promising
+     * its word would promise one nothing writes.
+     */
+    private static Class<?>[] everyReasonAMeasureNobodyMadeCanGive() {
+        List<Class<?>> out = new ArrayList<>();
+        for (Class<?> arm : armsOf(NotMeasuredReason.class)) {
+            if (!saidToAReaderAndNotToADocument().contains(arm)) {
+                out.add(arm);
+            }
+        }
+        return out.toArray(new Class<?>[0]);
+    }
 
     /**
      * And every reason a measure can give is either registered with some field or named as one no
@@ -830,7 +889,7 @@ class EverySchemaWordIsAccountedForTest {
             for (Class<?> arm : armsOf(family)) {
                 leaves.add(arm);
                 if (!registered.contains(arm)
-                        && !SAID_TO_A_READER_AND_NOT_TO_A_DOCUMENT.contains(arm)) {
+                        && !saidToAReaderAndNotToADocument().contains(arm)) {
                     unaccounted.add(arm.getSimpleName());
                 }
             }
@@ -843,7 +902,7 @@ class EverySchemaWordIsAccountedForTest {
         // And the exceptions are still exceptions. One that got a field, or one whose type went
         // away, leaves a reason exempted from the check above for a fact that stopped being true —
         // which is the same silence one more turn along.
-        for (Class<?> said : SAID_TO_A_READER_AND_NOT_TO_A_DOCUMENT) {
+        for (Class<?> said : saidToAReaderAndNotToADocument()) {
             assertTrue(leaves.contains(said),
                     said.getSimpleName() + " is no longer a reason any measure gives");
             assertTrue(!registered.contains(said),
@@ -972,8 +1031,12 @@ class EverySchemaWordIsAccountedForTest {
         // The word itself, and not merely a word the schema happens to allow. This is here to keep
         // one reproduction alive: a fixture that stopped producing an undecided row and produced
         // some other legitimate gap instead would go on passing while covering nothing.
-        assertEquals(List.of("row_undecided"), written,
-                "the row did not come back, and this is what the report says about it");
+        //
+        // The row here is stopped by the clock it is evaluated under, which is one of the three
+        // figures this compiler compares a row against, so the word is that one and not the word
+        // for a row the evaluation had no answer for.
+        assertEquals(List.of("row_evaluation_limit_reached"), written,
+                "the row ran past its deadline, and this is what the report says about it");
         assertTrue(allowed.containsAll(written),
                 "the schema allows " + allowed + " and the report writes " + written);
     }
