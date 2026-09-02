@@ -2,14 +2,14 @@ package souther.compiler;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.observe.Incompleteness;
+import souther.compiler.publish.PublishedIncompleteness;
 import souther.compiler.observe.MeasurementStatus;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 
+import java.util.List;
 import java.util.Optional;
-import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -80,7 +80,7 @@ class AReasonAboutAPositionCountsOnlyAgainstItsBehaviorTest {
 
     @Test
     void theReasonNamesTheBehaviorThePositionIsIn() {
-        Set<Incompleteness.Met> why = report().modules().get(0).incompleteness();
+        List<PublishedIncompleteness> why = report().modules().get(0).incompleteness();
 
         assertFalse(why.isEmpty(), "the position that could not be read is said");
         assertTrue(why.stream().allMatch(gap -> gap.fact().behavior()
@@ -105,7 +105,7 @@ class AReasonAboutAPositionCountsOnlyAgainstItsBehaviorTest {
     void filteringToItDropsAReasonAboutAnotherBehaviorsPosition() {
         AdequacyReport only = AdequacyReport.of(compilationOf()).only(null, "cancel");
 
-        assertEquals(Set.of(), only.modules().get(0).incompleteness());
+        assertEquals(List.of(), only.modules().get(0).incompleteness());
         assertEquals(MeasurementStatus.COMPLETE, only.status());
     }
 

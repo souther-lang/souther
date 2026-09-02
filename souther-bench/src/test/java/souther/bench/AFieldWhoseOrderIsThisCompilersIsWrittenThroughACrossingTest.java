@@ -81,7 +81,8 @@ class AFieldWhoseOrderIsThisCompilersIsWrittenThroughACrossingTest {
 
         assertFalse(writers.isEmpty(), "nothing writes the behaviors of a module");
         assertTrue(writers.stream().noneMatch(
-                        AFieldWhoseOrderIsThisCompilersIsWrittenThroughACrossingTest::crossesIn),
+                        AFieldWhoseOrderIsThisCompilersIsWrittenThroughACrossingTest
+                                ::crossesItself),
                 () -> "the behaviors of a module are written in the order they were declared in,"
                         + " and something is now putting them in an order of this compiler's:"
                         + " " + writers);
@@ -93,7 +94,7 @@ class AFieldWhoseOrderIsThisCompilersIsWrittenThroughACrossingTest {
      *  nothing else. */
     private static Set<String> arraysStartedIn(String method) throws Exception {
         Set<String> out = new LinkedHashSet<>();
-        for (Compiled.Invocation each : Compiled.invocations()) {
+        for (Compiled.Invocation each : called()) {
             if (each.site().at().equals(method) && each.site().member().equals(STARTS_AN_ARRAY)) {
                 out.addAll(each.said());
             }
@@ -104,7 +105,7 @@ class AFieldWhoseOrderIsThisCompilersIsWrittenThroughACrossingTest {
     /** The methods that start an array under {@code field}, read off the name written at the call. */
     private static Set<String> whereTheArrayIsStarted(String field) throws Exception {
         Set<String> out = new LinkedHashSet<>();
-        for (Compiled.Invocation each : Compiled.invocations()) {
+        for (Compiled.Invocation each : called()) {
             if (each.site().member().equals(STARTS_AN_ARRAY) && each.said().contains(field)) {
                 out.add(each.site().at());
             }
@@ -112,16 +113,58 @@ class AFieldWhoseOrderIsThisCompilersIsWrittenThroughACrossingTest {
         return out;
     }
 
-    /** Whether that method takes what it writes from a sequence somebody put in order. */
+    /**
+     * Whether that method takes what it writes from a sequence somebody put in order.
+     *
+     * <p>Itself or one thing it asks, because a method that hands the sequence over already in
+     * order is the stronger arrangement: there is then no set for a writer to reach past. What it
+     * is not is a walk of everything reachable — a method that called anything at all would answer
+     * yes, and this would be holding nothing.
+     */
     private static boolean crossesIn(String method) {
-        try {
-            for (Compiled.Site site : Compiled.sites()) {
-                if (site.at().equals(method) && CROSSINGS.contains(site.owner())
-                        && site.member().equals("written")) {
-                    return true;
-                }
+        if (crossesItself(method)) {
+            return true;
+        }
+        for (Compiled.Site site : compiled()) {
+            if (site.at().equals(method) && site.owner().startsWith("souther.compiler.report.")
+                    && crossesItself(site.owner() + "#" + site.member())) {
+                return true;
             }
-            return false;
+        }
+        return false;
+    }
+
+    /** Whether that one method reaches a crossing, whatever it goes on to call. */
+    private static boolean crossesItself(String method) {
+        for (Compiled.Site site : compiled()) {
+            if (CROSSINGS.contains(site.owner()) && site.member().equals("written")
+                    && (site.at().equals(method) || site.at().startsWith(method + "("))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** The compiled classes, read once for every question here rather than once per question. */
+    private static List<Compiled.Site> compiled() {
+        return SITES;
+    }
+
+    /** The same, for the calls whose text was read. */
+    private static List<Compiled.Invocation> called() {
+        return CALLS;
+    }
+
+    private static final List<Compiled.Site> SITES = read(Compiled::sites);
+    private static final List<Compiled.Invocation> CALLS = read(Compiled::invocations);
+
+    private interface Reading<T> {
+        List<T> read() throws Exception;
+    }
+
+    private static <T> List<T> read(Reading<T> of) {
+        try {
+            return of.read();
         } catch (Exception opaque) {
             throw new AssertionError("the compiled classes could not be read", opaque);
         }

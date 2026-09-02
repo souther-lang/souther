@@ -60,8 +60,8 @@ public sealed interface ClosureGap {
      */
     static ClosureGap merged(ClosureGap had, ClosureGap also) {
         return switch (had) {
-            case RuleUnread it -> it.mergedWith((RuleUnread) also);
-            case QuestionUnanswered it -> it.mergedWith((QuestionUnanswered) also);
+            case RuleUnread it -> it.mergedWith(it.andAlso(also));
+            case QuestionUnanswered it -> it.mergedWith(it.andAlso(also));
             // Equal under the fact and holding nothing else, so both are the same value.
             case RulesNotReached _, PositionNotReachedInto _ -> had;
         };
@@ -100,6 +100,16 @@ public sealed interface ClosureGap {
             return rule;
         }
 
+        /** The other one, where it really is one of these. Two gaps filed under one fact and not
+         *  of one kind is a fact two arms answer with, which nothing here can put together. */
+        RuleUnread andAlso(ClosureGap other) {
+            if (other instanceof RuleUnread it) {
+                return it;
+            }
+            throw new IllegalArgumentException("a rule with no line and " + other
+                    + " are filed under one fact");
+        }
+
         /** Both readers' findings, as one: the rule, with every handle either of them offered. */
         public RuleUnread mergedWith(RuleUnread other) {
             Set<RuleCitation> both = new HashSet<>(cited);
@@ -129,6 +139,10 @@ public sealed interface ClosureGap {
         public QuestionUnanswered {
             cited = cited == null ? Set.of() : Set.copyOf(cited);
             stopped = stopped == null ? Set.of() : Set.copyOf(stopped);
+            if (stopped.isEmpty()) {
+                throw new IllegalArgumentException(
+                        "a question stands because something was short of it");
+            }
         }
 
         /**
@@ -149,6 +163,16 @@ public sealed interface ClosureGap {
         @Override
         public Object fact() {
             return question;
+        }
+
+        /** The other one, where it really is one of these, for the reason {@link RuleUnread}
+         *  gives. */
+        QuestionUnanswered andAlso(ClosureGap other) {
+            if (other instanceof QuestionUnanswered it) {
+                return it;
+            }
+            throw new IllegalArgumentException("a question that stands and " + other
+                    + " are filed under one fact");
         }
 
         /** Both readings' accounts, as one: the question, with every handle and everything either
@@ -174,9 +198,6 @@ public sealed interface ClosureGap {
          */
         @Override
         public RunSensitivity runSensitivity() {
-            if (stopped.isEmpty()) {
-                return RunSensitivity.UNAFFECTED;
-            }
             return stopped.stream()
                     .allMatch(each -> each.runSensitivity()
                             == RunSensitivity.MAY_CHANGE)

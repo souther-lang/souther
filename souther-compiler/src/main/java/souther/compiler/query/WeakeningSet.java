@@ -162,10 +162,10 @@ public final class WeakeningSet {
     private static Weakening merged(Weakening had, Weakening also) {
         return switch (had) {
             case Weakening.ObservationIncomplete it -> new Weakening.ObservationIncomplete(
-                    it.met().mergedWith(((Weakening.ObservationIncomplete) also).met()));
+                    it.met().mergedWith(alsoA(Weakening.ObservationIncomplete.class, also).met()));
             case Weakening.ModelReadingIncomplete it -> new Weakening.ModelReadingIncomplete(
                     ClosureGap.merged(it.cause(),
-                            ((Weakening.ModelReadingIncomplete) also).cause()));
+                            alsoA(Weakening.ModelReadingIncomplete.class, also).cause()));
             // Equal under the key and holding nothing but the fact, so both are the same value.
             case Weakening.OutputCasesUnreadable _, Weakening.InputCasesUnreadable _,
                  Weakening.BorderValueUnreadable _, Weakening.BodiesNotElaborated _,
@@ -173,6 +173,22 @@ public final class WeakeningSet {
                  Weakening.PairSpaceTruncated _, Weakening.ProofContradicted _,
                  Weakening.ArmsUnsettled _ -> had;
         };
+    }
+
+    /**
+     * The other one, where it really is the same arm.
+     *
+     * <p>Two facts that are one fact are two of one arm, because what tells them apart is a value
+     * of that arm's own. Said here rather than left to a cast, so that an arm added whose fact is
+     * a type another already answers with is this and not a class this method turned out not to
+     * hold.
+     */
+    private static <T extends Weakening> T alsoA(Class<T> arm, Weakening also) {
+        if (arm.isInstance(also)) {
+            return arm.cast(also);
+        }
+        throw new IllegalArgumentException(
+                "two weakenings of one fact that are not one kind: " + arm + " and " + also);
     }
 
     @Override

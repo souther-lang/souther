@@ -25,6 +25,8 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 class OnlyOnePlaceDeclaresAPublicationOrderTest {
 
     private static final String ORDER = "souther.compiler.publish.CanonicalSelection$Order";
+    private static final String ARRANGEMENT =
+            "souther.compiler.publish.CanonicalArrangement$Order";
     private static final String AUTHORITY = "souther.compiler.publish.PublicationOrders";
     private static final String SOURCE_ORDERED = "souther.compiler.publish.SourceOrdered";
     private static final String REPORT = "souther.compiler.report.";
@@ -34,8 +36,17 @@ class OnlyOnePlaceDeclaresAPublicationOrderTest {
         List<String> made = new ArrayList<>();
         boolean reached = false;
         for (Compiled.Site site : Compiled.sites()) {
-            if (site.owner().equals(ORDER)
-                    && (site.member().equals("overValues") || site.member().equals("overFamilies"))) {
+            if ((site.owner().equals(ORDER)
+                        && (site.member().equals("overValues")
+                                || site.member().equals("overFamilies")))
+                    // And the other shape an order comes in. A sequence whose length is not bounded
+                    // by a vocabulary is put in order by a comparison rather than by a list of
+                    // places, and a second one of those is a second decision about what a reader is
+                    // shown just as readily.
+                    // Called and not read: what it holds the comparison in is a field of that name
+                    // as well, and reading one's own field is not making an order.
+                    || (site.owner().equals(ARRANGEMENT) && site.member().equals("by")
+                            && site.how() == Compiled.How.CALLS)) {
                 reached = true;
                 if (!site.from().equals(AUTHORITY)) {
                     made.add(site.at());

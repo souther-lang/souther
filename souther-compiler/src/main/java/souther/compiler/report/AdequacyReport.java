@@ -221,9 +221,16 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
          * against every behavior is carried by every one of them and is one thing to tell an
          * author, and a module-wide failure found from each of three attached files is one failure
          * citing three places.
+         *
+         * <p><b>In order, and there is no way to have them out of it.</b> The account holds these
+         * as facts and says nothing about which comes first, so a caller handed that set would be
+         * publishing whatever it iterated in — and three surfaces publish these: this document,
+         * the page a person reads, and the block a generator writes. Handing over the sequence
+         * rather than the set is what makes the order one thing rather than three.
          */
-        public Set<Incompleteness.Met> incompleteness() {
-            return weakenedBy().observationCauses();
+        public List<PublishedIncompleteness> incompleteness() {
+            return PublicationOrders.WHAT_WENT_UNREAD
+                    .arrange(entriesOf(weakenedBy().observationCauses())).written();
         }
 
         /**
@@ -1144,9 +1151,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
     }
 
     /** The reasons, in the one shape a reason is printed in wherever it sits. */
-    private void said(StringBuilder out, List<Incompleteness.Met> gaps,
+    private void said(StringBuilder out, List<PublishedIncompleteness> gaps,
                              SourceNameResolver names) {
-        for (Incompleteness.Met gap : gaps) {
+        for (PublishedIncompleteness gap : gaps) {
             out.append(String.format("    · %s%n", Reasons.said(gap.fact(), names)));
         }
     }
@@ -2715,8 +2722,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
     private static void incompleteness(ObjectNode of, ModuleReport module,
                                        DocumentSources sources) {
         ArrayNode gaps = of.putArray("incompleteness");
-        for (PublishedIncompleteness gap : PublicationOrders.WHAT_WENT_UNREAD
-                .arrange(entriesOf(module.incompleteness())).written()) {
+        for (PublishedIncompleteness gap : module.incompleteness()) {
             ObjectNode g = gaps.addObject();
             g.put("code", word(gap.fact().code()));
             g.put("scope", word(gap.fact().scope()));
@@ -2739,7 +2745,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * {@link NoPlaceToWrite} gives: the document would otherwise say a reader can be sent
      * somewhere and leave the fields out.
      */
-    private static List<PublishedIncompleteness> entriesOf(Set<Incompleteness.Met> gaps) {
+    static List<PublishedIncompleteness> entriesOf(Set<Incompleteness.Met> gaps) {
         List<PublishedIncompleteness> out = new ArrayList<>(gaps.size());
         for (Incompleteness.Met gap : gaps) {
             Optional<PublishedAt> place = PublicationOrders.placeFor(gap.citations());

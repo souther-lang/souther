@@ -13,7 +13,9 @@ import souther.compiler.query.PartitionEvidence;
  *
  * <p>An enum for the reason {@link AdequacyOpeningWord} is one: the shipped schema names these
  * words in its own file and is held against this, so a word added here has to be taught to the
- * schema before it can be written.
+ * schema before it can be written. And every reason a verdict can rest on has one of these, which
+ * is asked separately — the two together are what say that the words a document writes and the
+ * words it allows are the same words.
  *
  * <p>Fewer words than there are reasons. Nine measures can go unmade and each says which of these
  * three it was waiting for — a measure with no rows to read is the same news whichever measure it

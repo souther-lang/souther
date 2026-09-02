@@ -9,6 +9,7 @@ import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.observe.Disposition;
 import souther.compiler.observe.Incompleteness;
+import souther.compiler.publish.PublishedIncompleteness;
 import souther.compiler.observe.MeasurementStatus;
 import souther.compiler.query.About;
 import souther.compiler.query.Adequacy;
@@ -27,8 +28,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
-import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -444,14 +443,13 @@ class CompilePartialAdequacyTest {
         // Both of them `cancel`'s: the row that did not finish — said as which row, since a
         // behavior may have more than one that did not — and the position of its guard whose value
         // that row was the only one to write.
-        assertEquals(Set.of("cancel/0/#1", "cancel/request.n"),
+        assertEquals(List.of("cancel/0/#1", "cancel/request.n"),
                 whole.modules().get(0).incompleteness().stream()
-                        .map(gap -> gap.fact().subject())
-                        .collect(Collectors.toUnmodifiableSet()));
+                        .map(gap -> gap.fact().subject()).toList());
 
         AdequacyReport one = whole.only(null, "submit");
         assertEquals(MeasurementStatus.COMPLETE, one.status());
-        assertEquals(Set.of(), one.modules().get(0).incompleteness());
+        assertEquals(List.of(), one.modules().get(0).incompleteness());
         assertTrue(one.modules().get(0).behaviors().stream()
                 .allMatch(b -> b.name().equals("submit")));
     }
@@ -609,11 +607,10 @@ class CompilePartialAdequacyTest {
         assertEquals(MeasurementStatus.PARTIAL, report.modules().get(0).status());
         assertEquals(MeasurementStatus.PARTIAL, report.modules().get(0).behaviors().get(0).status());
 
-        Set<Incompleteness.Met> why = report.modules().get(0).incompleteness();
+        List<PublishedIncompleteness> why = report.modules().get(0).incompleteness();
         assertEquals(1, why.size(), why.toString());
-        assertEquals(Incompleteness.Code.VALUE_TRUNCATED,
-                why.iterator().next().fact().code());
-        assertEquals(Optional.of("take"), why.iterator().next().fact().behavior(),
+        assertEquals(Incompleteness.Code.VALUE_TRUNCATED, why.get(0).fact().code());
+        assertEquals(Optional.of("take"), why.get(0).fact().behavior(),
                 "a position is inside one behavior");
         String human = report.human(SourceNameResolver.identity());
         assertTrue(human.contains("the observation at"), human);
@@ -942,22 +939,19 @@ class CompilePartialAdequacyTest {
     }
 
     /**
-     * One reason is one entry, however many sources went looking, and it is cited at each of them.
+     * One reason is one entry, however many sources went looking.
      *
      * <p>These are structured rather than written out so that a build can count them, and a count
      * that grows with the number of attached files is counting the looking rather than the failure.
-     * That the entries are one per reason is the account's own arithmetic; what is asked here is
-     * that nothing was thrown away to get it — a fact met from three files is one fact that can
-     * still send a reader to any of the three.
      */
     @Test
-    void oneReasonIsReportedOnceAndCitedAtEachPlaceItWasMet() {
-        Set<Incompleteness.Met> gaps =
+    void oneReasonIsReportedOnce() {
+        List<PublishedIncompleteness> gaps =
                 AdequacyReport.of(split()).modules().get(0).incompleteness();
 
-        assertEquals(gaps.stream().map(Incompleteness.Met::fact)
-                        .distinct().count(), gaps.size(), gaps.toString());
         assertFalse(gaps.isEmpty(), "a split model leaves something unread");
+        assertEquals(gaps.stream().map(PublishedIncompleteness::fact).distinct().count(),
+                gaps.size(), gaps.toString());
     }
 
     /** The row that did not finish is still there to be counted, and still says it did not. */

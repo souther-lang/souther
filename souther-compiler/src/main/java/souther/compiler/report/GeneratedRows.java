@@ -2,7 +2,8 @@ package souther.compiler.report;
 
 import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.fmt.Formatter;
-import souther.compiler.observe.Incompleteness;
+import souther.compiler.publish.PublicationOrders;
+import souther.compiler.publish.PublishedIncompleteness;
 import souther.compiler.partition.BorderObligationPoint;
 import souther.compiler.partition.GenerationReason;
 import souther.compiler.partition.GenerationOutcome;
@@ -605,7 +606,13 @@ public final class GeneratedRows {
                 // generator's would be the same fact under two spellings, read side by side.
                 case GenerationReason.RowsNotRead unread -> {
                     StringBuilder lines = new StringBuilder();
-                    for (Incompleteness.Met because : unread.because()) {
+                    // In the order a document writes them in, which is the order every surface
+                    // that says these facts writes them in. A block written from the account
+                    // itself would come out in whatever that iterated in, and a person comparing
+                    // two generations of one model would be reading the difference between two
+                    // walks.
+                    for (PublishedIncompleteness because : PublicationOrders.WHAT_WENT_UNREAD
+                            .arrange(AdequacyReport.entriesOf(unread.because())).written()) {
                         lines.append(String.format("// generation stopped for `%s`: %s%n",
                                 unread.behavior(), Reasons.said(because.fact(), names)));
                     }

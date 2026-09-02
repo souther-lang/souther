@@ -229,12 +229,14 @@ class EverySchemaWordIsAccountedForTest {
                     Incompleteness.Code.class,
                     souther.compiler.publish.WeakeningWord.class,
                     souther.compiler.publish.AdequacyOpeningWord.class),
-            // And what a measure nobody made was waiting for. The sources are read off the seal
-            // rather than listed: which reasons mean "never started" is `NotMeasuredReason`'s own
-            // membership, and a list here would be a second copy of it that the next arm added is
-            // missing from.
+            // And what a measure nobody made was waiting for, which the document writes from its
+            // own vocabulary rather than from the reasons that produce it. Held against that
+            // vocabulary, because that is what is written: read off the reasons instead, a word
+            // renamed here would leave the schema and the document disagreeing with every check
+            // green. That the vocabulary covers every reason a verdict can rest on is
+            // `everyReasonAMeasureNobodyMadeCanGiveHasAWord`'s.
             new Vocabulary("keptOpenBy[].reason", List.of("$defs", "notMeasuredReason"),
-                    everyReasonAMeasureNobodyMadeCanGive()),
+                    souther.compiler.publish.NotMeasuredWord.class),
             // `status` is the one enumerated field written through a projection rather than off an
             // enum's own names. The compiler tells a measure with nothing to be about from one nobody
             // made; a document says `unavailable` for both and leaves which to the `reason` beside it.
@@ -846,6 +848,36 @@ class EverySchemaWordIsAccountedForTest {
             }
         }
         return out.toArray(new Class<?>[0]);
+    }
+
+    /**
+     * And every one of those reasons has a word in the vocabulary the document writes.
+     *
+     * <p>The other half of holding {@code keptOpenBy[].reason} against that vocabulary. The schema
+     * and the vocabulary agreeing says the words are the same words; this says the vocabulary
+     * covers every reason a verdict can rest on, so that neither check is passed by a reason
+     * nothing has a word for.
+     *
+     * <p>Asked of the reason and not of the arm, because two constants of one arm can be two words
+     * — a measure nobody asked for and one there were no rows for come out of one enum.
+     */
+    @Test
+    void everyReasonAMeasureNobodyMadeCanGiveHasAWord() {
+        List<String> without = new ArrayList<>();
+        for (Class<?> arm : everyReasonAMeasureNobodyMadeCanGive()) {
+            for (Object constant : arm.getEnumConstants()) {
+                try {
+                    souther.compiler.publish.NotMeasuredWord.of((NotMeasuredReason) constant);
+                } catch (RuntimeException refused) {
+                    without.add(arm.getSimpleName() + "." + constant + ": "
+                            + refused.getMessage());
+                }
+            }
+        }
+
+        assertEquals(List.of(), without,
+                "a reason a verdict can rest on that the document has no word for, so a report"
+                        + " that met it would have nothing to write");
     }
 
     /**
