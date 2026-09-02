@@ -941,7 +941,7 @@ public final class InputDomain {
                 ? StructuralInspection.stoppedAt(
                         new BlockReason.RecursiveExpansion(unfolds, already))
                 : StructuralInspection.of(input.shape(), declared);
-        Position here = read(input, path, symbols, placed, structure, declared);
+        Position here = read(input, path, symbols, policy, placed, structure, declared);
         // Passing through an occurrence is not finding a position. A reading following a path the
         // model named opens every declaration on the way — that is how it knows which step to take
         // and whose rules reach the end of it — and what it reports is the end. Published all the
@@ -1301,6 +1301,7 @@ public final class InputDomain {
      * that the length is the number being measured.
      */
     private static Position read(ReadablePosition input, TermPath path, Symbols symbols,
+                                 ReadingPolicy policy,
                                  PlacedRules placed, StructuralInspection structure,
                                  List<Case> declared) {
         TypeView view = input.view();
@@ -1328,7 +1329,12 @@ public final class InputDomain {
         // Which of the position's numbers its own rules are written about, whatever each of them
         // came to. What a rule is about and where it leaves the values are two questions, and only
         // the first decides this.
-        Set<FieldDomains.CoordinateKind> written = DeclaredSubjects.of(type, symbols, taken);
+        //
+        // Asked of the reading that turned the clauses into constraints, which is the one place the
+        // canonical quantity of each of them was worked out. A second reader recognising the number
+        // off the spelling of a side answers nothing for `String.length(value) * 2 >= 4`, whose
+        // sides are neither a name nor a measure of one.
+        Set<FieldDomains.CoordinateKind> written = DeclaredSubjects.of(type, symbols, policy);
         List<RuleWithoutALine> competing = List.of();
         if (undecidable(written, stated, taken, carried)) {
             competing = competingCoordinates(stated, path, type, symbols);
@@ -1343,20 +1349,20 @@ public final class InputDomain {
                     "this reading decided " + path + " is measured by " + taken
                             + ", which is not what its type is measured by: " + Type.show(type));
         }
-        // And the ends a rule naming a value moved, which the reading of the clauses as they are
-        // written cannot see: no comparison places them, and where they are is in what the other
-        // rules leave.
+        // And the ends a conjunct that placed none moved, which the reading of the clauses as they
+        // are written cannot see: no comparison places them, and where they are is in what the
+        // other rules leave.
         List<FieldDomains.Placed> moved = placed.movedAtTheValue();
-        DeclaredBounds.Bounds own = bySize
-                ? DeclaredBounds.and(
-                        DeclaredBounds.and(ofType,
-                                DeclaredBounds.placed(moved, answeredBy(taken), Carrier.WHOLE)),
-                        DeclaredBounds.placed(stated, answeredBy(taken), Carrier.WHOLE))
-                : carried == null ? null
-                        : DeclaredBounds.and(
-                                DeclaredBounds.and(valueOfType,
-                                        DeclaredBounds.placed(moved, ITS_OWN_VALUE, carried)),
-                                DeclaredBounds.placed(stated, ITS_OWN_VALUE, carried));
+        // Three sources and not two: what the type's own clauses wrote, what a conjunct of them
+        // moved, and what the value this position sits in placed. Each is ends of one coordinate
+        // and they are intersected, every rule that put an end where it is kept.
+        FieldDomains.CoordinateKind kind = bySize ? answeredBy(taken) : ITS_OWN_VALUE;
+        Carrier on = bySize ? Carrier.WHOLE : carried;
+        DeclaredBounds.Bounds own = !bySize && carried == null ? null
+                : DeclaredBounds.and(
+                        DeclaredBounds.and(bySize ? ofType : valueOfType,
+                                DeclaredBounds.placed(moved, kind, on)),
+                        DeclaredBounds.placed(stated, kind, on));
         // A value whose rules contradict has no positions to cover: every edge of every field of it
         // is a row nobody can write, which is not the same answer as a field nothing bounds.
         boolean nothingExists = placed.bounds().infeasible();

@@ -526,8 +526,8 @@ public final class InvariantChecker {
          * {@link #withoutClausesOf}: a clause has as many conjuncts as the author wrote, and taking
          * the clause away answers for all of them at once.
          */
-        static Reach withoutPart(RuleRef.Invariant rule, Core part) {
-            return new Reach(RulesLeftOut.NONE, PartsLeftOut.without(rule, part), _ -> false);
+        static Reach withoutParts(java.util.Set<PartsLeftOut.AuthoredPart> parts) {
+            return new Reach(RulesLeftOut.NONE, PartsLeftOut.without(parts), _ -> false);
         }
 
         /** Every rule that is not reached through one of {@code these}, they being supposed to hold
@@ -2050,22 +2050,31 @@ public final class InvariantChecker {
                         .minus(((AffineForms.Outcome.Composed<FactSubject, Denotations>) right)
                                 .form());
         java.util.Set<RuleKey> over = new LinkedHashSet<>();
-        // And which number each name is, kept beside the name. A path carries more than one number
-        // and the reading has both here; projected to the path alone, whoever wanted the number
-        // would have to choose between them again.
-        java.util.Map<RuleKey, Coordinate> which = new LinkedHashMap<>();
+        // And which numbers they are, counted as numbers. A path carries more than one — a string
+        // has its own order and its length — so a form over two numbers of one name is over two
+        // things and not over one, and counting the names would call it one.
+        java.util.Set<Coordinate> numbers = new LinkedHashSet<>();
         for (FactSubject atom : whole.coefs().keySet()) {
             Coordinate found = byName.get(atom);
             over.add(found.path());
-            which.putIfAbsent(found.path(), found);
+            numbers.add(found);
         }
         if (over.isEmpty()) {
             return new Arithmetic.CutsNothing(recognised, whole.constant());
         }
         if (over.size() == 1) {
-            RuleKey one = over.iterator().next();
+            // One name, and the numbers taken at it are one number. The language declares one
+            // measure of a shape, so a form over two numbers of one name cannot be written today —
+            // said as an error rather than passed over, because the answer for such a form is
+            // neither of the two below: it is over one name and over two numbers, and a reader
+            // handed either would be told something the form does not say.
+            if (numbers.size() != 1) {
+                throw new IllegalStateException(
+                        "a form over one name and more than one of its numbers: " + numbers);
+            }
             return new Arithmetic.OverOne(recognised,
-                    new UnreadComparison.Quantity.OverOne<>(one), which.get(one));
+                    new UnreadComparison.Quantity.OverOne<>(over.iterator().next()),
+                    numbers.iterator().next());
         }
         return new Arithmetic.OverSeveral(recognised,
                 new UnreadComparison.Quantity.OverSeveral<>(over));

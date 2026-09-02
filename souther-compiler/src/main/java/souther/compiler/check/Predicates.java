@@ -575,10 +575,9 @@ final class Predicates {
         /** Whether this reading takes {@code part} in. */
         boolean includes(Core part);
 
-        /** Every part but {@code excluded}, which is what a counterfactual reading of one conjunct
-         *  asks for. */
-        static PartsToRead without(Core excluded) {
-            return part -> !excluded.equals(part);
+        /** Every part but {@code excluded}, which is what a counterfactual reading asks for. */
+        static PartsToRead without(java.util.Set<Core> excluded) {
+            return part -> !excluded.contains(part);
         }
     }
 

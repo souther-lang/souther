@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
+import souther.compiler.query.ReadAs;
 import souther.compiler.query.Scopes;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
@@ -114,6 +115,6 @@ class WhatARuleIsAboutIsReadWithoutItsEndTest {
         Map<String, Sig> sigs = compilation.db().ask(new Bodies.Signatures(module)).value();
         Symbols symbols = Scopes.derived(compilation.db(), module).value();
         Type type = sigs.get("take").inputTypes().get(0);
-        return DeclaredSubjects.of(type, symbols, NumericMeasures.takenOf(type, symbols));
+        return DeclaredSubjects.of(type, symbols, ReadAs.THE_COMPILATION_DOES);
     }
 }

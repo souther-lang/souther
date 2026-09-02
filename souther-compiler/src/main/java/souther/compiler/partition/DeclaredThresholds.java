@@ -88,6 +88,13 @@ public final class DeclaredThresholds {
         // Only the quantity that is on no position. Why this drew no line where it drew none is not
         // said here: the reading of ends already answered for this clause at each position it names,
         // and a second sentence about one rule is two answers to one question.
+        //
+        // Which is what keeps a conjunct from being drawn twice. One handed over with no end is
+        // read there as an end where its quantity is over one coordinate
+        // ({@code FieldDomains.OverOneCoordinate}), and here as a line where its quantity is over
+        // none of them or several — so the two are disjoint exactly as far as the two readings
+        // agree about how many coordinates a quantity is over. They are two readings of one
+        // question and neither is asked of the other.
         if (assessed instanceof ComparisonAssessment.AcrossPositions over && over.drawsABorder()) {
             out.add(new LineDrawn(over.cutting(), originOf(clause, over.cutting())));
         }

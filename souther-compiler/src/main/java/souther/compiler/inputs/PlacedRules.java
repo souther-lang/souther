@@ -432,11 +432,11 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
     }
 
     /**
-     * The ends a rule naming a value moved at the value this reading is opened at.
+     * The ends a conjunct that placed none moved at the value this reading is opened at.
      *
      * <p>What {@link #placedAt} leaves out. The ends of a value's own coordinates are read off the
      * clauses as they are written, which is a reading that sees no end where no comparison places
-     * one — so an end a rule naming a value moved is invisible there, and is here.
+     * one — so an end such a conjunct moved is invisible there, and is here.
      *
      * <p>Only the value's own. Everything under it is a position of its own and is answered at that
      * position, by {@link #placedAt}, which does not leave these out.

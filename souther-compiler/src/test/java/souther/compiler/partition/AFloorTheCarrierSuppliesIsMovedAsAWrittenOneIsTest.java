@@ -81,16 +81,33 @@ class AFloorTheCarrierSuppliesIsMovedAsAWrittenOneIsTest {
     }
 
     /**
-     * And the obligations are not one. Two clauses are two authored lines, and the row written for
-     * one is no evidence about the other.
+     * And the same range is not the same obligation.
      *
-     * <p>Held against the geometry above: the same range, and not the same debts. A check for the
-     * first that read as a check for the second would let the two be folded together.
+     * <p>Two clauses each saying where the value stops are two authored lines, and the row written
+     * for one is no evidence about the other. One clause saying it is one. Both models leave the
+     * position the same values.
+     *
+     * <p>The count and the clauses, not that the two answers differ. A model whose one debt moved
+     * from one clause to another differs too, and that is not what this is about — what a check
+     * here has to refuse is the day somebody folds two debts into one because the ranges agree.
      */
     @Test
-    void thesameRangeIsNotTheSameObligation() {
-        assertNotEquals(owedBy(CARRIERS), owedBy(WRITTEN),
-                "one model writes one clause about the length and the other writes two");
+    void theSameRangeIsNotTheSameObligation() {
+        String one = """
+                data Subject = Int
+                    invariant atLeastFive = value >= 5
+                """;
+        String two = """
+                data Subject = Int
+                    invariant atLeastFive = value >= 5
+                    invariant aboveFour = value > 4
+                """;
+
+        assertEquals(rangeOf(one), rangeOf(two), "the rules leave the position the same values");
+        assertEquals(1, bordersOf(one).size());
+        assertEquals(2, bordersOf(two).size(),
+                "two clauses drew the line, and a row at it is owed to each of them");
+        assertNotEquals(owedBy(one), owedBy(two));
     }
 
     /**
@@ -112,6 +129,43 @@ class AFloorTheCarrierSuppliesIsMovedAsAWrittenOneIsTest {
                 data Subject = Int
                     invariant doubled = value * 2 >= 4
                 """));
+    }
+
+    /**
+     * The same where the number is one taken of the value, which is the axis that can be lost.
+     *
+     * <p>An {@code Int} has one number and a rule about it cannot be about anything else, so an
+     * arithmetic there is measured on the right axis whatever recognised it. A {@code String} has
+     * two, and {@code String.length(value) * 2 >= 4} names neither of them on a side — recognised
+     * from the spelling, the model writes about no number of the value, and the position comes back
+     * measured on the string's own order with the length no number of the model at all.
+     */
+    @Test
+    void anArithmeticOnANumberTakenOfTheValueLeavesItsLineWhereThePlainOneDoes() {
+        assertEquals(bordersOf("""
+                data Subject = String
+                    invariant plain = String.length(value) >= 2
+                """), bordersOf("""
+                data Subject = String
+                    invariant doubled = String.length(value) * 2 >= 4
+                """));
+    }
+
+    /**
+     * Two clauses saying one thing are both owed a row, and neither is missed on its own.
+     *
+     * <p>Taking either away leaves the value where it is, so a reading that asked only which
+     * conjunct is missed on its own answered nobody twice and the end came back owed to nobody at
+     * all. Which of them accounts for it is the second question — whether it holds the end with
+     * every other candidate gone — and both of these do.
+     */
+    @Test
+    void twoClausesSayingOneThingAreBothOwedARow() {
+        assertEquals(4, bordersOf("""
+                data Subject = Int
+                    invariant five = value == 5
+                    invariant alsoFive = value == 5
+                """).size(), "two clauses, each with an end either side of the value they name");
     }
 
     /** The same of a record's field, which is read through another walk. */

@@ -82,7 +82,8 @@ public final class FieldDomains {
     /** The conjuncts this reading got no end out of, for whoever reads them next — see
      * {@link #withoutAnEnd}. */
     private final List<WithoutAnEnd> withoutAnEnd;
-    /** The conjuncts that name a value of one coordinate — see {@link #overOneCoordinate}. */
+    /** The conjuncts that placed no end and are about one number — see {@link #overOneCoordinate}.
+     */
     private final List<OverOneCoordinate> overOneCoordinate;
     /**
      * Which conjunct this reading was asked to leave out, so that a reading standing in for a
@@ -93,8 +94,8 @@ public final class FieldDomains {
      * one of its conjuncts, and again, and never come back.
      */
     private final PartsLeftOut withoutParts;
-    /** The ends the naming conjuncts moved, worked out once — see {@link #placed}. */
-    private volatile List<Placed> placed;
+    /** The ends the conjuncts that placed none moved, worked out once — see {@link #movedEnds}. */
+    private volatile List<Placed> moved;
     /** What each clause reaching this value raises, keyed on the rule it is. */
     private final Map<RuleRef, Required> raised;
     /** The same per part of each clause. A reader that found one conjunct wanting names what that
@@ -1019,52 +1020,109 @@ public final class FieldDomains {
     /**
      * Every end the rules place, wherever it is.
      *
-     * <p>The ends read off an ordering, and the ends a rule naming a value moved. Both are ends the
-     * declaration's rules put where they are, and which of the two an end came from is not a
-     * difference a reader of ends has any use for: {@code String.length(value) /= 0} leaves the
+     * <p>The ends read off an ordering, and the ends a conjunct that placed none moved. Both are
+     * ends the declaration's rules put where they are, and which of the two an end came from is not
+     * a difference a reader of ends has any use for: {@code String.length(value) /= 0} leaves the
      * length starting at one exactly as {@code String.length(value) >= 1} does, and a row at one is
      * owed to whichever of them the author wrote.
      *
      * <p>Not read off the comparison, which is what tells them apart at the other end of the
-     * question. Where an ordering places an end is in the rule; where a rule naming a value places
+     * question. Where an ordering places an end is in the rule; where a rule that placed none put
      * one is in everything else the rules say, and it is read by asking what they leave without
-     * this conjunct ({@link #movedEndsOf}).
+     * that conjunct ({@link #movedEndsOf}).
      *
-     * <p>Worked out once. Each of them costs a reading of the declaration, and every reader of ends
-     * asks for the list.
      */
     public List<Placed> placed() {
-        List<Placed> had = placed;
-        if (had != null) {
-            return had;
-        }
         List<Placed> out = new ArrayList<>(directs.stream()
                 .map(each -> new Placed(each.at(), each.from(),
                         each.bound().lower(), each.bound().end(), each.conjunct()))
                 .toList());
         out.addAll(movedEnds());
-        List<Placed> answer = List.copyOf(out);
-        placed = answer;
-        return answer;
+        return List.copyOf(out);
     }
 
     /**
-     * The ends the rules naming a value moved.
+     * The ends a conjunct that placed none moved.
      *
      * <p>Apart from the ends an ordering placed, because one reader wants them apart. A newtype's
      * own value has its ends read off the clauses as they are written ({@link DeclaredBounds#of}),
      * and an end that reader cannot see is exactly one no comparison places — so what is handed to
      * it is these, and handing it the whole list would state every other end twice.
+     *
+     * <p>Worked out once. Each of them costs a reading of the declaration, and both the readers
+     * that want them apart and the ones that want them together ask through here.
      */
     public List<Placed> movedEnds() {
-        List<Placed> moved = new ArrayList<>();
-        for (OverOneCoordinate names : overOneCoordinate) {
-            for (InvariantBound end : movedEndsOf(names)) {
-                moved.add(new Placed(names.at(), names.from(), end.lower(), end.end(),
-                        names.conjunct()));
-            }
+        List<Placed> had = moved;
+        if (had != null) {
+            return had;
         }
-        return List.copyOf(moved);
+        List<Placed> out = new ArrayList<>();
+        // A reading standing in for a counterfactual answers none of these. It exists to say what
+        // the conjuncts of the reading above it were holding; asked the same question, it would
+        // read itself again without some of its own and never come back.
+        if (!withoutParts.leavesAnythingOut()) {
+            byCoordinate().forEach((at, candidates) -> {
+                NumericDomain.Bounds with = leftAt(at.path(), at.kind());
+                if (with == null) {
+                    return;
+                }
+                accountedFor(at, candidates, with.min(), true, out);
+                accountedFor(at, candidates, with.max(), false, out);
+            });
+        }
+        List<Placed> answer = List.copyOf(out);
+        moved = answer;
+        return answer;
+    }
+
+    /** The conjuncts that placed no end, gathered by the number each is about. */
+    private Map<Coordinate, List<OverOneCoordinate>> byCoordinate() {
+        Map<Coordinate, List<OverOneCoordinate>> byNumber = new LinkedHashMap<>();
+        overOneCoordinate.forEach(each ->
+                byNumber.computeIfAbsent(each.at(), _ -> new ArrayList<>()).add(each));
+        return byNumber;
+    }
+
+    /**
+     * Which of {@code candidates} account for the end on one side, written down as ends they placed.
+     *
+     * <p>The three questions {@link EndNarrowing} asks, put to authored conjuncts. Only the first
+     * of them was asked before — whether the end moves when this conjunct alone is taken away —
+     * and a model writing one rule twice answered no to it twice: neither copy is missed on its
+     * own, and the end came back owed to nobody.
+     *
+     * <p>Every candidate the answer names, and the answer is what says which they are. What is
+     * written here is that each of them placed this end, which is what a row at it is owed to.
+     */
+    private void accountedFor(Coordinate at, List<OverOneCoordinate> candidates, Endpoint end,
+                              boolean lower, List<Placed> out) {
+        if (end == null) {
+            return;
+        }
+        for (OverOneCoordinate each : EndNarrowing.read(end, candidates,
+                removed -> sideWithout(removed, at, lower), inWrittenOrder()).names()) {
+            out.add(new Placed(at, each.from(), lower, end, each.conjunct()));
+        }
+    }
+
+    /** Where the coordinate stops on one side with these conjuncts taken away. */
+    private Endpoint sideWithout(Set<OverOneCoordinate> removed, Coordinate at, boolean lower) {
+        NumericDomain.Bounds without = without(removed).leftAt(at.path(), at.kind());
+        return without == null ? null : lower ? without.min() : without.max();
+    }
+
+    /**
+     * The order these are answered in, which is the order the author wrote them.
+     *
+     * <p>The clause and then which conjunct of it, which is what tells two lines of one rule apart
+     * everywhere else ({@link souther.compiler.partition.AuthoredLine}). Read off the walk that
+     * collected them, two readings of one edge would come back as two lines.
+     */
+    private static java.util.Comparator<OverOneCoordinate> inWrittenOrder() {
+        return java.util.Comparator
+                .comparing((OverOneCoordinate each) -> each.from().named())
+                .thenComparingInt(OverOneCoordinate::conjunct);
     }
 
     /** The ends the rules place on the coordinates at {@code path}, in the order they were read. */
@@ -1110,65 +1168,70 @@ public final class FieldDomains {
     }
 
     /**
-     * The conjuncts naming a value of one coordinate, in the order they were read.
+     * Which numbers of the value its own rules are about, whatever each of them came to.
      *
-     * <p>What they do to the coordinate is not here. A rule naming a value moves an end where the
-     * value it names sits at one, and where it sits at one is a fact about everything else the
-     * rules say — so it is read by {@link #movedEndsOf} and not written down as each conjunct
-     * arrives.
+     * <p>Off the canonical quantity, which is the one thing that says what a rule is about.
+     * {@code String.length(value) * 2 >= 4} is about the length of the string; a reader looking for
+     * a bare name or a bare measure on one side finds neither, and answers that the model writes
+     * about no number of the value at all — which is how a position with a rule about its length
+     * came to be measured on the string's own order.
+     *
+     * <p>Both the conjuncts an end was read from and the ones none was. Whether a clause came to an
+     * end is a fact about the clauses beside it and about this compiler's arithmetic; which number
+     * it is about is neither, and a reader choosing what a position is measured on wants the second.
+     *
+     * <p>A set and not a choice. Two numbers of one value can both be written about, which is a
+     * model with nothing here to pick between — said as a set, the reader that has to choose is the
+     * one that knows what it does where there is no choice to make.
+     */
+    public Set<Coordinate> writtenAbout() {
+        Set<Coordinate> out = new java.util.LinkedHashSet<>();
+        directs.forEach(each -> out.add(each.at()));
+        overOneCoordinate.forEach(each -> out.add(each.at()));
+        return java.util.Collections.unmodifiableSet(out);
+    }
+
+    /**
+     * The conjuncts that placed no end and are about one number, in the order they were read.
+     *
+     * <p>What they do to that number is not here. Such a rule moves an end where what it takes away
+     * is at one, and where it is at one is a fact about everything else the rules say — so it is
+     * read by {@link #movedEndsOf} and not written down as each conjunct arrives.
      */
     public List<OverOneCoordinate> overOneCoordinate() {
         return overOneCoordinate;
     }
 
     /**
-     * The ends {@code names} moved, which is what its conjunct was holding.
+     * The ends {@code over} moved, which is what its conjunct was holding.
      *
      * <p>Read by asking what the rules leave the coordinate without this conjunct and comparing
      * with what they leave it. An end that moves is an end the conjunct was holding — the same
      * question {@link EndNarrowing} puts to a declaration, put here to one authored conjunct.
      *
-     * <p><b>Against the rules and not against the ends they placed.</b> A rule naming a value
-     * places none, so a counterfactual over the ends would take nothing away and answer that
+     * <p><b>Against the rules and not against the ends they placed.</b> Every conjunct asked here
+     * placed no end, so a counterfactual over the ends would take nothing away and answer that
      * nothing moved. What is left out is the conjunct itself, and what is compared is what the
      * whole reading leaves.
      *
-     * <p>Empty where nothing moved, which is a rule whose value has other values either side of it:
-     * a hole with something to side it is a hole, and no end of a range says where it is.
+     * <p>Empty where nothing moved, which is what a rule leaves when what it takes away has values
+     * either side of it: a hole with something to side it is a hole, and no end of a range says
+     * where it is.
      */
-    public List<InvariantBound> movedEndsOf(OverOneCoordinate names) {
-        // A reading standing in for a counterfactual has no such question of its own. Asked, it
-        // would read itself again without one of its conjuncts and never come back — and what it
-        // is for is answering what one conjunct of the reading above it was holding.
-        if (!(withoutParts instanceof PartsLeftOut.Nothing)) {
-            return List.of();
-        }
-        NumericDomain.Bounds with = leftAt(names.at().path(), names.at().kind());
-        if (with == null) {
-            return List.of();
-        }
-        NumericDomain.Bounds without =
-                without(names.from(), names.part()).leftAt(names.at().path(), names.at().kind());
-        List<InvariantBound> moved = new ArrayList<>();
-        if (movedFrom(without == null ? null : without.min(), with.min())) {
-            moved.add(new InvariantBound(true, with.min()));
-        }
-        if (movedFrom(without == null ? null : without.max(), with.max())) {
-            moved.add(new InvariantBound(false, with.max()));
-        }
-        return List.copyOf(moved);
+    public List<InvariantBound> movedEndsOf(OverOneCoordinate over) {
+        return movedEnds().stream()
+                .filter(each -> each.from().equals(over.from()) && each.conjunct() == over.conjunct()
+                        && each.at().equals(over.at()))
+                .map(each -> new InvariantBound(each.lower(), each.end()))
+                .toList();
     }
 
-    /** Whether an end stands somewhere other than where it stood without the conjunct. An end that
-     *  was not there before is one that moved, which is what taking a rule away widens. */
-    private static boolean movedFrom(Endpoint without, Endpoint with) {
-        return with != null && !with.equals(without);
-    }
-
-    /** This value read again without one conjunct of one of its rules. */
-    private FieldDomains without(RuleRef.Invariant rule, Core part) {
+    /** This value read again without some conjuncts of its rules. */
+    private FieldDomains without(Set<OverOneCoordinate> removed) {
         return of(named, data, symbols, policy, settled,
-                InvariantChecker.Reach.withoutPart(rule, part));
+                InvariantChecker.Reach.withoutParts(removed.stream()
+                        .map(each -> new PartsLeftOut.AuthoredPart(each.from(), each.part()))
+                        .collect(java.util.stream.Collectors.toSet())));
     }
 
     /**
