@@ -272,7 +272,7 @@ class ARuleWithoutALineIsNamedByTheRuleTest {
                 }
                 """;
 
-        List<souther.compiler.check.RuleCitation> cited = rulesNotRead(model).stream()
+        List<java.util.Set<souther.compiler.check.RuleCitation>> cited = rulesNotRead(model).stream()
                 .map(each -> ((PartitionEvidence.NotRead.ARule) each).finding().cited())
                 .distinct().toList();
 

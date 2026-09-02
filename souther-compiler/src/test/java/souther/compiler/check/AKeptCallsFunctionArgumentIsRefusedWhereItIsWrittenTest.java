@@ -10,7 +10,6 @@ import souther.compiler.diag.CompileException;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.diag.msg.TypeMessage;
 import souther.compiler.types.BindingOwner;
-import souther.compiler.types.ConstructionOrigin;
 import souther.compiler.types.ReachName;
 import souther.compiler.types.ValueName;
 
@@ -54,7 +53,7 @@ class AKeptCallsFunctionArgumentIsRefusedWhereItIsWrittenTest {
         Hir.Expr call = new Hir.Apply("List.flatMap",
                 new ReachName.OfLibrary(ValueName.Stdlib.operation("List", "flatMap")),
                 List.of(answersAnInt, new Hir.ListLit(List.of(new Hir.IntLit(2, CALL, null)), CALL, null)),
-                ConstructionOrigin.own(), CALL, null);
+                CALL, null);
 
         CompileException e = assertThrows(CompileException.class,
                 () -> Elaborator.elaborate(call, Scope.NONE, CheckContext.of(Symbols.none(DefaultStdlib.get()))
@@ -77,7 +76,7 @@ class AKeptCallsFunctionArgumentIsRefusedWhereItIsWrittenTest {
         Hir.Expr call = new Hir.Apply("List.flatMap",
                 new ReachName.OfLibrary(ValueName.Stdlib.operation("List", "flatMap")),
                 List.of(answersAnInt, new Hir.ListLit(List.of(new Hir.IntLit(2, CALL, null)), CALL, null)),
-                ConstructionOrigin.own(), CALL, null);
+                CALL, null);
 
         CompileException e = assertThrows(CompileException.class,
                 () -> Elaborator.elaborate(call, Scope.NONE, CheckContext.of(Symbols.none(DefaultStdlib.get()))

@@ -446,7 +446,7 @@ public final class Elaborator {
                 souther.compiler.types.ValueName.Stdlib.operation(collection, "fromList");
         return new Hir.Apply(collection + ".fromList",
                 new souther.compiler.types.ReachName.OfLibrary(fromList), List.of(written),
-                souther.compiler.types.ConstructionOrigin.own(), row.pos(), row.region());
+                row.pos(), row.region());
     }
 
     /** {@code <collection>.empty} — the value a body names for the empty collection a row writes

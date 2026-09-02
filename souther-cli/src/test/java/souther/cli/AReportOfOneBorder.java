@@ -140,7 +140,7 @@ final class AReportOfOneBorder {
      *  absent. What weakened it is a row that never finished. */
     static Measurement<ItemAssessment.Coverage> undecided() {
         return new Measurement.Partial<>(new ItemAssessment.Coverage.NoHit(),
-                WeakeningSet.of(new Weakening.ObservationIncomplete(
+                WeakeningSet.of(Weakening.ObservationIncomplete.of(
                         new souther.compiler.observe.Incompleteness(
                                 souther.compiler.observe.Incompleteness.Code.ROW_UNDECIDED,
                                 new souther.compiler.observe.Target.OfRow(

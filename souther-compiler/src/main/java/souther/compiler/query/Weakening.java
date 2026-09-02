@@ -68,13 +68,30 @@ public sealed interface Weakening {
      * measures rather than inside them — which is why the report had to join the two by hand and
      * why a behavior's status was decided from a list its measures never saw.
      */
-    record ObservationIncomplete(Incompleteness cause) implements Weakening {
+    record ObservationIncomplete(Incompleteness.Met met) implements Weakening {
+
+        public ObservationIncomplete {
+            if (met == null) {
+                throw new IllegalArgumentException("something went unobserved, and this is what");
+            }
+        }
+
+        /**
+         * One occurrence of it, as the reader that met it produced one.
+         *
+         * <p>Where it was met is evidence and not the fact — a module's classes failing to be
+         * instrumented is one fact however many sources went looking for them — so it arrives as a
+         * place this may be cited at and never as part of what tells two of these apart.
+         */
+        public static ObservationIncomplete of(Incompleteness occurrence) {
+            return new ObservationIncomplete(Incompleteness.Met.of(occurrence));
+        }
 
         /** The code's own answer, which is the code's to give because every producer of one agrees
          *  about it. */
         @Override
         public RunSensitivity runSensitivity() {
-            return cause.code().runSensitivity();
+            return met.fact().code().runSensitivity();
         }
     }
 

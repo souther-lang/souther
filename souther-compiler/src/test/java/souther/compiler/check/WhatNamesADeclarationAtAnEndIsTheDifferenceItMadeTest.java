@@ -47,7 +47,7 @@ class WhatNamesADeclarationAtAnEndIsTheDifferenceItMadeTest {
      */
     @Test
     void whereTheyLeaveTheEndWhereItIsNobodyIsNamed() {
-        EndNarrowing.Answer answer = EndNarrowing.read(TWENTY, List.of(A, B),
+        EndNarrowing.Answer<TypeSymbol.AtModule> answer = EndNarrowing.read(TWENTY, List.of(A, B),
                 reading(Map.of(Set.of(A, B), TWENTY)));
 
         assertInstanceOf(EndNarrowing.Answer.NoNarrowing.class, answer,
@@ -58,13 +58,13 @@ class WhatNamesADeclarationAtAnEndIsTheDifferenceItMadeTest {
     /** The one the end moves without is named, and the one it does not is left out. */
     @Test
     void theOneTheEndMovesWithoutIsNamed() {
-        EndNarrowing.Answer answer = EndNarrowing.read(TWENTY, List.of(A, B),
+        EndNarrowing.Answer<TypeSymbol.AtModule> answer = EndNarrowing.read(TWENTY, List.of(A, B),
                 reading(Map.of(
                         Set.of(A, B), FIFTY,
                         Set.of(A), FIFTY,
                         Set.of(B), TWENTY)));
 
-        assertEquals(new EndNarrowing.Answer.Indispensable(List.of(A)), answer,
+        assertEquals(new EndNarrowing.Answer.Indispensable<>(List.of(A)), answer,
                 "taking A away moves the end and taking B away leaves it");
     }
 
@@ -76,13 +76,13 @@ class WhatNamesADeclarationAtAnEndIsTheDifferenceItMadeTest {
      */
     @Test
     void whereNeitherIsMissedTheOnesReachingTheEndAloneAreNamed() {
-        EndNarrowing.Answer answer = EndNarrowing.read(TWENTY, List.of(A, B),
+        EndNarrowing.Answer<TypeSymbol.AtModule> answer = EndNarrowing.read(TWENTY, List.of(A, B),
                 reading(Map.of(
                         Set.of(A, B), FIFTY,
                         Set.of(A), TWENTY,
                         Set.of(B), TWENTY)));
 
-        assertEquals(new EndNarrowing.Answer.AloneSufficient(List.of(A, B)), answer,
+        assertEquals(new EndNarrowing.Answer.AloneSufficient<>(List.of(A, B)), answer,
                 "each of them leaves the end where it is with the other gone");
     }
 
@@ -95,7 +95,7 @@ class WhatNamesADeclarationAtAnEndIsTheDifferenceItMadeTest {
      */
     @Test
     void oneThatMovesTheEndWithoutReachingItIsNotNamed() {
-        EndNarrowing.Answer answer = EndNarrowing.read(TWENTY, List.of(A, B, C),
+        EndNarrowing.Answer<TypeSymbol.AtModule> answer = EndNarrowing.read(TWENTY, List.of(A, B, C),
                 reading(Map.of(
                         Set.of(A, B, C), FIFTY,
                         Set.of(A), TWENTY,
@@ -105,7 +105,7 @@ class WhatNamesADeclarationAtAnEndIsTheDifferenceItMadeTest {
                         Set.of(A, C), TWENTY,
                         Set.of(A, B), THIRTY)));
 
-        assertEquals(new EndNarrowing.Answer.AloneSufficient(List.of(A, B)), answer,
+        assertEquals(new EndNarrowing.Answer.AloneSufficient<>(List.of(A, B)), answer,
                 "C alone stops short of the end, and stopping short is not saying it");
     }
 
@@ -117,7 +117,7 @@ class WhatNamesADeclarationAtAnEndIsTheDifferenceItMadeTest {
      */
     @Test
     void whereNeitherQuestionTellsThemApartTheSetIsTheAnswer() {
-        EndNarrowing.Answer answer = EndNarrowing.read(TWENTY, List.of(A, B, C),
+        EndNarrowing.Answer<TypeSymbol.AtModule> answer = EndNarrowing.read(TWENTY, List.of(A, B, C),
                 reading(Map.of(
                         Set.of(A, B, C), FIFTY,
                         Set.of(A), TWENTY,
@@ -127,7 +127,7 @@ class WhatNamesADeclarationAtAnEndIsTheDifferenceItMadeTest {
                         Set.of(A, C), THIRTY,
                         Set.of(A, B), THIRTY)));
 
-        assertEquals(new EndNarrowing.Answer.Undifferentiated(List.of(A, B, C)), answer,
+        assertEquals(new EndNarrowing.Answer.Undifferentiated<>(List.of(A, B, C)), answer,
                 "any two of them reach it and no one of them does");
     }
 
@@ -140,15 +140,16 @@ class WhatNamesADeclarationAtAnEndIsTheDifferenceItMadeTest {
      */
     @Test
     void whereNothingStopsItWithoutThemThatAbsenceIsTheDifference() {
-        EndNarrowing.Answer answer = EndNarrowing.read(TWENTY, List.of(A, B),
+        EndNarrowing.Answer<TypeSymbol.AtModule> answer = EndNarrowing.read(TWENTY, List.of(A, B),
                 removed -> removed.equals(Set.of(A, B)) ? null : TWENTY);
 
-        assertEquals(new EndNarrowing.Answer.AloneSufficient(List.of(A, B)), answer,
+        assertEquals(new EndNarrowing.Answer.AloneSufficient<>(List.of(A, B)), answer,
                 "with neither of them the coordinate stops nowhere, and it stops at twenty");
     }
 
     /** The ends these readings come to, and an error for a reading nothing here states. */
-    private static EndNarrowing.Ends reading(Map<Set<TypeSymbol.AtModule>, Endpoint> ends) {
+    private static EndNarrowing.Ends<TypeSymbol.AtModule> reading(
+            Map<Set<TypeSymbol.AtModule>, Endpoint> ends) {
         return removed -> {
             Endpoint found = ends.get(removed);
             if (found == null) {

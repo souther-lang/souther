@@ -174,11 +174,16 @@ public sealed interface Citation permits Citation.Written, Citation.Unplaced, Ci
      * that.
      */
     default SequencedMap<String, String> writtenAtFields() {
+        return switch (this) {
+            case Written _, Unplaced _ -> hereFields();
+            case Elsewhere out -> outOfSightFields(out.provenance());
+        };
+    }
+
+    /** The same fields for code that is written where a report is pointing. */
+    static SequencedMap<String, String> hereFields() {
         SequencedMap<String, String> fields = new LinkedHashMap<>();
-        switch (this) {
-            case Written _, Unplaced _ -> fields.put("kind", "here");
-            case Elsewhere out -> fields.putAll(outOfSightFields(out.provenance()));
-        }
+        fields.put("kind", "here");
         return fields;
     }
 
@@ -190,9 +195,16 @@ public sealed interface Citation permits Citation.Written, Citation.Unplaced, Ci
      * uses for "the code is elsewhere" are the same whether or not there was a caret.
      */
     static SequencedMap<String, String> outOfSightFields(SourceProvenance provenance) {
+        return outOfSightFields(provenance.reachedBy());
+    }
+
+    /** The same, said of the name a reader reaches the code by rather than of the provenance that
+     *  gives it — for a place that has been projected to what a document writes and no longer
+     *  holds how this compiler came to be pointing at it. */
+    static SequencedMap<String, String> outOfSightFields(String reachedBy) {
         SequencedMap<String, String> fields = new LinkedHashMap<>();
         fields.put("kind", "outOfSight");
-        fields.put("declaration", provenance.reachedBy());
+        fields.put("declaration", reachedBy);
         return fields;
     }
 

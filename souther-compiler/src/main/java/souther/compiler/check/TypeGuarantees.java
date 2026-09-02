@@ -61,6 +61,18 @@ final class TypeGuarantees {
      * owed differ only in direction.
      */
     At at(Core root, Denotations denotations) {
+        return at(root, denotations, PartsLeftOut.NONE);
+    }
+
+    /**
+     * The same, reading only the conjuncts {@code withoutParts} leaves in.
+     *
+     * <p>Here rather than filtered out of what comes back. What a guarantee states is read out of
+     * the clause, and a conjunct taken away afterwards would leave a guarantee whose parts and
+     * whose answer were read from two different clauses — the whole one and the one the caller
+     * asked about.
+     */
+    At at(Core root, Denotations denotations, PartsLeftOut withoutParts) {
         ValueReading written = ValueReading.of(root.type(), symbols);
         Map<String, Core> values = new LinkedHashMap<>();
         List<At.Readable> readable = new ArrayList<>();
@@ -87,7 +99,7 @@ final class TypeGuarantees {
                     clauses.statedAt(owner.named(), owner.data(), given);
             for (Clauses.Stated one : stated.clauses()) {
                 if (already.add(one.clause().ref())) {
-                    here.add(read(one, denotations));
+                    here.add(read(one, denotations, withoutParts));
                 }
             }
             for (RuleRef.Invariant each : stated.lost()) {
@@ -149,15 +161,20 @@ final class TypeGuarantees {
      * happens. A reader told mid-reading is a reader the reading has to know about; a reader given
      * the parts afterwards is one this does not.
      */
-    private TypeGuarantee read(Clauses.Stated one, Denotations denotations) {
+    private TypeGuarantee read(Clauses.Stated one, Denotations denotations,
+                               PartsLeftOut withoutParts) {
         // Where this clause becomes a rule of the model something can be attributed to. Settled here
         // so that no reader of the reading has to decide which of the rules of the model it holds.
         RuleRef.Invariant rule = new RuleRef.Invariant(one.clause().ref());
+        // Which of this clause's conjuncts the caller asked for, and the same answer for everything
+        // read out of it. A guarantee is what one clause states, so a reading that took a conjunct
+        // out of what it owes and left it in what it quantifies would be a clause half taken away.
+        Predicates.PartsToRead read = withoutParts.of(rule);
         List<TypeGuarantee.Part> parts = new ArrayList<>();
         Predicates.Owed owed = predicates.assumed(one.expr(), denotations, false,
-                (part, said) -> parts.add(new TypeGuarantee.Part(part, said)));
+                (part, said) -> parts.add(new TypeGuarantee.Part(part, said)), read);
         List<Quantified> quantified = new ArrayList<>();
-        predicates.quantifiedBy(one.expr(), denotations, true, quantified);
+        predicates.quantifiedBy(one.expr(), denotations, true, quantified, read);
         return new TypeGuarantee(rule, one.expr(), owed, quantified, parts);
     }
 

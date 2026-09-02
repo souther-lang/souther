@@ -1,7 +1,6 @@
 package souther.compiler.check;
 
 import souther.compiler.ast.Hir;
-import souther.compiler.types.ConstructionOrigin;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 
@@ -101,7 +100,7 @@ public final class NewtypeDesugar {
                     yield new Hir.NewData(
                             new Hir.Name.Denoting(call.name(), built),
                             List.of(new Hir.FieldInit("value", args.get(0), call.pos())),
-                            List.of(), ConstructionOrigin.own(), call.pos(), call.region());
+                            List.of(), call.pos(), call.region());
                 }
                 yield call.withArgs(args);
             }
@@ -110,8 +109,7 @@ public final class NewtypeDesugar {
                 for (Hir.FieldInit fi : nd.inits()) {
                     inits.add(fi.withValue(go(fi.value(), symbols)));
                 }
-                yield new Hir.NewData(nd.typeName(), inits, nd.spreads(), nd.origin(), nd.fields(),
-                        nd.pos(), nd.region());
+                yield nd.with(inits, nd.spreads());
             }
             case Hir.Neg neg -> new Hir.Neg(go(neg.operand(), symbols), neg.pos(), neg.region());
             case Hir.Binary bin ->

@@ -51,7 +51,6 @@ class WhatCarriesADeclarationSaysSoInItsTypeTest {
     private static final Set<String> ANY_ROUTE = Set.of(
             // A name written in a body, which is answered before anything knows what it reaches.
             "souther.compiler.ast.Hir$Var$Denoting.reachedAs",
-            "souther.compiler.ast.Hir$Var$Denoting.withReachedAs",
             "souther.compiler.ast.Hir$Var.denoting",
             "souther.compiler.ast.Hir$Var.respelled",
             "souther.compiler.ast.Hir$Apply.<init>",

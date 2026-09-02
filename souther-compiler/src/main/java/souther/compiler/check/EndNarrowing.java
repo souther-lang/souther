@@ -1,7 +1,6 @@
 package souther.compiler.check;
 
 import souther.compiler.numeric.Endpoint;
-import souther.compiler.types.TypeSymbol;
 
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -9,9 +8,15 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * Which of the declarations relating a coordinate to something else account for where it stops.
+ * Which of the candidates reaching a coordinate account for where it stops.
  *
- * <p>A declaration reaches here for having written such a relation, which is not the same as having
+ * <p><b>What a candidate is is the caller's.</b> A declaration whose clauses are taken away and one
+ * authored conjunct taken away are the same three questions asked of different things, and the
+ * questions are what is here: whether the candidates moved the end at all, which of them is missed
+ * on its own, and which of them holds it alone. Written once per kind of candidate, the second copy
+ * would answer the middle question and stop, which is what it did.
+ *
+ * <p>A candidate reaches here for having been read about the coordinate, which is not the same as having
  * decided anything: a clause reaching a value another clause has already passed moves the end
  * nowhere. So the first question is whether the candidates between them left the coordinate
  * anywhere other than where it would be without every one of them, and only where they did is there
@@ -27,19 +32,19 @@ import java.util.Set;
  * actually stops at, and a baseline still in reach is a baseline the next comparison can be written
  * against.
  */
-final class EndNarrowing {
+final class EndNarrowing<C> {
 
     /**
-     * Where a coordinate stops with the clauses of some declarations taken away.
+     * Where a coordinate stops with some of the candidates taken away.
      *
-     * <p>A set, because that is what a counterfactual reading is asked: a declaration named twice is
+     * <p>A set, because that is what a counterfactual reading is asked: a candidate named twice is
      * named once, and which order they arrive in is no part of what the reading comes to.
      *
      * <p>An end that is not there is a {@code null}, which is a wider reading and not a missing
-     * answer — taking clauses away is what widens one.
+     * answer — taking rules away is what widens one.
      */
-    interface Ends {
-        Endpoint without(Set<TypeSymbol.AtModule> removed);
+    interface Ends<C> {
+        Endpoint without(Set<C> removed);
     }
 
     /**
@@ -50,10 +55,10 @@ final class EndNarrowing {
      * them a world is in. A declaration whose removal moves the end is holding it whatever else is
      * true of it, and there is no reason to go on and ask whether it could hold the end alone.
      */
-    sealed interface Answer {
+    sealed interface Answer<C> {
 
-        /** The declarations these names are, or none where there are none to name. */
-        List<TypeSymbol.AtModule> names();
+        /** The candidates these are, or none where there are none to name. */
+        List<C> names();
 
         /**
          * The candidates leave the coordinate where it stops without any of them.
@@ -62,10 +67,10 @@ final class EndNarrowing {
          * something else had already stopped it at, and an author sent here would be sent to a
          * clause they can rewrite with the end staying put.
          */
-        record NoNarrowing() implements Answer {
+        record NoNarrowing<C>() implements Answer<C> {
 
             @Override
-            public List<TypeSymbol.AtModule> names() {
+            public List<C> names() {
                 return List.of();
             }
         }
@@ -75,7 +80,7 @@ final class EndNarrowing {
          *
          * @param names in declaration order
          */
-        record Indispensable(List<TypeSymbol.AtModule> names) implements Answer {}
+        record Indispensable<C>(List<C> names) implements Answer<C> {}
 
         /**
          * None of them is missed on its own and each of these leaves the end where it is with the
@@ -86,7 +91,7 @@ final class EndNarrowing {
          *
          * @param names in declaration order
          */
-        record AloneSufficient(List<TypeSymbol.AtModule> names) implements Answer {}
+        record AloneSufficient<C>(List<C> names) implements Answer<C> {}
 
         /**
          * The candidates moved the end and neither question told any of them apart.
@@ -98,19 +103,23 @@ final class EndNarrowing {
          *
          * @param names in declaration order
          */
-        record Undifferentiated(List<TypeSymbol.AtModule> names) implements Answer {}
+        record Undifferentiated<C>(List<C> names) implements Answer<C> {}
     }
 
     private final Endpoint end;
 
-    private final List<TypeSymbol.AtModule> candidates;
+    private final List<C> candidates;
 
-    private final Ends ends;
+    private final Ends<C> ends;
 
-    private EndNarrowing(Endpoint end, List<TypeSymbol.AtModule> candidates, Ends ends) {
+    private final java.util.Comparator<C> order;
+
+    private EndNarrowing(Endpoint end, List<C> candidates, Ends<C> ends,
+                         java.util.Comparator<C> order) {
         this.end = end;
         this.candidates = candidates;
         this.ends = ends;
+        this.order = order;
     }
 
     /**
@@ -121,38 +130,49 @@ final class EndNarrowing {
      *                   to have moved anywhere, and a caller with none has its answer already
      * @param candidates the declarations that wrote a relation about it, in the order they were
      *                   found
-     * @param ends       the same coordinate read again with clauses taken away
+     * @param ends       the same coordinate read again with rules taken away
+     * @param order      the one order these are answered in, which is the caller's to say: what a
+     *                   line is told apart by is the answer, so an order read off the walk that
+     *                   collected the candidates would make two readings of one edge into two lines
      */
-    static Answer read(Endpoint end, List<TypeSymbol.AtModule> candidates, Ends ends) {
-        return end.sameAs(ends.without(Set.copyOf(candidates)))
-                ? new Answer.NoNarrowing()
-                : new EndNarrowing(end, candidates, ends).attribute();
+    static <C extends Comparable<? super C>> Answer<C> read(Endpoint end, List<C> candidates,
+                                                            Ends<C> ends) {
+        return read(end, candidates, ends, java.util.Comparator.naturalOrder());
     }
 
-    private Answer attribute() {
-        List<TypeSymbol.AtModule> indispensable = new ArrayList<>();
-        for (TypeSymbol.AtModule each : candidates) {
+    /** The same, where what a candidate is has no order of its own for the caller to leave
+     *  unsaid. */
+    static <C> Answer<C> read(Endpoint end, List<C> candidates, Ends<C> ends,
+                              java.util.Comparator<C> order) {
+        return end.sameAs(ends.without(Set.copyOf(candidates)))
+                ? new Answer.NoNarrowing<>()
+                : new EndNarrowing<>(end, candidates, ends, order).attribute();
+    }
+
+    private Answer<C> attribute() {
+        List<C> indispensable = new ArrayList<>();
+        for (C each : candidates) {
             if (!end.sameAs(ends.without(Set.of(each)))) {
                 indispensable.add(each);
             }
         }
         if (!indispensable.isEmpty()) {
-            return new Answer.Indispensable(inDeclarationOrder(indispensable));
+            return new Answer.Indispensable<>(inOrder(indispensable));
         }
-        List<TypeSymbol.AtModule> alone = new ArrayList<>();
-        for (TypeSymbol.AtModule each : candidates) {
+        List<C> alone = new ArrayList<>();
+        for (C each : candidates) {
             if (end.sameAs(ends.without(allBut(each)))) {
                 alone.add(each);
             }
         }
         if (!alone.isEmpty()) {
-            return new Answer.AloneSufficient(inDeclarationOrder(alone));
+            return new Answer.AloneSufficient<>(inOrder(alone));
         }
-        return new Answer.Undifferentiated(inDeclarationOrder(candidates));
+        return new Answer.Undifferentiated<>(inOrder(candidates));
     }
 
-    private Set<TypeSymbol.AtModule> allBut(TypeSymbol.AtModule kept) {
-        Set<TypeSymbol.AtModule> removed = new LinkedHashSet<>(candidates);
+    private Set<C> allBut(C kept) {
+        Set<C> removed = new LinkedHashSet<>(candidates);
         removed.remove(kept);
         return removed;
     }
@@ -162,12 +182,13 @@ final class EndNarrowing {
      * line is told apart by, so an order read off the walk that collected them would make two
      * readings of one edge into two lines.
      *
-     * <p>The declaration's own order and not its name alone. Two declarations holding one end can be
+     * <p>Which order that is belongs to whoever knows what a candidate is. For declarations it is
+     * the declaration's own order and not its name alone: two of them holding one end can be
      * written in two modules — an inner record's clause and an outer record's reaching the same
      * coordinate at the same value — and two modules may each declare a {@code Span}, so a name is
      * not what tells those two apart.
      */
-    private static List<TypeSymbol.AtModule> inDeclarationOrder(List<TypeSymbol.AtModule> found) {
-        return found.stream().sorted().toList();
+    private List<C> inOrder(List<C> found) {
+        return found.stream().sorted(order).toList();
     }
 }

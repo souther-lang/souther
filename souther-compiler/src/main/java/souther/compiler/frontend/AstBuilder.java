@@ -27,7 +27,6 @@ import souther.compiler.diag.msg.BehaviorMessage;
 import souther.compiler.diag.Region;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.diag.Placement;
-import souther.compiler.types.ConstructionOrigin;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -846,7 +845,7 @@ public final class AstBuilder {
                 args.add(expr(arg));
             }
         });
-        return new Ast.Apply(expr(callee), args, ConstructionOrigin.own(), pos(callee), region(n));
+        return new Ast.Apply(expr(callee), args, pos(callee), region(n));
     }
 
     private Ast.Expr binary(SyntaxNode n) {
@@ -890,17 +889,16 @@ public final class AstBuilder {
         if (right instanceof Ast.Apply c) {
             List<Ast.Expr> args = new ArrayList<>(c.args());
             args.add(left);
-            return new Ast.Apply(c.function(), args, c.origin(), c.pos(), written);
+            return new Ast.Apply(c.function(), args, c.pos(), written);
         }
         if (right instanceof Ast.Var v) {
-            return new Ast.Apply(v, List.of(left), ConstructionOrigin.own(), v.pos(), written);
+            return new Ast.Apply(v, List.of(left), v.pos(), written);
         }
         // `e |> Mod.name`: the read is handed over as the callee it is, rather than reassembled
         // into a name here. Whether it is a namespace member or a field taken off a binding is
         // resolution's to say, and it says it once, for this and for `Mod.name(e)` alike.
         if (right instanceof Ast.FieldAccess fa) {
-            return new Ast.Apply(fa, List.of(left), ConstructionOrigin.own(),
-                    pos(operands.get(1)), written);
+            return new Ast.Apply(fa, List.of(left), pos(operands.get(1)), written);
         }
         throw CompileException.of(Diagnostic.at(right.pos())
                 .say(new DeclarationMessage.TheRightSideOfAValuePipeIsACall()).build());
@@ -1063,8 +1061,7 @@ public final class AstBuilder {
                 inits.add(new Ast.FieldInit(field, v));
             }
         }
-        Ast.Expr built = new Ast.NewData(typeName, inits, spreads, ConstructionOrigin.own(),
-                pos(n), region(n));
+        Ast.Expr built = new Ast.NewData(typeName, inits, spreads, pos(n), region(n));
         // The bindings the spread paths become are the construction as it was written: they stand
         // where it stands and there is nothing else at those characters.
         for (int i = pathNames.size() - 1; i >= 0; i--) {

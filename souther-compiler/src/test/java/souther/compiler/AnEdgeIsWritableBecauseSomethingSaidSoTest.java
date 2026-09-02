@@ -42,8 +42,10 @@ class AnEdgeIsWritableBecauseSomethingSaidSoTest {
      * this position has is the one at 1 — a line at 0 is a line at no value of {@code N}, and asking
      * whether a row can be written there asks about a value the model excludes.
      *
-     * <p>Which rule the line belongs to does not move with it. {@code within} placed it and holds it
-     * still; {@code nonzero} did not draw a new line at 1.
+     * <p>And both of them are owed a row there. Taking {@code nonzero} away leaves the values from
+     * 0 and taking the floor away leaves them stopping nowhere, so each holds the line at 1 and
+     * each is a clause an author could rewrite to move it. Owed to the clause that wrote a bound
+     * alone, the rule that put the line where it is would owe nothing for it.
      */
     private static final String HOLED = """
             module example.holed
@@ -64,8 +66,9 @@ class AnEdgeIsWritableBecauseSomethingSaidSoTest {
 
     @Test
     void anEndTakenAwayByAClauseBesideItIsALineAtTheValueTheRulesLeave() {
-        assertEquals(List.of("1", "10"), valuesAt(HOLED, "example.holed", "f"),
-                "the position starts at 1, so that is where the line is and 0 is no line of it");
+        assertEquals(List.of("1", "1", "10"), valuesAt(HOLED, "example.holed", "f"),
+                "the position starts at 1, so that is where the line is and 0 is no line of it —"
+                        + " and the two clauses holding it there are each owed a row");
 
         ItemAssessment.Owed at = assessmentAt(HOLED, "example.holed", "f", "1");
         ItemAssessment.WritabilityEvidence evidence = at.writabilityEvidence();
@@ -432,13 +435,18 @@ at.coverage().made().orElseThrow());
                 | "some" : (Moment(DateTime("2026-06-01T00:00:00"))) -> Ok
             """;
 
-    /** The line stands where the rules leave the values, one count along from the value refused. */
+    /**
+     * The line stands where the rules leave the values, one count along from the value refused.
+     *
+     * <p>Once per conjunct holding it there, which is both of them: the bound alone leaves the
+     * value it names and the denial alone leaves the values stopping nowhere.
+     */
     @Test
     void aTemporalEdgeTakenAwayIsALineAtTheValueTheRulesLeave() {
-        assertEquals(List.of("2026-01-02"),
+        assertEquals(List.of("2026-01-02", "2026-01-02"),
                 valuesAt(TEMPORAL_EDGE_TAKEN_AWAY, "example.temporal", "onADate"),
                 "a day is a count with a next one, so the line steps to it");
-        assertEquals(List.of("2026-01-01T00:00:01"),
+        assertEquals(List.of("2026-01-01T00:00:01", "2026-01-01T00:00:01"),
                 valuesAt(TEMPORAL_EDGE_TAKEN_AWAY, "example.temporal", "onAMoment"),
                 "and a moment steps by its second");
     }

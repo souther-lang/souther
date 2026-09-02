@@ -149,7 +149,7 @@ public final class GuardThresholds {
         InputDomain inputs = read.domain();
         Symbols symbols = read.symbols();
         List<LineEvidence> found = new ArrayList<>();
-        List<RuleWithoutALine> withoutALine = new ArrayList<>();
+        RuleWithoutALine.Gathered withoutALine = new RuleWithoutALine.Gathered();
         List<LineDrawn> between = new ArrayList<>();
         // One reading of the body, and everything below is that reading asked something. Where a
         // comparison is written, what its names point at, what a row had satisfied to get there,
@@ -168,7 +168,7 @@ public final class GuardThresholds {
                 case BoundaryPolicy.Standing.Refused _ -> { }
             }
         }
-        return new Guards(found, withoutALine, between, comparisons.reaching(plan));
+        return new Guards(found, withoutALine.all(), between, comparisons.reaching(plan));
     }
 
     /**
@@ -425,7 +425,7 @@ public final class GuardThresholds {
                                Symbols symbols, ComparisonAssessment read,
                                List<LineEvidence> out,
                                List<LineDrawn> between,
-                               List<RuleWithoutALine> withoutALine) {
+                               RuleWithoutALine.Gathered withoutALine) {
         publish(each, read, withoutALine);
         switch (read) {
             case ComparisonAssessment.AtAPosition at -> {
@@ -506,7 +506,7 @@ public final class GuardThresholds {
      * missing a border.
      */
     private static void publish(ComparisonCatalog.Catalogued comparison,
-                                ComparisonAssessment read, List<RuleWithoutALine> out) {
+                                ComparisonAssessment read, RuleWithoutALine.Gathered out) {
         // Whose body it is, from the name the catalog issued. Taken from a caller beside it, the
         // rule this reports and the comparison it is read off would be free to be of two behaviors,
         // and the occurrence being one this plan holds would not refuse it.
@@ -518,12 +518,8 @@ public final class GuardThresholds {
         // answer. A rule that was read is filed at its quantity's coordinates and says one thing
         // there, because the quantity is one subject; a reading that stopped has none, and each
         // place says what stopped it there.
-        read.whatEachPlaceIsLeftWith().forEach((at, why) -> {
-            RuleWithoutALine said = new RuleWithoutALine(rule, cited, at, why);
-            if (out.stream().noneMatch(had -> had.sameAs(said))) {
-                out.add(said);
-            }
-        });
+        read.whatEachPlaceIsLeftWith().forEach((at, why) ->
+                out.add(RuleWithoutALine.of(rule, cited, at, why)));
     }
 
     /** How a row meets a line a body's condition drew, which is a guard's own answer: what it takes

@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.RuleWithoutALine;
+import souther.compiler.inputs.StandingQuestion;
 import souther.compiler.observe.RunSensitivity;
 
 /**
@@ -34,6 +35,43 @@ public sealed interface ClosureGap {
     RunSensitivity runSensitivity();
 
     /**
+     * What tells one of these from another.
+     *
+     * <p>The value itself, wherever everything the arm holds is what a reader is told. Where the
+     * arm holds what evidenced the fact as well — the handle a reader is sent to, what a reading
+     * was short of — the fact alone, so that one thing that went wrong, found twice, is one thing.
+     *
+     * <p>Asked of the arm and not written down by whoever gathers these. Two places put these
+     * together — what one measure's reading came to, and what a measurement went without — and a
+     * quotient written at each would be two answers to the question of what one gap is.
+     */
+    Object fact();
+
+    /**
+     * Two of these under one fact, as one.
+     *
+     * <p>What each arm does with what it holds beside the fact is that arm's own: a handle joins,
+     * because two of them are two ways to one place; what an author wrote is held to, because two
+     * accounts of it that differ are two accounts one of which is wrong.
+     *
+     * <p>Commutative, so which of the two a walk met first decides nothing about the result. A
+     * {@code switch} with no {@code default}, so an arm added later has to say whether it carries
+     * anything to accumulate before anything can put two of them together.
+     */
+    static ClosureGap merged(ClosureGap had, ClosureGap also) {
+        if (!had.fact().equals(also.fact())) {
+            throw new IllegalArgumentException("two gaps put together are two of one fact: "
+                    + had.fact() + " and " + also.fact());
+        }
+        return switch (had) {
+            case RuleUnread it -> it.mergedWith(it.andAlso(also));
+            case QuestionUnanswered it -> it.mergedWith(it.andAlso(also));
+            // Equal under the fact and holding nothing else, so both are the same value.
+            case RulesNotReached _, PositionNotReachedInto _ -> had;
+        };
+    }
+
+    /**
      * A rule of the model a reader stopped on. The rule says which measures that costs
      * ({@link BlockReason.RuleWithoutLineReason#leavesShort}).
      *
@@ -43,20 +81,48 @@ public sealed interface ClosureGap {
      * nothing here for it to be counted as. `MeasureClosure` asks the reason before building one of
      * these, and this refuses what that question would have had to let through.
      */
-    record RuleUnread(RuleWithoutALine rule) implements ClosureGap {
+    record RuleUnread(RuleWithoutALine finding) implements ClosureGap {
 
         public RuleUnread {
-            if (!(rule.why() instanceof BlockReason.RuleReadingStopped)) {
+            if (!(finding.why() instanceof BlockReason.RuleReadingStopped)) {
                 throw new IllegalArgumentException(
-                        "a rule read to the end leaves no measure short: " + rule.why());
+                        "a rule read to the end leaves no measure short: " + finding.why());
             }
+        }
+
+        /** What the readers found, whole. Taken apart into the rule and the handles, this would
+         *  hold a second answer to what makes two findings one and a second way of putting two
+         *  together — and the type that has those is the one the readers produced. */
+        public static RuleUnread of(RuleWithoutALine found) {
+            return new RuleUnread(found);
+        }
+
+        /** The finding's own, which is the rule, the position and the limit. */
+        @Override
+        public Object fact() {
+            return finding.fact();
+        }
+
+        /** The other one, where it really is one of these. Two gaps filed under one fact and not
+         *  of one kind is a fact two arms answer with, which nothing here can put together. */
+        RuleUnread andAlso(ClosureGap other) {
+            if (other instanceof RuleUnread it) {
+                return it;
+            }
+            throw new IllegalArgumentException("a rule with no line and " + other
+                    + " are filed under one fact");
+        }
+
+        /** Both readers' findings, as one, which the finding itself says how to do. */
+        public RuleUnread mergedWith(RuleUnread other) {
+            return new RuleUnread(finding.mergedWith(other.finding));
         }
 
         /** The rule's own answer, which the constructor above has already made sure there is one
          *  of: only a reading that stopped is admitted here, and a stop answers this. */
         @Override
         public RunSensitivity runSensitivity() {
-            return ((BlockReason.RuleReadingStopped) rule.why()).runSensitivity();
+            return ((BlockReason.RuleReadingStopped) finding.why()).runSensitivity();
         }
     }
 
@@ -68,8 +134,35 @@ public sealed interface ClosureGap {
      * both or yields neither and records what stopped its reading. Which is why a comparison's
      * incompleteness reaches this only as {@link RuleUnread}.
      */
-    record QuestionUnanswered(souther.compiler.inputs.StandingQuestion question)
-            implements ClosureGap {
+    record QuestionUnanswered(StandingQuestion question) implements ClosureGap {
+
+        /** What a reading found, whole, for the reason {@link RuleUnread#of} gives: what makes two
+         *  of these one question, what happens to the handles, and what may be said about the order
+         *  the author wrote, are the question's own answers. */
+        public static QuestionUnanswered of(StandingQuestion asked) {
+            return new QuestionUnanswered(asked);
+        }
+
+        /** The question's own, which is the rule that raised it and what it asks. */
+        @Override
+        public Object fact() {
+            return question.fact();
+        }
+
+        /** The other one, where it really is one of these, for the reason {@link RuleUnread}
+         *  gives. */
+        QuestionUnanswered andAlso(ClosureGap other) {
+            if (other instanceof QuestionUnanswered it) {
+                return it;
+            }
+            throw new IllegalArgumentException("a question that stands and " + other
+                    + " are filed under one fact");
+        }
+
+        /** Both readings' accounts, as one, which the question itself says how to do. */
+        public QuestionUnanswered mergedWith(QuestionUnanswered other) {
+            return new QuestionUnanswered(question.mergedWith(other.question));
+        }
 
         /**
          * What the reasons the question is short for come to, and it takes all of them.
@@ -84,9 +177,6 @@ public sealed interface ClosureGap {
          */
         @Override
         public RunSensitivity runSensitivity() {
-            if (question.stopped().isEmpty()) {
-                return RunSensitivity.UNAFFECTED;
-            }
             return question.stopped().stream()
                     .allMatch(each -> each.runSensitivity()
                             == RunSensitivity.MAY_CHANGE)
@@ -140,6 +230,12 @@ public sealed interface ClosureGap {
         public RunSensitivity runSensitivity() {
             return RunSensitivity.UNAFFECTED;
         }
+
+        /** Everything it holds is what a reader is told: whose position, and which. */
+        @Override
+        public Object fact() {
+            return this;
+        }
     }
 
     /**
@@ -173,6 +269,13 @@ public sealed interface ClosureGap {
         @Override
         public RunSensitivity runSensitivity() {
             return why.runSensitivity();
+        }
+
+        /** Everything it holds is what a reader is told: whose position, which, and what the walk
+         *  met there. */
+        @Override
+        public Object fact() {
+            return this;
         }
     }
 }

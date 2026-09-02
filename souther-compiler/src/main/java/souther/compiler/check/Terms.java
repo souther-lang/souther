@@ -13,7 +13,6 @@ import souther.compiler.numeric.OrderedInterval;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
-import souther.compiler.types.ConstructionOrigin;
 import souther.compiler.types.Refinement;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
@@ -2647,7 +2646,7 @@ final class Terms {
                 List<Hir.Expr> args = written(call.args());
                 yield args == null ? null
                         : new Hir.Apply(call.operation().name(), reachOf(call.operation()), args,
-                                ConstructionOrigin.own(), call.pos(), null);
+                                call.pos(), null);
             }
             // A temporal is written as a literal with its text spelled out (spec
             // §a-temporal-value-is-written-as-a-literal). Rendered here for the same reason every
@@ -2664,13 +2663,11 @@ final class Terms {
                         ValueName.Stdlib.namespace(t.kind().shown());
                 yield new Hir.Apply(namespace.qualified(),
                         new ReachName.TheNamespace(namespace),
-                        List.of(new Hir.StringLit(t.text(), t.pos(), null)),
-                        ConstructionOrigin.own(), t.pos(), null);
+                        List.of(new Hir.StringLit(t.text(), t.pos(), null)), t.pos(), null);
             }
             // A case of an enumeration is written by naming it, so the value is the name.
             case Core.UnitValue unit -> {
-                ValueName.OfType named = new ValueName.OfType(unit.data().name(), unit.data(),
-                        ConstructionOrigin.own());
+                ValueName.OfType named = new ValueName.OfType(unit.data().name(), unit.data());
                 yield Hir.Var.respelled(unit.data().name(), new ReachName.InScope(named),
                         unit.pos(), null);
             }

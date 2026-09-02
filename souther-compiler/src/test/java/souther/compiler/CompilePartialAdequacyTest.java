@@ -8,6 +8,8 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.observe.Disposition;
+import souther.compiler.observe.Incompleteness;
+import souther.compiler.publish.PublishedIncompleteness;
 import souther.compiler.observe.MeasurementStatus;
 import souther.compiler.query.About;
 import souther.compiler.query.Adequacy;
@@ -25,6 +27,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -441,12 +444,12 @@ class CompilePartialAdequacyTest {
         // behavior may have more than one that did not — and the position of its guard whose value
         // that row was the only one to write.
         assertEquals(List.of("cancel/0/#1", "cancel/request.n"),
-                whole.modules().get(0).incompleteness().stream()
-                        .map(souther.compiler.observe.Incompleteness::subject).toList());
+                whole.modules().get(0).incompleteness().written().stream()
+                        .map(gap -> gap.fact().subject()).toList());
 
         AdequacyReport one = whole.only(null, "submit");
         assertEquals(MeasurementStatus.COMPLETE, one.status());
-        assertEquals(List.of(), one.modules().get(0).incompleteness());
+        assertEquals(List.of(), one.modules().get(0).incompleteness().written());
         assertTrue(one.modules().get(0).behaviors().stream()
                 .allMatch(b -> b.name().equals("submit")));
     }
@@ -558,9 +561,9 @@ class CompilePartialAdequacyTest {
         AdequacyReport one = AdequacyReport.of(split()).only(null, "take");
 
         assertEquals(MeasurementStatus.PARTIAL, one.status());
-        assertEquals(1, one.modules().get(0).incompleteness().size());
-        assertEquals(souther.compiler.observe.Incompleteness.Code.OBSERVATION_ABSENT,
-                one.modules().get(0).incompleteness().get(0).code());
+        assertEquals(1, one.modules().get(0).incompleteness().written().size());
+        assertEquals(Incompleteness.Code.OBSERVATION_ABSENT,
+                one.modules().get(0).incompleteness().written().iterator().next().fact().code());
     }
 
     /**
@@ -604,12 +607,10 @@ class CompilePartialAdequacyTest {
         assertEquals(MeasurementStatus.PARTIAL, report.modules().get(0).status());
         assertEquals(MeasurementStatus.PARTIAL, report.modules().get(0).behaviors().get(0).status());
 
-        List<souther.compiler.observe.Incompleteness> why =
-                report.modules().get(0).incompleteness();
+        List<PublishedIncompleteness> why = report.modules().get(0).incompleteness().written();
         assertEquals(1, why.size(), why.toString());
-        assertEquals(souther.compiler.observe.Incompleteness.Code.VALUE_TRUNCATED,
-                why.get(0).code());
-        assertEquals(java.util.Optional.of("take"), why.get(0).behavior(),
+        assertEquals(Incompleteness.Code.VALUE_TRUNCATED, why.get(0).fact().code());
+        assertEquals(Optional.of("take"), why.get(0).fact().behavior(),
                 "a position is inside one behavior");
         String human = report.human(SourceNameResolver.identity());
         assertTrue(human.contains("the observation at"), human);
@@ -940,16 +941,17 @@ class CompilePartialAdequacyTest {
     /**
      * One reason is one entry, however many sources went looking.
      *
-     * <p>These are structured rather than written out so that a build can count them, and a count that
-     * grows with the number of attached files is counting the looking rather than the failure.
+     * <p>These are structured rather than written out so that a build can count them, and a count
+     * that grows with the number of attached files is counting the looking rather than the failure.
      */
     @Test
     void oneReasonIsReportedOnce() {
-        List<souther.compiler.observe.Incompleteness> gaps =
-                AdequacyReport.of(split()).modules().get(0).incompleteness();
+        List<PublishedIncompleteness> gaps =
+                AdequacyReport.of(split()).modules().get(0).incompleteness().written();
 
-        assertEquals(gaps.stream().map(souther.compiler.observe.Incompleteness::identity)
-                        .distinct().count(), gaps.size(), gaps.toString());
+        assertFalse(gaps.isEmpty(), "a split model leaves something unread");
+        assertEquals(gaps.stream().map(PublishedIncompleteness::fact).distinct().count(),
+                gaps.size(), gaps.toString());
     }
 
     /** The row that did not finish is still there to be counted, and still says it did not. */

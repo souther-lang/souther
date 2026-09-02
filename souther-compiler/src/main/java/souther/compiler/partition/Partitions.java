@@ -315,7 +315,7 @@ public final class Partitions {
         Quantities quantities = input.quantities();
         Symbols symbols = input.symbols();
         java.util.Set<NumericTerm> uncertain = new java.util.LinkedHashSet<>();
-        List<RuleWithoutALine> rulesWithoutALine = new ArrayList<>();
+        RuleWithoutALine.Gathered rulesWithoutALine = new RuleWithoutALine.Gathered();
         // What the reading could not hold together, asked of every position it read rather than of
         // the ones left pending. This qualifies the classes and does not stand in for them: a
         // position with classes read from a product wider than the rules admit is exactly where it
@@ -365,14 +365,15 @@ public final class Partitions {
         // the rules came to is whether either happened, and which of the two it was — settled
         // beside each axis, as it is once a body has spoken.
         List<PositionMeasurements> settled = new ArrayList<>();
+        List<RuleWithoutALine> refused = rulesWithoutALine.all();
         for (Drawn at : drawn) {
             BodyCutInspection came = null;
             for (Axis axis : at.axes()) {
                 came = BodyCutInspection.combined(came,
-                        cameTo(axis.term(), axis.path(), rulesWithoutALine));
+                        cameTo(axis.term(), axis.path(), refused));
             }
             if (came == null) {
-                came = cameTo(null, at.at().path(), rulesWithoutALine);
+                came = cameTo(null, at.at().path(), refused);
             }
             settled.add(new PositionMeasurements(at.at(), at.axes(), came));
         }
@@ -385,9 +386,9 @@ public final class Partitions {
         java.util.Map<AxisId, List<Border>> lines = linesAlong(kept, quantities, symbols, read);
         read.returning(lines.values().stream().flatMap(List::stream).toList());
         MeasureClosure.Both closed =
-                MeasureClosure.of(positions, standing, rulesWithoutALine, read);
+                MeasureClosure.of(positions, standing, refused, read);
         return new Partitioning(List.copyOf(settled), standing, uncertain,
-                List.copyOf(rulesWithoutALine),
+                refused,
                 List.copyOf(notSeparated),
                 List.of(), lines, ReachingCuts.NONE,
                 closed.partition(), closed.border(),
@@ -771,12 +772,10 @@ public final class Partitions {
         // Both producers of one kind of evidence. What a body compared and what a type's own rules
         // bound are read by different readers and answer the same question, so a position either of
         // them wrote about and neither could turn into a line is named once, whichever wrote it.
-        List<RuleWithoutALine> rules = new ArrayList<>(base.rulesWithoutALine());
-        for (RuleWithoutALine each : rulesWithoutALine) {
-            if (rules.stream().noneMatch(had -> had.sameAs(each))) {
-                rules.add(each);
-            }
-        }
+        RuleWithoutALine.Gathered gathered =
+                new RuleWithoutALine.Gathered(base.rulesWithoutALine());
+        gathered.addAll(rulesWithoutALine);
+        List<RuleWithoutALine> rules = gathered.all();
         List<PositionMeasurements> measurements = new ArrayList<>();
         EvidenceAccount account = new EvidenceAccount(evidence);
         // A position at a time, so that what a body's rules add is added where the position already
@@ -1102,12 +1101,8 @@ public final class Partitions {
                                ReadingPolicy policy,
                                List<Drawn> drawn,
                                java.util.Set<NumericTerm> uncertain,
-                               List<RuleWithoutALine> rulesWithoutALine) {
-        for (RuleWithoutALine each : position.rulesWithoutALine()) {
-            if (rulesWithoutALine.stream().noneMatch(had -> had.sameAs(each))) {
-                rulesWithoutALine.add(each);
-            }
-        }
+                               RuleWithoutALine.Gathered rulesWithoutALine) {
+        rulesWithoutALine.addAll(position.rulesWithoutALine());
         NumericTerm.FromOnePosition term = position.term();
         AxisId id = AxisId.of(behavior, term);
         switch (LocalInspection.of(position, symbols, policy)) {

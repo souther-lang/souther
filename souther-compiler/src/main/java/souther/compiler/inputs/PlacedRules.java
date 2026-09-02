@@ -433,6 +433,22 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
     }
 
     /**
+     * The ends a conjunct that placed none moved at the value this reading is opened at.
+     *
+     * <p>What {@link #placedAt} leaves out. The ends of a value's own coordinates are read off the
+     * clauses as they are written, which is a reading that sees no end where no comparison places
+     * one — so an end such a conjunct moved is invisible there, and is here.
+     *
+     * <p>Only the value's own. Everything under it is a position of its own and is answered at that
+     * position, by {@link #placedAt}, which does not leave these out.
+     */
+    List<FieldDomains.Placed> movedAtTheValue() {
+        return bounds().movedEnds().stream()
+                .filter(each -> each.path().isTheValueItself())
+                .toList();
+    }
+
+    /**
      * The rules saying where the coordinate at {@code path} stops that no end came out of.
      *
      * <p>At every path the value has, its own included — unlike {@link #placedAt}, whose empty
@@ -467,10 +483,14 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
      * <p>Not what any of them came to. Which of these is a line is the drawing reading's answer,
      * and this reading's word for why it drew none is no part of the question — the two read the
      * same clause with different atoms, and a clause set aside here is one the other may read.
+     *
+     * <p><b>What was handed on, and not what was reported.</b> Read off the findings, this carried
+     * whatever the reading of ends owed an author a sentence about — so a rule that names a value,
+     * which places no end and is nothing anyone has to lift, could not be passed along at all.
      */
     List<ClauseWithoutAnEnd> clausesWithoutAnEnd() {
         java.util.Map<Key, ClauseWithoutAnEnd> once = new java.util.LinkedHashMap<>();
-        for (FieldDomains.NoLine each : bounds().noLines()) {
+        for (FieldDomains.WithoutAnEnd each : bounds().withoutAnEnd()) {
             once.putIfAbsent(new Key(each.from(), each.conjunct()),
                     new ClauseWithoutAnEnd(each.from(), each.conjunct(), each.part(), root,
                             bounds().named()));

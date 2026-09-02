@@ -4,7 +4,9 @@ import java.io.IOException;
 import java.lang.classfile.ClassFile;
 import java.lang.classfile.ClassModel;
 import java.lang.classfile.CodeModel;
+import java.lang.classfile.Instruction;
 import java.lang.classfile.Opcode;
+import java.lang.classfile.instruction.ConstantInstruction;
 import java.lang.classfile.instruction.FieldInstruction;
 import java.lang.classfile.instruction.InvokeDynamicInstruction;
 import java.lang.classfile.instruction.InvokeInstruction;
@@ -118,6 +120,77 @@ final class Compiled {
         String at() {
             return from + "#" + method + descriptor;
         }
+    }
+
+    /**
+     * One call, with the text this compiler could read at it.
+     *
+     * <p><b>What is read is the constant loaded immediately before the call and nothing more.</b>
+     * Recovering what an argument was in general is running the program, and a rule written as
+     * though this did that would be a rule about a guess. What it does answer is the shape a
+     * document's fields are written in — {@code putArray("keptOpenBy")} — where the name is a
+     * literal a line above the call, which is the whole of what a rule about a named field needs.
+     *
+     * <p>Empty where the call took no constant, or took one this could not see: a name built by
+     * joining two strings is one nothing here reads, and a rule over these says nothing about such
+     * a call rather than saying it is fine.
+     *
+     * @param said the string constant loaded just before, where there was one
+     */
+    record Invocation(Site site, List<String> said) {}
+
+    /** Every call of every compiled class, with the text read at it. */
+    static List<Invocation> invocations() throws IOException {
+        return invocationsIn(Reactor.classes());
+    }
+
+    /**
+     * The same of the classes named, so that what this reads can be asked of code written to be
+     * read.
+     *
+     * <p>The population is the argument and the reading is not: a check that wanted to know what
+     * this does to a particular shape would otherwise write the walk again, and then what it
+     * measured would be its own copy rather than the thing every rule here is built on.
+     */
+    static List<Invocation> invocationsIn(List<Path> classes) throws IOException {
+        List<Invocation> found = new ArrayList<>();
+        for (Path each : classes) {
+            ClassModel model = ClassFile.of().parse(Files.readAllBytes(each));
+            String from = named(model.thisClass().asInternalName());
+            for (var method : model.methods()) {
+                CodeModel code = method.code().orElse(null);
+                if (code == null) {
+                    continue;
+                }
+                String name = method.methodName().stringValue();
+                String descriptor = method.methodType().stringValue();
+                String loaded = null;
+                for (var element : code) {
+                    // Whatever was loaded is only what this call took if nothing came between, so
+                    // anything that is not the constant itself clears it. Kept across the ones in
+                    // between, a name put in a local and passed a line later would read as the
+                    // name written at the call — and a rule about a named field would then be
+                    // about a call that does not name it.
+                    switch (element) {
+                        case ConstantInstruction constant ->
+                                loaded = constant.constantValue() instanceof String text
+                                        ? text : null;
+                        case InvokeInstruction call -> {
+                            found.add(new Invocation(new Site(from, name, descriptor, How.CALLS,
+                                    named(call.owner().asInternalName()),
+                                    call.name().stringValue(),
+                                    call.opcode() == Opcode.INVOKESTATIC),
+                                    loaded == null ? List.of() : List.of(loaded)));
+                            loaded = null;
+                        }
+                        case Instruction _ -> loaded = null;
+                        default -> { }
+                    }
+                }
+            }
+        }
+        assertFalse(found.isEmpty(), "no compiled call was read at all");
+        return found;
     }
 
     /** Everything every compiled class of every module does. */

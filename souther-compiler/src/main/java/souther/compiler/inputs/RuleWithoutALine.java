@@ -3,6 +3,12 @@ package souther.compiler.inputs;
 import souther.compiler.check.RuleCitation;
 import souther.compiler.check.RuleRef;
 
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
 /**
  * One rule of the model, at one position it is about, that this did not turn into a line.
  *
@@ -34,39 +40,118 @@ import souther.compiler.check.RuleRef;
  * no line. Which of the two it was is {@code why}, and it is asked of the type rather than read
  * back out of a word.
  *
- * @param rule  which rule of the model, as everything that names a rule names it
- * @param cited how a reader finds it — a name where the author gave one, a place where they did not
- * @param at    the position, spelled the way a report names it. One of these per position the rule
- *              is about: {@code a < b} leaves neither of them divided, and a reader looking up
- *              either is owed the same answer. Filed at the first alone, which position was named
- *              would turn on which side the author wrote it
- * @param why   why there is no line here, in this compiler's own terms: what would have to change
- *              before this rule could be one, or what the rule itself places. Which word a report
- *              writes for it is {@link ReportedReason}'s, so a capability gained here need not move
- *              a published vocabulary
+ * @param fact  which rule, at which position, and why there is no line — the whole of what makes
+ *              two of these one finding ({@link Fact})
+ * @param cited how a reader finds it — a name where the author gave one, a place where they did
+ *              not. Every one that was offered, because a rule found by two readers is one finding
+ *              and each of them says how to reach it; which of them a document writes is that
+ *              document's to decide
  */
-public record RuleWithoutALine(RuleRef rule, RuleCitation cited, FilingCoordinate at,
-                         BlockReason.RuleWithoutLineReason why) {
+public record RuleWithoutALine(Fact fact, Set<RuleCitation> cited) {
 
     public RuleWithoutALine {
-        if (rule == null || cited == null) {
-            throw new IllegalArgumentException(
-                    "a rule with no line here is one a reader can be sent to look at");
-        }
-        if (at == null || why == null) {
+        if (fact == null) {
             throw new IllegalArgumentException("a rule is without a line somewhere, and for a"
                     + " reason");
         }
+        cited = cited == null ? Set.of() : Set.copyOf(cited);
+        if (cited.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "a rule with no line here is one a reader can be sent to look at");
+        }
+    }
+
+    /** One reader's finding, as that reader produced it. */
+    public static RuleWithoutALine of(RuleRef rule, RuleCitation cited, FilingCoordinate at,
+                                      BlockReason.RuleWithoutLineReason why) {
+        return new RuleWithoutALine(new Fact(rule, at, why), Set.of(cited));
     }
 
     /**
-     * Whether this is the same finding as {@code other}.
+     * A rule with no line here, with the handle for it left out, which is the whole of what makes
+     * two of them one.
      *
-     * <p>The rule, the position and the limit. The citation is left out on purpose: a rule and the
-     * handle for it are two questions, and a key holding the handle would file one rule under
-     * several wherever the two come apart.
+     * <p>The citation is no part of it. A rule and the handle for it are two questions, and a key
+     * holding the handle files one rule under several wherever the two come apart — which they do
+     * wherever a rule has no name of its own.
      */
-    public boolean sameAs(RuleWithoutALine other) {
-        return rule.equals(other.rule) && at.equals(other.at) && why.equals(other.why);
+    public record Fact(RuleRef rule, FilingCoordinate at, BlockReason.RuleWithoutLineReason why) {
+
+        public Fact {
+            if (rule == null || at == null || why == null) {
+                throw new IllegalArgumentException("a rule is without a line somewhere, and for a"
+                        + " reason");
+            }
+        }
     }
+
+    /** Which rule of the model this is about. */
+    public RuleRef rule() {
+        return fact.rule();
+    }
+
+    /** The position it is about, spelled the way a report names it. */
+    public FilingCoordinate at() {
+        return fact.at();
+    }
+
+    /** Why there is no line here, in this compiler's own terms. */
+    public BlockReason.RuleWithoutLineReason why() {
+        return fact.why();
+    }
+
+    /**
+     * Both readers' findings, as one: the rule, with every handle either of them offered.
+     *
+     * <p>Of one rule, and it says so rather than taking the caller's word. What comes out carries
+     * this one's fact, so two that are not one fact would come out as one of them cited where the
+     * other was.
+     */
+    public RuleWithoutALine mergedWith(RuleWithoutALine other) {
+        if (!fact.equals(other.fact)) {
+            throw new IllegalArgumentException("two findings put together are one rule with no"
+                    + " line: " + fact + " and " + other.fact);
+        }
+        Set<RuleCitation> both = new HashSet<>(cited);
+        both.addAll(other.cited);
+        return new RuleWithoutALine(fact, both);
+    }
+
+    /**
+     * The rules a reading found no line for, each one once, with every handle offered for it.
+     *
+     * <p>The one fold on this identity, and the reason it is a type rather than a line somebody
+     * writes where they need it. Six readers gathered these, each with a walk that asked whether
+     * it already had one and kept the first if it did — so a rule cited two ways came out cited
+     * whichever way was met first, and a fold further down that accumulated could only accumulate
+     * what these let through.
+     *
+     * <p>In the order they were first found, which is what the readers hand on and what a document
+     * that says them puts in an order of its own.
+     */
+    public static final class Gathered {
+
+        private final Map<Fact, RuleWithoutALine> byFact = new LinkedHashMap<>();
+
+        public Gathered() {
+        }
+
+        public Gathered(List<RuleWithoutALine> already) {
+            already.forEach(this::add);
+        }
+
+        /** One more, merged with what is already filed under its rule. */
+        public void add(RuleWithoutALine one) {
+            byFact.merge(one.fact(), one, RuleWithoutALine::mergedWith);
+        }
+
+        public void addAll(List<RuleWithoutALine> some) {
+            some.forEach(this::add);
+        }
+
+        public List<RuleWithoutALine> all() {
+            return List.copyOf(byFact.values());
+        }
+    }
+
 }
