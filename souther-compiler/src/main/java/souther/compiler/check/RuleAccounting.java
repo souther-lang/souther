@@ -10,7 +10,13 @@ import java.util.Set;
 import java.util.function.Function;
 
 /**
- * One rule of the model, every question it raises, and what answered each.
+ * One rule where it applies to one value, every question it raises there, and what answered each.
+ *
+ * <p>Of a rule at a value and not of a rule. What a rule raises is written in the vocabulary of the
+ * value being read and differs in number between values ({@link Required}), so a rule the model
+ * holds several values to has one of these at each of them. Which value this is of is the reading
+ * these come from: a reading is of one declaration, and everything holding one of these holds it
+ * beside that.
  *
  * <p>Closed over the questions rather than a list of answers somebody assembled. What can go wrong
  * with a list is that a question is missing from it, and a completeness read off a list with a

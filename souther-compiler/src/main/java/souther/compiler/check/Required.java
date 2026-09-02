@@ -5,7 +5,16 @@ import java.util.LinkedHashSet;
 import java.util.Set;
 
 /**
- * Which coverage obligations one rule of the model raises.
+ * Which coverage obligations one rule raises where it applies to one value, in that value's
+ * vocabulary.
+ *
+ * <p><b>Not a property of the rule alone.</b> What is raised is {@link Owed} over a
+ * {@link RuleKey}, and a key is relative to the value whose clauses are being read. So one rule
+ * read at two values raises questions neither spells the same way — and raises a different number
+ * of them wherever a value carries the rule's type more than once: a record with a {@code was} and
+ * a {@code now} of one bounded type is held to that type's clause at both places, where the type
+ * itself is held to it at one, and a row satisfying it at one says nothing about the other. The
+ * count is the model's shape and has nothing to do with how often anything was read.
  *
  * <p>Two answers and not a set that may be empty. A rule raising none is a conclusion about the rule
  * — it was read, and what it says raises no question a measure of coverage answers — and an empty
