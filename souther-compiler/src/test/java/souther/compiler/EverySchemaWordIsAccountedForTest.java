@@ -9,6 +9,7 @@ import souther.compiler.diag.SourcePos;
 import souther.compiler.diag.SourceProvenance;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.MeasurementStatus;
+import souther.compiler.observe.RunSensitivity;
 import souther.compiler.coverage.DecidedBy;
 import souther.compiler.coverage.SuppliedRules;
 import souther.compiler.query.Adequacy;
@@ -210,6 +211,12 @@ class EverySchemaWordIsAccountedForTest {
     private static final List<Vocabulary> VOCABULARIES = List.of(
             new Vocabulary("adequacy", List.of("properties", "adequacy"),
                     AdequacyReport.AdequacyStatus.class),
+            // What one thing keeping that verdict open says about a wider run. Its own enum and its
+            // own field: the words are the compiler's, and which of them a fact answers is decided
+            // where the fact is made rather than read back off the kind beside it here — one kind
+            // covers facts that answer differently.
+            new Vocabulary("keptOpenBy[].runSensitivity", List.of("$defs", "runSensitivity"),
+                    RunSensitivity.class),
             // `status` is the one enumerated field written through a projection rather than off an
             // enum's own names. The compiler tells a measure with nothing to be about from one nobody
             // made; a document says `unavailable` for both and leaves which to the `reason` beside it.

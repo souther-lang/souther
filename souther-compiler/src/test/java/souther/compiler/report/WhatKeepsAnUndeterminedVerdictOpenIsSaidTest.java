@@ -2,12 +2,29 @@ package souther.compiler.report;
 
 import org.junit.jupiter.api.Test;
 
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
+
+import souther.compiler.check.RuleCitation;
+import souther.compiler.check.RuleRef;
 import souther.compiler.diag.SourceNameResolver;
+import souther.compiler.inputs.BlockReason;
+import souther.compiler.inputs.FilingCoordinate;
+import souther.compiler.inputs.RuleWithoutALine;
+import souther.compiler.inputs.TermPath;
+import souther.compiler.partition.ClosureGap;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Weakening;
+import souther.compiler.query.WeakeningSet;
+import souther.compiler.types.CoverageConstruct;
+import souther.compiler.types.CoverageOrigin;
+
+import java.util.ArrayList;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -25,6 +42,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * that measuring again would find exactly the same thing.
  */
 class WhatKeepsAnUndeterminedVerdictOpenIsSaidTest {
+
+    private static final JsonMapper JSON = JsonMapper.builder().build();
 
     private static final String MODEL = """
             module probe.empty
@@ -117,5 +136,112 @@ class WhatKeepsAnUndeterminedVerdictOpenIsSaidTest {
                     may change in a wider run     0
                     unaffected by a wider run     1
                 """), human);
+    }
+
+    /** And a build reading the document is told the fact, not the count. */
+    @Test
+    void theDocumentSaysTheFactAndLeavesTheCountingToWhoeverWantsIt() {
+        JsonNode root = JSON.readTree(measured().json(SourceNameResolver.identity()));
+
+        assertEquals("undetermined", root.get("adequacy").asString());
+        assertEquals(1, root.get("keptOpenBy").size(), root.get("keptOpenBy").toString());
+        assertEquals("rule_unread", root.get("keptOpenBy").get(0).get("kind").asString());
+        assertEquals("unaffected",
+                root.get("keptOpenBy").get(0).get("runSensitivity").asString());
+    }
+
+    /**
+     * A settled verdict is open on nothing, whichever way it settled.
+     *
+     * <p>The field is written all the same, so a consumer reads an array rather than asking whether
+     * one is there. What it holds is what keeps the word open — a build refused over a gap has an
+     * answer whatever else went unmeasured, which is what makes this not a second list of
+     * everything that fell short.
+     */
+    @Test
+    void aSettledVerdictIsOpenOnNothing() {
+        Compilation compilation = Compilation.ofSource("""
+                module probe.settled
+
+                data In = { n: Int }
+                data Out = { n: Int }
+
+                behavior go : (in: In) -> Out
+                    constructs Out
+
+                let go (in) = Out { n = in.n }
+
+                example go
+                    | "one" : (In { n = 1 }) -> Out { n = 1 }
+                """, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        AdequacyReport report = AdequacyReport.of(compilation);
+        JsonNode root = JSON.readTree(report.json(SourceNameResolver.identity()));
+
+        assertNotEquals(AdequacyReport.AdequacyStatus.UNDETERMINED, report.adequacy(),
+                () -> report.human(SourceNameResolver.identity()));
+        assertTrue(root.get("keptOpenBy").isEmpty(), root.get("keptOpenBy").toString());
+    }
+
+    /**
+     * Two facts one document calls the same thing are two entries, and this is why nothing folds.
+     *
+     * <p>The array's multiplicity is the facts', so a reader counting it counts facts. Folded on
+     * what an entry is printed as, two rules this compiler could not read would come back as one —
+     * which is the collapse the whole of this work is about, arriving one step from the end, and it
+     * would arrive as somebody tidying up a list with repeats in it.
+     *
+     * <p>Both halves are here on purpose. Two entries alike must stay two, and two entries the same
+     * kind with different answers must stay two as well: the first is what a {@code distinct()}
+     * takes out, and the second is what folding on the kind alone takes out.
+     */
+    @Test
+    void twoFactsOfOneKindAreTwoEntries() {
+        assertEquals(List.of("rule_unread/unaffected", "rule_unread/unaffected"),
+                keptOpenBy(WeakeningSet.of(
+                        ruleUnread(new BlockReason.RuleAboutADerivedValue(), "a"),
+                        ruleUnread(new BlockReason.RuleAboutADerivedValue(), "b"))),
+                "two rules nothing could read are two things to tell a person");
+        assertEquals(List.of("rule_unread/may_change", "rule_unread/unaffected"),
+                keptOpenBy(WeakeningSet.of(
+                        ruleUnread(new BlockReason.PatternTooCostly(), "a"),
+                        ruleUnread(new BlockReason.RuleAboutADerivedValue(), "b"))),
+                "and one word over two answers is two entries, not one of either");
+    }
+
+    /**
+     * And one fact found twice is one entry, which is the fold this leaves alone.
+     *
+     * <p>{@link WeakeningSet#union} keeps one of two equal facts, so a rule found from three
+     * measures is one thing to tell a person. That is a fold on what the facts are, and it happens
+     * before anything here — which is the whole of why nothing here folds again.
+     */
+    @Test
+    void oneFactFoundTwiceIsOneEntry() {
+        Weakening once = ruleUnread(new BlockReason.RuleAboutADerivedValue(), "a");
+
+        assertEquals(List.of("rule_unread/unaffected"),
+                keptOpenBy(WeakeningSet.of(once).union(WeakeningSet.of(once))));
+    }
+
+    /** The document's entries, as {@code kind/runSensitivity}, from a set of facts. */
+    private static List<String> keptOpenBy(WeakeningSet open) {
+        List<String> out = new ArrayList<>();
+        for (Weakening each : open.causes()) {
+            out.add(AdequacyReport.kindOf(each) + "/"
+                    + each.runSensitivity().name().toLowerCase(java.util.Locale.ROOT));
+        }
+        return out;
+    }
+
+    /** One rule this compiler stopped on, at {@code term}. */
+    private static Weakening ruleUnread(BlockReason.RuleReadingStopped why, String term) {
+        return new Weakening.ModelReadingIncomplete(new ClosureGap.RuleUnread(
+                new RuleWithoutALine(
+                        new RuleRef.Comparison("go",
+                                new CoverageOrigin("m", 0, 0, CoverageConstruct.IF)),
+                        new RuleCitation.Named(term),
+                        new FilingCoordinate.AtPosition(TermPath.of(term)), why)));
     }
 }

@@ -9,6 +9,7 @@
     "compilerVersion",
     "status",
     "adequacy",
+    "keptOpenBy",
     "modules"
   ],
   "additionalProperties": false,
@@ -36,6 +37,13 @@
       ],
       "description": "Whether the rows meet what the asked measures require, which is not what `status` says. `undetermined` is a measure that was not asked for or could not be made; a build that gates on this refuses `not_satisfied` and nothing else."
     },
+    "keptOpenBy": {
+      "type": "array",
+      "description": "The facts keeping `adequacy` undetermined, one entry each. Empty for a settled verdict, `satisfied` or `not_satisfied` alike: a build refused over a gap has an answer whatever else went unmeasured, so what is here is what holds the word open and never a list of everything that fell short. Not `weakening`, which is a different question at a different unit — that one is about one measure or one module, its unit is the published kind, and it says each kind once. This one is about the verdict and its unit is a fact, so two things this document calls by the same word are two entries, and the entries are not folded on what they are printed as. The one fold there is happens before: two measures that went without the same fact went without one fact.",
+      "items": {
+        "$ref": "#/$defs/adequacyOpening"
+      }
+    },
     "modules": {
       "type": "array",
       "items": {
@@ -51,6 +59,32 @@
     }
   },
   "$defs": {
+    "runSensitivity": {
+      "enum": [
+        "may_change",
+        "unaffected"
+      ],
+      "description": "Whether a wider run of this compiler could come to a different answer about one thing it fell short of. A wider run is the same sources, the same compiler build, the same dependencies and the same host, with one or more of the allowances this compiler stops under widened and none of them narrowed — an allowance being a figure it compared something against and stopped on: the steps a row is evaluated for, the depth a recursion may reach, the clock it is held to, the nodes an observation keeps, the combinations a measure walks, the states a pattern is built into. Whether a caller can set the figure today is not the question; several of them are constants, and which knobs exist is a fact about this month rather than about the stop. `may_change` does not promise that a wider run finishes the measure — a reading past one figure may be stopped by the next — it says the stop that produced this need not happen again. `unaffected` is the stronger of the two and the one to act on: no allowance widens it, so measuring the same model again with more allowed finds the same thing. Neither says anything about what a later version of this compiler could read, or about writing the model another way; both are outside what a run is.",
+      "$comment": "The host is not an allowance: a stack that ran out and classes that would not link are met again by a wider run on the same machine, and a run on another machine is a different host."
+    },
+    "adequacyOpening": {
+      "type": "object",
+      "description": "One fact keeping the adequacy verdict undetermined, projected to what a document may say of it: the kind it is, and whether a wider run could answer it.",
+      "required": [
+        "kind",
+        "runSensitivity"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/weakening/items",
+          "description": "The published word for what fell short, which is the vocabulary `weakening` writes. One word covers more than one thing this compiler can meet — a pattern too large to build and a rule about a value made from another are both `rule_unread` — so this says which kind of thing it was and not which of them, and two entries alike are two facts rather than one said twice."
+        },
+        "runSensitivity": {
+          "$ref": "#/$defs/runSensitivity"
+        }
+      }
+    },
     "weakening": {
       "type": "array",
       "minItems": 1,

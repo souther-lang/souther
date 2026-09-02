@@ -2555,6 +2555,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         root.put("status", wire(status()));
         weakening(root, weakenedBy);
         root.put("adequacy", word(adequacy()));
+        // Beside the verdict rather than inside it. What `adequacy` is has not changed — a word
+        // every document since the fifth version has carried — and what is new is the facts that
+        // word is open on, which is a second thing to read and not a different spelling of the
+        // first.
+        keptOpenBy(root);
         ArrayNode modulesOut = root.putArray("modules");
         for (ModuleReport module : modules) {
             ObjectNode m = modulesOut.addObject();
@@ -3445,11 +3450,58 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         }
         Set<String> words = new LinkedHashSet<>();
         for (Weakening each : weakenedBy.causes()) {
-            words.add(each instanceof Weakening.ObservationIncomplete gap
-                    ? word(gap.cause().code()) : word(wordFor(each)));
+            words.add(kindOf(each));
         }
         ArrayNode out = of.putArray("weakening");
         words.forEach(out::add);
+    }
+
+    /**
+     * The published word for one weakening, whichever vocabulary it is written in.
+     *
+     * <p>An observation writes the {@code Incompleteness} code's own word rather than a second
+     * spelling of it, which is what {@link #wordFor} refuses to answer for. Both surfaces that name
+     * a weakening ask this, so a reader meeting one in either place meets the same word.
+     */
+    static String kindOf(Weakening weakening) {
+        return weakening instanceof Weakening.ObservationIncomplete gap
+                ? word(gap.cause().code()) : word(wordFor(weakening));
+    }
+
+    /**
+     * The facts holding the adequacy verdict open, one entry each, as what a document may say of
+     * them.
+     *
+     * <p><b>Not the array beside it, and the difference is the unit.</b> A {@code weakening} is
+     * about one measure or one module, its unit is the published kind, and it says each kind once —
+     * which is right, because which rule or which position it was is named where the document
+     * already names that thing. This is about the verdict, its unit is a fact, and it says each
+     * fact once.
+     *
+     * <p><b>So nothing here is folded.</b> Two rules this compiler could not read are two entries
+     * even where the two objects are equal, because the multiplicity is the fact's. Folded on the
+     * pair written out, two facts one document calls the same thing would come back as one, which
+     * is the collapse this whole field exists to have avoided — and the entries would then count
+     * kinds, which the other array already does.
+     *
+     * <p>The one fold there is happens before this: {@link WeakeningSet#union} keeps one of two
+     * equal facts, so a rule found from three behaviors is one thing to tell a person. That is a
+     * fold on what the facts are and not on what they are printed as.
+     *
+     * <p>Written whether or not the verdict is open, and empty where it is not. What it holds is
+     * what keeps the status undetermined, so a satisfied model has none and a refused one has none
+     * either — a build refused over a gap has a verdict, whatever else went unmeasured.
+     */
+    private void keptOpenBy(ObjectNode root) {
+        ArrayNode out = root.putArray("keptOpenBy");
+        if (adequacy() != AdequacyStatus.UNDETERMINED) {
+            return;
+        }
+        for (Weakening each : whatKeepsTheVerdictOpen().causes()) {
+            ObjectNode fact = out.addObject();
+            fact.put("kind", kindOf(each));
+            fact.put("runSensitivity", word(each.runSensitivity()));
+        }
     }
 
     /**

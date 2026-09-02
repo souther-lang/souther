@@ -3,6 +3,7 @@
   "compilerVersion" : "<version>",
   "status" : "complete",
   "adequacy" : "undetermined",
+  "keptOpenBy" : [ ],
   "modules" : [ {
     "module" : "conformance.staffing",
     "status" : "complete",
