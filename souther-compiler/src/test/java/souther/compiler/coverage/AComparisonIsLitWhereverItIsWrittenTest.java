@@ -143,9 +143,9 @@ class AComparisonIsLitWhereverItIsWrittenTest {
         return compilation;
     }
 
-    /** The numbering the classes below were lit against, asked of the check the emitter reads too.
-     *  Named apart from the plans this package's other tests build straight from bodies: those are
-     *  a walk of their own, and this is the one the compile settled on. */
+    /** The numbering of the bodies the classes below were generated from, asked of the check the
+     *  emitter reads too. Named apart from the plans this package's other tests build straight from
+     *  bodies, which have no compile behind them at all. */
     private static CoverageSites.Plan checkedPlanOf(Compilation compilation) {
         Bodies.Elaborated checked = compilation.db()
                 .ask(new Bodies.Checked(compilation.modules().get(0))).value();

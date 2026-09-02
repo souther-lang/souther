@@ -44,9 +44,9 @@ class ProbeMappingTest {
         return compilation;
     }
 
-    /** The numbering {@code compilation} settled on for {@code module}, asked of the check that
-     *  holds its bodies. Every call walks them again and comes to the same numbers, the walk being
-     *  a function of the bodies; what matters here is which compile's bodies were walked. */
+    /** The numbering of {@code module}'s bodies as {@code compilation} checked them. Which compile
+     *  they were checked by is what the tests below turn on: two compiles of one source number one
+     *  arm alike, and a plan of one compile's bodies is about that compile's trees. */
     private static CoverageSites.Plan checkedPlanOf(Compilation compilation, String module) {
         Bodies.Elaborated checked =
                 compilation.db().ask(new Bodies.Checked(module)).value();
