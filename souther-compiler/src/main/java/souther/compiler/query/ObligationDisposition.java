@@ -162,15 +162,18 @@ public sealed interface ObligationDisposition {
             switch (each) {
                 // The reading's own reason, and the only one this sentence carries.
                 case Weakening.BorderValueUnreadable it -> met.add(it.why());
-                // Said where it happened. A row that never ran, a body nothing elaborated and a
-                // boundary nothing derived bear on every line at once, so a sentence about one
-                // point that repeated them would say of this line what is true of all of them.
+                // Said where it happened. A row that never ran, a body nothing elaborated, a
+                // boundary nothing derived and an input nothing read are each one fact about a
+                // behavior or a module, and every line under it is short of that same one thing —
+                // so a sentence about one point that repeated them would say of this line what is
+                // true of all of them, and say it once per line.
                 case Weakening.ObservationIncomplete _,
                      Weakening.OutputCasesUnreadable _,
                      Weakening.InputCasesUnreadable _,
                      Weakening.ModelReadingIncomplete _,
                      Weakening.BodiesNotElaborated _,
                      Weakening.BoundaryNotDerived _,
+                     Weakening.InputNotRead _,
                      Weakening.PairSpaceTruncated _,
                      Weakening.ProofContradicted _,
                      Weakening.ArmsUnsettled _ -> { }

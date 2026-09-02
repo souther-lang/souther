@@ -16,7 +16,6 @@ import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Towards;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.Target;
-import souther.compiler.partition.AxisId;
 import souther.compiler.partition.Border;
 import souther.compiler.partition.BorderQuantity;
 import souther.compiler.partition.BoundaryTarget;
@@ -291,7 +290,7 @@ class AnObligationsExplanationNamesEachReasonOnceTest {
         Carrier carrier = new Carrier.Whole();
         NumericTerm.ValueOf value = new NumericTerm.ValueOf(TermPath.of(term));
         BoundaryTarget target = BoundaryTarget.at(
-                new BorderQuantity.OfACoordinate(new AxisId("cap", term), value,
+                new BorderQuantity.OfACoordinate("cap", value,
                         TermOrdersFixtures.itself(value, carrier)),
                 new Level.OnACarrier(carrier, Count.of(100)));
         OriginRef origin = new OriginRef.EnsuresOrigin(
