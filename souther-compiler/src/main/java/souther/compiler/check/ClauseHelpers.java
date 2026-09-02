@@ -87,16 +87,15 @@ public final class ClauseHelpers {
         // writing a declaration with no clause leaves this answer where it was — and everything a
         // module's clauses are read by with it.
         for (Hir.Def def : settled.defs()) {
-            // With the constructions in the clauses written as constructions, which is the same
-            // normalising the settled form has had ({@link Normalized.Def}). What tells the two
-            // representations apart is what {@link InliningPolicy} says and nothing else: a value
-            // built by naming its declaration is a construction in either, and a reader that met it
-            // as an application here would read one clause in one form and not in the other.
-            if (NewtypeDesugar.rewriteInvariantsOf(def, symbols) instanceof Hir.Data d
-                    && !d.invariants().isEmpty()) {
-                TypeSymbol.AtModule declared = d.declares();
-                out.put(declared, Hir.mapClauses(d.invariants(),
-                        clause -> inliner.inline(clause, new BindingOwner.OfData(declared))));
+            // Expanded first and the constructions written as constructions after, which is the
+            // order the settled form is put together in: it inlines ({@link InvariantSettled}) and
+            // normalises the result ({@link Normalized.Def}). Normalising first would leave a
+            // construction that appears only inside a helper's body written as an application
+            // here and as a construction there, and what tells the two representations apart is
+            // what {@link InliningPolicy} says and nothing else.
+            if (NewtypeDesugar.rewriteInvariantsOf(withInlinedInvariants(inliner, def), symbols)
+                    instanceof Hir.Data d && !d.invariants().isEmpty()) {
+                out.put(d.declares(), d.invariants());
             }
         }
         return new AnalysisInvariants(m.name(), out);
@@ -117,14 +116,7 @@ public final class ClauseHelpers {
     private static Hir.Module withInlinedInvariants(HelperInliner inliner, Hir.Module m) {
         List<Hir.Def> defs = new ArrayList<>();
         for (Hir.Def def : m.defs()) {
-            if (def instanceof Hir.Data d && !d.invariants().isEmpty()) {
-                BindingOwner declared = new BindingOwner.OfData(d.declares());
-                defs.add(new Hir.Data(d.written(), d.declares(), d.newtype(), d.includes(), d.fields(),
-                        Hir.mapClauses(d.invariants(), clause -> inliner.inline(clause, declared)),
-                        d.pos()));
-            } else {
-                defs.add(def);
-            }
+            defs.add(withInlinedInvariants(inliner, def));
         }
         List<Hir.BehaviorDef> behaviors = new ArrayList<>();
         for (Hir.BehaviorDef behavior : m.behaviors()) {
@@ -132,6 +124,24 @@ public final class ClauseHelpers {
                     ? withInlinedEnsures(inliner, m.name(), spec) : behavior);
         }
         return m.withDefs(defs).withBehaviors(behaviors);
+    }
+
+    /**
+     * {@code def} with the helper calls in its clauses expanded as {@code inliner} expands them.
+     *
+     * <p>The one step both representations take. Written once so that what either does before it
+     * and after it is done at the same point of the same walk: a step one of them takes on the
+     * clause as written and the other on the clause with the helpers in it would tell the two
+     * apart by something other than {@link InliningPolicy}.
+     */
+    private static Hir.Def withInlinedInvariants(HelperInliner inliner, Hir.Def def) {
+        if (!(def instanceof Hir.Data d) || d.invariants().isEmpty()) {
+            return def;
+        }
+        BindingOwner declared = new BindingOwner.OfData(d.declares());
+        return new Hir.Data(d.written(), d.declares(), d.newtype(), d.includes(), d.fields(),
+                Hir.mapClauses(d.invariants(), clause -> inliner.inline(clause, declared)),
+                d.pos());
     }
 
     /** {@code spec} with the helper calls in its {@code ensures} expanded as {@code inliner} expands
