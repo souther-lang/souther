@@ -2545,10 +2545,8 @@ public final class Generator {
                 case Outcome.Limited(UnresolvedCombination.Reason word, String said,
                                      java.util.Set<CompositionBudget> by) -> {
                     return BoundaryAttempt.Limited.at(label,
-                            uncertified[0]
-                                    && word == UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED
-                                    ? UnresolvedCombination.Reason.NO_CERTIFIED_WITNESS : word,
-                            said, by, where.unrepresented());
+                            nothingStoodWhereItWasBuilt(uncertified[0], word), said, by,
+                            where.unrepresented());
                 }
                 case Outcome.Unresolved(UnresolvedCombination.Reason word, String said) -> {
                     why = word;
@@ -2561,20 +2559,13 @@ public final class Generator {
                     stoppedBy = stopped.by();
                 }
             }
+            why = nothingStoodWhereItWasBuilt(uncertified[0], why);
             // Where the refusal is of the values one edge offered, what that edge held back
             // outranks it: values that were never built were not among the ones refused. Only
             // where one edge offered them, though — a point of a form fixes several positions
             // under one parameter, and which of their edges the refusal was about is not
             // something this knows. Taken from whichever came first, the reason named the wrong
             // position's search.
-            //
-            // A search that offered candidates and certified none of them has not shown that
-            // every value the rules allow was refused: what it found out is that what it built
-            // did not stand where it was built for, which is its own answer.
-            if (uncertified[0]
-                    && why == UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED) {
-                why = UnresolvedCombination.Reason.NO_CERTIFIED_WITNESS;
-            }
             if (here.size() == 1
                     && why == UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED) {
                 java.util.Set<CompositionBudget> held =
@@ -3645,7 +3636,7 @@ public final class Generator {
             // offered at a position the plan stopped short of is whole values of a type it declined
             // to look inside, and none being available is that decision and not a fact about the
             // model.
-            return whatTheSearchCameTo(plan,
+            return whatTheSearchCameTo(plan.cutBy(),
                     new Outcome.Unresolved(UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
                             choices.missingAt()));
         }
@@ -3693,7 +3684,8 @@ public final class Generator {
             // The plan was short of the positions the value has. What the search did with the plan
             // it was given stands as its own answer, and this is what says that answer is not about
             // everything the point had.
-            case HeldBack.PlanCut _ -> whatTheSearchCameTo(plan, product);
+            case HeldBack.PlanCut(java.util.Set<CompositionBudget> by) ->
+                    whatTheSearchCameTo(by, product);
         };
     }
 
@@ -3709,8 +3701,7 @@ public final class Generator {
      * the row did not need, and a reader owed something about a value they have in hand is a reader
      * being told about this compiler's bookkeeping.
      */
-    private static Outcome whatTheSearchCameTo(ConstructionPlan plan, Outcome came) {
-        java.util.Set<CompositionBudget> cut = plan.cutBy();
+    private static Outcome whatTheSearchCameTo(java.util.Set<CompositionBudget> cut, Outcome came) {
         if (cut.isEmpty()) {
             return came;
         }
@@ -3721,6 +3712,21 @@ public final class Generator {
             // second account of the same emptiness. A row stands whatever the plan gave up on.
             case Outcome.Built _, Outcome.Stopped _, Outcome.Limited _ -> came;
         };
+    }
+
+    /**
+     * The word a search comes back with where it offered candidates and read none of them back
+     * standing at the point.
+     *
+     * <p>Said in one place because it is one rule. Such a search has not shown that every value the
+     * rules allow was refused: what it found out is that what it built did not stand where it was
+     * built for, which is its own answer. Spelled at each outcome that can carry the word, the
+     * outcomes part the first time the rule is edited.
+     */
+    private static UnresolvedCombination.Reason nothingStoodWhereItWasBuilt(
+            boolean uncertified, UnresolvedCombination.Reason why) {
+        return uncertified && why == UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED
+                ? UnresolvedCombination.Reason.NO_CERTIFIED_WITNESS : why;
     }
 
     /**
