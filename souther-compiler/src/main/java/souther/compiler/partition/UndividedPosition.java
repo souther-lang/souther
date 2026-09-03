@@ -230,24 +230,22 @@ public record UndividedPosition(TermPath at, Why why) {
          */
         RULE_ABOUT_A_RUN,
         /**
-         * The rule divides this position, and the division is not one this measure has a line for.
+         * The rule holds this position to the values it admits, and places no end on them.
          *
-         * <p>A format states which strings stand here, which is two classes and no order: the
-         * strings it accepts and the rest. What this measure carries is intervals on an order, so
-         * there is no line and no point either side of one — and the position is divided all the
-         * same.
+         * <p>A format states which strings stand here, and everything else is refused at
+         * construction — so what the rule did is restrict the position, and the strings it leaves
+         * out are no class of it. What a reader acts on is that the value written here is one the
+         * rule admits.
          *
-         * <p><b>The one word here that is about this measure and not about the rule.</b> The others
-         * say something the rule does or does not do; this says the rule did divide the position
-         * and the measure has no representation for what it divided it into. Which is why a
-         * position carrying only such a rule is not one the model divides no way — it was reported
-         * as one, and every reader downstream took the silence for a conclusion (issue #1249).
+         * <p>A position carrying only such a rule is not one the model divides no way. It was
+         * reported as one, and every reader downstream took the silence for a conclusion; then it
+         * was reported as a division this measure has no representation for, which said the model
+         * divides a position its declaration says cannot hold the other side.
          *
-         * <p>Named for the representation and not for what reached it first. A congruence divides a
-         * position the same way and no interval says it, so the day that is read this is its word
-         * too.
+         * <p>Nothing here about whether the position is divided. A rule may restrict and divide at
+         * once, and what a position divides into is said where the classes are.
          */
-        PARTITION_NOT_REPRESENTABLE,
+        POSITION_RESTRICTED_TO_WHAT_A_RULE_ADMITS,
         /**
          * The input returns here to a declaration it has already been through, and what is under
          * this position was not read again.

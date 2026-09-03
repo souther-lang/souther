@@ -611,31 +611,32 @@ public sealed interface BlockReason {
     record ComparisonOverARun() implements ReadToEndWithoutLine {}
 
     /**
-     * The rule divides this position, and the division is not one this measure draws lines on.
+     * The rule holds this position to the values it admits, and places no end on them.
      *
-     * <p>A rule stating which strings stand at a position divides its values in two, and nothing
-     * about that division is an order: there is no value on either side of a line for a row to be
-     * owed at, because there is no line — the classes are a set of strings and its complement.
-     * What this measure carries is intervals on an order, and a set that is not one is a partition
-     * it has no representation for.
+     * <p>What a reader is owed, and it is a fact they act on: the value written here has to be one
+     * of the ones the rule admits, because everything outside them is refused at construction
+     * (E1903). A bounded newtype gets the same restraint said as an edge; this is the same fact
+     * about a rule whose admitted values are not a run of the order, and it is why there is no
+     * class away from them to cover (ADR-0090).
      *
-     * <p><b>Not an absence, which is what it used to be read as.</b> A position whose only rule was
-     * a format came back with no classes and no reason, and every reader downstream took that for
-     * the model dividing it no way at all — a conclusion about a model, drawn from this measure
-     * having nothing to say (issue #1249). The rule was read from end to end; what has no line is
-     * the shape of what it says.
+     * <p><b>Not a division, which is what it used to be said as.</b> That a rule tells the values
+     * it admits from the rest is a fact about those values, and whether the position is divided is
+     * a different question answered by what the rule is written in. Under an invariant the other
+     * side is no class of the position, so a sentence saying the model divides the position into
+     * values this measure draws no line between told a reader the opposite of what the declaration
+     * says.
      *
-     * <p>Nor a limit of the reading. Whether a format is read into a set of strings is
-     * {@link souther.compiler.check.StringPredicates}'s answer and is a separate question — a
-     * pattern nobody could take apart stops the reading and is
-     * {@link ReadingStopReason}'s. This one is for a rule that <em>was</em> taken in.
+     * <p><b>And it says nothing about whether the position is divided.</b> A rule may restrict and
+     * divide at once — {@code invariant value == "A" || value == "B"} admits two values and every
+     * other string is no class of the position — so the classes are read where they are read
+     * ({@link Distinctions#ofValues}) and this stays a statement about what may stand here.
      *
-     * <p>Named for the measure and not for what happened to reach it first. A congruence divides a
-     * position the same way — {@code Int.floorMod(value, 1000) == 0} states which of the values an
-     * order does hold are in, and no interval says it — so the day that is read this is the word
-     * for it too.
+     * <p>Nor a limit of the reading. What a rule leaves a position is worked out by the reading
+     * that turns clauses into sets, and one it could not work out is not one of these: a set left
+     * wide because something went unread is this compiler falling short, and said from here it
+     * would go out as a fact about the model.
      */
-    record RuleDividingOutsideAnOrder() implements ReadToEndWithoutLine {}
+    record RuleRestrictingToAdmittedValues() implements ReadToEndWithoutLine {}
 
     /**
      * What a derivation would have to be able to reach into.

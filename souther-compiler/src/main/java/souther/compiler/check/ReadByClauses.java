@@ -50,6 +50,31 @@ record ReadByClauses(AdmissibleValues<FactSubject> values, OrderedIntervals<Fact
         java.util.Set<FactSubject> adopted() {
             return ReadByClauses.adopted(byValues, byOrder);
         }
+
+        /**
+         * Whether this part put a constraint on which values stand at {@code position}.
+         *
+         * <p>Narrower than {@link #adopted}, and the difference is the whole of what a reader
+         * asking this wants. That one is every position either reading settled what the part does
+         * to, which a dead branch settles by imposing nothing and which the ordered reading settles
+         * by placing an end. Neither of those is a rule holding the values at the position down,
+         * and a reader told they were would say a position is restricted by a clause that leaves it
+         * exactly as wide as it was.
+         */
+        boolean restricts(FactSubject position) {
+            return byValues.read().contains(position);
+        }
+
+        /**
+         * Whether this part put one on where those values stop.
+         *
+         * <p>Asked of the ordered reading, because that is what an end is read by. A part that
+         * placed one has a line at the position and is accounted for by whoever draws lines, so it
+         * is not a part a reader is owed a second sentence about.
+         */
+        boolean bounds(FactSubject position) {
+            return byOrder.read().contains(position);
+        }
     }
 
     /** Both maps, each position saying what either of them said of it. */

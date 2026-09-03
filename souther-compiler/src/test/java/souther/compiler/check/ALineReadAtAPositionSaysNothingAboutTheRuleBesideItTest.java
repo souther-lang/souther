@@ -132,14 +132,44 @@ class ALineReadAtAPositionSaysNothingAboutTheRuleBesideItTest {
     }
 
     /**
-     * A rule of another shape is not one of these either.
+     * A rule of another shape places no end, and what it did instead is what it is named for.
      *
-     * <p>A format, a membership, a denial: each says which values exist rather than where they
-     * stop, and a report has nowhere to put one as a line. Named here, an author would be sent
-     * after a boundary nobody wrote.
+     * <p>A denial says which values exist rather than where they stop, so a report has nowhere to
+     * put it as a line and an author named one would be sent after a boundary nobody wrote. What it
+     * does do is hold the position to what it admits — {@code length} is every whole number but
+     * five, and five cannot be built there — and that is a fact a reader acts on. Said by nothing,
+     * the position came back measured at nothing with no word for why.
+     *
+     * <p>Which values those are is not read here. The reading that turns clauses into sets answers
+     * it, and this is only asked whether what it left is narrower than everything — so a denial and
+     * a format arrive alike, as they do at every reader below.
      */
     @Test
-    void aRuleThatIsNotAboutWhereTheValuesStopIsNotNamedAsALine() {
+    void aRuleThatIsNotAboutWhereTheValuesStopIsNamedForWhatItRestricts() {
+        FieldDomains read = readingOf("""
+                module example.parcels
+
+                data Parcel = { label: String, length: Int }
+                    invariant String.matches(label, "[A-Z]+")
+                    invariant length /= 5
+                """, "Parcel");
+
+        assertTrue(read.placedAt(RuleKey.of("length")).isEmpty(),
+                "a denial is no line, which is what a report would send an author after");
+        assertEquals(List.of(new BlockReason.RuleRestrictingToAdmittedValues()),
+                reasonsAt(read, "length"));
+    }
+
+    /**
+     * And a rule whose text this could not work out restricts nothing it can name.
+     *
+     * <p>The written argument of the format above is a position and not a literal, so which strings
+     * it admits was never worked out and the position is left at every value. A reading that filed
+     * a restriction anyway would be saying the model holds a position down on the strength of a
+     * rule it did not read.
+     */
+    @Test
+    void andOneWhoseValuesWereNeverWorkedOutRestrictsNothing() {
         FieldDomains read = readingOf("""
                 module example.parcels
 
@@ -149,7 +179,6 @@ class ALineReadAtAPositionSaysNothingAboutTheRuleBesideItTest {
                 """, "Parcel");
 
         assertEquals(List.of(), read.noLineAt(RuleKey.of("label")));
-        assertEquals(List.of(), read.noLineAt(RuleKey.of("length")));
     }
 
     /**

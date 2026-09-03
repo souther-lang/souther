@@ -113,7 +113,7 @@ class ARuleThatDividesNothingIsNotARuleThisMeasureCannotHoldTest {
         assertInstanceOf(UndividedPosition.Why.CannotDerive.class, undivided.get(0).why(),
                 "the pattern was not read, so nothing about the division follows");
         assertFalse(reasonsOf(NOT_READ).contains(
-                        UndividedPosition.Reason.PARTITION_NOT_REPRESENTABLE),
+                        UndividedPosition.Reason.POSITION_RESTRICTED_TO_WHAT_A_RULE_ADMITS),
                 "and the word for a division this measure cannot hold is not said of it: "
                         + reasonsOf(NOT_READ));
     }
@@ -159,10 +159,10 @@ class ARuleThatDividesNothingIsNotARuleThisMeasureCannotHoldTest {
     @Test
     void aPredicateThatRulesNothingOutIsNotADivisionThisMeasureCannotHold() {
         assertFalse(reasonsOf(RULES_NOTHING_OUT)
-                        .contains(UndividedPosition.Reason.PARTITION_NOT_REPRESENTABLE),
+                        .contains(UndividedPosition.Reason.POSITION_RESTRICTED_TO_WHAT_A_RULE_ADMITS),
                 () -> "every string satisfies it, so there is no distinction to have no line for: "
                         + reasonsOf(RULES_NOTHING_OUT));
-        assertEquals(List.of(UndividedPosition.Reason.PARTITION_NOT_REPRESENTABLE),
+        assertEquals(List.of(UndividedPosition.Reason.POSITION_RESTRICTED_TO_WHAT_A_RULE_ADMITS),
                 reasonsOf(DIVIDES_WITHOUT_AN_ORDER),
                 "and the one that does divide still says so");
     }
@@ -171,7 +171,7 @@ class ARuleThatDividesNothingIsNotARuleThisMeasureCannotHoldTest {
     @Test
     void aPredicateNoStringSatisfiesIsNotADivisionEither() {
         assertFalse(reasonsOf(LEAVES_NOTHING)
-                        .contains(UndividedPosition.Reason.PARTITION_NOT_REPRESENTABLE),
+                        .contains(UndividedPosition.Reason.POSITION_RESTRICTED_TO_WHAT_A_RULE_ADMITS),
                 () -> "no string satisfies it, so the rules leave no value rather than two"
                         + " classes: " + reasonsOf(LEAVES_NOTHING));
     }
@@ -196,7 +196,7 @@ class ARuleThatDividesNothingIsNotARuleThisMeasureCannotHoldTest {
         assertEquals(List.of(UndividedPosition.Reason.RULE_CUTS_NOTHING),
                 reasonsOf(DIVIDES_NOTHING),
                 "a rule about a number the position cancels out of divides nothing");
-        assertEquals(List.of(UndividedPosition.Reason.PARTITION_NOT_REPRESENTABLE),
+        assertEquals(List.of(UndividedPosition.Reason.POSITION_RESTRICTED_TO_WHAT_A_RULE_ADMITS),
                 reasonsOf(DIVIDES_WITHOUT_AN_ORDER),
                 "a format divides the position, and no interval says which values are in");
     }
