@@ -606,9 +606,9 @@ final class BodyGen {
                 return;
             }
             ctx.comparisonSiteOf(bin).ifPresent(site -> {
-                ctx.emitted(site.value());
+                ctx.emitted(site.raw());
                 code.dup();
-                code.loadConstant(site.value());
+                code.loadConstant(site.raw());
                 code.invokestatic(CD_Probe, "compared", MTD_Probe_compared);
             });
         }

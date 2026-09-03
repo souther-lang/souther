@@ -23,16 +23,26 @@ import java.util.Optional;
 public sealed interface SourceOutcome {
 
     /**
+     * One of the ways through a fork that a branch measure counts.
+     *
+     * <p>Which of them is not a question anything asks of a value: a fork has arms and a comparison
+     * is not one of them, so which a way through is belongs to what it is rather than to a predicate
+     * over it. A reader that only ever has arms says so and takes one of these; the few that hold
+     * both take what they both are.
+     */
+    sealed interface Arm extends SourceOutcome permits Held, Failed, Matched {}
+
+    /**
      * The way taken because the decision held.
      *
      * <p>Not always an arm the author wrote. A {@code guard}'s is the rest of the block and a
      * comprehension's is the element it yields, and what says which of those this is, is the
      * construct beside it.
      */
-    record Held(HeldBy by) implements SourceOutcome {}
+    record Held(HeldBy by) implements Arm {}
 
     /** The way taken because the decision did not hold. */
-    record Failed(FailedBy by) implements SourceOutcome {}
+    record Failed(FailedBy by) implements Arm {}
 
     /**
      * What held.
@@ -77,7 +87,7 @@ public sealed interface SourceOutcome {
      * @param cases the cases written on the arm. Several where the source wrote them together, which
      *              is one run of code and so one arm
      */
-    record Matched(List<TypeSymbol> cases) implements SourceOutcome {
+    record Matched(List<TypeSymbol> cases) implements Arm {
 
         public Matched {
             cases = List.copyOf(cases);
@@ -92,11 +102,4 @@ public sealed interface SourceOutcome {
      */
     record Compared(BinOp op) implements SourceOutcome {}
 
-    /** Whether this is one of the arms a branch measure counts. */
-    default boolean isArm() {
-        return switch (this) {
-            case Compared _ -> false;
-            case Held _, Failed _, Matched _ -> true;
-        };
-    }
 }

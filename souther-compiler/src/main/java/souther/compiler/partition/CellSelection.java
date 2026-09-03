@@ -1,7 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.coverage.ControlClaim;
-import souther.compiler.coverage.Observation;
+import souther.compiler.coverage.AlignedObservation;
 
 import java.util.List;
 
@@ -47,12 +47,12 @@ public record CellSelection(InteractionCells.Cell cell, List<ControlClaim> claim
      * never reached the meeting misses the way in, and one that reached it and went the other way
      * misses an outcome, and those are different things to be told.
      */
-    public List<ControlClaim> missedBy(Observation seen) {
+    public List<ControlClaim> missedBy(AlignedObservation seen) {
         return claims.stream().filter(claim -> !claim.satisfiedBy(seen)).toList();
     }
 
     /** Whether {@code seen} did everything this names. */
-    public boolean certifiedBy(Observation seen) {
+    public boolean certifiedBy(AlignedObservation seen) {
         return claims.stream().allMatch(claim -> claim.satisfiedBy(seen));
     }
 
@@ -159,7 +159,7 @@ public record CellSelection(InteractionCells.Cell cell, List<ControlClaim> claim
      * A caller holding one half cannot reach for it, which is what stops the reading that composed
      * a row from being read back as evidence for itself.
      */
-    public java.util.Optional<CertifiedWitness> certifying(int[] where, Observation seen) {
+    public java.util.Optional<CertifiedWitness> certifying(int[] where, AlignedObservation seen) {
         return cell.holds(where) && certifiedBy(seen)
                 ? java.util.Optional.of(new CertifiedWitness(this, where, seen))
                 : java.util.Optional.empty();
@@ -177,9 +177,9 @@ public record CellSelection(InteractionCells.Cell cell, List<ControlClaim> claim
 
         private final CellSelection of;
         private final int[] where;
-        private final Observation seen;
+        private final AlignedObservation seen;
 
-        private CertifiedWitness(CellSelection of, int[] where, Observation seen) {
+        private CertifiedWitness(CellSelection of, int[] where, AlignedObservation seen) {
             this.of = of;
             this.where = where.clone();
             this.seen = seen;
@@ -196,7 +196,7 @@ public record CellSelection(InteractionCells.Cell cell, List<ControlClaim> claim
         }
 
         /** What the run was seen doing, which is what other combinations are asked of in turn. */
-        public Observation seen() {
+        public AlignedObservation seen() {
             return seen;
         }
     }

@@ -2,6 +2,8 @@ package souther.compiler.partition;
 
 import souther.compiler.core.Core;
 import souther.compiler.check.PathReachability;
+import souther.compiler.coverage.ArmProbe;
+import souther.compiler.coverage.ControlPointId;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.types.TypeSymbol;
 
@@ -83,7 +85,8 @@ public final class ProducedCases {
      * value a {@code let} binds — is not what the behavior answers with, and counting it would keep a
      * case owed because the body happened to build one on its way past.
      */
-    private static void walk(Core e, List<Integer> under, CoverageSites.Plan plan,
+    private static void walk(Core e, List<ArmProbe> under,
+                             CoverageSites.Plan plan,
                              PathReachability.Answers arrives, Set<TypeSymbol> declared, Seen seen) {
         if (seen.anythingUnreadable) {
             return;   // nothing further can be taken away
@@ -92,19 +95,19 @@ public final class ProducedCases {
             case Core.Unreachable _ -> { }   // answers nothing, so it produces nothing
             case Core.LetIn li -> walk(li.body(), under, plan, arrives, declared, seen);
             case Core.If iff -> {
-                int[] arms = plan.probesOf(iff);
+                ControlPointId.ArmOccurrence[] arms = plan.armsOf(iff);
                 walk(iff.then(), beneath(under, arms, 0), plan, arrives, declared, seen);
                 walk(iff.els(), beneath(under, arms, 1), plan, arrives, declared, seen);
             }
             case Core.Match m -> {
-                int[] arms = plan.probesOf(m);
+                ControlPointId.ArmOccurrence[] arms = plan.armsOf(m);
                 for (int i = 0; i < m.cases().size(); i++) {
                     walk(m.cases().get(i).body(), beneath(under, arms, i), plan, arrives, declared,
                             seen);
                 }
             }
             case Core.IfConstructed ic -> {
-                int[] arms = plan.probesOf(ic);
+                ControlPointId.ArmOccurrence[] arms = plan.armsOf(ic);
                 walk(ic.then(), beneath(under, arms, 0), plan, arrives, declared, seen);
                 for (int i = 0; i < ic.els().size(); i++) {
                     walk(ic.els().get(i).body(), beneath(under, arms, i + 1), plan, arrives,
@@ -120,7 +123,8 @@ public final class ProducedCases {
     }
 
     /** Where one producer puts the case it answers with. */
-    private static void produce(TypeSymbol built, List<Integer> under, PathReachability.Answers arrives,
+    private static void produce(TypeSymbol built, List<ArmProbe> under,
+                                PathReachability.Answers arrives,
                                 Set<TypeSymbol> declared, Seen seen) {
         boolean proven = under.stream().anyMatch(arrives::nothingArrivesAt);
         if (built == null || !declared.contains(built)) {
@@ -138,12 +142,15 @@ public final class ProducedCases {
 
     /** The arms of an inner fork, added to the ones already above it. An arm with no probe adds
      * nothing: there is no site for a proof to have been about. */
-    private static List<Integer> beneath(List<Integer> under, int[] arms, int index) {
-        if (arms == null || index >= arms.length || arms[index] == CoverageSites.NO_SITE) {
+    private static List<ArmProbe> beneath(
+            List<ArmProbe> under,
+            ControlPointId.ArmOccurrence[] arms, int index) {
+        if (arms == null || index >= arms.length || arms[index] == null
+                || arms[index].probe().isEmpty()) {
             return under;
         }
-        List<Integer> out = new ArrayList<>(under);
-        out.add(arms[index]);
+        List<ArmProbe> out = new ArrayList<>(under);
+        out.add(arms[index].probe().get());
         return List.copyOf(out);
     }
 

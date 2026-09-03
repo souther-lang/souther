@@ -14,6 +14,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertSame;
 
 /**
@@ -342,8 +343,18 @@ class CoverageSitesTest {
 
         assertEquals(1, plan.guards().size());
         CoverageSites.GuardRef guard = plan.guards().get(0);
-        assertEquals("then", souther.compiler.report.ArmVocabulary.label(plan.site(guard.siteIndexThen())));
-        assertEquals("else", souther.compiler.report.ArmVocabulary.label(plan.site(guard.siteIndexElse())));
+        assertEquals("then", labelAt(plan, guard.whereThen()));
+        assertEquals("else", labelAt(plan, guard.whereElse()));
+    }
+
+    /** What the arm {@code where} numbers is called, asked of the plan that numbered it. */
+    private static String labelAt(CoverageSites.Plan plan, java.util.Optional<ArmProbe> where) {
+        CoverageSites.ArmSite found = plan.sites().stream()
+                .filter(CoverageSites.ArmSite.class::isInstance)
+                .map(CoverageSites.ArmSite.class::cast)
+                .filter(site -> site.index().equals(where.orElseThrow()))
+                .findFirst().orElseThrow();
+        return souther.compiler.report.ArmVocabulary.label(found);
     }
 
     /** The comparison was evaluated to reach the arm that is left, so the line it draws is still one
@@ -355,8 +366,8 @@ class CoverageSitesTest {
 
         assertEquals(1, plan.guards().size());
         CoverageSites.GuardRef guard = plan.guards().get(0);
-        assertEquals(CoverageSites.NO_SITE, guard.siteIndexThen());
-        assertEquals("else", souther.compiler.report.ArmVocabulary.label(plan.site(guard.siteIndexElse())));
+        assertTrue(guard.whereThen().isEmpty(), "the `then` arm answers nothing, so it has no place");
+        assertEquals("else", labelAt(plan, guard.whereElse()));
     }
 
     /**
@@ -404,7 +415,8 @@ class CoverageSitesTest {
         int[] arms = plan.probesOf(match);
         assertNotNull(arms, "the plan is keyed by the instances it was built from");
         assertEquals(2, arms.length);
-        assertEquals("case UnderThirty", souther.compiler.report.ArmVocabulary.label(plan.site(arms[0])));
+        assertEquals("case UnderThirty", labelAt(plan, java.util.Optional.of(
+                plan.numbering().arm(arms[0]))));
 
         Core.Match copy = new Core.Match(match.scrutinee(), match.cases(), match.origin(),
                 match.type(), match.pos(), java.util.List.of());

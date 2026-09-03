@@ -1,5 +1,7 @@
 package souther.compiler.partition;
 
+import souther.compiler.coverage.Numberings;
+
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.coverage.ControlClaim;
@@ -7,7 +9,7 @@ import souther.compiler.coverage.ControlPointId;
 
 import java.util.List;
 import java.util.Map;
-import java.util.OptionalInt;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -42,8 +44,8 @@ class WhatACombinationAsksIsItsOwnToSayTest {
 
     private static CellSelection over(boolean[]... positions) {
         return new CellSelection(new InteractionCells.Cell(positions),
-                List.of(ControlClaim.of(new ControlPointId.ArmOccurrence(1, OptionalInt.of(1),
-                                null, null))
+                List.of(ControlClaim.of(new ControlPointId.ArmOccurrence(1,
+                                Optional.of(Numberings.arm(2, 1)), null, null))
                         .orElseThrow(() -> new AssertionError("an arm with a probe can be claimed"))));
     }
 

@@ -12,7 +12,6 @@ import souther.compiler.query.Output;
 
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
-import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
 
@@ -62,7 +61,7 @@ class AComparisonSaysWhichWayItCameOutTest {
     void twoWaysOfFailingOneConditionAreNotOneObservation() {
         Compilation compilation = compiled();
         CoverageSites.Plan plan = checkedPlanOf(compilation);
-        Behavior submit = new Behavior(probed(compilation));
+        Behavior submit = new Behavior(probed(compilation), plan.identity());
 
         Observation early = submit.observing(-1L);
         Observation late = submit.observing(500L);
@@ -83,7 +82,8 @@ class AComparisonSaysWhichWayItCameOutTest {
     @Test
     void aComparisonNeverReachedIsAbsentAndNotFalse() {
         Compilation compilation = compiled();
-        Behavior submit = new Behavior(probed(compilation));
+        Behavior submit = new Behavior(probed(compilation),
+                checkedPlanOf(compilation).identity());
 
         Observation early = submit.observing(-1L);
 
@@ -94,15 +94,13 @@ class AComparisonSaysWhichWayItCameOutTest {
 
         Observation late = submit.observing(500L);
         ComparisonOutcome second = late.comparisons().stream()
-                .filter(each -> !each.at().equals(first.at()))
+                .filter(each -> each.at() != first.at())
                 .findFirst()
                 .orElseThrow(() -> new AssertionError(
                         "the row that answered both comparisons reached the second one"));
-        assertFalse(early.reached(second.at()),
-                "which the row that short-circuited never reached");
-        assertFalse(early.saw(new ComparisonOutcome(second.at(), true)),
-                "so it did not come out one way");
-        assertFalse(early.saw(new ComparisonOutcome(second.at(), false)),
+        assertFalse(early.comparisons().contains(new ComparisonOutcome(second.at(), true)),
+                "the row that short-circuited did not have it come out one way");
+        assertFalse(early.comparisons().contains(new ComparisonOutcome(second.at(), false)),
                 "nor the other");
     }
 
@@ -110,7 +108,8 @@ class AComparisonSaysWhichWayItCameOutTest {
     @Test
     void aComparisonIsRecordedComingOutEitherWay() {
         Compilation compilation = compiled();
-        Behavior submit = new Behavior(probed(compilation));
+        Behavior submit = new Behavior(probed(compilation),
+                checkedPlanOf(compilation).identity());
 
         Observation refused = submit.observing(500L);
         Observation accepted = submit.observing(50L);
@@ -119,40 +118,45 @@ class AComparisonSaysWhichWayItCameOutTest {
                 .filter(each -> !each.held())
                 .findFirst()
                 .orElseThrow(() -> new AssertionError("the second comparison failed for this row"));
-        assertTrue(accepted.saw(new ComparisonOutcome(failed.at(), true)),
+        assertTrue(accepted.comparisons().contains(new ComparisonOutcome(failed.at(), true)),
                 "and the row inside the range answered the same comparison the other way");
-        assertFalse(accepted.saw(failed), "which is not the way this one came out");
+        assertFalse(accepted.comparisons().contains(failed),
+                "which is not the way this one came out");
     }
 
     /**
-     * A comparison recorded as having come out a way is a comparison recorded as reached.
+     * A comparison's number is recorded among the comparisons and nowhere else.
      *
-     * <p>Held by how the recording is written rather than by the emitter keeping to it: one call
-     * records both. So a run that has the first without the second is one nothing produces, and
-     * whoever reads the sites and whoever reads the ways out are reading one run.
+     * <p>What a run leaves behind is a family apiece. There is no second place a comparison could
+     * be written as reached — its having come out a way is that — so nothing has to keep two
+     * records of one comparison in step, and no reader has to work out which family a number
+     * belongs to after the numbering has already said.
      */
     @Test
-    void awayOutImpliesItsComparisonWasReached() {
-        Behavior submit = new Behavior(probed(compiled()));
+    void aComparisonIsRecordedAmongTheComparisonsAndNotAmongTheArms() {
+        Compilation compilation = compiled();
+        CoverageSites.Plan plan = checkedPlanOf(compilation);
+        Behavior submit = new Behavior(probed(compilation), plan.identity());
+        Set<Integer> comparisons = plan.sites().stream()
+                .filter(CoverageSites.ComparisonSite.class::isInstance)
+                .map(site -> ((CoverageSites.ComparisonSite) site).index().raw())
+                .collect(java.util.stream.Collectors.toSet());
+        assertFalse(comparisons.isEmpty(), "the model under test writes comparisons");
 
         for (long cost : new long[] {-1L, 50L, 500L}) {
             Observation seen = submit.observing(cost);
-            for (ComparisonOutcome each : seen.comparisons()) {
-                assertTrue(seen.reached(each.at()),
-                        "a way out of " + each.at() + " was recorded, so it was reached");
+            for (int arm : seen.arms()) {
+                assertFalse(comparisons.contains(arm),
+                        "no comparison of this plan is recorded as an arm: " + arm);
             }
+            assertFalse(seen.comparisons().isEmpty(),
+                    "and every one of these rows evaluated a comparison");
         }
     }
 
     /** The sites of {@code seen} that are arms, which is what a branch measure counts. */
-    private static Set<Integer> armsOf(Observation seen, CoverageSites.Plan plan) {
-        Set<Integer> arms = new LinkedHashSet<>();
-        for (CoverageSites.Site site : plan.sites()) {
-            if (site.isArm() && seen.lit(site.index())) {
-                arms.add(site.index());
-            }
-        }
-        return arms;
+    private static Set<ArmProbe> armsOf(Observation seen, CoverageSites.Plan plan) {
+        return plan.numbering().align(seen).arms();
     }
 
     private static Compilation compiled() {
@@ -184,8 +188,10 @@ class AComparisonSaysWhichWayItCameOutTest {
 
         private final Object instance;
         private final Method apply;
+        private final NumberingIdentity under;
 
-        Behavior(Map<String, ClassFileImage> classes) {
+        Behavior(Map<String, ClassFileImage> classes, NumberingIdentity under) {
+            this.under = under;
             assertNotNull(classes, "the model under test compiles");
             ClassLoader loader = new MemoryClassLoader(classes,
                     AComparisonSaysWhichWayItCameOutTest.class.getClassLoader());
@@ -201,8 +207,9 @@ class AComparisonSaysWhichWayItCameOutTest {
             }
         }
 
+        /** What the classes recorded, as numbers under the numbering they were emitted with. */
         Observation observing(long cost) {
-            Probe.begin();
+            Probe.begin(under);
             try {
                 apply.invoke(instance, cost);
                 return Probe.snapshot();

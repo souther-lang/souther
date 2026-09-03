@@ -49,11 +49,11 @@ public record ControlClaim(ControlPointId at) {
      * it. What this does not say is how many times, which is why a claim is only ever made where a
      * run passes the place once ({@link CoverageSites.Plan#mayRepeat}).
      */
-    public boolean satisfiedBy(Observation seen) {
+    public boolean satisfiedBy(AlignedObservation seen) {
         return switch (at) {
             case ControlPointId.ArmOccurrence arm ->
-                    arm.probe().isPresent() && seen.lit(arm.probe().getAsInt());
-            case ControlPointId.ComparisonPoint point -> seen.saw(point.way());
+                    arm.probe().isPresent() && seen.lit(arm.probe().get());
+            case ControlPointId.ComparisonPoint point -> seen.saw(point.at(), point.held());
         };
     }
 
@@ -61,7 +61,8 @@ public record ControlClaim(ControlPointId at) {
     public String toString() {
         return switch (at) {
             case ControlPointId.ArmOccurrence arm -> "arm " + arm.controlId();
-            case ControlPointId.ComparisonPoint point -> point.way().toString();
+            case ControlPointId.ComparisonPoint point ->
+                    point.at() + (point.held() ? " held" : " failed");
         };
     }
 }

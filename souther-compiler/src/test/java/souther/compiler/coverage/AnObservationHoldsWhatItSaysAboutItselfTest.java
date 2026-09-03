@@ -8,24 +8,57 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * What a record of a run may say, held where the record is made rather than where it is written.
+ * A number a run holds is one the numbering issued to the family it is recorded under.
  *
- * <p>The one producer today records a comparison being reached and the way it came out in a single
- * call, so nothing it makes can break this. That is how the producer is written and producers get
- * rewritten; what every reader of a run is entitled to is that a way out of a comparison means the
- * comparison was reached, because a claim about a place is certified against exactly that.
+ * <p>The two families take their numbers from one counter, so nothing in a number says which of
+ * them it was written for. What says it is which call wrote it down — and the recording keeps them
+ * apart, so the answer is the record's own rather than something a reader works out afterwards by
+ * asking the numbering about a set holding both.
+ *
+ * <p>Held where the recording is made rather than where it is read. A number written into the wrong
+ * family is the emitter having lit a place it was not at, and a reader meeting it later has a run
+ * saying something no run could say: an arm no arm was ever emitted for, or a comparison that never
+ * came out any way at all.
+ *
+ * <p>What is <em>not</em> held here, said rather than left to be looked for: nothing relates the two
+ * sets. A comparison is recorded by the way it came out and by nothing else, so there is no second
+ * record of it to agree with — which is what makes each of them mean something on its own.
  */
 class AnObservationHoldsWhatItSaysAboutItselfTest {
 
-    @Test
-    void awayOutOfAComparisonMeansTheComparisonWasReached() {
-        ComparisonOutcome held = new ComparisonOutcome(new ComparisonEmissionSite(7), true);
+    /** A comparison at 0 and an arm at 1, so each family has a number the other does not. */
+    private static final SiteNumbering NUMBERING =
+            Numberings.of(Numberings.Family.COMPARISON, Numberings.Family.ARM);
 
-        assertThrows(IllegalArgumentException.class,
-                () -> new Observation(Set.of(), Set.of(held)),
-                "a run that saw a comparison come out one way reached it");
-        assertTrue(new Observation(Set.of(7), Set.of(held)).saw(held),
-                "and one that holds both says so");
+    private static final NumberingIdentity UNDER = NUMBERING.identity();
+
+    @Test
+    void aComparisonsNumberIsNotAnArmARunPassed() {
+        IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
+                () -> new Observation(UNDER, Set.of(0), Set.of()));
+
+        assertTrue(refused.getMessage().contains("recorded as an arm"), refused.getMessage());
+    }
+
+    @Test
+    void anArmsNumberIsNoComparisonARunEvaluated() {
+        IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
+                () -> new Observation(UNDER, Set.of(),
+                        Set.of(new ComparisonOutcome(1, true))));
+
+        assertTrue(refused.getMessage().contains("recorded as a comparison"),
+                refused.getMessage());
+    }
+
+    /** And each family holds its own, which is what says the refusals above are about the family
+     *  and not about holding anything at all. */
+    @Test
+    void andEachFamilyHoldsItsOwn() {
+        Observation seen = new Observation(UNDER, Set.of(1),
+                Set.of(new ComparisonOutcome(0, true)));
+
+        assertTrue(seen.arms().contains(1));
+        assertTrue(seen.comparisons().contains(new ComparisonOutcome(0, true)));
     }
 
     /**
@@ -37,11 +70,10 @@ class AnObservationHoldsWhatItSaysAboutItselfTest {
      */
     @Test
     void bothWaysOutOfOneComparisonAreARunThatCameBackToIt() {
-        ComparisonEmissionSite twice = new ComparisonEmissionSite(3);
-        Observation seen = new Observation(Set.of(3),
-                Set.of(new ComparisonOutcome(twice, true), new ComparisonOutcome(twice, false)));
+        Observation seen = new Observation(UNDER, Set.of(),
+                Set.of(new ComparisonOutcome(0, true), new ComparisonOutcome(0, false)));
 
-        assertTrue(seen.saw(new ComparisonOutcome(twice, true)));
-        assertTrue(seen.saw(new ComparisonOutcome(twice, false)));
+        assertTrue(seen.comparisons().contains(new ComparisonOutcome(0, true)));
+        assertTrue(seen.comparisons().contains(new ComparisonOutcome(0, false)));
     }
 }

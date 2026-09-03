@@ -1,5 +1,6 @@
 package souther.compiler.report;
 
+import souther.compiler.coverage.ArmProbe;
 import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.fmt.Formatter;
 import souther.compiler.publish.PublishedIncompleteness;
@@ -306,8 +307,8 @@ public final class GeneratedRows {
      * written. An arm the search composed a row for is one a finding named, the plan being made of
      * them, so there is a name here for every arm a row is offered at.
      */
-    private static Map<Integer, String> armNames(Adequacy.Filling filling) {
-        Map<Integer, String> out = new LinkedHashMap<>();
+    private static Map<ArmProbe, String> armNames(Adequacy.Filling filling) {
+        Map<ArmProbe, String> out = new LinkedHashMap<>();
         if (filling == null) {
             // A behavior with no search of its own, which is one that composed a row a declaration
             // is owed and nothing else. A row at a line is offered without a name, so there is no
@@ -329,10 +330,11 @@ public final class GeneratedRows {
      * two things, and `a x b` spelt over the pair reads as an obligation nobody raised — the same
      * fault as naming a row for everything it turns out to settle, arriving from the other side.
      */
-    private static List<String> named(List<Generator.Purpose> purposes, Map<Integer, String> arms) {
+    private static List<String> named(List<Generator.Purpose> purposes,
+                                      Map<ArmProbe, String> arms) {
         List<String> out = new ArrayList<>();
         for (Generator.Purpose purpose : purposes) {
-            if (purpose instanceof Generator.Purpose.ForAnArm(int probe)) {
+            if (purpose instanceof Generator.Purpose.ForAnArm(ArmProbe probe)) {
                 // Left unnamed where nothing named the arm, which is the state of a row nobody has
                 // named yet and is what the language writes for one. A name invented here would be
                 // a second vocabulary for an arm.
@@ -362,7 +364,7 @@ public final class GeneratedRows {
     private static Map<String, List<Offered>> named(Offering offering) {
         Map<String, List<Offered>> out = new LinkedHashMap<>();
         offering.rowsByBehavior().forEach((behavior, rows) -> {
-            Map<Integer, String> arms = armNames(offering.searched().get(behavior));
+            Map<ArmProbe, String> arms = armNames(offering.searched().get(behavior));
             List<Offered> here = new ArrayList<>();
             for (OfferedRow row : rows) {
                 Offered offered = new Offered(row.key().inputs(), List.of());

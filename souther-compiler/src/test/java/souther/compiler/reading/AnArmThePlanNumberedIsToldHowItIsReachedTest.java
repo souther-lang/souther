@@ -1,11 +1,13 @@
 package souther.compiler.reading;
 
+import souther.compiler.coverage.ArmProbe;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.CoverageSites;
+import souther.compiler.coverage.Numberings;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
@@ -226,7 +228,11 @@ class AnArmThePlanNumberedIsToldHowItIsReachedTest {
         Read read = read(NESTED);
 
         assertInstanceOf(PathAccess.Ways.class, read.answer.armAt(read.armSites().iterator().next()));
-        assertThrows(IllegalArgumentException.class, () -> read.answer.armAt(-1));
+        // An arm of another numbering, which is what "no arm of this behavior" can be now that a
+        // place is an address rather than a number: a number this read never issued cannot be
+        // spelled, and one that addresses a place somewhere else is refused here.
+        assertThrows(IllegalArgumentException.class,
+                () -> read.answer.armAt(Numberings.arm(1, 0)));
     }
 
     /** What the conditions of one way say, as the report of a class would spell them. */
@@ -237,8 +243,8 @@ class AnArmThePlanNumberedIsToldHowItIsReachedTest {
     private record Read(CoverageRead.Read answer, CoverageSites.Plan plan, String behavior) {
 
         /** The arms of the behavior, by the numbers the plan gave them. */
-        Set<Integer> armSites() {
-            return plan.arms(behavior).stream().map(CoverageSites.Site::index)
+        Set<ArmProbe> armSites() {
+            return plan.arms(behavior).stream().map(CoverageSites.ArmSite::index)
                     .collect(Collectors.toCollection(java.util.LinkedHashSet::new));
         }
     }

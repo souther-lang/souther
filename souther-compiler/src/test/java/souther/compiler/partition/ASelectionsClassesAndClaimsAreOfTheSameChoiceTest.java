@@ -1,13 +1,18 @@
 package souther.compiler.partition;
 
+import souther.compiler.coverage.AlignedObservation;
+import souther.compiler.coverage.ArmProbe;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.coverage.ControlClaim;
 import souther.compiler.coverage.ControlPointId;
-import souther.compiler.coverage.Observation;
+import souther.compiler.coverage.Numberings;
+import souther.compiler.coverage.Runs;
+import souther.compiler.coverage.SiteNumbering;
 
+import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.OptionalInt;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -40,19 +45,28 @@ class ASelectionsClassesAndClaimsAreOfTheSameChoiceTest {
         return new InteractionCells.Cell(new boolean[][] {allowed});
     }
 
+    /** The numbering this fixture's places are of. One of them, so that two places written here as
+     *  the same number are the same place. */
+    private static final SiteNumbering NUMBERING = Numberings.ofArms(32);
+
+    private static ArmProbe probe(int raw) {
+        return NUMBERING.arm(raw);
+    }
+
     /** A place a run can be recorded at, told from its neighbours by the probe it carries. */
     private static ControlClaim at(int probe) {
-        return ControlClaim.of(new ControlPointId.ArmOccurrence(probe, OptionalInt.of(probe),
-                        null, null))
+        return ControlClaim.of(new ControlPointId.ArmOccurrence(probe,
+                        java.util.Optional.of(probe(probe)), null, null))
                 .orElseThrow(() -> new AssertionError("an arm with a probe can be claimed"));
     }
 
-    private static Observation lit(int... probes) {
-        java.util.Set<Integer> taken = new java.util.LinkedHashSet<>();
+    /** A run read as having been at those places of this fixture's numbering. */
+    private static AlignedObservation lit(int... probes) {
+        Set<ArmProbe> arms = new LinkedHashSet<>();
         for (int each : probes) {
-            taken.add(each);
+            arms.add(probe(each));
         }
-        return new Observation(taken, java.util.Set.of());
+        return Runs.at(NUMBERING, arms);
     }
 
     /**

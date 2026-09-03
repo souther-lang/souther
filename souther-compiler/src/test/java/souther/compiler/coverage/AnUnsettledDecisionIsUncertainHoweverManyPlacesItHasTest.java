@@ -35,10 +35,19 @@ class AnUnsettledDecisionIsUncertainHoweverManyPlacesItHasTest {
     private static final CoverageOrigin FORK =
             CoverageOrigin.written("m", 0, CoverageConstruct.IF);
 
-    private static CoverageSites.Site arm(int index, DecidedBy decided) {
-        return new CoverageSites.Site("b",
-                new SourceOutcome.Held(new SourceOutcome.HeldBy.Condition()), null, index, index,
-                new CoverageSites.Obligation("b", FORK, index, decided));
+    /** Three places of one numbering, so that arms put in one list are addresses of one. */
+    private static final java.util.Map<Integer, ArmProbe> PLACES = Numberings.arms(3);
+
+    private static CoverageSites.ArmSite arm(int index, DecidedBy decided) {
+        return arm(index, FORK, index, decided);
+    }
+
+    private static CoverageSites.ArmSite arm(int index, CoverageOrigin fork, int part,
+                                             DecidedBy decided) {
+        return new CoverageSites.ArmSite("b",
+                new SourceOutcome.Held(new SourceOutcome.HeldBy.Condition()), null,
+                PLACES.get(index), index,
+                new CoverageSites.Obligation("b", fork, part, decided));
     }
 
     /** Two arms of one fork, neither of them reached. */
@@ -100,10 +109,7 @@ class AnUnsettledDecisionIsUncertainHoweverManyPlacesItHasTest {
         CoverageOrigin beside = CoverageOrigin.written("m", 1, CoverageConstruct.IF);
         Adequacy.BranchEvidence measured = Adequacy.BranchEvidence.measured("b",
                 List.of(arm(0, DecidedBy.NOT_SAID), arm(1, DecidedBy.NOT_SAID),
-                        new CoverageSites.Site("b",
-                                new SourceOutcome.Held(new SourceOutcome.HeldBy.Condition()), null,
-                                2, 2, new CoverageSites.Obligation("b", beside, 0,
-                                        DecidedBy.THE_DECLARATION))),
+                        arm(2, beside, 0, DecidedBy.THE_DECLARATION)),
                 Set.of(), souther.compiler.query.Adequacy.NOTHING_PROVEN, WeakeningSet.none());
 
         assertEquals(1, measured.arms().unmet().size(),

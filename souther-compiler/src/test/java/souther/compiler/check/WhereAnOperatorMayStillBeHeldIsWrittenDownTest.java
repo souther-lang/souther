@@ -109,6 +109,12 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                     "the resolved tree, which is where an operator is written down"),
             new Held("souther.compiler.core.Core.Binary#op",
                     "the tree a check produces, which carries what the source wrote"),
+            new Held("souther.compiler.coverage.Settled.Operator#op",
+                    "what a comparison of a body compares by, as part of saying what that body"
+                            + " does: two bodies alike but for an operator do different things, so"
+                            + " a numbering of one is not a numbering of the other. Copied out of"
+                            + " the tree rather than read for anything — nothing here asks what the"
+                            + " operator means, only whether two of them are the same"),
 
             new Held("souther.compiler.check.ComparisonPlacement.of",
                     "the one reading of an operator for what it places"),
@@ -160,6 +166,8 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                             + " operators one of them may be keyed by to those answering a number"),
             new Held("souther.compiler.coverage.SourceOutcome.Compared.<init>",
                     "makes the outcome a report shows an operator for"),
+            new Held("souther.compiler.coverage.Settled.Operator.<init>",
+                    "makes the word a numbering says a comparison of a body compares by"),
             new Held("souther.compiler.semantics.Arithmetic.TheOperator.<init>",
                     "makes the fact that a library operation computes what an operator computes,"
                             + " and is what limits that to the operators answering a number"),
@@ -318,6 +326,8 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                     "hands back the operator an arithmetic meaning is keyed by"),
             new Held("souther.compiler.coverage.SourceOutcome.Compared.op",
                     "hands back the operator an outcome was written with"),
+            new Held("souther.compiler.coverage.Settled.Operator.op",
+                    "hands back the operator a body's comparison compares by"),
             new Held("souther.compiler.semantics.Arithmetic.TheOperator.op",
                     "hands back the operator a library operation computes"),
             new Held("souther.compiler.semantics.NumericResult.TheOtherCaseWhen.op",

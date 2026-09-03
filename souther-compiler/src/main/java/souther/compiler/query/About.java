@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.coverage.CoverageSites;
 import souther.compiler.types.TypeSymbol;
 
 /**
@@ -364,7 +365,7 @@ public sealed interface About {
      * one from another is the obligation, and this says so by being an {@link OfAnObligation}.
      */
     record AnArmNoRowGoesThrough(
-            souther.compiler.coverage.CoverageSites.Site arm) implements OfAnObligation {
+            CoverageSites.ArmSite arm) implements OfAnObligation {
 
         public AnArmNoRowGoesThrough {
             java.util.Objects.requireNonNull(arm, "a finding is about something");

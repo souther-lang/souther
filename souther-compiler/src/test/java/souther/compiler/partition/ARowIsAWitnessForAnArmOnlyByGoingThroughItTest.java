@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.coverage.ArmProbe;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.ast.Hir;
@@ -8,11 +9,13 @@ import souther.compiler.check.RuleReadings;
 import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
 import souther.compiler.core.Core;
-import souther.compiler.coverage.ComparisonOutcome;
+import souther.compiler.coverage.AlignedObservation;
 import souther.compiler.coverage.ControlClaim;
 import souther.compiler.coverage.ControlPointId;
 import souther.compiler.coverage.CoverageSites;
-import souther.compiler.coverage.Observation;
+import souther.compiler.coverage.SiteNumbering;
+import souther.compiler.coverage.Runs;
+import souther.compiler.coverage.SeenComparison;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
@@ -65,7 +68,7 @@ class ARowIsAWitnessForAnArmOnlyByGoingThroughItTest {
     void theWayIntoAComparisonsArmNamesTheComparisonAndNotTheArm() {
         Model model = Model.of(GATE);
 
-        for (Map.Entry<Integer, PathAccess> each : model.read().arms().entrySet()) {
+        for (Map.Entry<ArmProbe, PathAccess> each : model.read().arms().entrySet()) {
             assertInstanceOf(PathAccess.Ways.class, each.getValue(),
                     "both arms are reached: " + each);
             for (WayIn way : ((PathAccess.Ways) each.getValue()).ways()) {
@@ -89,15 +92,15 @@ class ARowIsAWitnessForAnArmOnlyByGoingThroughItTest {
     @Test
     void aRunThatTookTheWayButNotTheArmIsNoWitness() {
         Model model = Model.of(GATE);
-        Set<Integer> everyArm = model.read().arms().keySet();
+        Set<ArmProbe> everyArm = model.read().arms().keySet();
 
         FillResult filled = Generator.fill(model.subject(), List.of(),
                 Generator.CandidateCheck.ANY, model.read(),
                 // Seen doing everything the ways in name, and seen at no arm at all.
-                _ -> new Generator.Watched.Ran(waysWithoutTheArms(model.read())),
+                _ -> new Generator.Watched.Ran(waysWithoutTheArms(model)),
                 List.of(), List.of(), List.copyOf(everyArm), Budgets.generation());
 
-        for (int probe : everyArm) {
+        for (ArmProbe probe : everyArm) {
             assertFalse(filled.discharge().at(new Generator.ArmOwed(probe)) instanceof ArmDisposition.Built,
                     () -> "no row goes through an arm nothing was seen at: " + filled.discharge().arms().values());
         }
@@ -110,11 +113,11 @@ class ARowIsAWitnessForAnArmOnlyByGoingThroughItTest {
     @Test
     void aRunSeenAtTheArmIsAWitness() {
         Model model = Model.of(GATE);
-        Set<Integer> everyArm = model.read().arms().keySet();
+        Set<ArmProbe> everyArm = model.read().arms().keySet();
 
         FillResult filled = Generator.fill(model.subject(), List.of(),
                 Generator.CandidateCheck.ANY, model.read(),
-                _ -> new Generator.Watched.Ran(everywhere(model.read(), everyArm)),
+                _ -> new Generator.Watched.Ran(everywhere(model, everyArm)),
                 List.of(), List.of(), List.copyOf(everyArm), Budgets.generation());
 
         assertTrue(filled.discharge().arms().values().stream().allMatch(ArmDisposition.Built.class::isInstance),
@@ -122,24 +125,24 @@ class ARowIsAWitnessForAnArmOnlyByGoingThroughItTest {
     }
 
     /** Everything the ways in name, and nothing at any arm. */
-    private static Observation waysWithoutTheArms(CoverageRead.Read read) {
-        Set<Integer> taken = new LinkedHashSet<>();
-        Set<ComparisonOutcome> ways = new LinkedHashSet<>();
-        collect(read, taken, ways);
-        taken.removeAll(read.arms().keySet());
-        return new Observation(taken, ways);
+    private static AlignedObservation waysWithoutTheArms(Model model) {
+        Set<ArmProbe> taken = new LinkedHashSet<>();
+        Set<SeenComparison> ways = new LinkedHashSet<>();
+        collect(model.read(), taken, ways);
+        taken.removeAll(model.read().arms().keySet());
+        return Runs.of(model.numbering(), taken, ways);
     }
 
     /** The same, and the arms as well. */
-    private static Observation everywhere(CoverageRead.Read read, Set<Integer> arms) {
-        Set<Integer> taken = new LinkedHashSet<>(arms);
-        Set<ComparisonOutcome> ways = new LinkedHashSet<>();
-        collect(read, taken, ways);
-        return new Observation(taken, ways);
+    private static AlignedObservation everywhere(Model model, Set<ArmProbe> arms) {
+        Set<ArmProbe> taken = new LinkedHashSet<>(arms);
+        Set<SeenComparison> ways = new LinkedHashSet<>();
+        collect(model.read(), taken, ways);
+        return Runs.of(model.numbering(), taken, ways);
     }
 
-    private static void collect(CoverageRead.Read read, Set<Integer> taken,
-                                Set<ComparisonOutcome> ways) {
+    private static void collect(CoverageRead.Read read, Set<ArmProbe> taken,
+                                Set<SeenComparison> ways) {
         for (PathAccess access : read.arms().values()) {
             if (!(access instanceof PathAccess.Ways found)) {
                 continue;
@@ -147,18 +150,17 @@ class ARowIsAWitnessForAnArmOnlyByGoingThroughItTest {
             for (WayIn way : found.ways()) {
                 for (ControlClaim claim : way.claims()) {
                     switch (claim.at()) {
-                        case ControlPointId.ArmOccurrence arm -> taken.add(arm.probe().getAsInt());
-                        case ControlPointId.ComparisonPoint point -> {
-                            taken.add(point.at().value());
-                            ways.add(point.way());
-                        }
+                        case ControlPointId.ArmOccurrence arm -> taken.add(arm.probe().get());
+                        case ControlPointId.ComparisonPoint point ->
+                                ways.add(new SeenComparison(point.at(), point.held()));
                     }
                 }
             }
         }
     }
 
-    private record Model(MeasuredInput subject, CoverageRead.Read read) {
+    private record Model(MeasuredInput subject, CoverageRead.Read read,
+                         SiteNumbering numbering) {
 
         static Model of(String source) {
             Compilation compilation = Compilation.ofSource(source, "Main");
@@ -188,7 +190,7 @@ class ARowIsAWitnessForAnArmOnlyByGoingThroughItTest {
                     "and divides it into classes a row can be composed at");
             return new Model(MeasuredInput.of(spec.name(), inputs.reading(rules),
                     partitioning),
-                    CoverageRead.of("fee", body, plan, inputs, rules));
+                    CoverageRead.of("fee", body, plan, inputs, rules), plan.numbering());
         }
     }
 }

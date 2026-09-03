@@ -1,5 +1,8 @@
 package souther.compiler.partition;
 
+import souther.compiler.coverage.ArmProbe;
+import souther.compiler.coverage.Numberings;
+
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.DefaultStdlib;
@@ -41,9 +44,16 @@ class AFillIsTotalOverThePlanItWasAskedWithTest {
     private static final Generator.ClassOwed ANOTHER_CLASS =
             new Generator.ClassOwed(new AxisId("fee", "days"), "days/high");
 
-    private static final Generator.ArmOwed AN_ARM = new Generator.ArmOwed(1);
+    /** Two places of one numbering, so that the arms below are addresses of one. */
+    private static final Map<Integer, ArmProbe> PLACES = Numberings.arms(3);
 
-    private static final Generator.ArmOwed ANOTHER_ARM = new Generator.ArmOwed(2);
+    private static final ArmProbe ARM = PLACES.get(1);
+
+    private static final ArmProbe ANOTHER = PLACES.get(2);
+
+    private static final Generator.ArmOwed AN_ARM = new Generator.ArmOwed(ARM);
+
+    private static final Generator.ArmOwed ANOTHER_ARM = new Generator.ArmOwed(ANOTHER);
 
     private static final Generator.UnresolvedCombination NOTHING_CAME_OF_IT =
             new Generator.UnresolvedCombination(List.of("days=low"),

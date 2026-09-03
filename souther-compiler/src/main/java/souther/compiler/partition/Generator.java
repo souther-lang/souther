@@ -1,5 +1,9 @@
 package souther.compiler.partition;
 
+import souther.compiler.coverage.AlignedObservation;
+import souther.compiler.coverage.ArmProbe;
+import souther.compiler.coverage.ControlClaim;
+import souther.compiler.coverage.ControlPointId;
 import souther.compiler.check.ReadingPolicy;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.ast.Hir;
@@ -171,7 +175,7 @@ public final class Generator {
          * name made here would be a second vocabulary for one thing, free to drift from the one the
          * finding is written in.
          */
-        record ForAnArm(int probe) implements Purpose {
+        record ForAnArm(ArmProbe probe) implements Purpose {
 
             @Override
             public List<String> labels() {
@@ -740,7 +744,7 @@ public final class Generator {
         /** It ran, something was recording, and this is what it was seen doing. Also what a row
          *  that aborted part way comes back as: it went where it went before it stopped, and that
          *  is recorded. */
-        record Ran(souther.compiler.coverage.Observation seen) implements Watched {}
+        record Ran(AlignedObservation seen) implements Watched {}
 
         /**
          * Nothing here can say what it did.
@@ -818,7 +822,7 @@ public final class Generator {
      * this takes the answer rather than the collection it was kept in.
      */
     public static GenerationPlan planOver(MeasuredInput subject, List<ClassOwed> classes,
-                                          List<Integer> arms) {
+                                          List<ArmProbe> arms) {
         return new GenerationPlan(subject, classes, arms.stream().map(ArmOwed::new).toList());
     }
 
@@ -834,7 +838,7 @@ public final class Generator {
                                         souther.compiler.reading.CoverageRead.Read read,
                                         Trial trial, List<Baseline> baselines,
                                         List<ClassOwed> classesOwed,
-                                        List<Integer> armsOwed,
+                                        List<ArmProbe> armsOwed,
                                         AdequacyPolicy.OfTheGeneration budget) {
         return fill(planOver(subject, classesOwed, armsOwed), existing, check, read, trial,
                 baselines, budget);
@@ -860,10 +864,10 @@ public final class Generator {
      * nothing to tell that from an arm nothing could be composed for. An arm asked for and not
      * found says what each place it was looked in came to.
      */
-    public static Set<Integer> everyArmACombinationMayTake(
+    public static Set<ArmProbe> everyArmACombinationMayTake(
             MeasuredInput subject, List<souther.compiler.reading.Interaction> groups,
             AdequacyPolicy.OfTheGeneration budget) {
-        Set<Integer> out = new LinkedHashSet<>();
+        Set<ArmProbe> out = new LinkedHashSet<>();
         InteractionCells.Offered offered =
                 InteractionCells.of(groups, ordered(subject).axes(), budget);
         for (InteractionCells.Group group : offered.groups()) {
@@ -895,7 +899,7 @@ public final class Generator {
      * spelled as a bare {@code int} put the obligations into two vocabularies, and anything holding
      * both had to say which kind of thing a number was every time it read one.
      */
-    public record ArmOwed(int probe) {}
+    public record ArmOwed(ArmProbe probe) {}
 
     /**
      * Every class of every position no row the author wrote sits in.
@@ -952,7 +956,7 @@ public final class Generator {
                                         AdequacyPolicy.OfTheGeneration budget) {
         MeasuredInput subject = plan.subject();
         List<ClassOwed> classesOwed = plan.classesOwed();
-        List<Integer> armsOwed = plan.armsOwed().stream().map(ArmOwed::probe).toList();
+        List<ArmProbe> armsOwed = plan.armsOwed().stream().map(ArmOwed::probe).toList();
         MeasuredInput.MeasuredAxes ordered = ordered(subject);
         // A position where some row's value could not be read is a position nothing is known about.
         // A row generated for a class there may be a row that is already written, and telling an
@@ -1073,13 +1077,13 @@ public final class Generator {
         // row found there arrives at the arm and exercises the combination at once, so it is looked
         // in first — which is a preference between two answers and not one of them standing in for
         // the other. An arm no combination is over is answered from its way in all the same.
-        Set<Integer> left = new LinkedHashSet<>(armsOwed);
-        Map<Integer, RowId> built = new LinkedHashMap<>();
-        Map<Integer, List<UnresolvedCombination>> failed = new LinkedHashMap<>();
+        Set<ArmProbe> left = new LinkedHashSet<>(armsOwed);
+        Map<ArmProbe, RowId> built = new LinkedHashMap<>();
+        Map<ArmProbe, List<UnresolvedCombination>> failed = new LinkedHashMap<>();
         // Arms the row budget ran out before, which is what the search stopping looks like from an
         // arm. Told apart from an arm with nowhere to look, because raising the budget changes one
         // of them and nothing about the other.
-        Set<Integer> cutOff = new LinkedHashSet<>();
+        Set<ArmProbe> cutOff = new LinkedHashSet<>();
         // And the arms behind a group nothing walked, which is a second silence with a different
         // cause. The one above is a budget that ran out with the arm still owed; this is a group
         // the offer never opened, and raising the budget does not reach it.
@@ -1089,12 +1093,12 @@ public final class Generator {
         // for one, so a walk per arm builds every cell of it again for an answer that does not
         // depend on which arm is asking.
         List<WhereToLook>cells = placesFor(new LinkedHashSet<>(armsOwed), offered);
-        Set<Integer> notOffered = new LinkedHashSet<>();
+        Set<ArmProbe> notOffered = new LinkedHashSet<>();
         // Which arms each held-back group could have been searched at, kept per group so that the
         // summary at the end can be counted off the entries rather than worked out a second way.
-        List<List<Integer>> behindEachHeldGroup = new ArrayList<>();
+        List<List<ArmProbe>> behindEachHeldGroup = new ArrayList<>();
         for (InteractionCells.NotOffered held : offered.notOffered()) {
-            List<Integer> behindIt = armsIn(held.claims());
+            List<ArmProbe> behindIt = armsIn(held.claims());
             behindEachHeldGroup.add(behindIt);
             notOffered.addAll(behindIt);
         }
@@ -1102,7 +1106,7 @@ public final class Generator {
         // What each set of values did when it was run, so that a row two arms were both composed
         // the same values for is applied once.
         Map<List<String>, Watched> ran = new LinkedHashMap<>();
-        for (int probe : armsOwed) {
+        for (ArmProbe probe : armsOwed) {
             if (!left.contains(probe)) {
                 // A row already composed was watched going through it, which is the one thing that
                 // says so. Nothing is composed a second time for what a run was seen doing.
@@ -1123,7 +1127,7 @@ public final class Generator {
                 // cell claims the arms a reading believes a row filling it takes, and discharging
                 // them on that belief is the reading certifying itself (issue #1009).
                 GeneratedRow row;
-                List<Integer> also;
+                List<ArmProbe> also;
                 switch (place.tried) {
                     case Witness.NoCombination none -> {
                         noRow(unresolved, failed, probe, new UnresolvedCombination(List.of(),
@@ -1193,7 +1197,7 @@ public final class Generator {
         // nothing about the ones nobody got to, and an arm answered by the first alone was reported
         // as settled by the model on the strength of a search that stopped.
         Map<ArmOwed, ArmDisposition> armAnswers = new LinkedHashMap<>();
-        for (int probe : armsOwed) {
+        for (ArmProbe probe : armsOwed) {
             RowId row = built.get(probe);
             List<UnresolvedCombination> why = new ArrayList<>(
                     failed.getOrDefault(probe, List.of()));
@@ -1234,7 +1238,7 @@ public final class Generator {
         // is not what the limit did; asked about nothing behind it, the group costs this run
         // nothing and is not named (issue #967).
         int heldBackAndAskedAbout = 0;
-        for (List<Integer> behindIt : behindEachHeldGroup) {
+        for (List<ArmProbe> behindIt : behindEachHeldGroup) {
             if (behindIt.stream().anyMatch(armsOwed::contains)) {
                 heldBackAndAskedAbout++;
             }
@@ -1286,7 +1290,7 @@ public final class Generator {
      * a comparison is one of those — it is a place a run passes and not a way through a fork, so
      * nothing about an arm is owed for it.
      */
-    private static List<Integer> claimed(CellSelection selection) {
+    private static List<ArmProbe> claimed(CellSelection selection) {
         return armsIn(selection.claims());
     }
 
@@ -1306,11 +1310,11 @@ public final class Generator {
 
         private final CellSelection at;
 
-        private final List<Integer> claims;
+        private final List<ArmProbe> claims;
 
         private Witness tried;
 
-        private WhereToLook(CellSelection at, List<Integer> claims) {
+        private WhereToLook(CellSelection at, List<ArmProbe> claims) {
             this.at = at;
             this.claims = claims;
         }
@@ -1324,7 +1328,8 @@ public final class Generator {
      * search space nobody asked about — which is what the cells were before a finding decided what
      * to look for.
      */
-    private static List<WhereToLook>placesFor(Set<Integer> armsOwed, InteractionCells.Offered offered) {
+    private static List<WhereToLook>placesFor(Set<ArmProbe> armsOwed,
+                                              InteractionCells.Offered offered) {
         List<WhereToLook>out = new ArrayList<>();
         for (InteractionCells.Group group : offered.groups()) {
             for (int index = 0; index < group.size(); index++) {
@@ -1334,7 +1339,7 @@ public final class Generator {
                 if (selection == null) {
                     continue;
                 }
-                List<Integer> claims = claimed(selection);
+                List<ArmProbe> claims = claimed(selection);
                 if (claims.stream().anyMatch(armsOwed::contains)) {
                     out.add(new WhereToLook(selection, claims));
                 }
@@ -1358,7 +1363,8 @@ public final class Generator {
      * for from one every attempt failed at.
      */
     private static List<WhereToLook>whereToLookFor(
-            int probe, souther.compiler.reading.CoverageRead.Read read, List<WhereToLook>cells,
+            ArmProbe probe, souther.compiler.reading.CoverageRead.Read read,
+            List<WhereToLook>cells,
             List<Axis> axes) {
         List<WhereToLook>out = new ArrayList<>();
         for (WhereToLook place : cells) {
@@ -1394,7 +1400,7 @@ public final class Generator {
      * account.
      */
     private static void noRow(List<UnresolvedCombination> unresolved,
-                              Map<Integer, List<UnresolvedCombination>> failed, int probe,
+                              Map<ArmProbe, List<UnresolvedCombination>> failed, ArmProbe probe,
                               UnresolvedCombination why) {
         if (!unresolved.contains(why)) {
             unresolved.add(why);
@@ -1409,11 +1415,11 @@ public final class Generator {
      * arms — every arm on the way to the one it was composed for is one it takes — and the arm it
      * was composed for is left out here because it is already answered.
      */
-    private static List<Integer> alsoThrough(souther.compiler.coverage.Observation seen,
-                                             Set<Integer> left, int probe) {
-        List<Integer> out = new ArrayList<>();
-        for (int each : left) {
-            if (each != probe && seen.taken().contains(each)) {
+    private static List<ArmProbe> alsoThrough(AlignedObservation seen,
+                                              Set<ArmProbe> left, ArmProbe probe) {
+        List<ArmProbe> out = new ArrayList<>();
+        for (ArmProbe each : left) {
+            if (!each.equals(probe) && seen.lit(each)) {
                 out.add(each);
             }
         }
@@ -1470,12 +1476,13 @@ public final class Generator {
 
     /** The arms a list of claims names, by the numbers the plan gave them. Shared with the groups
      *  the limit held back, which have claims and no cell to read them off. */
-    private static List<Integer> armsIn(List<souther.compiler.coverage.ControlClaim> claims) {
-        List<Integer> out = new ArrayList<>();
-        for (souther.compiler.coverage.ControlClaim claim : claims) {
-            if (claim.at() instanceof souther.compiler.coverage.ControlPointId.ArmOccurrence arm
+    private static List<ArmProbe> armsIn(
+            List<ControlClaim> claims) {
+        List<ArmProbe> out = new ArrayList<>();
+        for (ControlClaim claim : claims) {
+            if (claim.at() instanceof ControlPointId.ArmOccurrence arm
                     && arm.probe().isPresent()) {
-                out.add(arm.probe().getAsInt());
+                out.add(arm.probe().get());
             }
         }
         return out;
@@ -3067,7 +3074,7 @@ public final class Generator {
      */
     private static Witness witnessFor(MeasuredInput.MeasuredAxes axes,
                                       CellSelection selection, CandidateCheck check, Trial trial,
-                                      Map<List<String>, Watched> applied, List<Integer> takes,
+                                      Map<List<String>, Watched> applied, List<ArmProbe> takes,
                                       List<ResolvedOrigin> origins) {
         Reading reading =
                 new Reading(axes, selection, check, trial, applied, takes, origins);
@@ -3101,7 +3108,7 @@ public final class Generator {
 
         private final Map<List<String>, Watched> applied;
 
-        private final List<Integer> takes;
+        private final List<ArmProbe> takes;
 
         private final List<ResolvedOrigin> origins;
 
@@ -3130,7 +3137,7 @@ public final class Generator {
 
         private Reading(MeasuredInput.MeasuredAxes axes, CellSelection selection,
                         CandidateCheck check, Trial trial, Map<List<String>, Watched> applied,
-                        List<Integer> takes, List<ResolvedOrigin> origins) {
+                        List<ArmProbe> takes, List<ResolvedOrigin> origins) {
             this.axes = axes;
             this.selection = selection;
             this.check = check;

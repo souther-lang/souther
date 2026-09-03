@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.coverage.ArmProbe;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.RunSensitivity;
 import souther.compiler.partition.ClosureGap;
@@ -252,7 +253,7 @@ public sealed interface Weakening {
      * is evidence that an analysis the numbers were computed with does not hold, which is why it is
      * an arm of its own and never one of {@link ObservationIncomplete}.
      */
-    record ProofContradicted(String behavior, int probe) implements Weakening {
+    record ProofContradicted(String behavior, ArmProbe probe) implements Weakening {
 
         /** An analysis that does not hold is one that does not hold however much a run allows. */
         @Override

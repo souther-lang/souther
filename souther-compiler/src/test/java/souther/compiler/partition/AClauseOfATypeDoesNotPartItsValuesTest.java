@@ -1,5 +1,8 @@
 package souther.compiler.partition;
 
+import souther.compiler.coverage.ComparisonEmissionSite;
+import souther.compiler.coverage.Numberings;
+
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.AReadingOfAPosition;
@@ -183,6 +186,10 @@ class AClauseOfATypeDoesNotPartItsValuesTest {
                 Optional.of(new ClauseName("cap")))), 0, EndSide.LOWER, true);
     }
 
+    /** The place this fixture's comparison is at. One of them, so that two readings built here
+     *  address one place. */
+    private static final ComparisonEmissionSite WHERE = Numberings.comparison(1, 0);
+
     private static OriginRef aComparison() {
         return new OriginRef.ComparisonOrigin(new RuleRef.Comparison("weigh",
                 new souther.compiler.types.CoverageOrigin("example.weigh", 2, 0,
@@ -193,7 +200,7 @@ class AClauseOfATypeDoesNotPartItsValuesTest {
                         new souther.compiler.check.RuleCitation.WrittenAt(
                                 souther.compiler.diag.Citation.of(
                                         new souther.compiler.diag.SourcePos(3, 5))),
-                        new souther.compiler.coverage.ComparisonEmissionSite(0)),
+                        WHERE),
                 new LineFacts(new souther.compiler.check.ComparisonClaim.Cut(Towards.BELOW, true)));
     }
 }

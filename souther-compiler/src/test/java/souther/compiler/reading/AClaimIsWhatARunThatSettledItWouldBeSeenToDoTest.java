@@ -8,7 +8,9 @@ import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.CoverageSites;
+import souther.compiler.coverage.AlignedObservation;
 import souther.compiler.coverage.Observation;
+import souther.compiler.coverage.SiteNumbering;
 import souther.compiler.coverage.Probe;
 import souther.compiler.generated.MemoryClassLoader;
 import souther.compiler.inputs.InputDomain;
@@ -103,7 +105,7 @@ class AClaimIsWhatARunThatSettledItWouldBeSeenToDoTest {
         Model model = Model.of(FEE, "chargeFor");
         Interaction group = model.groups().get(0);
 
-        Observation seen = model.observing(500L, 50L);
+        AlignedObservation seen = model.observing(500L, 50L);
         assertEquals(List.of(), group.reachClaims().stream()
                         .filter(claim -> !claim.satisfiedBy(seen)).toList(),
                 "a row that reaches the meeting did everything the way in names");
@@ -116,7 +118,7 @@ class AClaimIsWhatARunThatSettledItWouldBeSeenToDoTest {
      * they are not ways of settling the same thing; none holding would say the reading named
      * something no row reaches, which is the shape every misreading of a group ends in.
      */
-    private static Map<String, Boolean> takenBy(Interaction group, Observation seen) {
+    private static Map<String, Boolean> takenBy(Interaction group, AlignedObservation seen) {
         Map<String, Boolean> settled = new java.util.LinkedHashMap<>();
         for (Factor factor : group.factors()) {
             List<Outcome> did = factor.outcomes().stream()
@@ -133,12 +135,13 @@ class AClaimIsWhatARunThatSettledItWouldBeSeenToDoTest {
         return settled;
     }
 
-    private static boolean satisfied(Outcome outcome, Observation seen) {
+    private static boolean satisfied(Outcome outcome, AlignedObservation seen) {
         return outcome.claims().stream().allMatch(claim -> claim.satisfiedBy(seen));
     }
 
     /** One model, read the way the generator reads it and run the way an example row is. */
-    private record Model(List<Interaction> groups, Behavior behavior) {
+    private record Model(List<Interaction> groups, SiteNumbering numbering,
+                         Behavior behavior) {
 
         static Model of(String source, String name) {
             Compilation compilation = Compilation.ofSource(source, "Main");
@@ -158,11 +161,11 @@ class AClaimIsWhatARunThatSettledItWouldBeSeenToDoTest {
                     .ask(new Output.Evaluated(module, ArmObservation.RECORD)).value();
             assertNotNull(artifact, "the model under test emits measured classes");
             return new Model(CoverageRead.of(name, body, plan, inputs, rules).interactions(),
-                    new Behavior(artifact.classes(), module, name));
+                    plan.numbering(), new Behavior(artifact.classes(), module, name, plan));
         }
 
-        Observation observing(Object... arguments) {
-            return behavior.observing(arguments);
+        AlignedObservation observing(Object... arguments) {
+            return numbering.align(behavior.observing(arguments));
         }
     }
 
@@ -172,7 +175,11 @@ class AClaimIsWhatARunThatSettledItWouldBeSeenToDoTest {
         private final Object instance;
         private final Method apply;
 
-        Behavior(Map<String, ClassFileImage> classes, String module, String name) {
+        private final CoverageSites.Plan plan;
+
+        Behavior(Map<String, ClassFileImage> classes, String module, String name,
+                 CoverageSites.Plan plan) {
+            this.plan = plan;
             assertNotNull(classes, "the model under test compiles");
             ClassLoader loader = new MemoryClassLoader(classes,
                     AClaimIsWhatARunThatSettledItWouldBeSeenToDoTest.class.getClassLoader());
@@ -192,7 +199,7 @@ class AClaimIsWhatARunThatSettledItWouldBeSeenToDoTest {
         }
 
         Observation observing(Object... arguments) {
-            Probe.begin();
+            Probe.begin(plan.identity());
             try {
                 apply.invoke(instance, arguments);
                 return Probe.snapshot();

@@ -6,8 +6,8 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.codegen.Backend;
 import souther.compiler.codegen.Instrumentation;
 import souther.compiler.coverage.CoverageSites;
-import souther.compiler.coverage.NumberingIdentity;
-import souther.compiler.coverage.SiteAddress;
+import souther.compiler.coverage.Numberings;
+import souther.compiler.coverage.SiteNumbering;
 
 import java.util.List;
 
@@ -105,17 +105,37 @@ class ProbeMappingTest {
         // each number it handed out addresses, so the extra number is given an address too: a plan
         // whose sites and addresses disagree is refused where it is built, and what is under test
         // here is what the emitter does with an arm no body has.
-        CoverageSites.Site extra = real.sites().get(0);
-        List<CoverageSites.Site> longer = new java.util.ArrayList<>(real.sites());
-        longer.add(new CoverageSites.Site(extra.behavior(), extra.outcome(), extra.at(),
-                real.sites().size(), real.sites().size(), extra.obligation()));
-        List<SiteAddress> addressed = new java.util.ArrayList<>(real.identity().byNumber());
-        addressed.add(real.identity().at(0));
+        // A numbering of the same families this module's own has, and one arm more. The sites are
+        // reissued from it so that the plan is of one numbering throughout: what is being made here
+        // is a plan with an arm no body emits, and not a plan whose parts came from two.
+        Numberings.Family[] families = new Numberings.Family[real.sites().size() + 1];
+        for (int at = 0; at < real.sites().size(); at++) {
+            families[at] = real.sites().get(at) instanceof CoverageSites.ArmSite
+                    ? Numberings.Family.ARM : Numberings.Family.COMPARISON;
+        }
+        families[real.sites().size()] = Numberings.Family.ARM;
+        SiteNumbering wider = Numberings.of(families);
+
+        List<CoverageSites.Site> longer = new java.util.ArrayList<>();
+        for (int at = 0; at < real.sites().size(); at++) {
+            longer.add(switch (real.sites().get(at)) {
+                case CoverageSites.ArmSite site -> new CoverageSites.ArmSite(site.behavior(),
+                        site.outcome(), site.at(), wider.arm(at), site.ordinal(),
+                        site.obligation());
+                case CoverageSites.ComparisonSite site -> new CoverageSites.ComparisonSite(
+                        site.behavior(), site.outcome(), site.at(), wider.comparison(at),
+                        site.ordinal(), site.obligation());
+            });
+        }
+        CoverageSites.ArmSite extra = (CoverageSites.ArmSite) longer.stream()
+                .filter(CoverageSites.ArmSite.class::isInstance).findFirst().orElseThrow();
+        longer.add(new CoverageSites.ArmSite(extra.behavior(), extra.outcome(), extra.at(),
+                wider.arm(real.sites().size()), real.sites().size(), extra.obligation()));
+
         CoverageSites.Plan overcounted =
                 new CoverageSites.Plan(longer, real.guards(), real.byNode(), real.byComparison(),
                         real.armsByNode(), real.controlByComparison(), real.mayRepeat(),
-                        real.forkByNode(), real.comparisons(),
-                        new NumberingIdentity(module, real.identity().executable(), addressed));
+                        real.forkByNode(), real.comparisons(), wider);
 
         IllegalStateException stopped = assertThrows(IllegalStateException.class,
                 () -> Backend.generate(in.lowered(), in.scope(),

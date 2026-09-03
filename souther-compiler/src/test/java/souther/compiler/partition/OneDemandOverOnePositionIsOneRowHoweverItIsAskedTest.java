@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.coverage.ArmProbe;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.ast.Hir;
@@ -82,7 +83,7 @@ class OneDemandOverOnePositionIsOneRowHoweverItIsAskedTest {
         Model model = Model.of(SHIPPING, "shippingFee");
         List<Axis> axes = model.subject().axes().axes();
         int asked = 0;
-        for (int probe : model.read().arms().keySet()) {
+        for (ArmProbe probe : model.read().arms().keySet()) {
             for (Map.Entry<Integer, Integer> pin : onePinWaysInto(probe, model, axes)) {
                 Axis axis = axes.get(pin.getKey());
                 assertEquals(
@@ -98,7 +99,7 @@ class OneDemandOverOnePositionIsOneRowHoweverItIsAskedTest {
 
     /** The ways into {@code probe} that settle exactly one position, as that position and its
      *  class. */
-    private static List<Map.Entry<Integer, Integer>> onePinWaysInto(int probe, Model model,
+    private static List<Map.Entry<Integer, Integer>> onePinWaysInto(ArmProbe probe, Model model,
                                                                     List<Axis> axes) {
         List<Map.Entry<Integer, Integer>> out = new ArrayList<>();
         if (!(model.read().armAt(probe) instanceof souther.compiler.reading.PathAccess.Ways ways)) {
@@ -123,7 +124,7 @@ class OneDemandOverOnePositionIsOneRowHoweverItIsAskedTest {
 
     /** What one run of the search offered, by the values each row carries. */
     private static List<List<String>> rowsOf(Model model, List<Generator.ClassOwed> classes,
-                                             List<Integer> arms) {
+                                             List<ArmProbe> arms) {
         return Generator.fill(model.subject(), List.of(), Generator.CandidateCheck.ANY,
                         model.read(), Generator.Trial.NOTHING_RUNS, List.of(), classes, arms,
                         Budgets.generation())

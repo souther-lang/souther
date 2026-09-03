@@ -368,7 +368,8 @@ public record Settlements(List<OfferItem> requested,
             // is nothing where nothing asked it.
             return new OneBehavior(behavior, subject, sig, building,
                     sig == null || trials == null ? Generator.Trial.NOTHING_RUNS
-                            : Adequacy.runningRowsOf(trials, behavior, sig),
+                            : Adequacy.runningRowsOf(trials, behavior, sig,
+                                    Adequacy.numberingOf(db, module)),
                     filling == null ? List.of() : filling.composed().plan().classesOwed(),
                     filling == null ? List.of() : filling.composed().plan().armsOwed(),
                     reads);
@@ -465,7 +466,7 @@ public record Settlements(List<OfferItem> requested,
          */
         private Settlement throughArm(RowAsRead asRead, Generator.ArmOwed owed) {
             return switch (asRead.watched()) {
-                case Generator.Watched.Ran(var account) -> account.taken().contains(owed.probe())
+                case Generator.Watched.Ran(var account) -> account.lit(owed.probe())
                         ? new Settlement.Settles() : new Settlement.DoesNotSettle();
                 case Generator.Watched.NoAccount _ ->
                         new Settlement.Undetermined(Settlement.Reason.NO_ACCOUNT_OF_THE_RUN);

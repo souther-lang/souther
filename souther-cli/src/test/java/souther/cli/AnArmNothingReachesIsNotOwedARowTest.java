@@ -6,6 +6,7 @@ import souther.cli.Main;
 import org.junit.jupiter.api.Test;
 import souther.compiler.types.CoverageOrigin;
 
+import souther.compiler.coverage.ArmProbe;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.observe.MeasurementStatus;
 import souther.compiler.check.PathReachability;
@@ -316,28 +317,28 @@ class AnArmNothingReachesIsNotOwedARowTest {
      * is what the emitter and a measurement agree on and it moves whenever the numbering does, so a
      * test that names one is naming the walk's order and not the arm.
      */
-    private static List<Integer> armProbes() {
+    private static List<ArmProbe> armProbes() {
         Compilation compilation = Compilation.ofSource(CAPPED, "Main");
         compilation.answerEverything();
         Bodies.Elaborated checked = compilation.db()
                 .ask(new Bodies.Checked(compilation.modules().get(0))).value();
         return checked.plan().arms("classify").stream()
-                .map(CoverageSites.Site::index).toList();
+                .map(CoverageSites.ArmSite::index).toList();
     }
 
     /** The arm nothing reaches — the {@code then} of a guard at 50 no pair can be above. */
-    private static final int UNREACHED = armProbes().get(0);
+    private static final ArmProbe UNREACHED = armProbes().get(0);
 
     /** The arm every run takes. */
-    private static final int TAKEN = armProbes().get(1);
+    private static final ArmProbe TAKEN = armProbes().get(1);
 
-    private static CoverageSites.Site arm(int index) {
-        return new CoverageSites.Site("classify",
+    private static CoverageSites.ArmSite arm(ArmProbe probe) {
+        return new CoverageSites.ArmSite("classify",
                 new souther.compiler.coverage.SourceOutcome.Held(
                         new souther.compiler.coverage.SourceOutcome.HeldBy.Condition()),
-                null, index, index,
+                null, probe, probe.raw(),
                 new CoverageSites.Obligation("classify",
-                        CoverageOrigin.written("t", index,
+                        CoverageOrigin.written("t", probe.raw(),
                                 souther.compiler.types.CoverageConstruct.IF), 0,
                         souther.compiler.coverage.DecidedBy.THE_DECLARATION));
     }
@@ -372,10 +373,10 @@ class AnArmNothingReachesIsNotOwedARowTest {
     }
 
     /** The probes of the arms this account holds, in the order the body holds them. */
-    private static List<Integer> probesOf(Adequacy.BranchEvidence measured) {
+    private static List<ArmProbe> probesOf(Adequacy.BranchEvidence measured) {
         return measured.arms().all().stream()
                 .flatMap(arm -> arm.occurrences().stream())
-                .map(CoverageSites.Site::index).toList();
+                .map(CoverageSites.ArmSite::index).toList();
     }
 
     /**

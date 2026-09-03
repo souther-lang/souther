@@ -74,7 +74,7 @@ class EveryForkTheNumberingReachesIsOneTheDeclarationsAnsweredForTest {
         List<CoverageOrigin> forks = new ArrayList<>();
         for (CoverageSites.Site site : plan.sites()) {
             CoverageOrigin origin = site.obligation().origin();
-            if (site.isArm() && !forks.contains(origin)) {
+            if (site instanceof CoverageSites.ArmSite && !forks.contains(origin)) {
                 forks.add(origin);
             }
         }

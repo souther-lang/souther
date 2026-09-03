@@ -11,6 +11,7 @@ import souther.compiler.diag.Diagnostic;
 import souther.compiler.generated.EvaluationArtifact;
 import souther.compiler.meta.PublishedClasses;
 import souther.compiler.observe.Applied;
+import souther.compiler.coverage.RunRecord;
 import souther.compiler.observe.Counting;
 import souther.compiler.observe.Disposition;
 import souther.compiler.observe.FailurePhase;
@@ -192,15 +193,20 @@ class ARecordedRowIsRunAgainstABoundImplementationTest {
      * this compile's code and the row's fixture goes through it, so what is counted covers the
      * fixtures and stops at the behavior — which is injected, has no body, and has nothing to count.
      *
-     * <p>{@code hits} is empty, so a measure reading it sees no arm this row failed to reach.
+     * <p>And nothing recorded where the row went, which is the other half and is not an empty
+     * account of one. This compile was asked to leave the recording calls out, so there is no
+     * probed body for the row to be written down by — a measure reading an empty account instead
+     * would see a row shown to have reached no arm at all.
      */
     @Test
     void aBoundRowsCountingIsReadAndCoversItsFixturesOnly() throws Exception {
         for (RowOutcome row : evaluated(ANSWERS).rows()) {
             Counting.Read read = assertInstanceOf(Counting.Read.class, row.run().counting(),
                     "the counting was read");
-            assertEquals(java.util.Set.of(), read.observation().taken(),
-                    "and lit no branch, there being no body to light one");
+            assertInstanceOf(RunRecord.NoAccount.class, read.recorded(),
+                    "and nothing recorded where the row went: the implementation is bound from"
+                            + " outside this compile, so there is no probed body to write anything"
+                            + " down — which is not the same as a run that lit no branch");
         }
     }
 

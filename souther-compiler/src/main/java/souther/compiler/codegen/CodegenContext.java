@@ -266,8 +266,11 @@ final class CodegenContext {
     List<Integer> plannedButNotEmitted() {
         List<Integer> missing = new java.util.ArrayList<>();
         for (souther.compiler.coverage.CoverageSites.Site site : coverage.sites()) {
-            if (!emittedSites.contains(site.index())) {
-                missing.add(site.index());
+            // By the number, because what was emitted is what was written into the code: this is
+            // the side of the boundary where a place is a constant in a call, and both families
+            // are written the same way there.
+            if (!emittedSites.contains(site.index().raw())) {
+                missing.add(site.index().raw());
             }
         }
         return missing;

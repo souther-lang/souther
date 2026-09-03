@@ -9,6 +9,8 @@ import souther.compiler.source.SourceId;
 import souther.compiler.generated.EvaluationArtifact;
 import souther.compiler.generated.GeneratedImplementations;
 import souther.compiler.generated.MemoryClassLoader;
+import souther.compiler.generated.ProbeImage;
+import souther.compiler.coverage.CoverageSites;
 import souther.compiler.execute.ConstantConstruction;
 import souther.compiler.execute.ConstantOutcome;
 import souther.compiler.execute.ProgramExecution;
@@ -367,9 +369,14 @@ public final class Output {
                 return Answer.absent();
             }
             Instrumentation instrumentation = Instrumentation.COUNTING;
+            ProbeImage probes = new ProbeImage.Uninstrumented();
             if (arms == ArmObservation.RECORD) {
-                instrumentation = instrumentation.measuring(
-                        in.checked().plan());
+                CoverageSites.Plan plan = in.checked().plan();
+                instrumentation = instrumentation.measuring(plan);
+                // The numbering the calls about to be written carry, taken from the plan that is
+                // writing them. What a run leaves behind is these numbers, and this is what says
+                // whose they are.
+                probes = new ProbeImage.Instrumented(plan.identity());
             }
             try {
                 Emissions emitted = Backend.generate(
@@ -381,7 +388,8 @@ public final class Output {
                         instrumentation);
                 Classes.stamp(db, name, emitted);
                 // The classes and what they implement, from the one emission that decided both.
-                return Answer.of(new EvaluationArtifact(emitted.seal(), emitted.implemented()));
+                return Answer.of(
+                        new EvaluationArtifact(emitted.seal(), emitted.implemented(), probes));
             } catch (CompileException e) {
                 return Answer.absent(e);
             } catch (IllegalStateException _) {
@@ -429,6 +437,7 @@ public final class Output {
             Front.Layout.Of layout = db.ask(new Front.Layout()).value();
             Map<String, ClassFileImage> linked = new LinkedHashMap<>();
             GeneratedImplementations implemented = null;
+            ProbeImage probes = new ProbeImage.Uninstrumented();
             // Furthest first, so the module being evaluated is put on last, as Linked does.
             for (int i = reaches.size() - 1; i >= 0; i--) {
                 String reached = reaches.get(i);
@@ -453,6 +462,9 @@ public final class Output {
                 }
                 linked.putAll(classes.value().classes());
                 if (reached.equals(name)) {
+                    // The probes are the evaluated module's: it is the one asked for them, and the
+                    // ones it reaches were asked to record nothing.
+                    probes = classes.value().probes();
                     implemented = classes.value().implementations();
                 }
             }
@@ -463,7 +475,7 @@ public final class Output {
                 // its rows as one nothing applies.
                 return Answer.absent();
             }
-            return Answer.of(new EvaluationArtifact(Ordered.map(linked), implemented));
+            return Answer.of(new EvaluationArtifact(Ordered.map(linked), implemented, probes));
         }
     }
 

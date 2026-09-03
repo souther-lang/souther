@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.coverage.ArmProbe;
 import souther.compiler.coverage.CoverageSites;
 
 import java.util.List;
@@ -21,7 +22,7 @@ import java.util.Set;
 public sealed interface ArmObligation {
 
     /** Every copy of this arm, in the order the body holds them. Never empty. */
-    List<CoverageSites.Site> occurrences();
+    List<CoverageSites.ArmSite> occurrences();
 
     /** Where this stands in the account, which is the one question asked of it. */
     ArmDisposition disposition();
@@ -41,7 +42,7 @@ public sealed interface ArmObligation {
      * occurrence carries says the arm is written out of sight and names the declaration, so a report
      * says that however this chooses; the choice only decides which call the reader is shown.
      */
-    default CoverageSites.Site display() {
+    default CoverageSites.ArmSite display() {
         return occurrences().getFirst();
     }
 
@@ -54,7 +55,7 @@ public sealed interface ArmObligation {
      * value are not here either — where nothing read the rows there is no arm account at all, and a
      * counted arm carrying one of them would be an account holding an arm it cannot answer for.
      */
-    record Counted(List<CoverageSites.Site> occurrences, Measurement<ArmCoverage> coverage)
+    record Counted(List<CoverageSites.ArmSite> occurrences, Measurement<ArmCoverage> coverage)
             implements ArmObligation {
 
         public Counted {
@@ -86,7 +87,7 @@ public sealed interface ArmObligation {
     }
 
     /** An arm outside the count, with why it is out. */
-    record NotCounted(List<CoverageSites.Site> occurrences, ArmExclusion because)
+    record NotCounted(List<CoverageSites.ArmSite> occurrences, ArmExclusion because)
             implements ArmObligation {
 
         public NotCounted {
@@ -116,7 +117,7 @@ public sealed interface ArmObligation {
      * @param rowsUnread  what the reading of this behavior's rows went without, which is empty
      *                    where it read them all
      */
-    static ArmObligation of(List<CoverageSites.Site> occurrences, Set<Integer> covered,
+    static ArmObligation of(List<CoverageSites.ArmSite> occurrences, Set<ArmProbe> covered,
                             WeakeningSet rowsUnread) {
         // An obligation whose occurrences were put together without anything establishing that they
         // are one is not one the rows can answer: a row through either of them may or may not be a
@@ -135,7 +136,7 @@ public sealed interface ArmObligation {
     }
 
     /** The occurrences of one arm, which is what an entry of this account is over. */
-    private static List<CoverageSites.Site> oneArm(List<CoverageSites.Site> occurrences) {
+    private static List<CoverageSites.ArmSite> oneArm(List<CoverageSites.ArmSite> occurrences) {
         if (occurrences == null || occurrences.isEmpty()) {
             throw new IllegalArgumentException("an arm is somewhere the body holds it");
         }

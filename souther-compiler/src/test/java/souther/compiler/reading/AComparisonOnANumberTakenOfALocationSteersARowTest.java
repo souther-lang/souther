@@ -274,12 +274,19 @@ class AComparisonOnANumberTakenOfALocationSteersARowTest {
                 "no position answers the number, so no decision is said of one");
     }
 
-    /** Which arms rows were offered for, by the number the plan gave each. */
+    /**
+     * Which arms rows were offered for, by the number the plan gave each.
+     *
+     * <p>By number, because what two of these are held against each other is two compiles of two
+     * sources. Each has a numbering of its own and an address of one is an address of nothing in
+     * the other, so what "the same arms" can mean between them is the numbers — which is what the
+     * two sources being one body up to a spelling makes a claim about.
+     */
     private static List<Integer> armsAnsweredIn(String source) {
         return generated(source).composed().rows().stream()
                 .flatMap(row -> row.purposes().stream())
                 .filter(Generator.Purpose.ForAnArm.class::isInstance)
-                .map(each -> ((Generator.Purpose.ForAnArm) each).probe())
+                .map(each -> ((Generator.Purpose.ForAnArm) each).probe().raw())
                 .sorted().toList();
     }
 

@@ -1,5 +1,6 @@
 package souther.compiler.reading;
 
+import souther.compiler.coverage.ArmProbe;
 import souther.compiler.check.ElementBindings;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.Symbols;
@@ -128,7 +129,7 @@ public final class CoverageRead {
      *                     have come from wherever that map put its keys
      */
     public record Read(List<Interaction> interactions,
-                       java.util.SequencedMap<Integer, PathAccess> arms) {
+                       java.util.SequencedMap<ArmProbe, PathAccess> arms) {
 
         public Read {
             interactions = List.copyOf(interactions);
@@ -137,7 +138,7 @@ public final class CoverageRead {
         }
 
         /** How arm {@code probe} is reached, by the number the plan gave it. */
-        public PathAccess armAt(int probe) {
+        public PathAccess armAt(ArmProbe probe) {
             PathAccess access = arms.get(probe);
             if (access == null) {
                 throw new IllegalArgumentException(

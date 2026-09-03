@@ -69,8 +69,10 @@ class AComparisonIsLitWhereverItIsWrittenTest {
         ComparisonEmissionSite perElement = comparisonAt(plan, "fee", 9);
         Map<String, ClassFileImage> classes = probed(compilation);
 
-        Observation mixed = new Behavior(classes, "fee").observing(20L, List.of(1L, -1L));
-        Observation positives = new Behavior(classes, "fee").observing(20L, List.of(1L, 2L));
+        AlignedObservation mixed =
+                new Behavior(classes, plan, "fee").observing(20L, List.of(1L, -1L));
+        AlignedObservation positives =
+                new Behavior(classes, plan, "fee").observing(20L, List.of(1L, 2L));
 
         assertEquals(List.of(true, false), waysOut(mixed, perElement),
                 "one element over the line and one under it, at one comparison, in one run");
@@ -93,9 +95,9 @@ class AComparisonIsLitWhereverItIsWrittenTest {
         Map<String, ClassFileImage> classes = probed(compilation);
 
         assertEquals(List.of(true),
-                waysOut(new Behavior(classes, "fee").observing(20L, List.of(1L)), named));
+                waysOut(new Behavior(classes, plan, "fee").observing(20L, List.of(1L)), named));
         assertEquals(List.of(false),
-                waysOut(new Behavior(classes, "fee").observing(1L, List.of(1L)), named));
+                waysOut(new Behavior(classes, plan, "fee").observing(1L, List.of(1L)), named));
     }
 
     /** The same where the comparison is the whole of what the behavior answers. */
@@ -107,16 +109,17 @@ class AComparisonIsLitWhereverItIsWrittenTest {
         Map<String, ClassFileImage> classes = probed(compilation);
 
         assertEquals(List.of(true),
-                waysOut(new Behavior(classes, "positive").observing(5L), answered));
+                waysOut(new Behavior(classes, plan, "positive").observing(5L), answered));
         assertEquals(List.of(false),
-                waysOut(new Behavior(classes, "positive").observing(-5L), answered));
+                waysOut(new Behavior(classes, plan, "positive").observing(-5L), answered));
     }
 
     /** The ways {@code seen} records out of {@code comparison}, held true first. */
-    private static List<Boolean> waysOut(Observation seen, ComparisonEmissionSite comparison) {
+    private static List<Boolean> waysOut(AlignedObservation seen,
+                                         ComparisonEmissionSite comparison) {
         List<Boolean> out = new ArrayList<>();
         for (boolean held : new boolean[] {true, false}) {
-            if (seen.saw(new ComparisonOutcome(comparison, held))) {
+            if (seen.saw(comparison, held)) {
                 out.add(held);
             }
         }
@@ -126,15 +129,16 @@ class AComparisonIsLitWhereverItIsWrittenTest {
     /** The comparison {@code behavior} writes on {@code line}, which is what a run is asked about. */
     private static ComparisonEmissionSite comparisonAt(CoverageSites.Plan plan, String behavior,
                                                      int line) {
-        List<CoverageSites.Site> found = plan.sites().stream()
+        List<CoverageSites.ComparisonSite> found = plan.sites().stream()
                 .filter(site -> site.behavior().equals(behavior))
-                .filter(site -> site.outcome() instanceof SourceOutcome.Compared)
+                .filter(site -> site instanceof CoverageSites.ComparisonSite)
+                .map(CoverageSites.ComparisonSite.class::cast)
                 .filter(site -> site.at() instanceof souther.compiler.diag.Citation.Written written
                         && written.at().line() == line)
                 .toList();
         assertEquals(1, found.size(),
                 () -> "one comparison of " + behavior + " on line " + line + ": " + plan.sites());
-        return new ComparisonEmissionSite(found.get(0).index());
+        return found.get(0).index();
     }
 
     private static Compilation compiled() {
@@ -166,9 +170,11 @@ class AComparisonIsLitWhereverItIsWrittenTest {
 
         private final Object instance;
         private final Method apply;
+        private final CoverageSites.Plan plan;
 
-        Behavior(Map<String, ClassFileImage> classes, String named) {
+        Behavior(Map<String, ClassFileImage> classes, CoverageSites.Plan plan, String named) {
             assertNotNull(classes, "the model under test compiles");
+            this.plan = plan;
             ClassLoader loader = new MemoryClassLoader(classes,
                     AComparisonIsLitWhereverItIsWrittenTest.class.getClassLoader());
             try {
@@ -185,11 +191,14 @@ class AComparisonIsLitWhereverItIsWrittenTest {
             }
         }
 
-        Observation observing(Object... given) {
-            Probe.begin();
+        AlignedObservation observing(Object... given) {
+            // Under the numbering the classes were emitted with, and read back under the same one.
+            // What the alignment is for is that those two are one, so a fixture that took them
+            // from two places would be the thing this cannot check.
+            Probe.begin(plan.identity());
             try {
                 apply.invoke(instance, given);
-                return Probe.snapshot();
+                return plan.numbering().align(Probe.snapshot());
             } catch (ReflectiveOperationException e) {
                 throw new AssertionError(e);
             } finally {

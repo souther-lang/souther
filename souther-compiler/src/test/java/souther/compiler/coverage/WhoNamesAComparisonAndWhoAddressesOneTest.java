@@ -53,6 +53,8 @@ class WhoNamesAComparisonAndWhoAddressesOneTest {
 
     private static final String SITE = "souther/compiler/coverage/ComparisonEmissionSite";
 
+    private static final String ARM = "souther/compiler/coverage/ArmProbe";
+
     private static final String BODIES = "souther/compiler/coverage/ModuleBodies";
 
     private static final String CATALOGUED = "souther/compiler/coverage/ComparisonCatalog$Catalogued";
@@ -70,11 +72,21 @@ class WhoNamesAComparisonAndWhoAddressesOneTest {
                             + " what it is a name of are made together"));
 
     private static final List<Licence> MAY_ADDRESS = List.of(
-            new Licence("souther.compiler.coverage.CoverageSites.Plan.emissionSiteOf", 1,
-                    "the plan's own numbering, read back for a comparison it instrumented"),
-            new Licence("souther.compiler.coverage.Probe.compared", 1,
-                    "what a probed class calls as it runs, which arrives as the number the emitter"
-                            + " wrote into the call and has no catalog to ask anything of"));
+            new Licence("souther.compiler.coverage.SiteNumbering.comparison", 1,
+                    "the numbering asked what a number of its own addresses, which is the one way"
+                            + " a number becomes a place — and it is refused where that numbering"
+                            + " handed the number out to something other than a comparison, or"
+                            + " never handed it out at all. Everything holding one of these got it"
+                            + " here: the walk that numbers the places carries numbers until the"
+                            + " numbering is finished, because until then there is no numbering"
+                            + " for an address to be of"));
+
+    private static final List<Licence> MAY_ADDRESS_AN_ARM = List.of(
+            new Licence("souther.compiler.coverage.SiteNumbering.arm", 1,
+                    "the numbering asked what a number of its own addresses, which is the one way"
+                            + " a number becomes a place — and it is refused where that numbering"
+                            + " handed the number out to something other than an arm, or never"
+                            + " handed it out at all"));
 
     /**
      * What holds a value whose parts have to agree, and where each is put together.
@@ -134,10 +146,24 @@ class WhoNamesAComparisonAndWhoAddressesOneTest {
     }
 
     @Test
-    void onlyThePlanAndTheProbeAddressARun() throws IOException {
+    void onlyTheNumberingAddressesAComparisonOfARun() throws IOException {
         assertEquals(declared(MAY_ADDRESS), callsToConstructor(SITE),
                 "an address made anywhere else is a place no run was recorded at. What may make"
                         + " one, and why: " + why(MAY_ADDRESS));
+    }
+
+    /**
+     * And the same for the other family, which is the same rule and not a second one.
+     *
+     * <p>Both or neither: the two are numbers out of one counter, and a rule that held for the
+     * comparisons alone would leave the arms — the family every branch measure counts — free to be
+     * paired with a numbering that never handed them out.
+     */
+    @Test
+    void onlyTheNumberingAddressesAnArmOfARun() throws IOException {
+        assertEquals(declared(MAY_ADDRESS_AN_ARM), callsToConstructor(ARM),
+                "an address made anywhere else is a place no run was recorded at. What may make"
+                        + " one, and why: " + why(MAY_ADDRESS_AN_ARM));
     }
 
     private static Map<String, Integer> declared(List<Licence> licences) {
