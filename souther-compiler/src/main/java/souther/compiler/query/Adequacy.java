@@ -25,6 +25,7 @@ import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
 import souther.compiler.observe.Disposition;
 import souther.compiler.observe.Incompleteness;
+import souther.compiler.observe.MeasureReason;
 import souther.compiler.observe.RowOutcome;
 import souther.compiler.observe.Stage;
 import souther.compiler.partition.Axis;
@@ -495,13 +496,23 @@ public final class Adequacy {
              *  cover and no row could make one. Held rather than read back from the two empty case
              *  sets below it: a reader that counted them would be answering a different question —
              *  how many cases there are — and getting this one right by coincidence. */
-            NOT_A_SUM
+            NOT_A_SUM;
+
+            @Override
+            public MeasureReason.About about() {
+                return MeasureReason.About.THE_BEHAVIOR;
+            }
         }
 
         /** The same, for a measurement nobody asked for. */
         public enum NoRows implements NotMeasuredReason {
             /** No row names this behavior, so nothing was established about it either way. */
-            NO_ROWS
+            NO_ROWS;
+
+            @Override
+            public MeasureReason.About about() {
+                return MeasureReason.About.THE_BEHAVIOR;
+            }
         }
 
         public static SignatureEvidence notASum(OutputCaseEvidence output,
@@ -2145,7 +2156,17 @@ public final class Adequacy {
             NOT_ASKED,
             /** No row names this behavior. The measurement is opted into by writing one, and
              *  reaching the behavior through somebody else's row is not opting in. */
-            NO_ROWS
+            NO_ROWS;
+
+            /** What the build asked for is one value for the run; which behaviors a row names is
+             *  not. */
+            @Override
+            public MeasureReason.About about() {
+                return switch (this) {
+                    case NOT_ASKED -> MeasureReason.About.THE_RUN;
+                    case NO_ROWS -> MeasureReason.About.THE_BEHAVIOR;
+                };
+            }
         }
 
         /**
@@ -2178,13 +2199,23 @@ public final class Adequacy {
              * writes and a branch no test can reach, so the two are the one answer the obligations
              * give.
              */
-            NO_ARM_OBLIGATIONS
+            NO_ARM_OBLIGATIONS;
+
+            @Override
+            public MeasureReason.About about() {
+                return MeasureReason.About.THE_BEHAVIOR;
+            }
         }
 
         /** The rows ran without instrumentation, so what they went through went with it. The one
          *  reason here that is a measurement started and not finished. */
         public enum Unreadable implements FailureReason {
-            UNREADABLE
+            UNREADABLE;
+
+            @Override
+            public MeasureReason.About about() {
+                return MeasureReason.About.THE_BEHAVIOR;
+            }
         }
 
         /**
@@ -2200,7 +2231,14 @@ public final class Adequacy {
          * were one answer while the measure read the elaborated bodies for both (issue #996).
          */
         public enum Unelaborated implements FailureReason {
-            BODIES_NOT_ELABORATED
+            BODIES_NOT_ELABORATED;
+
+            /** The module the behavior is in, which another behavior of the same run need not be
+             *  in. */
+            @Override
+            public MeasureReason.About about() {
+                return MeasureReason.About.THE_BEHAVIOR;
+            }
         }
 
         public static BranchEvidence noArms(NoArms reason) {
@@ -2524,12 +2562,22 @@ public final class Adequacy {
          *  the ways a reading that was made came out. */
         public enum NotAsked implements NotMeasuredReason {
             /** This build does not read rows, so nothing was seen and nothing is owed about it. */
-            ROWS_NOT_ASKED
+            ROWS_NOT_ASKED;
+
+            @Override
+            public MeasureReason.About about() {
+                return MeasureReason.About.THE_RUN;
+            }
         }
 
         /** Nothing came back at all, so a measure over what remains is over none of them. */
         public enum Unavailable implements FailureReason {
-            ROWS_UNAVAILABLE
+            ROWS_UNAVAILABLE;
+
+            @Override
+            public MeasureReason.About about() {
+                return MeasureReason.About.THE_BEHAVIOR;
+            }
         }
 
         /**

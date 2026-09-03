@@ -61,6 +61,7 @@ import souther.compiler.query.ObligationCoverage;
 import souther.compiler.query.ObligationDisposition;
 import souther.compiler.query.ObligationSummary;
 import souther.compiler.query.ReadingReasons;
+import souther.compiler.query.UnaskedReasons;
 import souther.compiler.query.EstablishmentGap;
 import souther.compiler.query.WritabilityKnowledge;
 import souther.compiler.publish.CanonicalSelection;
@@ -829,8 +830,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         for (ObligationDisposition.Uncertainty each : undecided.because().written()) {
             switch (each) {
                 case ObligationDisposition.Uncertainty.WhetherARowIsThere.ReadingsStopped _ -> { }
+                // One opening, which says one reason. What the readings gave is a set, and asking
+                // for it as one is where an opening with no room for the second says so.
                 case ObligationDisposition.Uncertainty.WhetherARowIsThere.NothingWasRead it ->
-                        out.add(new AdequacyOpening.NotMeasured(it.why()));
+                        out.add(new AdequacyOpening.NotMeasured(it.why().asOne()));
                 case ObligationDisposition.Uncertainty.WhetherARowCanBeWritten.Stopped it ->
                         it.by().by().written().forEach(gap ->
                                 out.add(new AdequacyOpening.ShowingStopped(gap)));
@@ -1907,9 +1910,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 // that reached past it for the evidence would be one more reader working the
                 // answer out on its own terms.
                 case ObligationDisposition.Uncertainty.WhetherARowIsThere.NothingWasRead(
-                        MeasureReason why) ->
+                        UnaskedReasons why) ->
                         "undecided whether a row is at the " + point + " — "
-                                + ReasonProse.of(why).clause();
+                                + ReasonProse.of(why.asOne()).clause();
                 // Named for what happened, which is not one thing. A reading that did not come
                 // back is of a row this compiler composed; a composing that stopped never had one
                 // — and an opening written for the first says a row was built at a point where
@@ -2019,10 +2022,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * short of whatever the reason is about.
      */
     private static void sayWhy(StringBuilder out, String measure, MeasureReason reason) {
-        ReasonProse why = ReasonProse.of(reason);
-        if (why.scope() == ReasonProse.Scope.BEHAVIOR) {
+        if (reason.about() == MeasureReason.About.THE_BEHAVIOR) {
             out.append(String.format("    %s%s%n",
-                    DisplayColumns.padRight(measure, 12), why.sentence()));
+                    DisplayColumns.padRight(measure, 12), ReasonProse.of(reason).sentence()));
         }
     }
 
@@ -2278,8 +2280,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
     /** What an obligation's coverage was left short by, where a reason says. A coverage that came
      *  to an answer has none, and the note beside the item is what this fills in. */
     private static String whyNoBoundaryItem(ObligationCoverage coverage) {
-        MeasureReason why = coverage.why();
-        return why == null ? "" : ReasonProse.of(why).clause();
+        return coverage.theReasonAsOne().map(why -> ReasonProse.of(why).clause()).orElse("");
     }
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
@@ -3568,9 +3569,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         }
         ObligationCoverage coverage = owed.coverage();
         of.put("status", wire(ReportMeasurement.statusOf(coverage)));
-        if (coverage.why() != null) {
-            of.put("reason", word(coverage.why()));
-        }
+        // One word, which is what a boundary item promises. What the readings gave is a set, and
+        // asking for it as one is where an account with no room in the document says so.
+        coverage.theReasonAsOne().ifPresent(why -> of.put("reason", word(why)));
         weakening(of, coverage.weakening());
         if (coverage.hasAnswer()) {
             of.put("hit", coverage.hasRowWitness());

@@ -1,6 +1,7 @@
 package souther.compiler.query;
 
 
+import souther.compiler.observe.MeasureReason;
 import souther.compiler.partition.MeasureClosure;
 
 import java.util.List;
@@ -42,12 +43,22 @@ public final class BoundaryDerivation {
         public String name() {
             return WORD;
         }
+
+        @Override
+        public MeasureReason.About about() {
+            return MeasureReason.About.THE_BEHAVIOR;
+        }
     }
 
     /** This behavior has no positions for a line to be drawn on — a {@code >->} composition, which
      *  is measured at its stages. */
     public enum NoSubject implements NotApplicableReason {
-        NO_SUBJECT
+        NO_SUBJECT;
+
+        @Override
+        public MeasureReason.About about() {
+            return MeasureReason.About.THE_BEHAVIOR;
+        }
     }
 
     /**
@@ -59,7 +70,12 @@ public final class BoundaryDerivation {
      * at all; the closure tells them apart, and this is what is left of the first.
      */
     public enum TheReadingDidNotRunOut implements FailureReason {
-        THE_READING_DID_NOT_RUN_OUT
+        THE_READING_DID_NOT_RUN_OUT;
+
+        @Override
+        public MeasureReason.About about() {
+            return MeasureReason.About.THE_BEHAVIOR;
+        }
     }
 
     /** What a behavior measured at its stages rather than at itself comes to. */

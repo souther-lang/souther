@@ -83,7 +83,8 @@ class WhatTheReadingsOfOneDebtComeToTogetherTest {
      */
     @Test
     void aBuildThatLookedAtNothingDoesUnsettleAMissBesideIt() {
-        assertEquals(new ObligationCoverage.NotMeasured(Coverage.NotAsked.NOT_ASKED),
+        assertEquals(new ObligationCoverage.NotMeasured(
+                        UnaskedReasons.of(Coverage.NotAsked.NOT_ASKED)),
                 ObligationCoverage.acrossTheReadings(List.of(notAsked(), missed())),
                 "the rows of the reading that was never made may be at the point");
     }
@@ -91,7 +92,8 @@ class WhatTheReadingsOfOneDebtComeToTogetherTest {
     /** Where every reading had nothing to look at, neither has the debt. */
     @Test
     void aDebtNoRowAnywhereCouldHaveAnsweredIsNotAMiss() {
-        assertEquals(new ObligationCoverage.NotMeasured(Coverage.NotAsked.NO_ROWS),
+        assertEquals(new ObligationCoverage.NotMeasured(
+                        UnaskedReasons.of(Coverage.NotAsked.NO_ROWS)),
                 ObligationCoverage.acrossTheReadings(List.of(noRows(), noRows())));
     }
 

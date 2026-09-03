@@ -390,4 +390,17 @@ public final class PublicationOrders {
                     ItemAssessment.WritabilityEvidence.Ground.THE_RULES_PROVE_IT,
                     ItemAssessment.WritabilityEvidence.Ground.A_ROW_IS_AT_IT,
                     ItemAssessment.WritabilityEvidence.Ground.A_VALUE_WAS_BUILT));
+
+    /**
+     * Why nothing was read against a point, over every reading of the line it is on.
+     *
+     * <p>What the run asked for before what one behavior turned out to have. A reader told that
+     * this build measured nothing has been told why every line of it says so, and what a single
+     * behavior has no rows for is the narrower fact under it.
+     */
+    public static final CanonicalSelection.Order<ItemAssessment.Coverage.NotAsked> UNASKED_REASONS =
+            CanonicalSelection.Order.overValues(List.of(
+                    ItemAssessment.Coverage.NotAsked.NOT_ASKED,
+                    ItemAssessment.Coverage.NotAsked.ARMS_NOT_ASKED,
+                    ItemAssessment.Coverage.NotAsked.NO_ROWS));
 }

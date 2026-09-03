@@ -23,4 +23,40 @@ public interface MeasureReason {
 
     /** The constant's own word, which is what the JSON form lowercases. */
     String name();
+
+    /**
+     * What this reason is a fact about.
+     *
+     * <p>The reason's own answer, asked at its declaration. Three readers put this question and
+     * none of them can work it out from what it holds: a surface decides from it whether a line of
+     * its own is printed, a fold over the readings of one line decides from it whether the reasons
+     * two readings gave are two facts or one fact said twice, and whoever adds a reason has to say
+     * which it is. Answered at each of those instead, one fact about a constant is spelled in as
+     * many tables as there are readers, and a constant added later reaches the ones whose author
+     * remembered it.
+     *
+     * <p><b>Not read off anything else the reason answers, and nothing else read off this.</b>
+     * Whether a row could be hiding behind a reason is a different question with a different
+     * answer — a reading of the arms that came back unreadable is a fact about the behavior and may
+     * be hiding a row — and a reader wanting that one asks the measure that has it.
+     */
+    About about();
+
+    /** What a reason is a fact about, which is a property of the reason and of nothing around it. */
+    enum About {
+
+        /**
+         * The run, and not the behavior the measure is of.
+         *
+         * <p>What a build asked for is an input to the whole run, so every measure of every
+         * behavior says the same one — a surface printing a line per measure would say one fact as
+         * many times as the module has behaviors, and readings of one line that say this say one
+         * fact rather than several.
+         */
+        THE_RUN,
+
+        /** The behavior the measure is of, so the measure says it and two behaviors can say
+         *  different ones. */
+        THE_BEHAVIOR
+    }
 }

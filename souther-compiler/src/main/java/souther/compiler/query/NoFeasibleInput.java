@@ -1,6 +1,7 @@
 package souther.compiler.query;
 
 import souther.compiler.inputs.EmptyInput;
+import souther.compiler.observe.MeasureReason;
 
 /**
  * There is nothing for a measure of a behavior's input to be about, because the rules reaching that
@@ -40,6 +41,11 @@ public record NoFeasibleInput(EmptyInput proof) implements NotApplicableReason {
     @Override
     public String name() {
         return WORD;
+    }
+
+    @Override
+    public MeasureReason.About about() {
+        return MeasureReason.About.THE_BEHAVIOR;
     }
 
     public NoFeasibleInput {

@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.observe.MeasureReason;
 import souther.compiler.types.TypeSymbol;
 
 import java.util.List;
@@ -56,13 +57,23 @@ public record InputCaseEvidence(int at, Set<TypeSymbol> declared, Set<TypeSymbol
 
     /** No row names this behavior. */
     public enum NoRows implements NotMeasuredReason {
-        NO_ROWS
+        NO_ROWS;
+
+        @Override
+        public MeasureReason.About about() {
+            return MeasureReason.About.THE_BEHAVIOR;
+        }
     }
 
     /** Why one input's cases have no numbers. */
     public enum NotASum implements NotApplicableReason {
         /** The position is one data rather than a sum, so there is no case to cover. */
-        NOT_A_SUM
+        NOT_A_SUM;
+
+        @Override
+        public MeasureReason.About about() {
+            return MeasureReason.About.THE_BEHAVIOR;
+        }
     }
 
     public InputCaseEvidence {
