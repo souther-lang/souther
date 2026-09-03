@@ -20,8 +20,10 @@ import souther.compiler.types.ValueName;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A container is filled to a total through the cases of what it holds.
@@ -71,14 +73,7 @@ class AContainerAddingUpIsFilledThroughTheCasesOfWhatItHoldsTest {
             behavior readArticles : (ns: List<Entry>) -> Page
             """;
 
-    private static final RuleReadingSource RULES = RuleReadings.ofSource(SHARED);
-
-    private static final Symbols SYMBOLS = RULES.symbols();
-
     private static final ReadingPolicy POLICY = new ReadingPolicy(64, 12);
-
-    /** What the behavior takes: a list of entries, which is the container the total is over. */
-    private static final Type ENTRIES = new Type.ListOf(named("Entry"));
 
     /**
      * A total two counts reach, so that both a container of one and a container of two are among
@@ -109,22 +104,71 @@ class AContainerAddingUpIsFilledThroughTheCasesOfWhatItHoldsTest {
                         + " amount");
     }
 
-    /** The containers this offered. */
+    /**
+     * The ways down are stopped by a figure of their own, and it is not the one that counts the
+     * containers offered.
+     *
+     * <p>A way that plans is not a container that was offered: the values are composed afterwards,
+     * and a case may be refused there. Charged to one figure, a case that planned and built nothing
+     * would spend an offer, so which cases are tried at all would be decided by the order they are
+     * declared in — which is what the offers were meant not to turn on.
+     */
+    @Test
+    void theWaysDownAreStoppedByTheirOwnFigure() {
+        TermRealizations.Realization.Built made = assertInstanceOf(
+                TermRealizations.Realization.Built.class, realizing(MANY_CASES),
+                "the cases that were tried compose containers");
+
+        assertTrue(made.heldBack().contains(CompositionBudget.WAYS_DOWN_TO_A_TOTAL_TRIED),
+                () -> "more cases than this tries, and it says which figure stopped it: "
+                        + made.heldBack());
+        assertFalse(made.values().isEmpty(),
+                "and the ways it did try composed containers");
+    }
+
+    /** The same sum with more cases than the ways down are tried. */
+    private static final String MANY_CASES = SHARED.replace(
+            "data Method = Card | Cash",
+            """
+            data Cash2 = { ...Common, note: Note }
+            data Cash3 = { ...Common, note: Note }
+            data Cash4 = { ...Common, note: Note }
+            data Cash5 = { ...Common, note: Note }
+            data Cash6 = { ...Common, note: Note }
+            data Cash7 = { ...Common, note: Note }
+            data Cash8 = { ...Common, note: Note }
+            data Cash9 = { ...Common, note: Note }
+
+            data Method = Card | Cash | Cash2 | Cash3 | Cash4 | Cash5 | Cash6 | Cash7 | Cash8
+                        | Cash9""");
+
+    /** The containers this offered for the model every test here is about. */
     private static List<FixtureTemplate> offered() {
+        return offeredBy(SHARED);
+    }
+
+    /** The containers this offered for {@code source}, whose behavior takes the entries. */
+    private static List<FixtureTemplate> offeredBy(String source) {
+        return assertInstanceOf(TermRealizations.Realization.Built.class, realizing(source),
+                "a list of entries whose amounts come to six is a container this composes")
+                .values();
+    }
+
+    /** What this walk came to for {@code source}. */
+    private static TermRealizations.Realization realizing(String source) {
+        RuleReadingSource rules = RuleReadings.ofSource(source);
+        Symbols symbols = rules.symbols();
+        Type entries = new Type.ListOf(named("Entry"));
         NumericTerm.TakenOver total = NumericTerm.TakenOver.of(
                 ValueName.Stdlib.operation("List", "sum"),
                 new RunSource.ProjectedOccurrences(
                         TermPath.of("ns").element().then("method").then("amount")),
-                named("Amount"), SYMBOLS);
+                named("Amount"), symbols);
         assertNotNull(total, "adding up the amounts of a run is a number of it");
-        TermOrders orders = TermOrdersFixtures.at(total, named("Amount"), SYMBOLS);
+        TermOrders orders = TermOrdersFixtures.at(total, named("Amount"), symbols);
         assertNotNull(orders.answered(), "and the order it answers on is the amounts'");
 
-        TermRealizations.Realization made = TermRealizations.at(ENTRIES, orders, SIX,
-                NothingTheRulesSay.REGION, RULES, POLICY);
-        return assertInstanceOf(TermRealizations.Realization.Built.class, made,
-                "a list of entries whose amounts come to six is a container this composes")
-                .values();
+        return TermRealizations.at(entries, orders, SIX, NothingTheRulesSay.REGION, rules, POLICY);
     }
 
     private static Type named(String data) {

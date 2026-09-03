@@ -122,6 +122,39 @@ class APlanSaysWhichNarrowingADemandUnderASumIsOwedTest {
     }
 
     /**
+     * What is offered is the narrowings that leave something to be built, and an absence is not one
+     * of them.
+     *
+     * <p>{@code None} settles the value rather than narrowing to something with positions under it,
+     * so a caller that stated it would be asking for a value under a position holding none — which
+     * the plan refuses outright. Offered as a way down, the one answer a caller could act on came
+     * back beside one that ends the walk.
+     */
+    @Test
+    void anAbsenceIsNotOfferedAsAWayDown() {
+        TermPath under = TermPath.of("query").then("held").then("amount");
+
+        ConstructionPlan.Result.Unnarrowed owed = assertInstanceOf(
+                ConstructionPlan.Result.Unnarrowed.class, planningOf(OPTIONAL, Set.of(under)),
+                "an optional holds nothing until something says the value is there");
+        assertEquals(List.of("Some"),
+                owed.narrowings().stream().map(Refinement::spelled).toList(),
+                "and what is offered is the presence, which is what puts a position under it");
+    }
+
+    /** A record whose field is an optional of a record, which is where an absence is a distinction
+     *  of the position and no way down to what the record holds. */
+    private static final String OPTIONAL = """
+            module g
+
+            data Inner = { amount: Int }
+            data Query = { held: Inner? }
+            data Page = { count: Int }
+
+            behavior readArticles : (query: Query) -> Page
+            """;
+
+    /**
      * A whole value asked for at the sum is not a demand under it, and nothing is owed.
      *
      * <p>The control. Read as "anything to do with a sum", the answer above would arrive wherever a
@@ -148,7 +181,11 @@ class APlanSaysWhichNarrowingADemandUnderASumIsOwedTest {
     }
 
     private static ConstructionPlan.Result planning(Set<TermPath> decided) {
-        return ConstructionPlan.of(typeOf(SHARED), TermPath.of("query"), symbolsOf(SHARED),
+        return planningOf(SHARED, decided);
+    }
+
+    private static ConstructionPlan.Result planningOf(String source, Set<TermPath> decided) {
+        return ConstructionPlan.of(typeOf(source), TermPath.of("query"), symbolsOf(source),
                 decided, Requirements.NONE, (_, _) -> 0);
     }
 

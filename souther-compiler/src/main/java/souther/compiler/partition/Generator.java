@@ -453,6 +453,7 @@ public final class Generator {
                              PLACES_A_PAIR_IS_TRIED_AT -> NOTHING_COMPOSES_ONE;
                         case PAIRINGS_BUILT_AT_ONCE, ELEMENTS_A_TOTAL_IS_SPREAD_OVER,
                              SHAPES_OF_A_TOTAL_OFFERED, DECOMPOSITIONS_OF_A_TOTAL_OFFERED,
+                             WAYS_DOWN_TO_A_TOTAL_TRIED,
                              STEPS_A_SEARCH_MAY_TAKE, ASSIGNMENTS_A_SEARCH_COMPOSES,
                              VALUES_OF_AN_UNBOUNDED_PROGRESSION_TRIED,
                              LEVELS_A_SIDE_IS_ASKED_AT -> SEARCH_LIMIT;
@@ -3658,18 +3659,21 @@ public final class Generator {
             case ConstructionPlan.Result.Beyond(Set<CompositionBudget> by) -> {
                 return new Outcome.Unplanned(by);
             }
-            // A class that puts a value under a case states the case (`PartitionClasses`), and a
-            // path that reaches one carries it (`TermPath.requirements`), so a search arriving here
-            // without one is this compiler asking for a position it has not said how to reach.
-            // Refused in the words the other arrangement of two accounts is refused in, rather than
-            // answered as a row nothing composes — a model has nothing to do with it.
-            case ConstructionPlan.Result.Unnarrowed(TermPath where, List<Refinement> narrowings) ->
-                    throw new IllegalStateException("a value is asked for under `" + where
-                            + "`, which stands at " + narrowings.stream().map(Refinement::spelled)
-                                    .collect(java.util.stream.Collectors.joining(" or "))
-                            + " and holds nothing until one of them is stated; the class or the"
-                            + " path that asked for it is keeping the narrowing it needs somewhere"
-                            + " this cannot read");
+            // Something is asked for under a position that holds nothing until a narrowing says
+            // what stands there, and this search has not said which. There is no plan, so nothing
+            // was searched and nothing was refused: what a reader is owed is that no value was
+            // composed and where the way down stopped. Said as a row nothing composes rather than
+            // as a failure of this compiler, because a model reaches it — a class may state a
+            // narrowing below a position nothing narrows.
+            case ConstructionPlan.Result.Unnarrowed(TermPath where, List<Refinement> narrowings) -> {
+                return new Outcome.Unresolved(UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
+                        narrowings.isEmpty()
+                                ? "`" + where + "` holds nothing that could be built under it"
+                                : "`" + where + "` stands at "
+                                        + narrowings.stream().map(Refinement::spelled)
+                                                .collect(java.util.stream.Collectors.joining(" or "))
+                                        + ", and nothing said which of them the value under it is");
+            }
         }
         Choices choices = choicesOf(subject, p, plan, decided, settled);
         if (choices.missingAt() != null) {

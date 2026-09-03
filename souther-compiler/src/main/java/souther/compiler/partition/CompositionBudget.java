@@ -63,6 +63,12 @@ public enum CompositionBudget {
      *  buys is another row reading like the last. */
     SHAPES_OF_A_TOTAL_OFFERED(() -> 4),
 
+    /** How many ways down to the number a total is read from are tried. Its own figure and not
+     *  {@link #SHAPES_OF_A_TOTAL_OFFERED}: a way that plans is not a container that was offered, and
+     *  charging one to the other leaves a case never tried because an earlier one planned and built
+     *  nothing. What multiplies here is the cases of every sum the way down crosses. */
+    WAYS_DOWN_TO_A_TOTAL_TRIED(() -> 8),
+
     /** How many ways the difference between a starting point and a total is spread over the
      *  elements. Read off the walk that has them, so a third way of spreading is this budget
      *  raised. */

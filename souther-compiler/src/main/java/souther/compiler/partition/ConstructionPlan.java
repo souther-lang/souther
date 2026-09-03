@@ -537,7 +537,7 @@ final class ConstructionPlan {
             // change them — a figure is raised, and this is a narrowing the caller has yet to
             // state.
             if (anythingIsAskedUnder(here, decided, required)) {
-                return new NodeResult.Unnarrowed(here, narrowingsAt(view, symbols));
+                return new NodeResult.Unnarrowed(here, narrowingsAt(settled, symbols, required));
             }
             return new NodeResult.Made(
                     new Slot(here, building, settled.outer(), new Leaf.Open()));
@@ -586,23 +586,32 @@ final class ConstructionPlan {
     }
 
     /**
-     * The narrowings a position stands at, in the order its declarations write them.
+     * The narrowings that would put a position under {@code settled}, in the order its declarations
+     * write them.
      *
-     * <p>Asked of {@link Distinctions}, which is where what a position's type divides into is
+     * <p>What a position divides into is asked of {@link Distinctions}, which is where that is
      * answered. A second reading here would be this deciding what a case is beside the reading that
      * decides what a class is, and the two would be free to differ about a case that is itself a
      * sum.
      *
-     * <p>Those that narrow, which is not every distinction. A {@code Bool} divides into two values
-     * and puts no position under either, so nothing there is a narrowing to state and the list is
-     * empty — which says, correctly, that stating something here is not what would make the demand
-     * reachable.
+     * <p><b>Those that leave something to be built, which is not every narrowing.</b> The absence of
+     * an optional settles the value rather than narrowing to something with positions under it, so
+     * stating it is not a way to reach what the caller asked for — it is the answer that there is
+     * nothing there at all, and a caller that stated it would be asking for a value under a position
+     * holding none. Asked by applying it, so this and {@link #applying} cannot come to differ about
+     * which narrowings those are.
+     *
+     * <p>Empty where nothing here would put a position under this at all. A {@code Bool} divides
+     * into two values and holds nothing under either, which says, correctly, that stating something
+     * here is not what would make the demand reachable.
      */
-    private static List<Refinement> narrowingsAt(TypeView view, Symbols symbols) {
+    private static List<Refinement> narrowingsAt(Settled settled, Symbols symbols,
+                                                 Requirements required) {
         List<Refinement> out = new ArrayList<>();
-        for (Case one : Distinctions.ofType(view, symbols)) {
+        for (Case one : Distinctions.ofType(TypeView.of(settled.building(), symbols), symbols)) {
             Refinement narrowing = Refinement.of(one);
-            if (narrowing != null) {
+            if (narrowing != null
+                    && applying(settled, narrowing, symbols, required).exact() == null) {
                 out.add(narrowing);
             }
         }

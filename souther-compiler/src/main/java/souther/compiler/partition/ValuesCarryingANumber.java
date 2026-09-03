@@ -2,8 +2,6 @@ package souther.compiler.partition;
 
 import souther.compiler.check.ReadingPolicy;
 import souther.compiler.check.RuleReadingSource;
-import souther.compiler.check.Shape;
-import souther.compiler.check.TypeView;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.types.TypeSymbol;
 
@@ -23,9 +21,13 @@ import java.util.Map;
  * this was a second reading of them: it agreed wherever a field is a field of a plain record and
  * lost the value at every sum, newtype and container, and each of those came back as one silence.
  *
- * <p>So what is left here is the filling. A record is composed by the reader that has its rules, a
- * container is asked what may stand beside the element the value is in, and the names a position
- * wears go on where the plan says they do.
+ * <p>So what is left here is the filling. A record is composed by the reader that has its rules, and
+ * the names a position wears go on where the plan says they do.
+ *
+ * <p><b>One occurrence of the number per element.</b> The walk that asks for this splits a total
+ * over the elements of one container, so a container between an element and the number is a value
+ * whose occurrences are not the ones that were split. Nothing is composed there rather than a value
+ * coming to a multiple of what was asked for.
  */
 final class ValuesCarryingANumber {
 
@@ -73,20 +75,13 @@ final class ValuesCarryingANumber {
                 yield whole.isEmpty() ? null
                         : Generator.worn(built.worn(), whole.getFirst(), ruleSource);
             }
-            // A container with the value somewhere inside one of its elements. What may stand
-            // beside that element is the carrier's business and is asked of the one reader that has
-            // it, the same way a row built around an element asks.
-            case ConstructionPlan.Held held -> {
-                FixtureTemplate element = carrying(held.under(), fixed, value, ruleSource, policy);
-                if (element == null || !(TypeView.of(held.type(), ruleSource.symbols()).shape()
-                        instanceof Shape.Sequence carrier)) {
-                    yield null;
-                }
-                FixtureTemplate collection = Witnesses.holdingAlso(carrier, element, held.least(),
-                        ruleSource, policy);
-                yield collection == null ? null
-                        : Generator.worn(held.worn(), collection, ruleSource);
-            }
+            // A container between the element and the number, which is more occurrences of the
+            // number than the walk that split the total counted. The split is one number per
+            // element of the outer container, and a container here holds as many as its own rules
+            // ask for -- so a value built here would come to a multiple of the total it was built
+            // for. Nothing composes one until what is decomposed is the occurrences rather than the
+            // elements, and that is a question for the walk that decomposes.
+            case ConstructionPlan.Held _ -> null;
         };
     }
 

@@ -64,6 +64,9 @@ final class ContainersAddingUp {
     private static final int HOW_MANY_SHAPES_ARE_OFFERED =
             CompositionBudget.SHAPES_OF_A_TOTAL_OFFERED.maximum();
 
+    private static final int MOST_WAYS_DOWN_TRIED =
+            CompositionBudget.WAYS_DOWN_TO_A_TOTAL_TRIED.maximum();
+
     /**
      * How many ways a difference is spread over the elements, which is how many this walk has.
      *
@@ -369,7 +372,7 @@ final class ContainersAddingUp {
     /**
      * The ways down, and what the planning gave up at.
      *
-     * @param filled  one per way, in the order the declarations write the narrowings
+     * @param filled  one per way that planned, in the order they were reached
      * @param cutBy   the figures the planning stopped at, which are this compiler's
      */
     private record Ways(List<Filling> filled, java.util.Set<CompositionBudget> cutBy) {
@@ -389,8 +392,13 @@ final class ContainersAddingUp {
      * stands at, and this states one of them and asks again — so which cases there are, and which
      * of them a field is under, are read where a position's divisions are read and nowhere here.
      *
-     * <p>Bounded by how many shapes are offered at all. What is dropped is ways nothing would have
-     * been offered from, and the figure travels so that a reader is told the rest were never made.
+     * <p>Bounded by its own figure, and the figure travels so that a reader is told the rest were
+     * never tried.
+     *
+     * <p>The narrowings of one position in the order the declarations write them, and a second
+     * position's under whichever of the first's it was reached by. Nothing here orders the ways of
+     * two positions against each other: what a caller does with them is try each, and the figure
+     * above is what says how many.
      */
     private static Ways waysDown(Type element, TermPath at, TermPath demand,
                                  RuleReadingSource ruleSource) {
@@ -399,8 +407,13 @@ final class ContainersAddingUp {
         java.util.Deque<TermPath> asking = new java.util.ArrayDeque<>(List.of(demand));
         while (!asking.isEmpty()) {
             TermPath fixed = asking.removeFirst();
-            if (found.size() == HOW_MANY_SHAPES_ARE_OFFERED) {
-                cutBy.add(CompositionBudget.SHAPES_OF_A_TOTAL_OFFERED);
+            // What this walk stops at, and not what the offering does. A way that plans is not a
+            // container that was offered -- the values are composed afterwards and a case may be
+            // refused there -- so spending the offer's figure here would leave a case never tried
+            // because an earlier one planned and then built nothing, which is the declaration order
+            // deciding what is offered.
+            if (found.size() == MOST_WAYS_DOWN_TRIED) {
+                cutBy.add(CompositionBudget.WAYS_DOWN_TO_A_TOTAL_TRIED);
                 break;
             }
             switch (ConstructionPlan.of(element, at, ruleSource.symbols(), java.util.Set.of(fixed),
