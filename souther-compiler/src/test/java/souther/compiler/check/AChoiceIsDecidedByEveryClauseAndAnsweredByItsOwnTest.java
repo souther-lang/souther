@@ -176,11 +176,11 @@ class AChoiceIsDecidedByEveryClauseAndAnsweredByItsOwnTest {
         StatedByClauses.Part read = new StatedByClauses.Part(
                 new Adoption<>(java.util.Set.of(CONSTRAINED), java.util.Set.of(SETTLED),
                         java.util.Set.of(), false),
-                Adoption.nothing(), Map.of());
+                Adoption.nothing(), Map.of(), Map.of());
         StatedByClauses.Part unread = new StatedByClauses.Part(
                 new Adoption<>(java.util.Set.of(), java.util.Set.of(), java.util.Set.of(UNREAD),
                         true),
-                Adoption.nothing(), Map.of(UNREAD, List.of(UnreadReason.FORM_NOT_READ)));
+                Adoption.nothing(), Map.of(UNREAD, List.of(UnreadReason.FORM_NOT_READ)), Map.of());
 
         assertEquals(Map.of(UNREAD, List.of(UnreadReason.FORM_NOT_READ),
                         CONSTRAINED, List.of(UnreadReason.ALTERNATIVE_NOT_READ)),

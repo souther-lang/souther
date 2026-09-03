@@ -4,9 +4,12 @@ import souther.compiler.core.Core;
 import souther.compiler.numeric.OrderedIntervals;
 import souther.compiler.types.Type;
 import souther.compiler.values.AdmissibleValues;
+import souther.compiler.values.AdmittedPlan;
 import souther.compiler.values.Emptiness;
 
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -64,10 +67,33 @@ sealed interface StatedByClauses {
 
         /** The same, remembering that it is what {@code e} came to. */
         @Override
-        public StatedByClauses from(Core e) {
+        public StatedByClauses from(Core e, Set<FactSubject> aboutStrings) {
             Map<Core, Part> out = new java.util.IdentityHashMap<>(parts);
-            out.put(e, new Part(byValues, byOrder, values.standing()));
+            out.put(e, new Part(byValues, byOrder, values.standing(), strings(aboutStrings)));
             return new Said(values, ordered, byValues, byOrder, out);
+        }
+
+        /**
+         * What this part plans to admit at each position it states a rule about the strings of.
+         *
+         * <p>The plan and not the set. Which strings a rule leaves is a machine somebody has to pay
+         * for, and what wants it here is a reader working out where the values stop — so what is
+         * kept is the description, and whether it is ever built is settled under that reader's own
+         * allowance. Held as the set, every rule about a string would be a machine made while the
+         * clause was read, for a question nobody may go on to ask.
+         *
+         * <p>Per branch, because this is the branch's own reading. A part inside a choice is read
+         * once in each branch and the two admit different things; taken from outside, a branch
+         * nobody can be in would lend its plan to the one that stands.
+         */
+        private Map<FactSubject, AdmittedPlan> strings(
+                Set<FactSubject> aboutStrings) {
+            if (aboutStrings.isEmpty()) {
+                return Map.of();
+            }
+            Map<FactSubject, AdmittedPlan> out = new LinkedHashMap<>();
+            aboutStrings.forEach(position -> out.put(position, values.at(position)));
+            return Map.copyOf(out);
         }
     }
 
@@ -84,27 +110,38 @@ sealed interface StatedByClauses {
      * finally admits is not among them — that is the whole value's answer and belongs to the whole.
      *
      * @param standing what this part's reading recorded about positions it was short of
+     * @param aboutStrings the positions this part states a rule about the strings of, each with
+     *                     what the part plans to admit there. Both halves, because they answer two
+     *                     questions and one of them has an answer where the other has none: which
+     *                     of a position's numbers a rule is written about is settled by the call,
+     *                     and it is settled whether or not this could work out the text written in
+     *                     it. Kept as the position alone, a reader working out where the values
+     *                     stop would go back to the clause for the rest
      */
     record Part(Adoption<FactSubject> byValues, Adoption<FactSubject> byOrder,
-                Map<FactSubject, java.util.List<souther.compiler.values.UnreadReason>> standing) {
+                Map<FactSubject, java.util.List<souther.compiler.values.UnreadReason>> standing,
+                Map<FactSubject, AdmittedPlan> aboutStrings) {
 
         /** The same part, in a branch nobody can be in — see {@link Adoption#inADeadBranch}. */
         Part inADeadBranch() {
             // The reasons go with it too. A rule of a branch nothing satisfies is not a rule of
             // this declaration that went unread; there is no branch for an author to look at.
-            return new Part(byValues.inADeadBranch(), byOrder.inADeadBranch(), Map.of());
+            //
+            // And neither is what it said about the strings at a position. A line drawn from a
+            // branch nobody can be in is a line the model does not draw.
+            return new Part(byValues.inADeadBranch(), byOrder.inADeadBranch(), Map.of(), Map.of());
         }
 
         /** This part of the branch that stands, beside the same part of one nobody can be in. */
         Part beside(Part gone) {
             return new Part(byValues.beside(gone.byValues()), byOrder.beside(gone.byOrder()),
-                    standing);
+                    standing, aboutStrings);
         }
 
         /** The same part of two branches, neither of which anybody can be in. */
         Part bothDead(Part other) {
             return new Part(byValues.bothDead(other.byValues()),
-                    byOrder.bothDead(other.byOrder()), Map.of());
+                    byOrder.bothDead(other.byOrder()), Map.of(), Map.of());
         }
 
         /** The same part of two branches somebody can be in. */
@@ -124,7 +161,27 @@ sealed interface StatedByClauses {
                         reachedBy(other.byValues()));
             }
             return new Part(byValues.either(other.byValues()), byOrder.either(other.byOrder()),
-                    why);
+                    why, eitherAboutStrings(other));
+        }
+
+        /**
+         * What the same part of two branches states about the strings at a position.
+         *
+         * <p>Either branch's, which is what a choice leaves: a position one of them wrote a string
+         * rule about is one the clause writes a string rule about, and what stands there is what
+         * one branch admits or what the other does. So the plans join, and a position only one
+         * branch spoke about is left every string by the branch that did not.
+         */
+        private Map<FactSubject, AdmittedPlan> eitherAboutStrings(
+                Part other) {
+            if (aboutStrings.equals(other.aboutStrings())) {
+                return aboutStrings;
+            }
+            Map<FactSubject, AdmittedPlan> out =
+                    new LinkedHashMap<>(aboutStrings);
+            other.aboutStrings().forEach((position, plan) -> out.merge(position, plan,
+                    (here, there) -> AdmittedPlan.joining(List.of(here, there))));
+            return Map.copyOf(out);
         }
 
         /** The positions a rule of this copy reached and did not merely settle: what it
@@ -165,8 +222,8 @@ sealed interface StatedByClauses {
 
         /** Into both branches, since which of them survives is not known yet. */
         @Override
-        public StatedByClauses from(Core e) {
-            return new Choice(id, left.from(e), right.from(e));
+        public StatedByClauses from(Core e, Set<FactSubject> aboutStrings) {
+            return new Choice(id, left.from(e, aboutStrings), right.from(e, aboutStrings));
         }
     }
 
@@ -198,8 +255,12 @@ sealed interface StatedByClauses {
      * known yet and the part is in each of them until it is. Recorded on the outside instead, a part
      * whose branch turns out dead is a part nothing transformed, and the account it gives is the one
      * it gave before anybody knew.
+     *
+     * @param aboutStrings the positions {@code e} states a rule about the strings of, which is a
+     *                     fact about the clause and the same in every branch. What each branch
+     *                     admits at one of them is the branch's own and is read there
      */
-    StatedByClauses from(Core e);
+    StatedByClauses from(Core e, Set<FactSubject> aboutStrings);
 
     /**
      * What this rule's own clauses leave, with its choices decided by its own clauses and by
@@ -394,7 +455,7 @@ sealed interface StatedByClauses {
          */
         @Override
         public StatedByClauses from(Core e, StatedByClauses out) {
-            return out.from(e);
+            return out.from(e, values.stringSubjectsIn(e));
         }
 
         /**
@@ -643,7 +704,8 @@ sealed interface StatedByClauses {
             said.parts().forEach((each, part) -> parts.put(each, new ReadByClauses.OfAPart(
                     part.byValues().unbuiltAt(unbuilt),
                     part.byOrder().unbuiltAt(unbuilt),
-                    aRuleIsAnswerableFor(part, made.made()))));
+                    aRuleIsAnswerableFor(part, made.made()),
+                    part.aboutStrings())));
             return parts;
         }
 
@@ -696,7 +758,8 @@ sealed interface StatedByClauses {
             read.parts().forEach((each, part) -> parts.put(each, new Part(
                     part.byValues().unbuiltAt(known.unbuilt()),
                     part.byOrder().unbuiltAt(known.unbuilt()),
-                    ReadByClauses.alsoSaying(part.standing(), known.standing()))));
+                    ReadByClauses.alsoSaying(part.standing(), known.standing()),
+                    part.aboutStrings())));
             return new Said(read.values().alsoStanding(known.standing()), read.ordered(),
                     read.byValues().unbuiltAt(known.unbuilt()),
                     read.byOrder().unbuiltAt(known.unbuilt()),

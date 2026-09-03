@@ -6,6 +6,7 @@ import souther.compiler.ast.Hir;
 import souther.compiler.check.Combinators.Handed;
 import souther.compiler.check.PathEngine.Entered;
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.core.Core;
@@ -21,6 +22,8 @@ import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
+import souther.compiler.values.TextExtent;
+import souther.compiler.values.TextExtents;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -1480,7 +1483,15 @@ public final class InvariantChecker {
         if (withoutParts.excludes(from, clause)) {
             return;
         }
-        restricting(clause, from, part, byName, parts, noLines);
+        // What a rule about the strings at a position says about where they stop, which is a rule
+        // of this conjunct as much as an ordering written here is. Beside the reading of
+        // comparisons and not inside it: what such a rule states is not a comparison and has no
+        // sides to walk, and it reaches a position a comparison could reach as readily.
+        //
+        // Before the reading below, which needs to know: a conjunct that stated where the values
+        // stop has a line, and is not one an author is owed a sentence about for having drawn none.
+        restricting(clause, from, part, byName, parts, noLines,
+                runsOf(clause, from, part, byName, parts, naming, out));
         if (!(clause instanceof Core.Binary bin)) {
             // Nothing but a binary is written as a comparison, so there is no reading of one for
             // the classification to be handed.
@@ -1940,7 +1951,7 @@ public final class InvariantChecker {
      */
     private void restricting(Core clause, RuleRef.Invariant from, int part,
                              Map<FactSubject, Coordinate> byName, PartsRead parts,
-                             List<FieldDomains.NoLine> noLines) {
+                             List<FieldDomains.NoLine> noLines, Set<FactSubject> bounded) {
         ReadByClauses.OfAPart account = parts.accountIn(from, clause);
         ReadByClauses.OfARule rule = parts.ruleIn(from);
         if (account == null || rule == null) {
@@ -1952,7 +1963,11 @@ public final class InvariantChecker {
             // part that put no constraint on the values restricts nothing, whatever else it settled
             // — a dead branch settles every position it named by imposing nothing on it — and one
             // that placed an end has a line, which is accounted for by whoever draws lines.
-            if (!account.restricts(position) || account.bounds(position)) {
+            // A part that put no constraint on the values restricts nothing, and one that placed an
+            // end has a line — from the ordering it wrote, or from the run of the strings it
+            // admits, which are the two ways a conjunct states where the values stop.
+            if (!account.restricts(position) || account.bounds(position)
+                    || bounded.contains(position)) {
                 continue;
             }
             // And what the rule itself came to once its own choices are decided and its own
@@ -1968,6 +1983,67 @@ public final class InvariantChecker {
                 noLines.add(said);
             }
         }
+    }
+
+    /**
+     * Where a rule about the strings at a position leaves that position, and which number it is
+     * about.
+     *
+     * <p>Two answers of one recognition and neither read off the other. Which of a position's
+     * numbers such a rule is written about is settled by the call, so it is written down whatever
+     * became of the text in it — a format written out of a constant a module cannot reach is a rule
+     * about the string as plainly as one written out. Where the strings stop is a further question,
+     * asked only of a language this has, and answered under its own allowance.
+     *
+     * <p><b>Nothing here reads the rule.</b> What each conjunct states about the strings at a
+     * position is worked out once, by the reading that turns clauses into sets, and arrives as the
+     * position and the plan it left there. Read a second time here, this walk would be deciding for
+     * itself what a predicate means about a position.
+     *
+     * <p>The ends stand beside the ends an ordering places and are the same kind of thing: this
+     * conjunct states them, and which of them survives the rules beside it is
+     * {@link DeclaredBounds.End#tighter}'s. So they go where a comparison's own end goes and not
+     * among the ends worked out from what the rules leave together — a run is what this conjunct
+     * admits, and no counterfactual is needed to find out that it placed it.
+     *
+     * <p>Only on the position's own value. A string is the one value with two numbers, and what a
+     * run of the strings says is about the order they are written on and not about how many
+     * characters they hold; a rule about the length is a rule about a whole number and is read
+     * where whole numbers are.
+     */
+    private Set<FactSubject> runsOf(Core clause, RuleRef.Invariant from, int part,
+                        Map<FactSubject, Coordinate> byName, PartsRead parts,
+                        List<FieldDomains.AboutOneCoordinate> naming, List<Direct> out) {
+        ReadByClauses.OfAPart account = parts.accountIn(from, clause);
+        if (account == null) {
+            return Set.of();
+        }
+        Set<FactSubject> bounded = new LinkedHashSet<>();
+        account.aboutStrings().forEach((position, plan) -> {
+            Coordinate found = byName.get(position);
+            if (found == null) {
+                return;
+            }
+            // The value's own number, built here rather than taken from the coordinate in hand: a
+            // position measured by a count of itself has one of those, and a rule about the strings
+            // is about neither that count nor whichever of the two this map happens to hold.
+            NumberAt<RuleKey> value = NumberAt.valueOf(found.path());
+            naming.add(new FieldDomains.AboutOneCoordinate(value, from, clause, part));
+            // A run holding one string is the rule naming a value rather than bounding a range, and
+            // a value it names is a distinction of the position rather than an edge on it. What
+            // such a rule leaves is what the reading of the values says it leaves.
+            if (TextExtents.of(plan) instanceof TextExtent.One run && !run.holdsOneValue()) {
+                bounded.add(position);
+                out.add(new Direct(value, from,
+                        new InvariantBound(true, Endpoint.inclusive(run.first())), clause, part));
+                if (run.after() != null) {
+                    out.add(new Direct(value, from,
+                            new InvariantBound(false, Endpoint.exclusive(run.after())),
+                            clause, part));
+                }
+            }
+        });
+        return bounded;
     }
 
     /**

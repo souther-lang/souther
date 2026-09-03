@@ -33,11 +33,38 @@ import souther.compiler.regex.PatternPlan;
 public final class TextExtents {
 
     /**
+     * Where what {@code plan} admits begins and ends, or why it names no run.
+     *
+     * <p>The way in, and the plan rather than the set on purpose. Which strings a rule leaves is a
+     * machine somebody has to pay for; a caller here is asking where the values stop, which is a
+     * question a report asks, and paying for it out of what a position's own answer is allowed
+     * would let a diagnostic decide what the model is read to admit. So the plan is built again
+     * under this question's own allowance, and what the position's answer cost is untouched.
+     *
+     * <p>Its own allowance per plan, spent whole here: a caller with several rules pays for each of
+     * them on its own, so that one expensive rule does not take the line another rule drew.
+     *
+     * <p><b>Only what a language admits has a run.</b> A plan that comes to values written out, or
+     * to every value, or to none, is answered {@link TextExtent.NoNamedRun} — which is what those
+     * are: a position the rules divide into named values is divided rather than bounded, and one
+     * they leave every string is bounded nowhere. It is not that this could not answer.
+     */
+    public static TextExtent of(AdmittedPlan plan) {
+        Meter meter = PatternPlan.Budget.OF_AN_ORDERED_EXTENT.meter();
+        return switch (new Realizer(meter).of(plan)) {
+            case Realization.Exact it -> it.set() instanceof ValueSet.Matching matching
+                    ? of(matching.language(), meter) : new TextExtent.NoNamedRun();
+            case Realization.OverTheMachineLimit _ ->
+                    new TextExtent.NotBuilt(Meter.Stopped.ONE_MACHINE);
+            case Realization.OverTheAnswerLimit _ ->
+                    new TextExtent.NotBuilt(Meter.Stopped.THE_ANSWER);
+        };
+    }
+
+    /**
      * Where {@code language} begins and ends, or why it names no run.
      *
-     * <p>Its own allowance, spent whole here: what this asks for is machines nothing else wants,
-     * and a caller with several rules pays for each of them on its own so that one expensive rule
-     * does not take the line another rule drew.
+     * <p>For a caller holding the language already, which is what a test does.
      */
     public static TextExtent of(Language language) {
         return of(language, PatternPlan.Budget.OF_AN_ORDERED_EXTENT.meter());

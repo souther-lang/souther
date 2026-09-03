@@ -45,6 +45,22 @@ public sealed interface TextExtent {
                         "a run ends above where it begins: " + first + " up to " + after);
             }
         }
+
+        /**
+         * Whether the run holds one string and no other.
+         *
+         * <p>Asked of the order and not of the language: a run ends where the next string above its
+         * first one begins exactly when there is nothing between them, and what is just above a
+         * string is the order's answer ({@link Text#justAbove}).
+         *
+         * <p>Here because a reader that draws lines has to tell the two apart. A rule leaving a
+         * position between two places bounds it and is owed its edge; one leaving it a single
+         * string names a value, which is a distinction of the position and not a boundary on it.
+         * Both are runs, and only the first is a bound.
+         */
+        public boolean holdsOneValue() {
+            return after != null && after.equals(first.justAbove());
+        }
     }
 
     /**

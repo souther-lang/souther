@@ -1051,12 +1051,31 @@ public final class FieldDomains {
      *
      */
     public List<Placed> placed() {
-        List<Placed> out = new ArrayList<>(directs.stream()
-                .map(each -> new Placed(each.at(), each.from(),
-                        each.bound().lower(), each.bound().end(), each.conjunct()))
-                .toList());
+        List<Placed> out = new ArrayList<>(stated());
         out.addAll(movedEnds());
         return List.copyOf(out);
+    }
+
+    /**
+     * The ends the conjuncts state, each against the conjunct that states it.
+     *
+     * <p>Apart from {@link #movedEnds}, and the difference is where the answer comes from. An end
+     * here is in the conjunct: an ordering places one, and a rule about the strings at a position
+     * leaves them running from one place to another. Those are read off the rule alone, so which
+     * conjunct they belong to needs no working out. What the other list holds is the ends the rules
+     * leave together, attributed by asking what they would leave without each conjunct.
+     *
+     * <p>For a reader that has its own way to the first kind and wants only what that way cannot
+     * see. A newtype's own comparisons are read off the clauses as they are written
+     * ({@link DeclaredBounds#of}), and a rule stating no comparison is invisible there — so such a
+     * reader takes these and drops what it already has, which two ends at one value with one rule
+     * behind them come to anyway ({@link DeclaredBounds.End#tighter}).
+     */
+    public List<Placed> stated() {
+        return directs.stream()
+                .map(each -> new Placed(each.at(), each.from(),
+                        each.bound().lower(), each.bound().end(), each.conjunct()))
+                .toList();
     }
 
     /**

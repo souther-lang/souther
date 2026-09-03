@@ -12,6 +12,7 @@ import souther.compiler.values.Value;
 import souther.compiler.values.ValueSet;
 
 import java.math.BigDecimal;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -57,6 +58,13 @@ final class AdmissibleReading implements ClauseReading<PlannedValues<FactSubject
      * afterwards ({@code InvariantChecker}) spend from the same purse.
      */
     private final Allowance<FactSubject> allowed;
+    /**
+     * What each node was read as, so that reading it is done once.
+     *
+     * <p>By the node itself and not by what a node is equal to: two clauses written the same way
+     * are two places in a declaration, and what each of them is about is asked of the one in hand.
+     */
+    private final Map<Core, StringPredicates.Stated> asStated = new IdentityHashMap<>();
 
     private AdmissibleReading(Terms terms, Denotations at, Map<FactSubject, Type> byName,
                               Symbols symbols, Alternatives alternatives, Allowance<FactSubject> allowed) {
@@ -162,7 +170,7 @@ final class AdmissibleReading implements ClauseReading<PlannedValues<FactSubject
      * reading stopped at something other than this reading's own limit.
      */
     private PlannedValues<FactSubject> pattern(Core e, boolean states) {
-        StringPredicates.Stated stated = StringPredicates.statedByChecked(e, symbols);
+        StringPredicates.Stated stated = statedIn(e);
         FactSubject position = stated == null ? null : positionIn(stated.subject());
         if (position == null) {
             return null;
@@ -268,6 +276,58 @@ final class AdmissibleReading implements ClauseReading<PlannedValues<FactSubject
         Value value = type == null ? null : valueOf(what);
         return value == null ? null
                 : PlannedValues.at(position, AdmittedPlan.of(admits(value, states, type)));
+    }
+
+    /**
+     * The positions the clause {@code e} states a rule about the strings of.
+     *
+     * <p><b>Whatever became of the rule.</b> Which position a predicate over strings is about is
+     * settled by the call, and it is settled whether or not this could work out the text written in
+     * it: {@code String.matches("001" ++ tail, value)} is a rule about {@code value} in a module
+     * that cannot reach {@code tail} exactly as it is in the one that can. Answered off what the
+     * reading came to, the same declaration would be a rule about a position for one reader and
+     * about nothing for another.
+     *
+     * <p>Which is why this is beside the reading and not a projection of it. What the position
+     * finally admits is what this reading leaves; that it is a position the model wrote a string
+     * rule about is a fact about the clause, and both are wanted by the readers that decide which
+     * of a position's numbers it is measured at and where its values stop.
+     *
+     * <p>Over the whole of {@code e} and not its leaves as this folds them. A clause is walked
+     * elsewhere by a reader holding a conjunct, and what that reader is asking is which positions
+     * the conjunct states such a rule about — a denial and a choice inside it are still the
+     * conjunct's.
+     */
+    Set<FactSubject> stringSubjectsIn(Core e) {
+        Set<FactSubject> found = new LinkedHashSet<>();
+        gatherStringSubjects(e, found);
+        return found;
+    }
+
+    private void gatherStringSubjects(Core e, Set<FactSubject> found) {
+        StringPredicates.Stated stated = statedIn(e);
+        FactSubject position = stated == null ? null : positionIn(stated.subject());
+        if (position != null) {
+            found.add(position);
+            return;   // what a predicate is about is the call's, and nothing under it is another
+        }
+        Core.forEachChild(e, child -> gatherStringSubjects(child, found));
+    }
+
+    /**
+     * What {@code e} states as a predicate over strings, worked out once for the node.
+     *
+     * <p>One derivation and two readers of it: what the rule admits, and which position it is
+     * about. Asked twice of the table, the two would be one question with two derivations — which
+     * is the arrangement {@link StringPredicates} exists to stop, one file further down.
+     */
+    private StringPredicates.Stated statedIn(Core e) {
+        if (asStated.containsKey(e)) {
+            return asStated.get(e);
+        }
+        StringPredicates.Stated said = StringPredicates.statedByChecked(e, symbols);
+        asStated.put(e, said);
+        return said;
     }
 
     /** The position {@code e} is, or null where it is not one of the positions being read for. */
