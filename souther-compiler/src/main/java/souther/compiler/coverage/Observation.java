@@ -11,10 +11,12 @@ import java.util.Set;
  * things a reader could get from different runs, and a reader that asked for one of them would be
  * reasoning about a run it had only half of.
  *
- * <p>{@link #comparisons} implies {@link #taken}: a way a comparison came out is recorded by the
- * same call that records the comparison having been reached, so a run holding the first without the
- * second is one nothing produces. That holds by how the recording is written rather than by a rule
- * the emitter is asked to keep, which is the difference between an invariant and a convention.
+ * <p>{@link #comparisons} and {@link #taken} agree about the comparisons, in both directions: one
+ * call records a comparison as reached and records which way it came out, so a run holding either
+ * without the other is one nothing produces. Held both ways because either half alone is a value a
+ * reader is answered wrongly from — a way out of a place the run says it never reached, or a place
+ * the run reached that no way out of it is recorded for, which reads as a comparison nothing
+ * evaluated.
  *
  * <p><b>Numbers, and what numbering they are of.</b> A probed class is handed the number the
  * emitter wrote into the call and has no numbering to ask what it addresses, so what a run leaves
@@ -51,6 +53,23 @@ public record Observation(NumberingIdentity numbering, Set<Integer> taken,
             if (!taken.contains(way.at())) {
                 throw new IllegalArgumentException(
                         "a run that saw " + way + " is one that reached " + way.at());
+            }
+        }
+        // And the other way round, which is the same call seen from the other side. What a
+        // comparison's number is written by is one call that records both, so a run holding the
+        // number of a comparison and no way out of it is one nothing produces — and read, it says
+        // the comparison was never reached, because a comparison is answered by the ways out and
+        // the numbers a branch measure counts are the arms.
+        //
+        // Which family a number was issued to is the numbering's answer, and this run says which
+        // numbering it is of, so it can be asked here.
+        Set<Integer> answered = new java.util.LinkedHashSet<>();
+        comparisons.forEach(way -> answered.add(way.at()));
+        for (int raw : taken) {
+            if (numbering.at(raw) instanceof SiteAddress.Comparison && !answered.contains(raw)) {
+                throw new IllegalArgumentException("a run that reached " + numbering.at(raw)
+                        + " is one that had it come out some way; " + raw
+                        + " is recorded as reached and no way out of it is");
             }
         }
     }

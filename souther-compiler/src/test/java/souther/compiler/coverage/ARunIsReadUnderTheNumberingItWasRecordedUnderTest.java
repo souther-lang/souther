@@ -54,6 +54,29 @@ class ARunIsReadUnderTheNumberingItWasRecordedUnderTest {
     }
 
     /**
+     * And a place of another numbering put to a run that was read is refused too.
+     *
+     * <p>The other end of the same crossing, and the one a check at the door does not reach. A
+     * reader can hold two numberings — the module's own and one it took off an artifact — and what
+     * a run of the first did at a place of the second is nothing. Answered as an ordinary "no", it
+     * says the row did not reach a place it was never asked about, which is the same false answer
+     * the refusal above exists to stop, one step further along.
+     */
+    @Test
+    void aPlaceOfAnotherNumberingIsRefusedByARunThatWasRead() {
+        AlignedObservation read = here().align(new Observation(here().identity(), Set.of(0, 1),
+                Set.of(new ComparisonOutcome(1, true))));
+
+        assertThrows(IllegalArgumentException.class, () -> read.lit(elsewhere().arm(1)),
+                "an arm of another numbering is no arm this run can be asked about");
+        assertThrows(IllegalArgumentException.class,
+                () -> read.saw(elsewhere().comparison(0), true),
+                "and neither is a comparison of one");
+        assertThrows(IllegalArgumentException.class, () -> read.reached(elsewhere().comparison(2)),
+                "however the question is put");
+    }
+
+    /**
      * And a numbering derived a second time reads it, because it is the same numbering.
      *
      * <p>Which is what says the check above is about the numbering and not about the construction.

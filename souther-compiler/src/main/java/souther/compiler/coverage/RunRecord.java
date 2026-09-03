@@ -3,11 +3,10 @@ package souther.compiler.coverage;
 /**
  * What this compile's own recording has of one run.
  *
- * <p>Two answers and not an account that may be empty. A run recorded under a numbering and a run
- * nothing was recording are different facts about a row: the first says where it went, and the
- * second says nobody was watching. Written as one empty account, the second reads as a row that
- * passed nowhere — which is what a row shown to miss every arm looks like, and is the opposite of
- * what happened.
+ * <p>Two answers and not an account that may be empty. A run that was recorded and a row there is
+ * no account of are different facts: the first says where it went, and the second says nothing was
+ * written down. Written as one empty account, the second reads as a row that passed nowhere — which
+ * is what a row shown to miss every arm looks like, and is the opposite of what happened.
  *
  * <p>Said here rather than left to a reader. A number a run leaves behind means a place under the
  * numbering that handed it out ({@link SiteNumbering#align}), so an account has to say which
@@ -26,7 +25,15 @@ public sealed interface RunRecord {
         }
     }
 
-    /** Nothing was recording. The classes the row ran through were generated without the calls that
-     *  would have written anything down, so there is nothing here and nothing went nowhere. */
-    record NotRecording() implements RunRecord {}
+    /**
+     * No account of the run was taken.
+     *
+     * <p>Said as the absence rather than as its reason. There are two of those and a reader here
+     * acts on neither: the classes the row ran through may have been generated without the calls
+     * that write a run down, or the row may have stopped somewhere the snapshot is not reached —
+     * and a name asserting the first would be asserting it of the second. What every reader of this
+     * needs is that there is no account, which is not the same as an account of a run that went
+     * nowhere.
+     */
+    record NoAccount() implements RunRecord {}
 }

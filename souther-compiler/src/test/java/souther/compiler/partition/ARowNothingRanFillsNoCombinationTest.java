@@ -13,6 +13,7 @@ import souther.compiler.coverage.AlignedObservation;
 import souther.compiler.coverage.ControlClaim;
 import souther.compiler.coverage.ControlPointId;
 import souther.compiler.coverage.CoverageSites;
+import souther.compiler.coverage.SiteNumbering;
 import souther.compiler.coverage.Runs;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.reading.Interaction;
@@ -357,11 +358,13 @@ class ARowNothingRanFillsNoCombinationTest {
     }
 
     /** A run that did everything {@code claims} names and nothing else. */
-    private static AlignedObservation doing(List<ControlClaim> claims) {
-        return Runs.doing(claims);
+    private static AlignedObservation doing(SiteNumbering numbering,
+                                           List<ControlClaim> claims) {
+        return Runs.doing(numbering, claims);
     }
 
-    private record Model(MeasuredInput subject, CoverageRead.Read read) {
+    private record Model(MeasuredInput subject, CoverageRead.Read read,
+                         SiteNumbering numbering) {
 
         /** The groups of the one reading, for a caller asking about the combinations alone. */
         List<Interaction> groups() {
@@ -393,7 +396,7 @@ class ARowNothingRanFillsNoCombinationTest {
             CoverageSites.Plan plan = checked.plan();
             return new Model(MeasuredInput.of(spec.name(), inputs.reading(rules),
                     partitioning),
-                    CoverageRead.of(spec.name(), body, plan, inputs, rules));
+                    CoverageRead.of(spec.name(), body, plan, inputs, rules), plan.numbering());
         }
     }
 }

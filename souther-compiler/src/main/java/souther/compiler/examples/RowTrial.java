@@ -85,9 +85,10 @@ public final class RowTrial {
     /**
      * One row, built and applied, and what the probe saw while it was.
      *
-     * <p>The recording is begun and read on this thread because the run is on this thread. Both it
-     * and the budget are let go on every way out, a worker being something the next row would
-     * otherwise start inside of.
+     * <p>The recording is begun and read on this thread because the run is on this thread, and it
+     * is begun only where there is something to record: classes generated without the calls that
+     * write a run down leave no account, which is not the same as an account of a run that reached
+     * nothing.
      */
     private static Optional<Observation> went(FixtureReader fixtures,
                                               Answerer.Answer.Something applies, String behavior,
@@ -119,43 +120,62 @@ public final class RowTrial {
             // went is how a defect in the runner comes back as a defect in the model.
             return Optional.empty();
         }
-        // Under the numbering the classes about to be run were emitted with. Classes that record
-        // nothing start no recording: what comes back then is no account of a run rather than an
-        // account of one that went nowhere.
-        switch (probes) {
-            case ProbeImage.Instrumented(NumberingIdentity numbering) -> Probe.begin(numbering);
-            case ProbeImage.Uninstrumented _ -> { }
-        }
-        try {
-            EvaluationContext.begin(steps.stepLimit(), steps.recursionDepthLimit());
-            try {
-                applying.to(over);
-            } catch (ImplementationNotReached e) {
-                // Not a run at all: the implementation could not be reached to apply. Saying the
-                // row did nothing would be saying it went nowhere, and those are different facts.
-                return Optional.empty();
-            } catch (InvocationFailure e) {
-                // It ran and stopped. Where it had got to is what is being asked for, and what
-                // stopped it is not: nothing here is judging the row.
-                //
-                // This one and no wider. What the applied code ends with arrives as this, so a
-                // throwable that is not one is this compiler failing to reach or drive its own
-                // output — and swallowed here it would come back as a candidate that ran and
-                // missed, which is a statement about the model. The seam says which failures it
-                // has ({@link Answerer.Applying#to}) and those are the ones read.
-            } finally {
-                EvaluationContext.end();
+        // Under the numbering the classes about to be run were emitted with, or not at all where
+        // they record nothing. Asked once and answered by the shape: the recording is begun, read
+        // and let go inside one arm, so there is no way to end one that was never begun — and what
+        // comes back where nothing was watching is no account of a run rather than an account of
+        // one that went nowhere.
+        return switch (probes) {
+            case ProbeImage.Uninstrumented _ -> {
+                applied(applying, over, steps);
+                yield Optional.empty();
             }
-            // Nothing was watching where the classes record nothing, so the row ran and there is no
-            // account of where it went — which is not the same as an account of it reaching
-            // nothing, and is what an empty answer means here.
-            return probes instanceof ProbeImage.Instrumented
-                    ? Optional.of(Probe.snapshot()) : Optional.empty();
+            case ProbeImage.Instrumented(NumberingIdentity numbering) -> {
+                Probe.begin(numbering);
+                try {
+                    yield applied(applying, over, steps)
+                            ? Optional.of(Probe.snapshot()) : Optional.empty();
+                } finally {
+                    // On every way out, including one nothing here catches. A recording left
+                    // installed is where the next reader on this thread would start.
+                    Probe.end();
+                }
+            }
+        };
+    }
+
+    /**
+     * Applies the behavior, and says whether it was applied at all.
+     *
+     * <p>A run that aborts still went where it went, so what stopped it is dropped: nothing here is
+     * judging the row, and a generator has no expectation for it to have failed against. What is
+     * not a run at all is the implementation being out of reach, and that is the false answer.
+     *
+     * <p>The budget is let go on every way out, a worker being something the next row would
+     * otherwise start inside of.
+     */
+    private static boolean applied(Answerer.Applying applying, List<Handed> over,
+                                   EvaluationPolicy steps) {
+        EvaluationContext.begin(steps.stepLimit(), steps.recursionDepthLimit());
+        try {
+            applying.to(over);
+        } catch (ImplementationNotReached e) {
+            // Not a run at all: the implementation could not be reached to apply. Saying the row
+            // did nothing would be saying it went nowhere, and those are different facts.
+            return false;
+        } catch (InvocationFailure e) {
+            // It ran and stopped. Where it had got to is what is being asked for, and what stopped
+            // it is not.
+            //
+            // This one and no wider. What the applied code ends with arrives as this, so a
+            // throwable that is not one is this compiler failing to reach or drive its own output —
+            // and swallowed here it would come back as a candidate that ran and missed, which is a
+            // statement about the model. The seam says which failures it has
+            // ({@link Answerer.Applying#to}) and those are the ones read.
         } finally {
-            // On every way out, including one nothing here catches. A recording left installed is
-            // where the next reader on this thread would start.
-            Probe.end();
+            EvaluationContext.end();
         }
+        return true;
     }
 
     private RowTrial() {}

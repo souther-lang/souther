@@ -415,7 +415,8 @@ class CoverageSitesTest {
         int[] arms = plan.probesOf(match);
         assertNotNull(arms, "the plan is keyed by the instances it was built from");
         assertEquals(2, arms.length);
-        assertEquals("case UnderThirty", souther.compiler.report.ArmVocabulary.label(plan.site(arms[0])));
+        assertEquals("case UnderThirty", labelAt(plan, java.util.Optional.of(
+                plan.numbering().arm(arms[0]))));
 
         Core.Match copy = new Core.Match(match.scrutinee(), match.cases(), match.origin(),
                 match.type(), match.pos(), java.util.List.of());

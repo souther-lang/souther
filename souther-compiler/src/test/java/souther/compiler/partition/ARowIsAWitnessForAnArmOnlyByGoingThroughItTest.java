@@ -13,6 +13,8 @@ import souther.compiler.coverage.AlignedObservation;
 import souther.compiler.coverage.ControlClaim;
 import souther.compiler.coverage.ControlPointId;
 import souther.compiler.coverage.CoverageSites;
+import souther.compiler.coverage.SiteNumbering;
+import souther.compiler.coverage.Runs;
 import souther.compiler.coverage.SeenComparison;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.query.Adequacy;
@@ -95,7 +97,7 @@ class ARowIsAWitnessForAnArmOnlyByGoingThroughItTest {
         FillResult filled = Generator.fill(model.subject(), List.of(),
                 Generator.CandidateCheck.ANY, model.read(),
                 // Seen doing everything the ways in name, and seen at no arm at all.
-                _ -> new Generator.Watched.Ran(waysWithoutTheArms(model.read())),
+                _ -> new Generator.Watched.Ran(waysWithoutTheArms(model)),
                 List.of(), List.of(), List.copyOf(everyArm), Budgets.generation());
 
         for (ArmProbe probe : everyArm) {
@@ -115,7 +117,7 @@ class ARowIsAWitnessForAnArmOnlyByGoingThroughItTest {
 
         FillResult filled = Generator.fill(model.subject(), List.of(),
                 Generator.CandidateCheck.ANY, model.read(),
-                _ -> new Generator.Watched.Ran(everywhere(model.read(), everyArm)),
+                _ -> new Generator.Watched.Ran(everywhere(model, everyArm)),
                 List.of(), List.of(), List.copyOf(everyArm), Budgets.generation());
 
         assertTrue(filled.discharge().arms().values().stream().allMatch(ArmDisposition.Built.class::isInstance),
@@ -123,20 +125,20 @@ class ARowIsAWitnessForAnArmOnlyByGoingThroughItTest {
     }
 
     /** Everything the ways in name, and nothing at any arm. */
-    private static AlignedObservation waysWithoutTheArms(CoverageRead.Read read) {
+    private static AlignedObservation waysWithoutTheArms(Model model) {
         Set<ArmProbe> taken = new LinkedHashSet<>();
         Set<SeenComparison> ways = new LinkedHashSet<>();
-        collect(read, taken, ways);
-        taken.removeAll(read.arms().keySet());
-        return new AlignedObservation(taken, ways);
+        collect(model.read(), taken, ways);
+        taken.removeAll(model.read().arms().keySet());
+        return Runs.of(model.numbering(), taken, ways);
     }
 
     /** The same, and the arms as well. */
-    private static AlignedObservation everywhere(CoverageRead.Read read, Set<ArmProbe> arms) {
+    private static AlignedObservation everywhere(Model model, Set<ArmProbe> arms) {
         Set<ArmProbe> taken = new LinkedHashSet<>(arms);
         Set<SeenComparison> ways = new LinkedHashSet<>();
-        collect(read, taken, ways);
-        return new AlignedObservation(taken, ways);
+        collect(model.read(), taken, ways);
+        return Runs.of(model.numbering(), taken, ways);
     }
 
     private static void collect(CoverageRead.Read read, Set<ArmProbe> taken,
@@ -157,7 +159,8 @@ class ARowIsAWitnessForAnArmOnlyByGoingThroughItTest {
         }
     }
 
-    private record Model(MeasuredInput subject, CoverageRead.Read read) {
+    private record Model(MeasuredInput subject, CoverageRead.Read read,
+                         SiteNumbering numbering) {
 
         static Model of(String source) {
             Compilation compilation = Compilation.ofSource(source, "Main");
@@ -187,7 +190,7 @@ class ARowIsAWitnessForAnArmOnlyByGoingThroughItTest {
                     "and divides it into classes a row can be composed at");
             return new Model(MeasuredInput.of(spec.name(), inputs.reading(rules),
                     partitioning),
-                    CoverageRead.of("fee", body, plan, inputs, rules));
+                    CoverageRead.of("fee", body, plan, inputs, rules), plan.numbering());
         }
     }
 }

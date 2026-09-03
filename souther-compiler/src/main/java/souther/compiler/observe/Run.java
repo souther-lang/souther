@@ -33,6 +33,6 @@ public record Run(Applied applied, Counting counting) {
     /** A row that applied nothing and was read to have spent nothing. */
     public static Run nothing() {
         return new Run(new Applied.Nothing(),
-                new Counting.Read(0L, new RunRecord.NotRecording()));
+                new Counting.Read(0L, new RunRecord.NoAccount()));
     }
 }

@@ -1264,7 +1264,7 @@ public final class ExampleVerifier {
          * recorded otherwise, and nothing recorded for a row that did not finish — a snapshot read
          * from a row still running would be some of what it did rather than what it did, and a row
          * nobody watched did not pass nowhere. */
-        private RunRecord recorded = new RunRecord.NotRecording();
+        private RunRecord recorded = new RunRecord.NoAccount();
         /** What the row cost, in the unit it is held to. Written by the worker when it finishes, so
          * read only for a row that did. */
         private long stepsSpent;

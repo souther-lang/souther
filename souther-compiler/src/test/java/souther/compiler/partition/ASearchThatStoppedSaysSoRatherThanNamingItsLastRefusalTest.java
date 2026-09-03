@@ -8,7 +8,7 @@ import souther.compiler.check.RuleReadings;
 import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
 import souther.compiler.core.Core;
-import souther.compiler.coverage.AlignedObservation;
+import souther.compiler.coverage.SiteNumbering;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.reading.Interaction;
 import souther.compiler.reading.CoverageRead;
@@ -89,7 +89,8 @@ class ASearchThatStoppedSaysSoRatherThanNamingItsLastRefusalTest {
      */
     @Test
     void aCombinationLeftWithAnUnrunCandidateSaysTheSearchStopped() {
-        FillResult filled = fill(Model.of(TWO_FREE, "shippingFee"), _ -> MISSED);
+        Model model = Model.of(TWO_FREE, "shippingFee");
+        FillResult filled = fill(model, _ -> missed(model));
 
         assertEquals(Generator.UnresolvedCombination.Reason.SEARCH_LIMIT,
                 reasonFor(filled, List.of("member=Premium", "delivery=Express")),
@@ -104,7 +105,8 @@ class ASearchThatStoppedSaysSoRatherThanNamingItsLastRefusalTest {
      */
     @Test
     void aCombinationEveryCandidateMissedSaysTheCandidatesWereNotWitnesses() {
-        FillResult filled = fill(Model.of(ONE_FREE, "shippingFee"), _ -> MISSED);
+        Model model = Model.of(ONE_FREE, "shippingFee");
+        FillResult filled = fill(model, _ -> missed(model));
 
         assertEquals(Generator.UnresolvedCombination.Reason.NO_CERTIFIED_WITNESS,
                 reasonFor(filled, List.of("member=Premium", "delivery=Express")),
@@ -125,7 +127,8 @@ class ASearchThatStoppedSaysSoRatherThanNamingItsLastRefusalTest {
      */
     @Test
     void candidatesWhoseValuesAlreadyRanDoNotStopTheSearch() {
-        FillResult filled = fill(Model.of(ONE_FREE, "shippingFee"), _ -> MISSED);
+        Model model = Model.of(ONE_FREE, "shippingFee");
+        FillResult filled = fill(model, _ -> missed(model));
 
         assertEquals(Generator.UnresolvedCombination.Reason.NO_CERTIFIED_WITNESS,
                 reasonFor(filled, List.of("member=Premium")),
@@ -144,17 +147,21 @@ class ASearchThatStoppedSaysSoRatherThanNamingItsLastRefusalTest {
     void aSetOfValuesIsRunOnceHoweverManyCombinationsWantIt() {
         int[] runs = {0};
 
-        fill(Model.of(ONE_FREE, "shippingFee"), _ -> {
+        Model model = Model.of(ONE_FREE, "shippingFee");
+        fill(model, _ -> {
             runs[0]++;
-            return MISSED;
+            return missed(model);
         });
 
         assertEquals(8, runs[0], "one run per set of values this behavior has");
     }
 
-    /** A run that did nothing at all, which is a run that missed every combination. */
-    private static final Generator.Watched MISSED =
-            new Generator.Watched.Ran(AlignedObservation.NONE);
+    /** A run that did nothing at all, which is a run that missed every combination. Of the
+     *  model's own numbering: a run is a run of somewhere, and one of nowhere could be asked about
+     *  any place at all and answer. */
+    private static Generator.Watched missed(Model model) {
+        return new Generator.Watched.Ran(souther.compiler.coverage.Runs.nowhere(model.numbering()));
+    }
 
     /** What the search made of the one combination named by {@code classes}. */
     private static Generator.UnresolvedCombination.Reason reasonFor(
@@ -173,7 +180,8 @@ class ASearchThatStoppedSaysSoRatherThanNamingItsLastRefusalTest {
                 model.read(), trial, Budgets.generation());
     }
 
-    private record Model(MeasuredInput subject, CoverageRead.Read read) {
+    private record Model(MeasuredInput subject, CoverageRead.Read read,
+                         SiteNumbering numbering) {
 
         /** The groups of the one reading, for a caller asking about the combinations alone. */
         List<Interaction> groups() {
@@ -204,7 +212,7 @@ class ASearchThatStoppedSaysSoRatherThanNamingItsLastRefusalTest {
                             souther.compiler.query.ReadAs.THE_COMPILATION_DOES)),
                     CoverageRead.of(spec.name(), body,
                             checked.plan(), inputs,
-                            rules));
+                            rules), checked.plan().numbering());
         }
     }
 }

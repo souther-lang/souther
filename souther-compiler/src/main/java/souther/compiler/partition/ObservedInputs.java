@@ -60,7 +60,7 @@ public record ObservedInputs(List<ObservedValue> inputs, Generator.Watched watch
                     new Generator.Watched.Ran(numbering.align(seen));
             // And a row nothing watched has no account of where it went, whether that is because
             // the compile records nothing or because its counting was never read at all.
-            case Counting.Read(long _, RunRecord.NotRecording _) ->
+            case Counting.Read(long _, RunRecord.NoAccount _) ->
                     new Generator.Watched.NoAccount();
             case Counting.Unread _ -> new Generator.Watched.NoAccount();
         });

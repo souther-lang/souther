@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.coverage.ControlClaim;
 import souther.compiler.coverage.ControlPointId;
 import souther.compiler.coverage.Numberings;
+import souther.compiler.coverage.Runs;
 import souther.compiler.coverage.SiteNumbering;
 
 import java.util.LinkedHashSet;
@@ -65,7 +66,7 @@ class ASelectionsClassesAndClaimsAreOfTheSameChoiceTest {
         for (int each : probes) {
             arms.add(probe(each));
         }
-        return new AlignedObservation(arms, Set.of());
+        return Runs.at(NUMBERING, arms);
     }
 
     /**

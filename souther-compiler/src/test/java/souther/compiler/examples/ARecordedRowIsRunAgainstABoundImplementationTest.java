@@ -203,7 +203,7 @@ class ARecordedRowIsRunAgainstABoundImplementationTest {
         for (RowOutcome row : evaluated(ANSWERS).rows()) {
             Counting.Read read = assertInstanceOf(Counting.Read.class, row.run().counting(),
                     "the counting was read");
-            assertInstanceOf(RunRecord.NotRecording.class, read.recorded(),
+            assertInstanceOf(RunRecord.NoAccount.class, read.recorded(),
                     "and nothing recorded where the row went: the implementation is bound from"
                             + " outside this compile, so there is no probed body to write anything"
                             + " down — which is not the same as a run that lit no branch");

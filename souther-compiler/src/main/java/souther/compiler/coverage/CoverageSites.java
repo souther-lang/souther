@@ -443,10 +443,6 @@ public final class CoverageSites {
                     .filter(ArmSite.class::isInstance).map(ArmSite.class::cast)
                     .toList();
         }
-
-        public Site site(int index) {
-            return sites.get(index);
-        }
     }
 
     /** The sites of every behavior body in one module, numbered in the order the bodies are declared
@@ -682,8 +678,10 @@ public final class CoverageSites {
          */
         private int armSite(SourceOutcome.Arm outcome, Core owner, CoverageOrigin origin,
                             int part, DecidedBy decided) {
-            int raw = numbering.number(new SiteAddress.Arm(places.of(owner), part));
+            // Asked before the place is numbered, so that a tree nothing wrote is refused for
+            // being that rather than for whatever the numbering noticed about it first.
             written(origin, owner);
+            int raw = numbering.number(new SiteAddress.Arm(places.of(owner), part));
             sites.add(new DraftSite(behavior, outcome, Citation.of(owner.pos()), raw, ordinal++,
                     new Obligation(behavior, origin, part, decided)));
             return raw;
@@ -691,8 +689,8 @@ public final class CoverageSites {
 
         private int comparisonSite(SourceOutcome.Compared outcome, Core owner,
                                    CoverageOrigin origin, DecidedBy decided) {
-            int raw = numbering.number(new SiteAddress.Comparison(places.of(owner)));
             written(origin, owner);
+            int raw = numbering.number(new SiteAddress.Comparison(places.of(owner)));
             sites.add(new DraftSite(behavior, outcome, Citation.of(owner.pos()), raw,
                     ordinal++, new Obligation(behavior, origin, 0, decided)));
             return raw;

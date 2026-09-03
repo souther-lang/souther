@@ -18,21 +18,55 @@ import java.util.Set;
  * numbers out in another order does not align, and is refused where it arrives rather than
  * answered.
  *
- * <p>The addresses are of the numbering that did the aligning, and a reader asking about a place of
- * that same numbering is asking about the same value.
+ * <p><b>And which numbering that was is carried, not left at the door.</b> An address is a place of
+ * some numbering, and a reader can hold two: what a value made of one numbering's places says about
+ * another's is nothing, and saying it as an ordinary "no" is the very answer this exists to stop —
+ * a row reported as not having reached a place it was never asked about. Checked at the moment the
+ * value was made, that is a property of one call; carried, it is a property of the value, and every
+ * question put to it is answered or refused.
+ *
+ * <p><b>Made where the alignment is made.</b> There is no way here to put places beside a numbering
+ * that did not issue them.
  */
-public record AlignedObservation(Set<ArmProbe> arms, Set<SeenComparison> comparisons) {
+public final class AlignedObservation {
 
-    /** A run that passed nowhere, aligned with nothing to align. */
-    public static final AlignedObservation NONE = new AlignedObservation(Set.of(), Set.of());
+    private final NumberingIdentity numbering;
 
-    public AlignedObservation {
-        arms = arms == null ? Set.of() : Set.copyOf(arms);
-        comparisons = comparisons == null ? Set.of() : Set.copyOf(comparisons);
+    private final Set<ArmProbe> arms;
+
+    private final Set<SeenComparison> comparisons;
+
+    AlignedObservation(NumberingIdentity numbering, Set<ArmProbe> arms,
+                       Set<SeenComparison> comparisons) {
+        if (numbering == null) {
+            throw new IllegalArgumentException(
+                    "a run read as places is read as places of some numbering");
+        }
+        this.numbering = numbering;
+        this.arms = Set.copyOf(arms);
+        this.comparisons = Set.copyOf(comparisons);
+        this.arms.forEach(each -> requireOurs(each.numbering(), each));
+        this.comparisons.forEach(each -> requireOurs(each.at().numbering(), each));
+    }
+
+    /** What this run is read under, which is what a place put to it has to be a place of. */
+    public NumberingIdentity numbering() {
+        return numbering;
+    }
+
+    /** The arms the run was recorded at, as places of this numbering. */
+    public Set<ArmProbe> arms() {
+        return arms;
+    }
+
+    /** The ways its comparisons came out, as places of this numbering. */
+    public Set<SeenComparison> comparisons() {
+        return comparisons;
     }
 
     /** Whether the run was recorded at {@code probe}. */
     public boolean lit(ArmProbe probe) {
+        requireOurs(probe.numbering(), probe);
         return arms.contains(probe);
     }
 
@@ -40,11 +74,40 @@ public record AlignedObservation(Set<ArmProbe> arms, Set<SeenComparison> compari
      *  comparison having been reached: one that came out the other way was reached and is not
      *  this. */
     public boolean saw(ComparisonEmissionSite at, boolean held) {
+        requireOurs(at.numbering(), at);
         return comparisons.contains(new SeenComparison(at, held));
     }
 
     /** Whether the run reached {@code at} at all, whichever way the comparison there came out. */
     public boolean reached(ComparisonEmissionSite at) {
         return saw(at, true) || saw(at, false);
+    }
+
+    private void requireOurs(NumberingIdentity of, Object place) {
+        if (!numbering.equals(of)) {
+            throw new IllegalArgumentException(place + " is a place of " + of
+                    + ", and this run was read under " + numbering
+                    + "; what one numbering's run did at another's places is nothing, and"
+                    + " answering it would say a row missed a place it was never asked about");
+        }
+    }
+
+    @Override
+    public boolean equals(Object other) {
+        return this == other
+                || other instanceof AlignedObservation that
+                        && numbering.equals(that.numbering)
+                        && arms.equals(that.arms)
+                        && comparisons.equals(that.comparisons);
+    }
+
+    @Override
+    public int hashCode() {
+        return java.util.Objects.hash(numbering, arms, comparisons);
+    }
+
+    @Override
+    public String toString() {
+        return "a run of " + numbering + " at " + arms + " and " + comparisons;
     }
 }

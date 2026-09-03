@@ -12,6 +12,7 @@ import souther.compiler.core.Core;
 import souther.compiler.coverage.AlignedObservation;
 import souther.compiler.coverage.ControlClaim;
 import souther.compiler.coverage.CoverageSites;
+import souther.compiler.coverage.SiteNumbering;
 import souther.compiler.coverage.Runs;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.query.Adequacy;
@@ -162,7 +163,7 @@ class ARowThroughAnArmIsComposedFromTheWayIntoItTest {
     void anotherArmIsTakenOffTheListByWhatTheRunWasSeenDoing() {
         Model model = Model.of(NESTED, "press");
         Set<ArmProbe> everyArm = model.read().arms().keySet();
-        AlignedObservation everywhere = doing(model.read());
+        AlignedObservation everywhere = doing(model);
 
         FillResult watched = Generator.fill(model.subject(), List.of(),
                 Generator.CandidateCheck.ANY, model.read(),
@@ -224,19 +225,20 @@ class ARowThroughAnArmIsComposedFromTheWayIntoItTest {
 
     /** A run that was seen taking every arm the reading names, which is what a row through the
      *  outer arm and one of the inner ones is seen doing. */
-    private static AlignedObservation doing(CoverageRead.Read read) {
+    private static AlignedObservation doing(Model model) {
         List<ControlClaim> claims = new java.util.ArrayList<>();
-        for (PathAccess each : read.arms().values()) {
+        for (PathAccess each : model.read().arms().values()) {
             if (each instanceof PathAccess.Ways ways) {
                 for (souther.compiler.reading.WayIn way : ways.ways()) {
                     claims.addAll(way.claims());
                 }
             }
         }
-        return Runs.doing(claims);
+        return Runs.doing(model.numbering(), claims);
     }
 
-    private record Model(MeasuredInput subject, CoverageRead.Read read) {
+    private record Model(MeasuredInput subject, CoverageRead.Read read,
+                         SiteNumbering numbering) {
 
         static Model of(String source, String behavior) {
             Compilation compilation = Compilation.ofSource(source, "Main");
@@ -259,7 +261,7 @@ class ARowThroughAnArmIsComposedFromTheWayIntoItTest {
                     Partitions.of(spec.name(), inputs, rules, ReadAs.THE_COMPILATION_DOES);
             return new Model(MeasuredInput.of(spec.name(), inputs.reading(rules),
                     partitioning),
-                    CoverageRead.of(spec.name(), body, plan, inputs, rules));
+                    CoverageRead.of(spec.name(), body, plan, inputs, rules), plan.numbering());
         }
     }
 }

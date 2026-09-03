@@ -11,6 +11,7 @@ import souther.compiler.core.Core;
 import souther.compiler.coverage.AlignedObservation;
 import souther.compiler.coverage.ControlClaim;
 import souther.compiler.coverage.Runs;
+import souther.compiler.coverage.SiteNumbering;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.reading.Interaction;
 import souther.compiler.reading.CoverageRead;
@@ -71,9 +72,12 @@ class ACandidateThatMissedIsNotOfferedTest {
                 Fee(baseFee(member) + expressFee(delivery))
             """;
 
-    /** A run that did nothing at all, which is a run that missed every combination. */
-    private static final Generator.Watched MISSED =
-            new Generator.Watched.Ran(AlignedObservation.NONE);
+    /** A run that did nothing at all, which is a run that missed every combination. Of the
+     *  model's own numbering: a run is a run of somewhere, and one of nowhere could be asked about
+     *  any place at all and answer. */
+    private static Generator.Watched missed(Model model) {
+        return new Generator.Watched.Ran(Runs.nowhere(model.numbering()));
+    }
 
     /**
      * A combination every candidate missed is not offered, and is not called impossible.
@@ -86,7 +90,7 @@ class ACandidateThatMissedIsNotOfferedTest {
     void aCombinationEveryCandidateMissedIsLeftUntried() {
         Model model = Model.of(SHIPPING, "shippingFee");
 
-        FillResult filled = fill(model, _ -> MISSED);
+        FillResult filled = fill(model, _ -> missed(model));
 
         assertTrue(filled.unresolved().stream().anyMatch(each -> each.reason()
                         == Generator.UnresolvedCombination.Reason.NO_CERTIFIED_WITNESS),
@@ -100,7 +104,7 @@ class ACandidateThatMissedIsNotOfferedTest {
     @Test
     void aCandidateThatArrivedIsOffered() {
         Model model = Model.of(SHIPPING, "shippingFee");
-        AlignedObservation everything = doing(everyClaimOf(model));
+        AlignedObservation everything = doing(model.numbering(), everyClaimOf(model));
 
         FillResult filled =
                 fill(model, _ -> new Generator.Watched.Ran(everything));
@@ -126,7 +130,7 @@ class ACandidateThatMissedIsNotOfferedTest {
 
         fill(model, inputs -> {
             ran.add(inputs.stream().map(FixtureTemplate::text).toList());
-            return MISSED;
+            return missed(model);
         });
 
         // The two positions the decisions read say which combination a candidate was composed for;
@@ -185,11 +189,13 @@ class ACandidateThatMissedIsNotOfferedTest {
     }
 
     /** A run that did everything {@code claims} names. */
-    private static AlignedObservation doing(List<ControlClaim> claims) {
-        return Runs.doing(claims);
+    private static AlignedObservation doing(SiteNumbering numbering,
+                                           List<ControlClaim> claims) {
+        return Runs.doing(numbering, claims);
     }
 
-    private record Model(MeasuredInput subject, CoverageRead.Read read) {
+    private record Model(MeasuredInput subject, CoverageRead.Read read,
+                         SiteNumbering numbering) {
 
         /** The groups of the one reading, for a caller asking about the combinations alone. */
         List<Interaction> groups() {
@@ -220,7 +226,7 @@ class ACandidateThatMissedIsNotOfferedTest {
                             souther.compiler.query.ReadAs.THE_COMPILATION_DOES)),
                     CoverageRead.of(spec.name(), body,
                             checked.plan(), inputs,
-                            rules));
+                            rules), checked.plan().numbering());
         }
     }
 }

@@ -466,7 +466,7 @@ public record Settlements(List<OfferItem> requested,
          */
         private Settlement throughArm(RowAsRead asRead, Generator.ArmOwed owed) {
             return switch (asRead.watched()) {
-                case Generator.Watched.Ran(var account) -> account.arms().contains(owed.probe())
+                case Generator.Watched.Ran(var account) -> account.lit(owed.probe())
                         ? new Settlement.Settles() : new Settlement.DoesNotSettle();
                 case Generator.Watched.NoAccount _ ->
                         new Settlement.Undetermined(Settlement.Reason.NO_ACCOUNT_OF_THE_RUN);

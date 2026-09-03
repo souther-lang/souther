@@ -108,7 +108,7 @@ public final class SiteNumbering {
         for (ComparisonOutcome way : seen.comparisons()) {
             ways.add(new SeenComparison(comparison(way.at()), way.held()));
         }
-        return new AlignedObservation(arms, ways);
+        return new AlignedObservation(identity, arms, ways);
     }
 
     private SiteAddress at(int raw) {

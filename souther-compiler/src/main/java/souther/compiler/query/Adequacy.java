@@ -7,7 +7,6 @@ import souther.compiler.observe.ArmObservation;
 import souther.compiler.inputs.TermPath;
 
 
-import souther.compiler.coverage.AlignedObservation;
 import souther.compiler.coverage.ArmProbe;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.coverage.SiteNumbering;
@@ -1129,7 +1128,7 @@ public final class Adequacy {
             Set<ArmProbe> lit = new LinkedHashSet<>();
             for (RowReading observed : db.ask(new RowReadings(name)).value().values()) {
                 for (RowOutcome row : observed.rowsSeen()) {
-                    lit.addAll(seenBy(row, plan).arms());
+                    lit.addAll(armsSeenIn(row, plan));
                 }
             }
             Map<String, souther.compiler.check.PathReachability.Answers.AsRun> out =
@@ -2336,7 +2335,7 @@ public final class Adequacy {
             Set<ArmProbe> lit = new LinkedHashSet<>();
             for (RowReading observed : byTarget.values()) {
                 for (RowOutcome row : observed.rowsSeen()) {
-                    lit.addAll(seenBy(row, plan).arms());
+                    lit.addAll(armsSeenIn(row, plan));
                 }
             }
 
@@ -5021,18 +5020,21 @@ public final class Adequacy {
     private Adequacy() {}
 
     /**
-     * What a row is known to have done.
+     * The arms {@code row} was seen at, which is none where nothing watched it.
      *
-     * <p>For the two readers here that a run reaching nothing and a run nobody watched are one
-     * answer for. A row whose counting was never read is known to have done none of it, and that it
-     * was left undecided is said where the row is reported.
+     * <p>What the two readers here are gathering is the arms some row of the module reached, so a
+     * row with no account of its run adds nothing to it. Said by adding nothing rather than by
+     * standing an empty run in for the missing one: a run that reached nowhere is a fact about a
+     * row, and one nobody watched is the absence of any — and a value made to carry the second
+     * would answer the first about every place it was asked.
+     *
+     * <p>That a row was left undecided is not lost by this: it is said where the row is reported,
+     * of the row rather than of the arms.
      */
-    private static AlignedObservation seenBy(
-            RowOutcome row, CoverageSites.Plan plan) {
+    private static Set<ArmProbe> armsSeenIn(RowOutcome row, CoverageSites.Plan plan) {
         return switch (ObservedInputs.of(row, plan.numbering()).watched()) {
-            case Generator.Watched.Ran(var account) -> account;
-            case Generator.Watched.NoAccount _ ->
-                    AlignedObservation.NONE;
+            case Generator.Watched.Ran(var account) -> account.arms();
+            case Generator.Watched.NoAccount _ -> Set.of();
         };
     }
 
