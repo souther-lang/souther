@@ -110,12 +110,11 @@ final class ConstructionPlan {
     /**
      * Why a position is one the search chooses a whole value at.
      *
-     * <p><b>Two of these are the model and the third is this compiler.</b> A position nothing
-     * composes and a position the caller settled are what the declarations and the demand come to;
-     * a position this stopped short of looking inside is a figure being reached, and a row that
-     * comes to nothing under one of them is a different thing to tell a reader. Written as one
-     * word, the third was said in the first's — so a value this declined to plan for was reported
-     * as one the rules leave nothing at.
+     * <p><b>Only one of these is this compiler.</b> A position nothing composes is the
+     * declarations' answer and a position the caller settled is the demand's; a position this
+     * stopped short of looking inside is a figure being reached, and a row that comes to nothing
+     * under it is a different thing to tell a reader. Written in the first's word, a value this
+     * declined to plan for was reported as one the rules leave nothing at.
      *
      * <p>{@link Beneath} is evidence and not yet an answer. What follows from a plan being short
      * depends on what the composing then did: a row composed against it is a row, and nothing here
@@ -354,29 +353,35 @@ final class ConstructionPlan {
     }
 
     /**
-     * Whether anything the caller asked for stands strictly under {@code here}.
+     * Every position the caller asked something of: the ones it stated a narrowing at, and the ones
+     * it fixed a value at.
      *
-     * <p>Asked of the whole demand and not of half of it, for the reason {@link
-     * #refuseWhatWouldStandUnder} is: a value fixed at {@code x.a.b} adds no requirement that a
-     * field step was taken, so a reading of the requirements alone would let it through and drop it
-     * in silence.
+     * <p><b>One reading, because the two halves are one demand.</b> A value fixed at {@code x.a.b}
+     * adds no requirement that a field step was taken, so a reading of the requirements alone lets
+     * it through and drops it in silence — and a reading of the fixed paths alone drops a narrowing
+     * the caller stated. Both places that ask what stands below a position ask it here, so a third
+     * kind of demand is answered for by both of them or by neither.
+     *
+     * <p>The narrowings first, which is the order the answers below are given in. A path is in one
+     * of the two and never both: a caller that fixed a value at a position and also required a
+     * narrowing there is refused where the requirements are put together.
+     */
+    private static List<TermPath> whatTheCallerAsked(Set<TermPath> decided, Requirements required) {
+        List<TermPath> out = new ArrayList<>(required.refinements().keySet());
+        out.addAll(decided);
+        return out;
+    }
+
+    /**
+     * Whether anything the caller asked for stands strictly under {@code here}.
      *
      * <p>Strictly under, because the position itself is one this does plan — a whole value is
      * chosen there, and a caller that fixed a value at it was answered before this was asked.
      */
     private static boolean anythingIsAskedUnder(TermPath here, Set<TermPath> decided,
                                                 Requirements required) {
-        for (TermPath each : decided) {
-            if (!each.equals(here) && each.isAtOrUnder(here)) {
-                return true;
-            }
-        }
-        for (TermPath each : required.refinements().keySet()) {
-            if (!each.equals(here) && each.isAtOrUnder(here)) {
-                return true;
-            }
-        }
-        return false;
+        return whatTheCallerAsked(decided, required).stream()
+                .anyMatch(each -> !each.equals(here) && each.isAtOrUnder(here));
     }
 
     /** The collections this plan builds out of what stands at their element. */
@@ -631,19 +636,17 @@ final class ConstructionPlan {
      */
     private static void refuseWhatWouldStandUnder(TermPath absent, Set<TermPath> decided,
                                                   Requirements required) {
-        for (TermPath each : required.refinements().keySet()) {
-            if (each.isAtOrUnder(absent)) {
-                throw new IllegalStateException("`" + each + "` is required to be "
-                        + required.at(each).spelled() + " at or under `" + absent + "`, which holds"
-                        + " no value; nothing stands there for a requirement to be about");
+        for (TermPath each : whatTheCallerAsked(decided, required)) {
+            if (!each.isAtOrUnder(absent)) {
+                continue;
             }
-        }
-        for (TermPath each : decided) {
-            if (each.isAtOrUnder(absent)) {
-                throw new IllegalStateException("a value is fixed at `" + each + "`, at or under `"
-                        + absent + "`, which holds no value; nothing stands there for a value to be"
-                        + " written at");
-            }
+            Refinement stated = required.at(each);
+            throw new IllegalStateException(stated != null
+                    ? "`" + each + "` is required to be " + stated.spelled() + " at or under `"
+                            + absent + "`, which holds no value; nothing stands there for a"
+                            + " requirement to be about"
+                    : "a value is fixed at `" + each + "`, at or under `" + absent + "`, which"
+                            + " holds no value; nothing stands there for a value to be written at");
         }
     }
 
@@ -690,6 +693,10 @@ final class ConstructionPlan {
             case Slot(TermPath _, Type _, List<TypeOps.Layer> _, Leaf leaf) -> switch (leaf) {
                 case Leaf.Fixed _ -> new Under(true, Set.of());
                 case Leaf.Open _ -> new Under(false, Set.of());
+                // Nothing was asked below one of these, and that is settled where the position is
+                // made rather than assumed here: a demand under a figure is refused there and no
+                // plan comes back at all. Read as an ordinary empty hand, this would be the answer
+                // whether or not that check exists.
                 case Leaf.Beneath(Set<CompositionBudget> cutBy) -> new Under(false, cutBy);
             };
             case Built built -> across(built.under().values());
