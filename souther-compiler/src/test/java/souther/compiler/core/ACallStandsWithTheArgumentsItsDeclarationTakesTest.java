@@ -4,8 +4,9 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.KeptCalls;
 import souther.compiler.check.CallArguments;
+import souther.compiler.check.DeclaredArgument;
+import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.diag.SourcePos;
-import souther.compiler.semantics.ArgumentRef;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
 import souther.compiler.types.Type;
@@ -105,13 +106,18 @@ class ACallStandsWithTheArgumentsItsDeclarationTakesTest {
      * <p>The rebuild carries the operation rather than looking it up again, so what the rebuilt call
      * is held to is what the original was — and the rebuild goes through the same constructor, so a
      * pass that put back a different number of arguments would be refused where it wrote them.
+     *
+     * <p>The argument replaced is the one the bound fact about the operation names, which is the
+     * only kind of argument a pass holds: {@code List.reverse} is built from its one argument.
      */
     @Test
     void replacingAnArgumentLeavesACallOfTheSameDeclaration() {
-        Core.PreservedCall call = KeptCalls.to(LENGTH, POS);
+        ValueName.Stdlib.Operation reverse = ValueName.Stdlib.operation("List", "reverse");
+        Core.PreservedCall call = KeptCalls.to(reverse, POS);
         Core other = new Core.Read("other", new BindingId(OWNER, 1),
                 new Type.ListOf(Type.INT), POS);
-        Core.PreservedCall rebuilt = CallArguments.replacedIn(new ArgumentRef.At(0), call, other);
+        DeclaredArgument from = DefaultBoundOperationFacts.get().buildsItsResultFrom(reverse).from();
+        Core.PreservedCall rebuilt = CallArguments.replacedIn(from, call, other);
 
         assertEquals(call.declared(), rebuilt.declared());
         assertEquals(call.args().size(), rebuilt.args().size());

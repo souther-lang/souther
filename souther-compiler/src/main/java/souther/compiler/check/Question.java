@@ -1,7 +1,6 @@
 package souther.compiler.check;
 
 import souther.compiler.stdlib.Stdlib;
-import souther.compiler.semantics.OperationFacts;
 import souther.compiler.semantics.OperationSubject;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
@@ -58,7 +57,7 @@ enum Question {
 
         @Override
         Set<ValueName> nothingSaidOf() {
-            return OperationFacts.saysNothingOf(OperationSubject.COMBINATOR);
+            return DefaultBoundOperationFacts.get().saysNothingOf(OperationSubject.COMBINATOR);
         }
     },
 
@@ -186,7 +185,7 @@ enum Question {
 
         @Override
         Set<ValueName> nothingSaidOf() {
-            return OperationFacts.saysNothingOf(OperationSubject.BUILT);
+            return DefaultBoundOperationFacts.get().saysNothingOf(OperationSubject.BUILT);
         }
     },
 
@@ -212,7 +211,7 @@ enum Question {
 
         @Override
         Set<ValueName> nothingSaidOf() {
-            return OperationFacts.saysNothingOf(OperationSubject.PREDICATE_CARRY);
+            return DefaultBoundOperationFacts.get().saysNothingOf(OperationSubject.PREDICATE_CARRY);
         }
     },
 
@@ -239,7 +238,7 @@ enum Question {
 
         @Override
         Set<ValueName> nothingSaidOf() {
-            return OperationFacts.saysNothingOf(OperationSubject.EMPTINESS);
+            return DefaultBoundOperationFacts.get().saysNothingOf(OperationSubject.EMPTINESS);
         }
     },
 
@@ -267,7 +266,7 @@ enum Question {
 
         @Override
         Set<ValueName> nothingSaidOf() {
-            return OperationFacts.saysNothingOf(OperationSubject.QUANTIFICATION);
+            return DefaultBoundOperationFacts.get().saysNothingOf(OperationSubject.QUANTIFICATION);
         }
     },
 
@@ -296,7 +295,7 @@ enum Question {
 
         @Override
         Set<ValueName> nothingSaidOf() {
-            return OperationFacts.saysNothingOf(OperationSubject.PROJECTION);
+            return DefaultBoundOperationFacts.get().saysNothingOf(OperationSubject.PROJECTION);
         }
     },
 
@@ -320,7 +319,7 @@ enum Question {
 
         @Override
         Set<ValueName> nothingSaidOf() {
-            return OperationFacts.saysNothingOf(OperationSubject.SIZE);
+            return DefaultBoundOperationFacts.get().saysNothingOf(OperationSubject.SIZE);
         }
     },
 
@@ -349,7 +348,7 @@ enum Question {
 
         @Override
         Set<ValueName> nothingSaidOf() {
-            return OperationFacts.saysNothingOf(OperationSubject.ORDER);
+            return DefaultBoundOperationFacts.get().saysNothingOf(OperationSubject.ORDER);
         }
     },
 
@@ -366,7 +365,7 @@ enum Question {
      * was true of one was written wherever a reader happened to want it (#1016).
      *
      * <p>A bound that does name an argument is still held to a signature that has one:
-     * {@link DischargeRules#holdBound} reads the argument it names, so an operation given no number
+     * {@link OperationFactBinder} reads the argument it names, so an operation given no number
      * cannot declare one — which is where that requirement belongs, since it is about a fact and a
      * declaration agreeing rather than about which operations are asked.
      */
@@ -388,7 +387,7 @@ enum Question {
 
         @Override
         Set<ValueName> nothingSaidOf() {
-            return OperationFacts.saysNothingOf(OperationSubject.BOUNDS);
+            return DefaultBoundOperationFacts.get().saysNothingOf(OperationSubject.BOUNDS);
         }
     },
 
@@ -418,7 +417,7 @@ enum Question {
 
         @Override
         Set<ValueName> nothingSaidOf() {
-            return OperationFacts.saysNothingOf(OperationSubject.MEASURE);
+            return DefaultBoundOperationFacts.get().saysNothingOf(OperationSubject.MEASURE);
         }
     },
 
@@ -446,7 +445,7 @@ enum Question {
 
         @Override
         Set<ValueName> nothingSaidOf() {
-            return OperationFacts.saysNothingOf(OperationSubject.CHOICE);
+            return DefaultBoundOperationFacts.get().saysNothingOf(OperationSubject.CHOICE);
         }
     },
 
@@ -480,7 +479,7 @@ enum Question {
 
         @Override
         Set<ValueName> nothingSaidOf() {
-            return OperationFacts.saysNothingOf(OperationSubject.FORM);
+            return DefaultBoundOperationFacts.get().saysNothingOf(OperationSubject.FORM);
         }
     },
 
@@ -517,7 +516,7 @@ enum Question {
 
         @Override
         Set<ValueName> nothingSaidOf() {
-            return OperationFacts.saysNothingOf(OperationSubject.NUMERIC_RESULT);
+            return DefaultBoundOperationFacts.get().saysNothingOf(OperationSubject.NUMERIC_RESULT);
         }
     },
 
@@ -541,7 +540,7 @@ enum Question {
      * and the answer is that none does.
      *
      * <p>Wider than what may be declared. A term is held to a result that is a bare number
-     * ({@link DischargeRules#holdTakenOf}), because what stands at the path a term names is the
+     * (held by {@link OperationFactBinder}), because what stands at the path a term names is the
      * union and which case it is in is not something such an account has room for. The two ranges
      * are different on purpose: an operation may be asked a question whose only available answer is
      * that nothing reads it.
@@ -563,18 +562,18 @@ enum Question {
 
         @Override
         boolean answeredFor(Stdlib stdlib, ValueName operation) {
-            return NumericReadings.resolve(stdlib, OperationFacts.declarations(), operation)
+            return NumericReadings.resolve(stdlib, DefaultBoundOperationFacts.get(), operation)
                     instanceof NumericReadings.Resolution.One;
         }
 
         @Override
         Set<ValueName> answeredOperations() {
-            return OperationFacts.answersANumberTakenOfItsArgument();
+            return DefaultBoundOperationFacts.get().answersANumberTakenOfItsArgument();
         }
 
         @Override
         Set<ValueName> nothingSaidOf() {
-            return OperationFacts.saysNothingOf(OperationSubject.READING);
+            return DefaultBoundOperationFacts.get().saysNothingOf(OperationSubject.READING);
         }
     };
 

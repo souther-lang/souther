@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.check.ReadingPolicy;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.ast.Hir;
@@ -230,9 +231,8 @@ public final class Partitions {
                 // And what an operation answered is the operation's to say. Asked of the arm it is
                 // taken as instead, every operation sharing an arm would carry one answer: a string
                 // of any length exists and a `Set<Bool>` of three does not, and both are counts.
-                case NumericTerm.TakenOf taken ->
-                        souther.compiler.semantics.OperationFacts
-                                .everyAnswerItCanGiveHasASourceValue(taken.operation());
+                case NumericTerm.TakenOf taken -> DefaultBoundOperationFacts.get()
+                        .everyAnswerItCanGiveHasASourceValue(taken.operation());
                 // A run has as many values as a row wrote and each of them is chosen, so whether
                 // some run adds up to a given total is a question about what the elements may hold
                 // and how many there may be — not one the operation answers about itself. Nothing

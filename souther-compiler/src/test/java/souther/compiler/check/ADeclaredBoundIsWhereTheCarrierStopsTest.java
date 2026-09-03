@@ -30,7 +30,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 class ADeclaredBoundIsWhereTheCarrierStopsTest {
 
     private static NumericDomain.Bounds declaredFor(String module, String operation) {
-        return ResultRange.of(ValueName.Stdlib.operation(module, operation), ConstantArguments.NONE);
+        return ResultRange.of(DefaultBoundOperationFacts.get().boundsOnTheResult(
+                ValueName.Stdlib.operation(module, operation)), ConstantArguments.none());
     }
 
     /** A pair of ends, both counts and both of the range's own. */

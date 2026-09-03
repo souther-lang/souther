@@ -1,7 +1,6 @@
 package souther.compiler.check;
 
 import souther.compiler.numeric.LinearForm;
-import souther.compiler.semantics.ArgumentRef;
 import souther.compiler.semantics.NumericResult;
 import souther.compiler.semantics.TakenAs;
 
@@ -46,7 +45,7 @@ sealed interface NumericReading {
 
     /** The number is arithmetic over what the arguments are counted as, and {@code form} is that
      *  arithmetic. */
-    record AsAFormOfItsArguments(LinearForm<ArgumentRef> form)
+    record AsAFormOfItsArguments(LinearForm<DeclaredArgument> form)
             implements NumericReading {
 
         public AsAFormOfItsArguments {
@@ -61,7 +60,8 @@ sealed interface NumericReading {
 
     /** The number is the arithmetic the operation computes, and {@code result} says which and where
      *  it is answered. */
-    record AsTheArithmeticItComputes(NumericResult result) implements NumericReading {
+    record AsTheArithmeticItComputes(NumericResult<DeclaredArgument> result)
+            implements NumericReading {
 
         public AsTheArithmeticItComputes {
             java.util.Objects.requireNonNull(result, "this one says what it computes");
