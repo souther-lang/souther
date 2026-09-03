@@ -84,9 +84,15 @@ public record SearchOutcomes(List<ItemAssessment.Attempt> each) {
     }
 
     /**
-     * Which budgets of this compiler's stopped a showing here, and empty where none did.
+     * Which figures of this compiler's leave a showing here unable to establish the point, and
+     * empty where none do.
      *
-     * <p>All of them. Two searches stopped by two figures are two pieces of work, and a reader
+     * <p>Said that way and not as "stopped", because the outcomes that name a figure did not all
+     * stop: one search ran to the end of a plan short of the point, and one point was never
+     * searched at all. What they have in common is what this is for — the question is open, and
+     * open on something somebody could raise.
+     *
+     * <p>All of them. Two searches held back by two figures are two pieces of work, and a reader
      * asking what would have to give is owed both.
      *
      * <p>Kept inside this package, where the one caller is what puts them together

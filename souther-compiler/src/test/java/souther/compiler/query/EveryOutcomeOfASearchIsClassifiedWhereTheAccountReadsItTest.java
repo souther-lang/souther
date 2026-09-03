@@ -46,7 +46,7 @@ class EveryOutcomeOfASearchIsClassifiedWhereTheAccountReadsItTest {
     private static Map<Class<?>, ItemAssessment.Attempt> oneOfEach() {
         Map<Class<?>, ItemAssessment.Attempt> out = new LinkedHashMap<>();
         for (ItemAssessment.Attempt each : List.of(certified(), unverified(), stopped(), limited(),
-                unresolved(), unavailable())) {
+                unplanned(), unresolved(), unavailable())) {
             out.put(each.getClass(), each);
         }
         return out;
@@ -241,6 +241,22 @@ class EveryOutcomeOfASearchIsClassifiedWhereTheAccountReadsItTest {
         return new ItemAssessment.Attempt.Limited(
                 new Generator.UnresolvedCombination(List.of("p.x = 11"),
                         Generator.UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED),
+                WAY, List.of(), EstablishmentGap.Composition.of(
+                        EnumSet.of(CompositionBudget.DEPTH_A_CONSTRUCTION_PLAN_DESCENDS)));
+    }
+
+    /**
+     * A point no search was made for, which the account reads as prevented like any other.
+     *
+     * <p>Its word says no search happened. Given one a search comes back with, this and {@link
+     * ItemAssessment.Attempt.Limited} would be one state a reader tells apart by which fields were
+     * filled in.
+     */
+    private static ItemAssessment.Attempt unplanned() {
+        return new ItemAssessment.Attempt.Unplanned(
+                new Generator.UnresolvedCombination(List.of("p.x = 11"),
+                        Generator.UnresolvedCombination.Reason
+                                .NO_READING_OF_THE_LINE_COULD_BE_SEARCHED),
                 WAY, List.of(), EstablishmentGap.Composition.of(
                         EnumSet.of(CompositionBudget.DEPTH_A_CONSTRUCTION_PLAN_DESCENDS)));
     }

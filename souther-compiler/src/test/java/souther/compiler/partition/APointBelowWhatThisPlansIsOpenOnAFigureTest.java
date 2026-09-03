@@ -13,9 +13,9 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A point whose position is deeper than this compiler plans is left open on the figure that stopped
@@ -77,15 +77,36 @@ class APointBelowWhatThisPlansIsOpenOnAFigureTest {
     void aPointThePlanCouldNotReachIsOpenOnTheDepthThisPlansTo() {
         List<ItemAssessment.Attempt> made = searchesOf(PointRole.ON);
 
-        assertEquals(1, made.size(), "the line has one point ON it, searched once: " + made);
-        ItemAssessment.Attempt.Limited limited = assertInstanceOf(
-                ItemAssessment.Attempt.Limited.class, made.get(0),
-                "the plan stopped short of the position the line is drawn at, so what came back is"
-                        + " an answer about less than the point had");
+        assertEquals(1, made.size(), "the line has one point ON it, asked about once: " + made);
+        ItemAssessment.Attempt.Unplanned unplanned = assertInstanceOf(
+                ItemAssessment.Attempt.Unplanned.class, made.get(0),
+                "the position the line is drawn at is under what this plans, so no value was"
+                        + " planned and no search was made");
         assertEquals(List.of(CompositionBudget.DEPTH_A_CONSTRUCTION_PLAN_DESCENDS),
-                assertInstanceOf(EstablishmentGap.Composition.class, limited.by())
+                assertInstanceOf(EstablishmentGap.Composition.class, unplanned.by())
                         .budgets().written(),
                 "and it is open on how deep this plans, which is a figure somebody could raise");
+    }
+
+    /**
+     * And nothing counts it as a search that ran.
+     *
+     * <p><b>The half that a shared arm would have thrown away.</b> What a point comes to and what
+     * this run actually did are two facts, and they part here: the account's question — is the
+     * point open on a figure — is answered the same as for a search a figure stopped, while the
+     * history is that no search was made. Held as one outcome with the other, the reading would be
+     * counted among the ones that were walked, and a line's readings together would rest on one
+     * nobody looked at.
+     */
+    @Test
+    void aPointNothingWasPlannedForIsNotCountedAsASearchThatRan() {
+        ItemAssessment.Attempt made = searchesOf(PointRole.ON).get(0);
+
+        assertFalse(made instanceof ItemAssessment.Attempt.Searched,
+                "no search ran for it, so it is not an outcome of one");
+        assertInstanceOf(ItemAssessment.Attempt.Prevented.class, made,
+                "and the account still reads it as this compiler's own limit, which is what keeps"
+                        + " the point counted");
     }
 
     /**
@@ -105,29 +126,29 @@ class APointBelowWhatThisPlansIsOpenOnAFigureTest {
     }
 
     /**
-     * The search's own word survives beside the figure, and says which way the point got here.
+     * A plan short of the value, where the search did run, is the other arm — and its word is its
+     * own.
      *
-     * <p>The half a reader loses if this arm is read as {@link ItemAssessment.Attempt.Stopped}.
-     * That word is the budgets' to say and is checked against them, and these budgets have none —
-     * so the only way to carry a search's own answer beside a figure like this is for the two to be
-     * independent, and this is what says they are.
+     * <p>The line here is not below the figure, so the value is planned and searched; what the
+     * search is handed is short, because the parameter nests past what this plans elsewhere. So
+     * the answer is the search's own — every candidate refused — and the figure says that answer
+     * is about less than the point had. The word is not read off the budgets: these budgets stop no
+     * search and asking them for a word is what refuses to answer.
      *
-     * <p><b>And it is the only thing here that says which route was taken.</b> Two of them end at
-     * this same arm carrying this same figure: a demand the plan could not reach, refused before
-     * any search ran, and a search that ran against a short plan and came to nothing. That they
-     * converge is the design — what a reader is owed is the same either way — so the word is what
-     * tells them apart, and asserting it is what keeps this test about the first of the two.
+     * <p>Which is the whole of what tells this from the point above. There the plan was never
+     * made; here it was made, used, and short.
      */
     @Test
-    void theWordTheSearchCameBackWithIsNotReadOffTheFigure() {
-        ItemAssessment.Attempt.Limited limited = assertInstanceOf(
-                ItemAssessment.Attempt.Limited.class, searchesOf(PointRole.ON).get(0));
+    void aSearchOverAShortPlanIsAnOutcomeOfASearchAndKeepsItsOwnWord() {
+        ItemAssessment.Attempt made = onlyLimitedOf(BOTH, "both");
 
-        assertEquals(Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
+        ItemAssessment.Attempt.Limited limited =
+                assertInstanceOf(ItemAssessment.Attempt.Limited.class, made);
+        assertInstanceOf(ItemAssessment.Attempt.Searched.class, limited,
+                "the search ran over the plan it was handed, so it is an outcome of one");
+        assertEquals(Generator.UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED,
                 limited.why().reason(),
-                "the search said what it found, which is that nothing composed a row here");
-        assertTrue(limited.by() instanceof EstablishmentGap.Composition,
-                "and the figure is carried beside it rather than the word being taken off it");
+                "and it says what it found rather than what a figure would have said for it");
     }
 
     /**
@@ -141,22 +162,31 @@ class APointBelowWhatThisPlansIsOpenOnAFigureTest {
      */
     @Test
     void aPointTwoFiguresHeldBackNamesEachOfThem() {
-        List<CompositionBudget> named = new ArrayList<>();
-        for (BorderAssessment border : lines(BOTH, "both")) {
-            if (border.at(PointRole.ON) instanceof ItemAssessment.Owed owed) {
-                for (ItemAssessment.Attempt each : owed.searches().each()) {
-                    if (each instanceof ItemAssessment.Attempt.Limited it) {
-                        named.addAll(assertInstanceOf(EstablishmentGap.Composition.class, it.by())
-                                .budgets().written());
-                    }
-                }
-            }
-        }
+        ItemAssessment.Attempt.Limited limited = assertInstanceOf(
+                ItemAssessment.Attempt.Limited.class, onlyLimitedOf(BOTH, "both"));
 
         assertEquals(List.of(CompositionBudget.DECOMPOSITIONS_OF_A_TOTAL_OFFERED,
-                        CompositionBudget.DEPTH_A_CONSTRUCTION_PLAN_DESCENDS), named,
+                        CompositionBudget.DEPTH_A_CONSTRUCTION_PLAN_DESCENDS),
+                assertInstanceOf(EstablishmentGap.Composition.class, limited.by())
+                        .budgets().written(),
                 "the plan stopped short and the edge held values back, and the point is open on"
                         + " each of them");
+    }
+
+    /** The one search of this behavior that came back limited, which is the point both figures
+     *  bear on. */
+    private static ItemAssessment.Attempt onlyLimitedOf(String source, String behavior) {
+        List<ItemAssessment.Attempt> found = new ArrayList<>();
+        for (BorderAssessment border : lines(source, behavior)) {
+            if (border.at(PointRole.ON) instanceof ItemAssessment.Owed owed) {
+                owed.searches().each().stream()
+                        .filter(each -> each instanceof ItemAssessment.Attempt.Limited)
+                        .forEach(found::add);
+            }
+        }
+        assertEquals(1, found.size(),
+                "one point of this behavior is searched over a plan short of it: " + found);
+        return found.get(0);
     }
 
     /**

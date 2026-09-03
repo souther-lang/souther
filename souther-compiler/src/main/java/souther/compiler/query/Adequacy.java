@@ -3183,6 +3183,9 @@ public final class Adequacy {
                     // nothing in the same sense the two above did, and which figure made its answer
                     // short is the point's own to say, in the same place.
                     case ItemAssessment.Attempt.Limited why -> unresolved.add(why.why());
+                    // And a point no search was made for, which the block is short of a row for
+                    // like any other. Its word says that rather than saying what a search found.
+                    case ItemAssessment.Attempt.Unplanned why -> unresolved.add(why.why());
                     case ItemAssessment.Attempt.Unresolved why -> {
                         unresolved.add(why.why());
                         // And where the decoders were out of reach, the block is short of rows it

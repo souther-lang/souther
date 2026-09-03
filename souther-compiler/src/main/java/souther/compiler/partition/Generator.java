@@ -2403,6 +2403,35 @@ public final class Generator {
                         unrepresented);
             }
         }
+
+        /**
+         * No search was made for the point: the value could not be planned.
+         *
+         * <p>Beside the two above and not one of them, because nothing ran. A reader of this is
+         * owed the same thing a reader of {@link Stopped} is — the point is open on a figure — and
+         * is owed it about a search that never happened, which is what its word says.
+         */
+        record Unplanned(UnresolvedCombination why, java.util.Set<CompositionBudget> by,
+                         List<ReachabilityGap.Uncomposed> unrepresented)
+                implements BoundaryAttempt {
+
+            public Unplanned {
+                unrepresented = List.copyOf(unrepresented);
+                by = java.util.Set.copyOf(by);
+                if (by.isEmpty()) {
+                    throw new IllegalArgumentException(
+                            "a point nothing was planned for says which figure left it unplanned");
+                }
+            }
+
+            /** One at the label given, in the word a reading nothing searched comes back with. */
+            static Unplanned at(String label, java.util.Set<CompositionBudget> by,
+                                List<ReachabilityGap.Uncomposed> unrepresented) {
+                return new Unplanned(new UnresolvedCombination(List.of(label),
+                        UnresolvedCombination.Reason.NO_READING_OF_THE_LINE_COULD_BE_SEARCHED),
+                        by, unrepresented);
+            }
+        }
     }
 
     /**
@@ -2552,6 +2581,11 @@ public final class Generator {
                     both.addAll(whatTheEdgeHeldBack(heldBack, here, itsWord));
                     return BoundaryAttempt.Limited.at(label, itsWord, said, both,
                             where.unrepresented());
+                }
+                // Nothing ran for this parameter, so nothing below applies: the rewrites there are
+                // about what a search found, and there was no search.
+                case Outcome.Unplanned(java.util.Set<CompositionBudget> by) -> {
+                    return BoundaryAttempt.Unplanned.at(label, by, where.unrepresented());
                 }
                 case Outcome.Unresolved(UnresolvedCombination.Reason word, String said) -> {
                     why = word;
@@ -3522,6 +3556,13 @@ public final class Generator {
                                      java.util.Set<CompositionBudget> _) -> {
                     return Attempt.no(why, detail);
                 }
+                // A value nothing planned, which this route says in the word for a reading no
+                // search could be made of. It carries no figure for the same reason none of the
+                // others does here.
+                case Outcome.Unplanned _ -> {
+                    return Attempt.no(UnresolvedCombination.Reason
+                            .NO_READING_OF_THE_LINE_COULD_BE_SEARCHED, null);
+                }
             }
         }
         // The values, and no name. What a row is about is what it was composed for, which is the
@@ -3615,13 +3656,11 @@ public final class Generator {
             }
             // What the caller asked for is under a position the plan stopped short of reading, so
             // there is nothing to search: a row composed against such a plan would be one the
-            // caller's own value is missing from. Said in the ordinary word for a position nothing
-            // composed a value at, with the figure beside it — the word is what a reader has always
-            // been told and the figure is what says the point is open for a reason somebody could
-            // raise.
+            // caller's own value is missing from. Nothing here ran, so nothing here has a search's
+            // word to give — what travels is the figure, and what a reader is told is that no
+            // search could be made rather than what one found.
             case ConstructionPlan.Result.Beyond(java.util.Set<CompositionBudget> by) -> {
-                return new Outcome.Limited(UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
-                        null, by);
+                return new Outcome.Unplanned(by);
             }
         }
         Choices choices = choicesOf(subject, p, plan, decided, settled);
@@ -3704,8 +3743,10 @@ public final class Generator {
             case Outcome.Unresolved(UnresolvedCombination.Reason why, String detail) ->
                     new Outcome.Limited(why, detail, cut);
             // A search a figure stopped already names one, and nothing here turns that into a
-            // second account of the same emptiness. A row stands whatever the plan gave up on.
-            case Outcome.Built _, Outcome.Stopped _, Outcome.Limited _ -> came;
+            // second account of the same emptiness. A row stands whatever the plan gave up on, and
+            // a value nothing planned had no search for this to be about.
+            case Outcome.Built _, Outcome.Stopped _, Outcome.Limited _, Outcome.Unplanned _ ->
+                    came;
         };
     }
 
@@ -4319,6 +4360,28 @@ public final class Generator {
             /** The word a search these stopped comes back with. */
             UnresolvedCombination.Reason why() {
                 return UnresolvedCombination.Reason.wordFor(by);
+            }
+        }
+
+        /**
+         * No search was run: the value could not be planned.
+         *
+         * <p>No word, because a word here is a search's answer and none was made. The one thing
+         * known is which figure left the plan unable to reach what the caller asked for, and
+         * whoever turns this into an account says so in words about a search that did not happen.
+         *
+         * <p>Apart from {@link Limited} for the same reason it is apart at the account: the two
+         * leave a reader the same work and did not happen the same way, and an outcome that held
+         * both would have the history recoverable only from which fields were filled in.
+         */
+        record Unplanned(java.util.Set<CompositionBudget> by) implements Outcome {
+
+            public Unplanned {
+                by = java.util.Set.copyOf(by);
+                if (by.isEmpty()) {
+                    throw new IllegalArgumentException(
+                            "a value nothing planned says which figure left it unplanned");
+                }
             }
         }
 
