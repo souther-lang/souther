@@ -7,11 +7,11 @@ import souther.compiler.inputs.BlockReason;
  * which question there is.
  *
  * <p><b>Both, and at the same granularity.</b> A rule is read place by place, and how far the
- * reading got differs between them: {@code p.x < Int.multiply(p.y, p.y)} states something about the
- * values at {@code p.x} — a whole side of it is that position — and states nothing anybody here can
- * name about {@code p.y}, which the walk met inside a product it did not take apart. Written as one
- * answer for the rule, the second takes the first with it, and an obligation this compiler had
- * worked out is dropped because something beside it was not read.
+ * reading got differs between them: {@code lo >= 1 && Decimal.compare(a.value, b.value) <= 0}
+ * states where the values at {@code lo} stop, and about {@code a} it speaks of what an operation
+ * answered, so whether it puts an end there is what nothing worked out. Written as one answer for
+ * the rule, the second takes the first with it, and an obligation this compiler had worked out is
+ * dropped because something beside it was not read.
  *
  * <p><b>{@link BoundaryUndetermined#at} is where the classification stopped and not what the rule
  * is about.</b> What such a rule states there is what nothing worked out, so a reader may not turn

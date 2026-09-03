@@ -43,10 +43,10 @@ class OneIdentityIsFoldedOnceAndKeepsEveryHandleTest {
         gathered.add(found(NAMED, "x"));
         gathered.add(found(PLACED, "x"));
 
-        assertEquals(1, gathered.found().stated().size(),
+        assertEquals(1, gathered.found().reported().size(),
                 () -> "one rule at one position for one reason is one finding: "
-                        + gathered.found().stated());
-        assertEquals(Set.of(NAMED, PLACED), gathered.found().stated().get(0).cited(),
+                        + gathered.found().reported());
+        assertEquals(Set.of(NAMED, PLACED), gathered.found().reported().get(0).cited(),
                 "and a reader can be sent to it either way either reader offered");
     }
 
@@ -71,7 +71,7 @@ class OneIdentityIsFoldedOnceAndKeepsEveryHandleTest {
         gathered.add(found(NAMED, "x"));
         gathered.add(found(NAMED, "y"));
 
-        assertEquals(2, gathered.found().stated().size(), () -> gathered.found().stated().toString());
+        assertEquals(2, gathered.found().reported().size(), () -> gathered.found().reported().toString());
     }
 
     /** And nothing puts together two findings that are not one rule. */
@@ -102,9 +102,9 @@ class OneIdentityIsFoldedOnceAndKeepsEveryHandleTest {
                 () -> "one rule, one place, one limit: " + gathered.found().unclassified());
         assertEquals(Set.of(NAMED, PLACED), gathered.found().unclassified().get(0).cited(),
                 "and both handles are kept, as they are for a finding");
-        assertEquals(1, gathered.found().stated().size(),
+        assertEquals(1, gathered.found().reported().size(),
                 () -> "the rule read to the end is beside it and not folded into it: "
-                        + gathered.found().stated());
+                        + gathered.found().reported());
     }
 
     /** A question two readers cited two ways is one question with both handles, and what the author

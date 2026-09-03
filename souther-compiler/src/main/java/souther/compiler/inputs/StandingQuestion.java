@@ -12,13 +12,14 @@ import java.util.Set;
  * A rule of the model that leaves a measure of coverage open, as everything past the input boundary
  * carries it.
  *
- * <p><b>Two of them, and the line between them is how far the reading of the rule got.</b> Where
- * this compiler worked out what the rule raises, the question names that obligation and the subject
- * it is about ({@link Exact}). Where it did not, what the rule raises is the part that was not read,
- * and the question says exactly that and invents neither ({@link NothingClassifiesIt}). Both
- * hold a measure open, and neither is the other's answer: a reader told that a question about a
- * position stands is told which position and what about it, and one told that a rule's reading did
- * not finish is told to go and look at the rule.
+ * <p><b>What tells them apart is how far the reading of the rule got.</b> Where this compiler
+ * worked out what the rule raises, the question names that obligation and the subject it is about
+ * ({@link Exact}). Where it worked out which obligation was left undecided, the question says which
+ * one and holds that measure alone open ({@link BoundaryUndetermined}). Where nothing worked out
+ * what the rule raises at all, the question says exactly that and invents neither obligation nor
+ * subject ({@link NothingClassifiesIt}). All of them hold a measure open, and none is another's
+ * answer: a reader told that a question about a position stands is told which position and what
+ * about it, and one told that a rule's reading did not finish is told to go and look at the rule.
  *
  * <p>Written as one, the second would have to wear the first's clothes — a subject it does not have
  * and an obligation nobody worked out — or travel outside the questions altogether, as a flag on

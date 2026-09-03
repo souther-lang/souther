@@ -221,7 +221,7 @@ class WhatAClauseDrawsALineOnTest {
                 """, "look");
 
         assertEquals(List.of(), valuesOf(clauses));
-        assertEquals(List.of(), clauses.noLine().stated(),
+        assertEquals(List.of(), clauses.noLine().reported(),
                 "this read the rule; what it draws no line at is a decision and not a limit");
         assertEquals(List.of(), clauses.noLine().unclassified(),
                 "and nothing about it went unclassified");
@@ -259,7 +259,7 @@ class WhatAClauseDrawsALineOnTest {
 
         assertEquals(List.of(), valuesOf(clauses), "the line is on the answer, and a row has none");
         assertEquals(List.of(), clauses.between(), "and it is not a line between two inputs");
-        assertEquals(List.of(), clauses.noLine().stated(),
+        assertEquals(List.of(), clauses.noLine().reported(),
                 "this read the rule; that it draws no line is a decision and not a limit");
         assertEquals(List.of(), clauses.noLine().unclassified(),
                 "and nothing about it went unclassified");
@@ -332,9 +332,9 @@ class WhatAClauseDrawsALineOnTest {
 
             assertEquals(1, clauses.thresholds().size(),
                     () -> measure + " draws a line: " + valuesOf(clauses));
-            assertEquals(List.of(), clauses.noLine().stated(),
+            assertEquals(List.of(), clauses.noLine().reported(),
                     () -> measure + " was read, so nothing says otherwise: "
-                            + clauses.noLine().stated());
+                            + clauses.noLine().reported());
             assertEquals(List.of(), clauses.noLine().unclassified(),
                     () -> measure + " was read, so nothing about it is unclassified: "
                             + clauses.noLine().unclassified());
@@ -443,7 +443,7 @@ class WhatAClauseDrawsALineOnTest {
                 line.demand(PointRole.IN).criterion().asked(line.cut().of()));
         assertEquals("in to < from", line.demand(PointRole.OUT).criterion().asked(line.cut().of()));
         assertEquals(List.of("from", "to"),
-                clauses.noLine().stated().stream().map(each -> each.at().toString()).toList());
+                clauses.noLine().reported().stream().map(each -> each.at().toString()).toList());
     }
 
     /**

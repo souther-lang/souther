@@ -1386,7 +1386,7 @@ public final class InputDomain {
         NumericDomain.Bounds admissible = nothingExists ? null
                 : TypeBounds.admissible(own, projected.bounds(), term);
         RulesWithNoLine noLine = rulesWithoutALineAt(placed, path, type, source, found);
-        List<RuleWithoutALine> withoutALine = noLine.stated();
+        List<RuleWithoutALine> withoutALine = noLine.reported();
         // Everything left open about the rules of this position: what the accounting of the
         // declaration's clauses could not classify, and what this walk itself could not — which of
         // the position's two numbers it is measured at is decided here and nowhere else, so no

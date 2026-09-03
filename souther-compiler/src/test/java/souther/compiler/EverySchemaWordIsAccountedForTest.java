@@ -786,8 +786,23 @@ class EverySchemaWordIsAccountedForTest {
         out.add(AdequacyReport.questionWord(asking(new souther.compiler.inputs.InputQuestion
                 .AboutANumber(souther.compiler.check.NumberAt.valueOf(
                         souther.compiler.inputs.TermPath.of("x"))))));
+        out.add(AdequacyReport.questionWord(boundaryUndetermined()));
         out.add(AdequacyReport.questionWord(unclassified()));
         return out;
+    }
+
+    /** A rule read far enough to say it restricts the values, and no further. */
+    private static souther.compiler.inputs.StandingQuestion boundaryUndetermined() {
+        return souther.compiler.inputs.StandingQuestion.BoundaryUndetermined.of(
+                new souther.compiler.check.RuleRef.Comparison("f",
+                        new souther.compiler.types.CoverageOrigin("m", 0, 0,
+                                souther.compiler.types.CoverageConstruct.IF)),
+                new souther.compiler.check.RuleCitation.WrittenAt(
+                        souther.compiler.diag.Citation.of(
+                                new souther.compiler.diag.SourcePos(1, 1))),
+                souther.compiler.inputs.FilingCoordinate.at(
+                        souther.compiler.inputs.TermPath.of("x")),
+                new souther.compiler.inputs.BlockReason.UnreadComparisonForm());
     }
 
     /** A rule this compiler did not read far enough to classify. */

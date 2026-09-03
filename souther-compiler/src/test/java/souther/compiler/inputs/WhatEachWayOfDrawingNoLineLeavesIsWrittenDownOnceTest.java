@@ -281,7 +281,12 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
                     new FilingCoordinate.AtPosition(TermPath.of("x")), each);
             RulesWithNoLine filed = gathered.found();
 
-            assertEquals(1, filed.stated().size(), each.getClass().getSimpleName());
+            assertEquals(1, filed.reported().size(), each.getClass().getSimpleName());
+            assertEquals(each instanceof BlockReason.ReadToEndWithoutLine ? 1 : 0,
+                    filed.modelStatements().size(),
+                    () -> each.getClass().getSimpleName()
+                            + ": what the model states is asked of the reason, not of what a report"
+                            + " prints");
             assertEquals(List.of(), filed.unclassified(),
                     () -> each.getClass().getSimpleName()
                             + ": a finding raises no question by having been filed");

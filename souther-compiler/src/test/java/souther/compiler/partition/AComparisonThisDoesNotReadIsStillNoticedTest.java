@@ -355,14 +355,14 @@ class AComparisonThisDoesNotReadIsStillNoticedTest {
      */
     private static List<Said> said(GuardThresholds.Guards guards) {
         List<Said> out = new java.util.ArrayList<>();
-        guards.noLine().stated().forEach(each -> out.add(new Said(each.at(), each.why())));
+        guards.noLine().reported().forEach(each -> out.add(new Said(each.at(), each.why())));
         guards.noLine().unclassified().forEach(each -> out.add(new Said(each.at(), each.why())));
         return List.copyOf(out);
     }
 
     /** Nothing at all: neither a finding about the model nor a question about a rule. */
     private static void nothingWasLeft(GuardThresholds.Guards guards) {
-        assertEquals(List.of(), guards.noLine().stated());
+        assertEquals(List.of(), guards.noLine().reported());
         assertEquals(List.of(), guards.noLine().unclassified());
     }
 }

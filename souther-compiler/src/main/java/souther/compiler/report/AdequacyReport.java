@@ -1722,10 +1722,17 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 case ADMITTED_VALUES -> "which values may stand at";
                 case BOUNDARY -> "where the values stop on";
             };
-            // Not a question about the place, which is why the phrase does not name one. What such
-            // a rule asks is what nothing worked out, and the place beside this is where a reader
-            // is sent to look at the rule.
-            case StandingQuestion.Unclassified _ ->
+            // Neither phrase names the place, which is why they do not read like the two above:
+            // what such a rule asks is what nothing worked out, and the place beside this is where
+            // a reader is sent to look at the rule.
+            //
+            // Two phrases, because two different things are undecided and a reader acts on them
+            // differently. One says the rule restricts the values there and nothing worked out
+            // whether it also puts an end; the other says nothing worked out what the rule does at
+            // all.
+            case StandingQuestion.BoundaryUndetermined _ ->
+                    "whether the values stop on";
+            case StandingQuestion.NothingClassifiesIt _ ->
                     "what this rule states about";
         };
     }
@@ -2608,24 +2615,33 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                      InputQuestion.AboutANumber _ -> "position";
             };
             // Not a position, and not a number of one: what such a rule is about is what nothing
-            // worked out. What the `path` beside this names is where a reader is sent to look.
-            case StandingQuestion.Unclassified _ ->
-                    "filedAt";
+            // worked out — of the end in the one case and of the whole rule in the other, and
+            // neither has a subject. What the `path` beside this names is where a reader is sent to
+            // look, which is one word because it is one thing.
+            case StandingQuestion.BoundaryUndetermined _,
+                 StandingQuestion.NothingClassifiesIt _ -> "filedAt";
         };
     }
 
     /**
      * The word a document writes for what a standing question asks.
      *
-     * <p>Its own vocabulary and not the compiler's. What a question asks is either one of the two
-     * coverage obligations or nothing anybody worked out, and a document that had a word only for
-     * the first two would have to leave the third out or call it one of them.
+     * <p>Its own vocabulary and not the compiler's. A question asks one of the two coverage
+     * obligations, or asks whether a rule places an end where nothing worked that out, or is a rule
+     * nothing classified at all — and a document with a word only for the obligations would have to
+     * leave the other two out or call them one of those.
+     *
+     * <p>Four words for four states, and the last two are not one. A rule whose end is undecided has
+     * been classified far enough to say it restricts the values there, which is why the classes
+     * close over it and only the border stays open; a rule nothing classified holds both open. Under
+     * one word a reader of the document could not tell which of those a behavior is waiting on, and
+     * the two are lifted by different work.
      */
     public static String questionWord(StandingQuestion asked) {
         return switch (asked) {
             case StandingQuestion.Exact it -> word(it.obligation());
-            case StandingQuestion.Unclassified _ ->
-                    "notDetermined";
+            case StandingQuestion.BoundaryUndetermined _ -> "boundaryNotDetermined";
+            case StandingQuestion.NothingClassifiesIt _ -> "notDetermined";
         };
     }
 
@@ -3737,7 +3753,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 case ClosureGap.QuestionUnanswered one -> switch (one.question()) {
                     case StandingQuestion.Exact _ ->
                             WeakeningWord.QUESTION_UNANSWERED;
-                    case StandingQuestion.Unclassified _ ->
+                    // Both are this compiler not having read far enough, which is the one thing
+                    // this word says and the one thing a build held to it acts on. Which of them
+                    // it is, is what the question beside it says.
+                    case StandingQuestion.BoundaryUndetermined _,
+                         StandingQuestion.NothingClassifiesIt _ ->
                             WeakeningWord.RULE_UNREAD;
                 };
                 case ClosureGap.RulesNotReached _ ->

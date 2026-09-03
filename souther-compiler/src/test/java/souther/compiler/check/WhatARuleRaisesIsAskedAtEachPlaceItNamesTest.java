@@ -10,6 +10,7 @@ import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeSymbols;
 
+import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
@@ -135,7 +136,7 @@ class WhatARuleRaisesIsAskedAtEachPlaceItNamesTest {
         TypeSymbol.AtModule named = TypeSymbols.declared(new TypeKey(module, "Span"));
         Hir.Data data = (Hir.Data) symbols.declaredNode(named.key());
         assertNotNull(data, "no `Span` declared");
-        java.util.Collection<Required> every = FieldDomains
+        Collection<Required> every = FieldDomains
                 .of(named, data, RuleReadings.of(compilation, module),
                         ReadAs.THE_COMPILATION_DOES).required().values();
         assertEquals(1, every.size(), "one clause, so one answer about what it raises");

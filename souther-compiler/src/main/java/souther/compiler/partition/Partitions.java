@@ -374,7 +374,7 @@ public final class Partitions {
         // as one no rule was written about.
         unclassifiedIn(standing, rulesWithoutALine);
         RulesWithNoLine cameToHere = rulesWithoutALine.found();
-        List<RuleWithoutALine> refused = cameToHere.stated();
+        List<RuleWithoutALine> refused = cameToHere.reported();
         for (Drawn at : drawn) {
             BodyCutInspection came = null;
             for (Axis axis : at.axes()) {
@@ -442,11 +442,22 @@ public final class Partitions {
      * by it naming another.
      */
     private static BodyCutInspection cameTo(NumericTerm.FromOnePosition term,
-                                            souther.compiler.inputs.TermPath path,
+                                            TermPath path,
                                             RulesWithNoLine found) {
-        boolean stated = found.stated().stream().anyMatch(one -> filedHere(one.at(), term, path));
-        boolean stopped = found.unclassified().stream()
+        // Each bit asked of what says it, and neither read off the other's list. Every rule that
+        // came to no line is reported here, whichever of the two things happened to the reading, so
+        // the list alone answers neither question — the reason a finding carries is what says which
+        // of them it is.
+        boolean stated = found.modelStatements().stream()
                 .anyMatch(one -> filedHere(one.at(), term, path));
+        // And a reading stopped wherever a finding says so, or wherever a rule nothing classified
+        // stands. Both are the same sentence about this compiler reaching different surfaces: a
+        // reader that files no finding for such a rule leaves the question as the only thing
+        // saying it, and one whose questions are the accounting's leaves the finding.
+        boolean stopped = found.readingsThatStopped().stream()
+                        .anyMatch(one -> filedHere(one.at(), term, path))
+                || found.unclassified().stream()
+                        .anyMatch(one -> filedHere(one.at(), term, path));
         if (!stated && !stopped) {
             return new BodyCutInspection.Exhausted();
         }
@@ -503,7 +514,7 @@ public final class Partitions {
      */
     private static List<NumericTerm.FromOnePosition> numbersMeasuring(
             PositionMeasurements at, List<LineEvidence> evidence, EvidenceAccount account) {
-        souther.compiler.inputs.TermPath path = at.position().path();
+        TermPath path = at.position().path();
         List<LineEvidence> here = evidence.stream()
                 .filter(each -> each.at().position().equals(path)).toList();
         List<NumericTerm.FromOnePosition> numbers = new ArrayList<>();
@@ -804,7 +815,7 @@ public final class Partitions {
         found.addAll(rulesWithoutALine);
         unclassifiedIn(base.unanswered(), found);
         RulesWithNoLine gathered = found.found();
-        List<RuleWithoutALine> rules = gathered.stated();
+        List<RuleWithoutALine> rules = gathered.reported();
         // And what these readers could not classify, beside the questions the base reading already
         // had. One list of what holds a measure open, for the one reader of it.
         List<StandingQuestion> asked = new ArrayList<>(base.unanswered());

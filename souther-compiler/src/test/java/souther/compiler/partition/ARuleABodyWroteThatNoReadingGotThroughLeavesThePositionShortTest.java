@@ -99,6 +99,50 @@ class ARuleABodyWroteThatNoReadingGotThroughLeavesThePositionShortTest {
     }
 
     /**
+     * And the account of the position says the same, one bit each.
+     *
+     * <p>The two halves mean opposite things and are read from what says each. Every rule that came
+     * to no line is reported, whichever of the two happened to the reading, so the report's list
+     * answers neither question on its own — a reader taking it for the model having spoken says a
+     * position waiting on a reading is one the model has spoken about, and one taking the questions
+     * for the whole of what stopped misses a rule whose question its accounting raised.
+     *
+     * <p>Held on a model whose one rule at the position is a comparison nothing read, and beside it
+     * on a clause whose line nothing could fold — the two reach the account through different
+     * lists, and a reader that consults one of them gets one of these wrong.
+     */
+    @Test
+    void theAccountOfThePositionSaysAReadingStoppedAndNothingElse() {
+        assertEquals(new BodyCutInspection.NoLine(true, false), inspectionAt(divided(), AT),
+                "a reading stopped here, and no rule read to the end says anything");
+    }
+
+    /** The same of a clause the accounting raised the question for, which files a finding as well. */
+    @Test
+    void andSoDoesAClauseWhoseLineNothingCouldFold() {
+        Partitions.Partitioning divided = dividedIn("""
+                module probe.unfolded
+
+                data Length = Int
+                    invariant max = value <= 10 * 2
+
+                data Ok
+
+                behavior f : (l: Length) -> Ok
+                """);
+
+        assertEquals(new BodyCutInspection.NoLine(true, false), inspectionAt(divided, "l"),
+                "the reading of the number stopped, and the model states nothing anybody read");
+    }
+
+    /** What the rules at {@code path} came to, as the phase that measures the position holds it. */
+    private static BodyCutInspection inspectionAt(Partitions.Partitioning divided, String path) {
+        return divided.measurements().stream()
+                .filter(each -> each.position().path().toString().equals(path))
+                .findFirst().orElseThrow().inspection();
+    }
+
+    /**
      * And the measure's closure says the same thing, which is what the two used to disagree about.
      *
      * <p>A rule a reading did not get through leaves the partition measure short of what it would
@@ -120,7 +164,11 @@ class ARuleABodyWroteThatNoReadingGotThroughLeavesThePositionShortTest {
     }
 
     private static Partitions.Partitioning divided() {
-        Compilation compilation = Compilation.ofSource(A_GUARD_NO_READING_TAKES_APART, "Main");
+        return dividedIn(A_GUARD_NO_READING_TAKES_APART);
+    }
+
+    private static Partitions.Partitioning dividedIn(String model) {
+        Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         assertEquals(List.of(), compilation.diagnostics().values().stream()

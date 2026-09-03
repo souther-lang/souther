@@ -226,10 +226,12 @@ class WhatAReadingLeavesStandingIsAStateTheSchemaSaysTest {
         // declaration, which is what makes it the thing to assert here.
         assertEquals(List.of("r.n", "r.n"), partition.get("unanswered").valueStream()
                 .map(each -> each.get("at").asString()).toList(), partition.toString());
-        assertEquals(List.of("admitted_values", "notDetermined"),
+        assertEquals(List.of("admitted_values", "boundaryNotDetermined"),
                 partition.get("unanswered").valueStream()
                         .map(each -> each.get("question").asString()).sorted().toList(),
-                "which values may stand there is raised, and whether it bounds is not worked out");
+                "which values may stand there is raised, and whether it bounds is not worked out —"
+                        + " which is its own word, since the classes are settled and only the"
+                        + " border waits on it");
 
         // And the rules out of sight, at the other position, which raises no question at all.
         JsonNode held = axisAt(partition, "r.deep").get("read");

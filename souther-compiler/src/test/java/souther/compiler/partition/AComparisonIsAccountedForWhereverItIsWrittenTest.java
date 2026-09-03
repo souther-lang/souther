@@ -68,7 +68,7 @@ class AComparisonIsAccountedForWhereverItIsWrittenTest {
         GuardThresholds.Guards guards = read("Int.multiply(p.x, p.x) < 10");
 
         assertEquals(List.of(), guards.thresholds());
-        assertEquals(List.of(), guards.noLine().stated(),
+        assertEquals(List.of(), guards.noLine().reported(),
                 "the reading of it did not finish, so nothing is said about what the model states");
         assertEquals(1, guards.noLine().unclassified().size(),
                 guards.noLine().unclassified().toString());

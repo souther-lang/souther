@@ -35,7 +35,7 @@ class ARuleInABodyIsFiledAtWhatItsQuantityIsAboutTest {
     private static List<String> filedAt(String condition) {
         RulesWithNoLine found = read(condition);
         List<String> out = new java.util.ArrayList<>();
-        found.stated().forEach(each ->
+        found.reported().forEach(each ->
                 out.add(each.at() + "/" + each.why().getClass().getSimpleName()));
         found.unclassified().forEach(each ->
                 out.add(each.at() + "/" + each.why().getClass().getSimpleName()));
