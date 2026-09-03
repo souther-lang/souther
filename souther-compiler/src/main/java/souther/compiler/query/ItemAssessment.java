@@ -370,7 +370,7 @@ public sealed interface ItemAssessment {
      * <p>Made once. The row a person is offered and the value that witnessed the point are the same
      * value, built one time and read twice.
      *
-     * <p><b>Five outcomes, and three things that may be true of one.</b> The outcomes are what
+     * <p><b>The outcomes, and the things that may be true of one.</b> The outcomes are what
      * happened and are exclusive, so a reader asking which of them this is asks an exhaustive
      * switch. What may be true of one — that a row came of it, that a search ran, that a budget of
      * this compiler's stopped it — cuts across them: a row that was built and not read back is both
@@ -379,8 +379,8 @@ public sealed interface ItemAssessment {
      * others became fields or were read off the spelling of whichever arm a reader had in hand.
      */
     sealed interface Attempt
-            permits Attempt.Certified, Attempt.Unverified, Attempt.Stopped, Attempt.Unresolved,
-                    Attempt.Unavailable {
+            permits Attempt.Certified, Attempt.Unverified, Attempt.Stopped, Attempt.Limited,
+                    Attempt.Unresolved, Attempt.Unavailable {
 
         /**
          * What a search of the region came to, whichever way it came out.
@@ -397,7 +397,7 @@ public sealed interface ItemAssessment {
          * nobody could run — outside a hierarchy it belongs in.
          */
         sealed interface Searched
-                permits Certified, Unverified, Stopped, Unresolved {
+                permits Certified, Unverified, Stopped, Limited, Unresolved {
 
             /** What the way to the point took in and what it could not, which is what says how much
              *  the outcome beside it is worth. */
@@ -464,7 +464,7 @@ public sealed interface ItemAssessment {
          * the question is open — and open because of a figure somebody could raise, which is what
          * tells it from a point nothing ever promised.
          */
-        sealed interface Prevented permits Unverified, Stopped {
+        sealed interface Prevented permits Unverified, Stopped, Limited {
 
             /** Which budget of this compiler's stopped it, in the words the account reads. */
             EstablishmentGap by();
@@ -556,6 +556,40 @@ public sealed interface ItemAssessment {
         }
 
         /**
+         * The search came to an answer of its own, over less than the point had.
+         *
+         * <p><b>Beside {@link Stopped} and not a shape of it.</b> A stopped search has no outcome
+         * but the stopping, so the word it comes back with follows from the budgets and is checked
+         * against them at both ends. Here the search ran to the end of what it was handed and said
+         * what it found; the figure says the thing it was handed was short of the point. Neither
+         * half follows from the other, so no rule relates them and none may be written — a figure
+         * that stops no search has no word for a reader to check against.
+         *
+         * <p>What it licenses is what {@link Stopped} licenses and nothing more: the question is
+         * open, and open for a figure somebody could raise. What it refuses is the reading that the
+         * word is the whole story — which is how a point this compiler declined to plan for came to
+         * be counted as one the model admits no row at.
+         */
+        record Limited(Generator.UnresolvedCombination why,
+                       souther.compiler.partition.WayToTheBorder way,
+                       List<souther.compiler.partition.ReachabilityGap.Uncomposed> uncomposed,
+                       EstablishmentGap.Composition limitedBy)
+                implements Attempt, Searched, Prevented {
+
+            public Limited {
+                uncomposed = List.copyOf(uncomposed);
+                Objects.requireNonNull(why, "a search that came to nothing says so in its own word");
+                Objects.requireNonNull(limitedBy, "an answer short of what the point had says which"
+                        + " figure made it short");
+            }
+
+            @Override
+            public EstablishmentGap by() {
+                return limitedBy;
+            }
+        }
+
+        /**
          * The search ran and no row came of it.
          *
          * <p>Named for what happened and not for one of the ways it happens. Every candidate being
@@ -631,6 +665,11 @@ public sealed interface ItemAssessment {
                 // A search a budget ended walked as far as it walked, and what it could not compose
                 // against on the way is the first thing that would explain what it came back with.
                 case Stopped it -> it;
+                // And one whose answer was about less than the point had. Its word may be a word
+                // that proves nothing is there, and here it does not: what the word is about is
+                // what the search was handed, which was short of the point — so the conditions it
+                // could not compose against are still owed to a reader.
+                case Limited it -> it;
                 case Certified _, Unverified _, Unavailable _ -> null;
             };
             if (left == null) {
