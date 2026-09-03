@@ -812,7 +812,7 @@ public final class InvariantChecker {
             // And which of the clauses place an edge, asked once the positions have names to be
             // recognised by.
             Reading reading = c.directsIn(written, at, atoms, keys, held, typeAt, took,
-                    new PartsRead(readBy, adoptedBy, narrowedBy), reach.withoutParts(), values);
+                    new PartsRead(readBy, adoptedBy, narrowedBy), reach.withoutParts());
             ConstraintState<FactSubject> constraints = k.constraints()
                     .takingValuesRead(values, allowed)
                     .taking(answered.whole().ordered());
@@ -1310,8 +1310,7 @@ public final class InvariantChecker {
                                    Map<RuleKey, FieldDomains.Counted> held,
                                    Map<RuleKey, Type> typeAt,
                                    ReadingEvidence took, PartsRead parts,
-                                   PartsLeftOut withoutParts,
-                                   AdmissibleValues<FactSubject> values) {
+                                   PartsLeftOut withoutParts) {
         Map<FactSubject, Coordinate> byName = new LinkedHashMap<>();
         keys.forEach((path, key) -> {
             Carrier carrier = Carrier.ofValue(typeAt.get(path), symbols);
@@ -1340,7 +1339,7 @@ public final class InvariantChecker {
         stated.forEach(each ->
                 direct(each.clause(), each.from(), new int[1], at, byName, out, noLines,
                         withoutAnEnd, aboutOneCoordinate, narrowers, raised,
-                        took, typeAt, parts, raisedByPart, standing, withoutParts, values));
+                        took, typeAt, parts, raisedByPart, standing, withoutParts));
         // Insertion order, kept: `Map.copyOf` iterates in an order salted once per JVM run, and
         // what a report prints for a position is these in the order the declaration writes them.
         return new Reading(List.copyOf(out), List.copyOf(noLines), List.copyOf(withoutAnEnd),
@@ -1452,8 +1451,7 @@ public final class InvariantChecker {
                         Map<RuleRef, Map<Core, Required>> raisedByPart,
                         Map<FieldDomains.BoundaryQuestion,
                                 FieldDomains.BoundaryStanding> standing,
-                        PartsLeftOut withoutParts,
-                        AdmissibleValues<FactSubject> values) {
+                        PartsLeftOut withoutParts) {
         if (clause instanceof Core.Binary and
                 && ConditionJoin.of(and.op()).orElse(null) == ConditionJoin.BOTH) {
             // One rule the author wrote, so what it raises is what its conjuncts raise together.
@@ -1462,11 +1460,9 @@ public final class InvariantChecker {
             // its conjuncts alike, which is what lets a line drawn here be recognised as the line
             // the declaration's own reading drew (issue #1062).
             direct(and.left(), from, conjunct, at, byName, out, noLines, withoutAnEnd, naming,
-                    narrowers, raised, took, typeAt, parts, raisedByPart, standing, withoutParts,
-                    values);
+                    narrowers, raised, took, typeAt, parts, raisedByPart, standing, withoutParts);
             direct(and.right(), from, conjunct, at, byName, out, noLines, withoutAnEnd, naming,
-                    narrowers, raised, took, typeAt, parts, raisedByPart, standing, withoutParts,
-                    values);
+                    narrowers, raised, took, typeAt, parts, raisedByPart, standing, withoutParts);
             return;
         }
         // Which conjunct of the clause this is, taken here so that every one of them is numbered —
