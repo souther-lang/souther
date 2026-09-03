@@ -4,6 +4,12 @@ import souther.compiler.query.WeakeningSet;
 import souther.compiler.query.Weakening;
 import souther.compiler.query.Measurement;
 import souther.compiler.check.Carrier;
+import souther.compiler.coverage.ComparisonEmissionSite;
+import souther.compiler.coverage.CorePath;
+import souther.compiler.coverage.NodeAddress;
+import souther.compiler.coverage.NumberingIdentity;
+import souther.compiler.coverage.SiteAddress;
+import souther.compiler.coverage.SiteNumbering;
 import souther.compiler.check.Clause;
 import souther.compiler.check.ClauseName;
 import souther.compiler.check.RuleRef;
@@ -33,6 +39,7 @@ import souther.compiler.types.TypeSymbols;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Function;
 
 /**
@@ -56,14 +63,10 @@ final class AReportOfOneBorder {
      * numbering and of nothing else, so what is written here is the numbering — one comparison, in
      * the body this fixture stands for — and the place is read out of it.
      */
-    private static final souther.compiler.coverage.ComparisonEmissionSite WHERE =
-            souther.compiler.coverage.SiteNumbering.of(
-                            new souther.compiler.coverage.NumberingIdentity("example.rate",
-                                    Map.of(),
-                                    List.of(new souther.compiler.coverage.SiteAddress.Comparison(
-                                            new souther.compiler.coverage.NodeAddress("example.rate",
-                                                    java.util.Set.of(
-                                                            souther.compiler.coverage.CorePath.ROOT))))))
+    private static final ComparisonEmissionSite WHERE =
+            SiteNumbering.of(new NumberingIdentity("example.rate", Map.of(),
+                            List.of(new SiteAddress.Comparison(
+                                    new NodeAddress("example.rate", Set.of(CorePath.ROOT))))))
                     .comparison(0);
 
     /** The number the lines below are on, which their orders are the orders of. */

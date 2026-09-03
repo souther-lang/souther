@@ -27,7 +27,8 @@ public sealed interface RunSite permits ArmProbe, ComparisonEmissionSite {
      *
      * <p>The one way out of the typed vocabulary, and it goes to the code being emitted. Anything
      * else asking for it is turning an address back into something a caller can pair with a place
-     * it was not issued for.
+     * it was not issued for — which is what the numbering exists to stop, so who may ask is fixed
+     * by a walk over the compiled classes rather than by this sentence.
      */
     int raw();
 }

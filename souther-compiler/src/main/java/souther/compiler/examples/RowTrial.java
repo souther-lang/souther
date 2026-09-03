@@ -122,10 +122,9 @@ public final class RowTrial {
         // Under the numbering the classes about to be run were emitted with. Classes that record
         // nothing start no recording: what comes back then is no account of a run rather than an
         // account of one that went nowhere.
-        NumberingIdentity under = probes instanceof ProbeImage.Instrumented(var numbering)
-                ? numbering : null;
-        if (under != null) {
-            Probe.begin(under);
+        switch (probes) {
+            case ProbeImage.Instrumented(NumberingIdentity numbering) -> Probe.begin(numbering);
+            case ProbeImage.Uninstrumented _ -> { }
         }
         try {
             EvaluationContext.begin(steps.stepLimit(), steps.recursionDepthLimit());
@@ -150,7 +149,8 @@ public final class RowTrial {
             // Nothing was watching where the classes record nothing, so the row ran and there is no
             // account of where it went — which is not the same as an account of it reaching
             // nothing, and is what an empty answer means here.
-            return under == null ? Optional.empty() : Optional.of(Probe.snapshot());
+            return probes instanceof ProbeImage.Instrumented
+                    ? Optional.of(Probe.snapshot()) : Optional.empty();
         } finally {
             // On every way out, including one nothing here catches. A recording left installed is
             // where the next reader on this thread would start.

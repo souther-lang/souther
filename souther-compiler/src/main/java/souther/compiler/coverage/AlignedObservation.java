@@ -18,8 +18,8 @@ import java.util.Set;
  * numbers out in another order does not align, and is refused where it arrives rather than
  * answered.
  *
- * <p>The addresses are of the numbering that did the aligning, so asking one of them anything is a
- * reference comparison rather than a walk over what the numbering is.
+ * <p>The addresses are of the numbering that did the aligning, and a reader asking about a place of
+ * that same numbering is asking about the same value.
  */
 public record AlignedObservation(Set<ArmProbe> arms, Set<SeenComparison> comparisons) {
 

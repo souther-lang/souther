@@ -193,7 +193,10 @@ class ARecordedRowIsRunAgainstABoundImplementationTest {
      * this compile's code and the row's fixture goes through it, so what is counted covers the
      * fixtures and stops at the behavior — which is injected, has no body, and has nothing to count.
      *
-     * <p>{@code hits} is empty, so a measure reading it sees no arm this row failed to reach.
+     * <p>And nothing recorded where the row went, which is the other half and is not an empty
+     * account of one. This compile was asked to leave the recording calls out, so there is no
+     * probed body for the row to be written down by — a measure reading an empty account instead
+     * would see a row shown to have reached no arm at all.
      */
     @Test
     void aBoundRowsCountingIsReadAndCoversItsFixturesOnly() throws Exception {

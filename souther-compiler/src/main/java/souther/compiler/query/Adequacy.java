@@ -1125,9 +1125,7 @@ public final class Adequacy {
                 return Answer.absent();
             }
             // The numbering the recordings below are read under, which is this module's own.
-            Bodies.Elaborated checked = db.ask(new Bodies.Checked(name)).value();
-            CoverageSites.Plan plan =
-                    checked == null ? CoverageSites.Plan.NONE : checked.plan();
+            CoverageSites.Plan plan = numberingOf(db, name);
             Set<ArmProbe> lit = new LinkedHashSet<>();
             for (RowReading observed : db.ask(new RowReadings(name)).value().values()) {
                 for (RowOutcome row : observed.rowsSeen()) {
@@ -1915,6 +1913,12 @@ public final class Adequacy {
      * A module whose bodies were not read has none, and that is handed over as a numbering of
      * nothing: what a recording made under a real one aligns to then is nothing, which is refused
      * where the two meet rather than answered about places it was never near.
+     *
+     * <p><b>For a caller that wants the numbering and nothing else.</b> Several of the keys here
+     * read the checked bodies for other things beside it — what a behavior's body is, what its
+     * elements bind, whether the bodies came back at all — and those take the numbering off the
+     * value they are already holding. This is the same route rather than a second one, and calling
+     * it from there would be asking the store for something in hand.
      */
     static CoverageSites.Plan numberingOf(Db db, String module) {
         Bodies.Elaborated checked = db.ask(new Bodies.Checked(module)).value();
