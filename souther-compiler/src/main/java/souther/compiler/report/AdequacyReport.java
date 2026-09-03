@@ -28,6 +28,7 @@ import souther.compiler.partition.UndividedPosition;
 import souther.compiler.diag.Citation;
 import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.inputs.InputQuestion;
+import souther.compiler.inputs.StandingQuestion;
 import souther.compiler.meta.ModuleMetadata;
 import souther.compiler.check.CheckSurface;
 import souther.compiler.observe.Disposition;
@@ -1457,7 +1458,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         // it. It is exactly where none did that the question stands, so this cannot be written by
         // walking the borders.
         unaccounted(out, behavior, names, declaredIn,
-                question -> !aboutTheClasses(question));
+                asked -> asked.holdsOpen(CoverageObligation.Measure.BOUNDARY));
         // The rule as this report writes it. The finding carries the rule and not words about it,
         // because what to say differs between here — where a file has a name — and the warning built
         // from the same finding, where nothing knows what to call one.
@@ -1607,15 +1608,20 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         // given, which sent them looking for a rule the sentence never named — and two rules
         // stopped by one limit at one position came out as one line.
         for (Adequacy.Finding f : behavior.findings()) {
+            // Two sentences, because two opposite things are being said. A form no reader takes
+            // apart is a limit of this compiler; a rule whose quantity is empty was read from end
+            // to end and says what it says. Written under one word, a line read "not read: it was
+            // read to the end and cuts nothing" — which is what the reader is left to make sense
+            // of.
             if (f.about() instanceof About.ARuleWithoutALine(var it)) {
-                // Two sentences, because two opposite things are being said. A form no reader takes
-                // apart is a limit of this compiler; a rule whose quantity is empty was read from
-                // end to end and says what it says. Written under one word, a line read "not read:
-                // it was read to the end and cuts nothing" — which is what the reader is left to
-                // make sense of.
                 out.append(String.format("      %s %s: %s — %s, about `%s`%n",
                         mark(f), it.readingStopped() ? "not read" : "no line",
                         cited(it.cited(), names, declaredIn),
+                        whyUnread(it.reason()), it.at()));
+            }
+            if (f.about() instanceof About.ARuleNothingClassified(var it)) {
+                out.append(String.format("      %s not read: %s — %s, about `%s`%n",
+                        mark(f), cited(it.cited(), names, declaredIn),
                         whyUnread(it.reason()), it.at()));
             }
         }
@@ -1641,7 +1647,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         }
         // The questions this measure answers: which values may stand where, which classes hold
         // them, and which value a rule tells from every other. A border is the section below's.
-        unaccounted(out, behavior, names, declaredIn, AdequacyReport::aboutTheClasses);
+        unaccounted(out, behavior, names, declaredIn,
+                asked -> asked.holdsOpen(CoverageObligation.Measure.PARTITION));
     }
 
     /**
@@ -1707,12 +1714,26 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         };
     }
 
-    /** What a rule raised, in the words this document promises its reader. Here for the reason
+    /** What a rule left open, in the words this document promises its reader. Here for the reason
      *  {@link #whyUnread} gives. */
-    private static String asked(CoverageObligation question) {
+    private static String asked(StandingQuestion question) {
         return switch (question) {
-            case ADMITTED_VALUES -> "which values may stand at";
-            case BOUNDARY -> "where the values stop on";
+            case StandingQuestion.Exact it -> switch (it.obligation()) {
+                case ADMITTED_VALUES -> "which values may stand at";
+                case BOUNDARY -> "where the values stop on";
+            };
+            // Neither phrase names the place, which is why they do not read like the two above:
+            // what such a rule asks is what nothing worked out, and the place beside this is where
+            // a reader is sent to look at the rule.
+            //
+            // Two phrases, because two different things are undecided and a reader acts on them
+            // differently. One says the rule restricts the values there and nothing worked out
+            // whether it also puts an end; the other says nothing worked out what the rule does at
+            // all.
+            case StandingQuestion.BoundaryUndetermined _ ->
+                    "whether the values stop on";
+            case StandingQuestion.NothingClassifiesIt _ ->
+                    "what this rule states about";
         };
     }
 
@@ -2273,19 +2294,6 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
     }
 
     /**
-     * Whether the partition measure is the one that answers this question.
-     *
-     * <p>Asked of the question and not decided here. Which measure answers a question is the
-     * question's own answer ({@link CoverageObligation#answeredBy}), and the
-     * measures read the same table to know what they are short of. Filed by what the question asks
-     * and not by which producer raised it.
-     */
-    private static boolean aboutTheClasses(CoverageObligation question) {
-        return question.answeredBy()
-                == CoverageObligation.Measure.PARTITION;
-    }
-
-    /**
      * The questions a section is the reader of, each named by the rule that raised it.
      *
      * <p>One finding kind, filed by what it asks. Which measure answers a question is settled where
@@ -2295,15 +2303,14 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
     private void unaccounted(StringBuilder out, BehaviorReport behavior,
                                     SourceNameResolver names,
                                     SourceId declaredIn,
-                                    Predicate<
-                                            CoverageObligation> mine) {
+                                    Predicate<PartitionEvidence.Unanswered> mine) {
 
         for (Adequacy.Finding f : behavior.findings()) {
             if (f.about() instanceof About.AQuestionNothingAnswered(var asked)
-                    && mine.test(asked.question())) {
+                    && mine.test(asked)) {
                 out.append(String.format("      %s not accounted for: %s — %s %s: %s%n",
                         mark(f), cited(asked.cited(), names, declaredIn),
-                        asked(asked.question()), subjectOf(asked, names, declaredIn),
+                        asked(asked.asked()), subjectOf(asked, names, declaredIn),
                         whyStanding(asked).written().stream().map(AdequacyReport::whyUnread)
                                 .collect(Collectors.joining("; "))));
             }
@@ -2601,10 +2608,40 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * an arm added and not given a word stops the compile rather than arriving in a document as one
      * that already existed.
      */
-    public static String subjectWord(InputQuestion asks) {
-        return switch (asks) {
-            case InputQuestion.AboutAPosition _,
-                 InputQuestion.AboutANumber _ -> "position";
+    public static String subjectWord(StandingQuestion asked) {
+        return switch (asked) {
+            case StandingQuestion.Exact it -> switch (it.asks()) {
+                case InputQuestion.AboutAPosition _,
+                     InputQuestion.AboutANumber _ -> "position";
+            };
+            // Not a position, and not a number of one: what such a rule is about is what nothing
+            // worked out — of the end in the one case and of the whole rule in the other, and
+            // neither has a subject. What the `path` beside this names is where a reader is sent to
+            // look, which is one word because it is one thing.
+            case StandingQuestion.BoundaryUndetermined _,
+                 StandingQuestion.NothingClassifiesIt _ -> "filedAt";
+        };
+    }
+
+    /**
+     * The word a document writes for what a standing question asks.
+     *
+     * <p>Its own vocabulary and not the compiler's. A question asks one of the two coverage
+     * obligations, or asks whether a rule places an end where nothing worked that out, or is a rule
+     * nothing classified at all — and a document with a word only for the obligations would have to
+     * leave the other two out or call them one of those.
+     *
+     * <p>Four words for four states, and the last two are not one. A rule whose end is undecided has
+     * been classified far enough to say it restricts the values there, which is why the classes
+     * close over it and only the border stays open; a rule nothing classified holds both open. Under
+     * one word a reader of the document could not tell which of those a behavior is waiting on, and
+     * the two are lifted by different work.
+     */
+    public static String questionWord(StandingQuestion asked) {
+        return switch (asked) {
+            case StandingQuestion.Exact it -> word(it.obligation());
+            case StandingQuestion.BoundaryUndetermined _ -> "boundaryNotDetermined";
+            case StandingQuestion.NothingClassifiesIt _ -> "notDetermined";
         };
     }
 
@@ -2888,14 +2925,14 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 // questions came out as one object twice. Within this document and not a name to
                 // show a reader — which is what `rule` beside it is.
                 ruleId(one.putObject("ruleId"), each.rule());
-                one.put("question", word(each.question()));
+                one.put("question", questionWord(each.asked()));
                 // What the question is about, as the question names it. The number a line falls on
                 // is beside the position rather than in place of it, because a rule about the
                 // length of a string is a rule at that string: an author looking for where it is
                 // written looks at the position, and what the line is on is the other half of the
                 // answer.
                 ObjectNode about = one.putObject("subject");
-                about.put("kind", subjectWord(each.asks()));
+                about.put("kind", subjectWord(each.asked()));
                 about.put("path", each.at());
                 if (each.measure() != null) {
                     about.put("measure", each.measure());
@@ -3040,6 +3077,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             // what tells one rule from another, and the two are not in step wherever a rule has no
             // name of its own.
             if (each instanceof PartitionEvidence.NotRead.ARule rule) {
+                said.put("rule", handle(rule.cited()).said(sources::written, null));
+                ruleId(said.putObject("ruleId"), rule.rule());
+            }
+            if (each instanceof PartitionEvidence.NotRead.AnUnclassifiedRule rule) {
                 said.put("rule", handle(rule.cited()).said(sources::written, null));
                 ruleId(said.putObject("ruleId"), rule.rule());
             }
@@ -3357,6 +3398,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                     About.APointOfABorder _, About.APointOfADeclaredBorder _,
                     About.APositionNoLineDivides _,
                     About.APositionThisCouldNotRead _, About.ARuleWithoutALine _,
+                    About.ARuleNothingClassified _,
                     About.AQuestionNothingAnswered _,
                     About.APositionWhoseRulesWereNotReached _,
                     About.APositionReadWiderThanItsRules _ -> null;
@@ -3392,6 +3434,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             case About.APositionNoLineDivides(var position) -> position.at().toString();
             case About.APositionThisCouldNotRead(var it) -> it.at();
             case About.ARuleWithoutALine(var it) -> it.at();
+            // Where a reader is sent to look at the rule, which is what such a finding has instead
+            // of a subject: what the rule states there is what nothing worked out.
+            case About.ARuleNothingClassified(var it) -> it.at();
             // The position and not a number measured of it: which of this position's rules went
             // unread is a fact about the location, and the measures on it are as many as the rules
             // name numbers there.
@@ -3409,7 +3454,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             // may name the same case, so the words alone joined two questions into one row.
             case About.AQuestionNothingAnswered(var asked) ->
                     handle(asked.cited()).said(sources::written, null)
-                            + " — " + asked(asked.question())
+                            + " — " + asked(asked.asked())
                             + " " + subjectOf(asked, sources::written, null);
             case About.ACaseNoRowAppliesItTo(var input, var missing) ->
                     missing.name() + " (in #" + (input.at() + 1) + ")";
@@ -3699,12 +3744,22 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 case ReadingGap.NoValue _ -> WeakeningWord.BORDER_VALUE_ABSENT;
             };
             case Weakening.ModelReadingIncomplete it -> switch (it.cause()) {
-                case ClosureGap.RuleUnread _ ->
-                        WeakeningWord.RULE_UNREAD;
                 case ClosureGap.PositionNotReachedInto _ ->
                         WeakeningWord.POSITION_NOT_READ;
-                case ClosureGap.QuestionUnanswered _ ->
-                        WeakeningWord.QUESTION_UNANSWERED;
+                // Two words for the one gap, because a reader acts on them differently: a question
+                // about a subject wants an answer to that question, and a rule nothing classified
+                // wants this compiler to read further. Which of the two it is, is what the question
+                // is, asked of it here rather than read off which list it arrived in.
+                case ClosureGap.QuestionUnanswered one -> switch (one.question()) {
+                    case StandingQuestion.Exact _ ->
+                            WeakeningWord.QUESTION_UNANSWERED;
+                    // Both are this compiler not having read far enough, which is the one thing
+                    // this word says and the one thing a build held to it acts on. Which of them
+                    // it is, is what the question beside it says.
+                    case StandingQuestion.BoundaryUndetermined _,
+                         StandingQuestion.NothingClassifiesIt _ ->
+                            WeakeningWord.RULE_UNREAD;
+                };
                 case ClosureGap.RulesNotReached _ ->
                         WeakeningWord.RULES_NOT_REACHED;
             };

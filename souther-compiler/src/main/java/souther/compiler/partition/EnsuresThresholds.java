@@ -15,7 +15,7 @@ import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.FilingCoordinate;
-import souther.compiler.inputs.RuleWithoutALine;
+import souther.compiler.inputs.RulesWithNoLine;
 import souther.compiler.types.BindingId;
 
 import java.util.ArrayList;
@@ -71,21 +71,22 @@ public final class EnsuresThresholds {
      *                them and so have no axis to come off. Already obligations rather than
      *                thresholds: a line between two positions divides neither, so there is no class
      *                for a partition to be told about
-     * @param rulesWithoutALine  the positions a rule states something about that this drew no
-     *                line at. Carried rather than left out: a position a clause compares is not a
-     *                position the model draws no line through, and a reading that answered with its
-     *                lines alone would have that said of it — which is a sentence about the model,
-     *                and the model says otherwise in its own declaration
+     * @param noLine  the positions a rule states something about that this drew no line at, sorted
+     *                by how far the reading of each got. Carried rather than left out: a position a
+     *                clause compares is not a position the model draws no line through, and a
+     *                reading that answered with its lines alone would have that said of it — which
+     *                is a sentence about the model, and the model says otherwise in its own
+     *                declaration
      */
     public record Clauses(List<LineEvidence> evidence,
-                          List<LineDrawn> between, List<RuleWithoutALine> rulesWithoutALine) {
+                          List<LineDrawn> between, RulesWithNoLine noLine) {
 
-        public static final Clauses NONE = new Clauses(List.of(), List.of(), List.of());
+        public static final Clauses NONE =
+                new Clauses(List.of(), List.of(), RulesWithNoLine.NONE);
 
         public Clauses {
             evidence = List.copyOf(evidence);
             between = List.copyOf(between);
-            rulesWithoutALine = List.copyOf(rulesWithoutALine);
         }
 
         /** The lines, read off what the walk said. Not a list of their own, for the reason
@@ -132,7 +133,7 @@ public final class EnsuresThresholds {
         }
         InputReads reads = InputReads.ofWhatIsDeclared(rootsOf(stated.params()));
         Drawn drawn = new Drawn(stated.behavior().name(), new ArrayList<>(), new ArrayList<>(),
-                new RuleWithoutALine.Gathered());
+                new RulesWithNoLine.Gathered());
         for (StatedContract.StatedRule rule : stated.rules()) {
             String clause = labelOf(rule);
             // Which line of the clause each one is, counted over every comparison the clause states
@@ -149,14 +150,14 @@ public final class EnsuresThresholds {
                                 drawn);
             }
         }
-        return new Clauses(drawn.evidence(), drawn.between(), drawn.rulesWithoutALine().all());
+        return new Clauses(drawn.evidence(), drawn.between(), drawn.noLine().found());
     }
 
     /** What the walk has found so far, and the behavior a line between two positions is named
      *  after. Together because they are filled together and are one answer. */
     private record Drawn(String behavior, List<LineEvidence> evidence,
                          List<LineDrawn> between,
-                         RuleWithoutALine.Gathered rulesWithoutALine) {}
+                         RulesWithNoLine.Gathered noLine) {}
 
     /**
      * The comparisons a rule states outright: its own, and those of both sides of every {@code &&}
@@ -218,7 +219,7 @@ public final class EnsuresThresholds {
                             GuardThresholds.mentionedIn(e, reads, symbols).stream()
                                     .map(FilingCoordinate::at).toList(),
                             new BlockReason.UnreadComparisonForm()),
-                    out.rulesWithoutALine());
+                    out.noLine());
             return line + 1;
         }
         // What the comparison comes to is read the same way wherever a comparison is written, which
@@ -235,7 +236,7 @@ public final class EnsuresThresholds {
         // of the assessment and not worked out per arm here: the same table stood in the guard
         // reader, and a case added to an assessment had to be answered in both.
         reportRuleWithoutLine(new RuleRef.Ensures(rule.id(), clause), e, rule.value(),
-                assessed.whatEachPlaceIsLeftWith(), out.rulesWithoutALine());
+                assessed.whatEachPlaceIsLeftWith(), out.noLine());
         // And the geometry, which is this reader's own. Only the two arms that draw something have
         // anything to add here.
         switch (assessed) {
@@ -327,14 +328,23 @@ public final class EnsuresThresholds {
     private static void reportRuleWithoutLine(RuleRef.Ensures rule, Core statement, BindingId answer,
                                      java.util.SequencedMap<FilingCoordinate,
                                              BlockReason.RuleWithoutLineReason> left,
-                                     RuleWithoutALine.Gathered withoutALine) {
+                                     RulesWithNoLine.Gathered withoutALine) {
         if (ComparisonAssessment.readsAnswer(statement, answer)) {
             return;
         }
         souther.compiler.check.RuleCitation cited =
                 souther.compiler.check.RuleCitation.named(rule);
-        left.forEach((named, why) ->
-                withoutALine.add(RuleWithoutALine.of(rule, cited, named, why)));
+        // And what each place is left with, which for a clause of an `ensures` turns on whether its
+        // reading finished. Nothing works out what such a clause raises about an input — what it
+        // states is a relation the behavior is held to — so where the reading stopped there is
+        // nothing that was determined.
+        left.forEach((named, why) -> {
+            if (why instanceof BlockReason.RuleReadingStopped stopped) {
+                withoutALine.unclassified(rule, cited, named, stopped);
+            } else {
+                withoutALine.add(rule, cited, named, why);
+            }
+        });
     }
 
 

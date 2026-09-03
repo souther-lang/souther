@@ -4,9 +4,6 @@ import souther.compiler.check.RuleCitation;
 import souther.compiler.check.RuleRef;
 
 import java.util.HashSet;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
 import java.util.Set;
 
 /**
@@ -33,12 +30,15 @@ import java.util.Set;
  * first is part of what makes two of these one finding.
  *
  * <p><b>Named for what is true of everything in it.</b> Two opposite things bring a rule here — one
- * this compiler got partway through, and one it read from end to end that draws no line — and the
- * name used to be the first of them. So a rule read completely was carried, named and published as
- * one nobody could read, and the sentence a person was shown said the opposite of what had
- * happened. What both have in common is the whole of what this says: at this position, this rule is
- * no line. Which of the two it was is {@code why}, and it is asked of the type rather than read
- * back out of a word.
+ * this compiler got partway through, and one it read from end to end that draws no line — and what
+ * they have in common is the whole of what this says: at this position, this rule is no line. Which
+ * of the two it was is {@code why}, and it is asked of the type rather than read back out of a
+ * word.
+ *
+ * <p><b>And neither of them is what holds a measure of coverage open.</b> That is a question about
+ * a rule, which the reading that classifies the rule raises; this is what a report says about what
+ * became of a rule here. Counted as the first, a rule this compiler read completely is one nobody
+ * could read.
  *
  * @param fact  which rule, at which position, and why there is no line — the whole of what makes
  *              two of these one finding ({@link Fact})
@@ -115,43 +115,6 @@ public record RuleWithoutALine(Fact fact, Set<RuleCitation> cited) {
         Set<RuleCitation> both = new HashSet<>(cited);
         both.addAll(other.cited);
         return new RuleWithoutALine(fact, both);
-    }
-
-    /**
-     * The rules a reading found no line for, each one once, with every handle offered for it.
-     *
-     * <p>The one fold on this identity, and the reason it is a type rather than a line somebody
-     * writes where they need it. Six readers gathered these, each with a walk that asked whether
-     * it already had one and kept the first if it did — so a rule cited two ways came out cited
-     * whichever way was met first, and a fold further down that accumulated could only accumulate
-     * what these let through.
-     *
-     * <p>In the order they were first found, which is what the readers hand on and what a document
-     * that says them puts in an order of its own.
-     */
-    public static final class Gathered {
-
-        private final Map<Fact, RuleWithoutALine> byFact = new LinkedHashMap<>();
-
-        public Gathered() {
-        }
-
-        public Gathered(List<RuleWithoutALine> already) {
-            already.forEach(this::add);
-        }
-
-        /** One more, merged with what is already filed under its rule. */
-        public void add(RuleWithoutALine one) {
-            byFact.merge(one.fact(), one, RuleWithoutALine::mergedWith);
-        }
-
-        public void addAll(List<RuleWithoutALine> some) {
-            some.forEach(this::add);
-        }
-
-        public List<RuleWithoutALine> all() {
-            return List.copyOf(byFact.values());
-        }
     }
 
 }

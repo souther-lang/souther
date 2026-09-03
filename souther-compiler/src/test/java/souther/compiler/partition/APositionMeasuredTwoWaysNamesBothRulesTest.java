@@ -14,7 +14,6 @@ import java.util.List;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -97,17 +96,22 @@ class APositionMeasuredTwoWaysNamesBothRulesTest {
     }
 
     /**
-     * And neither of them raises a question nothing answered.
+     * And each of them is said twice, because two different things are owed about it.
      *
-     * <p>The two measures are not one. This one says the reading that draws lines could not adopt
-     * the rule; the accounting says no reading at all took it in, and here the readings that turn a
-     * clause into where the values stop did take both of them in. A model where they agreed would
-     * hide that they are asked of different things.
+     * <p>What became of the rule here, and what a measure is waiting on. The first is a finding:
+     * this rule has no line at this coordinate, and the reader that gave up says why. The second is
+     * a question: whether the rule puts an end there is what nothing worked out, so the measure
+     * that answers about ends stays open until something does.
+     *
+     * <p>Which of the position's two numbers it is measured at is settled by the walk over the
+     * input and by nothing else, so the question is the walk's own. Read off the accounting of the
+     * declaration's clauses — where it is not, because the clauses were read — the position came
+     * back with nothing standing at it and its measures closed over a rule this could not use.
      */
     @Test
-    void andNeitherIsAQuestionNothingAnswered() {
+    void andEachIsBothAFindingAndAQuestion() {
         assertTrue(human(ORDER_FIRST).contains("not read: invariant R (low)"), human(ORDER_FIRST));
-        assertFalse(human(ORDER_FIRST).contains("not accounted for: invariant R (low)"),
+        assertTrue(human(ORDER_FIRST).contains("not accounted for: invariant R (low)"),
                 human(ORDER_FIRST));
     }
 

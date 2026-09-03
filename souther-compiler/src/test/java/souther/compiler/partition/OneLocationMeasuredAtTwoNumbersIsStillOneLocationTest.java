@@ -86,8 +86,7 @@ class OneLocationMeasuredAtTwoNumbersIsStillOneLocationTest {
                         java.util.Set.of()),
                 null, List.of());
 
-        MeasureClosure.Both closed = MeasureClosure.of(List.of(at), List.of(), List.of(),
-                new LinesRead());
+        MeasureClosure.Both closed = MeasureClosure.of(List.of(at), List.of(), new LinesRead());
 
         assertEquals(List.of(new ClosureGap.PositionNotReachedInto("f", at.id(),
                         new BlockReason.ValueRulesNotReached())),
@@ -116,8 +115,7 @@ class OneLocationMeasuredAtTwoNumbersIsStillOneLocationTest {
                 new ReadingResidue(new BlockedDescent(new BlockReason.ValueRulesNotReached()),
                         java.util.Set.of()),
                 null, List.of());
-        MeasureClosure.Both closed = MeasureClosure.of(List.of(at), List.of(), List.of(),
-                new LinesRead());
+        MeasureClosure.Both closed = MeasureClosure.of(List.of(at), List.of(), new LinesRead());
         return souther.compiler.query.WeakeningSet.of(
                 ((MeasureClosure.OfThePartition.Open) closed.partition()).by().stream()
                         .map(souther.compiler.query.Weakening.ModelReadingIncomplete::new)

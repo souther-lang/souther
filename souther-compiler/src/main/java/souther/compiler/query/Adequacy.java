@@ -2885,7 +2885,7 @@ public final class Adequacy {
                                     About.ACaseNoRowExpects _, About.ACaseNothingWasSeenToProduce _,
                                     About.APositionNoLineDivides _,
                                     About.APositionThisCouldNotRead _,
-                                    About.ARuleWithoutALine _,
+                                    About.ARuleWithoutALine _, About.ARuleNothingClassified _,
                                     About.APositionWhoseRulesWereNotReached _,
                                     About.APositionReadWiderThanItsRules _,
                                     About.AQuestionNothingAnswered _ ->
@@ -3729,7 +3729,8 @@ public final class Adequacy {
                 case About.ABorderObligation owed -> owed.role().againstTheLine()
                         ? Kind.BOUNDARY_UNMET : Kind.DOMAIN_POINT_UNCOVERED;
                 case About.APositionNoLineDivides _ -> Kind.PARTITION_NOT_DERIVABLE;
-                case About.ARuleWithoutALine _ -> Kind.PARTITION_NOT_READ;
+                case About.ARuleWithoutALine _, About.ARuleNothingClassified _ ->
+                        Kind.PARTITION_NOT_READ;
                 // One word, whatever stopped the reading, and the reason beside it says which.
                 // PARTITION_RULES_NOT_REACHED belongs to the finding above — a position the axes
                 // did measure — and the two write nothing but the position, so sharing the word
@@ -4405,6 +4406,8 @@ public final class Adequacy {
                         switch (each) {
                             case PartitionEvidence.NotRead.ARule rule ->
                                     new About.ARuleWithoutALine(rule);
+                            case PartitionEvidence.NotRead.AnUnclassifiedRule rule ->
+                                    new About.ARuleNothingClassified(rule);
                             case PartitionEvidence.NotRead.APosition position ->
                                     new About.APositionThisCouldNotRead(position);
                         }));
@@ -4633,6 +4636,7 @@ public final class Adequacy {
                         // arriving as a warning with no sentence.
                         case About.ACaseNothingWasSeenToProduce _,
                                 About.APositionNoLineDivides _, About.APositionThisCouldNotRead _, About.ARuleWithoutALine _,
+                                About.ARuleNothingClassified _,
                                 About.APositionWhoseRulesWereNotReached _,
                                 About.APositionReadWiderThanItsRules _,
                                 About.AQuestionNothingAnswered _ ->
@@ -4714,6 +4718,7 @@ public final class Adequacy {
                 case About.ACaseNoRowAppliesItTo _, About.ACaseNothingWasSeenToProduce _,
                         About.APositionNoLineDivides _,
                         About.APositionThisCouldNotRead _, About.ARuleWithoutALine _,
+                        About.ARuleNothingClassified _,
                         About.APositionWhoseRulesWereNotReached _,
                         About.APositionReadWiderThanItsRules _,
                         About.AQuestionNothingAnswered _ -> { }

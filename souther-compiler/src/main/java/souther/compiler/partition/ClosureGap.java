@@ -1,7 +1,6 @@
 package souther.compiler.partition;
 
 import souther.compiler.inputs.BlockReason;
-import souther.compiler.inputs.RuleWithoutALine;
 import souther.compiler.inputs.StandingQuestion;
 import souther.compiler.observe.RunSensitivity;
 
@@ -64,7 +63,6 @@ public sealed interface ClosureGap {
                     + had.fact() + " and " + also.fact());
         }
         return switch (had) {
-            case RuleUnread it -> it.mergedWith(it.andAlso(also));
             case QuestionUnanswered it -> it.mergedWith(it.andAlso(also));
             // Equal under the fact and holding nothing else, so both are the same value.
             case RulesNotReached _, PositionNotReachedInto _ -> had;
@@ -72,73 +70,20 @@ public sealed interface ClosureGap {
     }
 
     /**
-     * A rule of the model a reader stopped on. The rule says which measures that costs
-     * ({@link BlockReason.RuleWithoutLineReason#leavesShort}).
+     * A rule of the model that leaves a measure of coverage open.
      *
-     * <p>Only a rule this compiler got partway through. A rule read from end to end that draws no
-     * line leaves no measure short of anything — that is what its half of the reasons answers, for
-     * every one of them and not case by case — so it is not a gap in what was measured and there is
-     * nothing here for it to be counted as. `MeasureClosure` asks the reason before building one of
-     * these, and this refuses what that question would have had to let through.
-     */
-    record RuleUnread(RuleWithoutALine finding) implements ClosureGap {
-
-        public RuleUnread {
-            if (!(finding.why() instanceof BlockReason.RuleReadingStopped)) {
-                throw new IllegalArgumentException(
-                        "a rule read to the end leaves no measure short: " + finding.why());
-            }
-        }
-
-        /** What the readers found, whole. Taken apart into the rule and the handles, this would
-         *  hold a second answer to what makes two findings one and a second way of putting two
-         *  together — and the type that has those is the one the readers produced. */
-        public static RuleUnread of(RuleWithoutALine found) {
-            return new RuleUnread(found);
-        }
-
-        /** The finding's own, which is the rule, the position and the limit. */
-        @Override
-        public Object fact() {
-            return finding.fact();
-        }
-
-        /** The other one, where it really is one of these. Two gaps filed under one fact and not
-         *  of one kind is a fact two arms answer with, which nothing here can put together. */
-        RuleUnread andAlso(ClosureGap other) {
-            if (other instanceof RuleUnread it) {
-                return it;
-            }
-            throw new IllegalArgumentException("a rule with no line and " + other
-                    + " are filed under one fact");
-        }
-
-        /** Both readers' findings, as one, which the finding itself says how to do. */
-        public RuleUnread mergedWith(RuleUnread other) {
-            return new RuleUnread(finding.mergedWith(other.finding));
-        }
-
-        /** The rule's own answer, which the constructor above has already made sure there is one
-         *  of: only a reading that stopped is admitted here, and a stop answers this. */
-        @Override
-        public RunSensitivity runSensitivity() {
-            return ((BlockReason.RuleReadingStopped) finding.why()).runSensitivity();
-        }
-    }
-
-    /**
-     * A question the rules written about one position raise that nothing answered.
-     *
-     * <p>A clause's, and never a comparison's. A comparison raises a question exactly where the
-     * reading of it reached a line, and that line is the answer — so a comparison either yields
-     * both or yields neither and records what stopped its reading. Which is why a comparison's
-     * incompleteness reaches this only as {@link RuleUnread}.
+     * <p>Either kind, because a measure is held open by either and the difference between them is
+     * about what a reader is told rather than about whether anything is missing. A rule whose
+     * reading finished raises a question about a subject and nothing answered it; a rule whose
+     * reading did not is one nothing worked out the questions of. Which measures each of them holds
+     * open is {@link MeasureClosure}'s to answer, and it asks the question rather than the reason it
+     * stands for.
      */
     record QuestionUnanswered(StandingQuestion question) implements ClosureGap {
 
-        /** What a reading found, whole, for the reason {@link RuleUnread#of} gives: what makes two
-         *  of these one question, what happens to the handles, and what may be said about the order
-         *  the author wrote, are the question's own answers. */
+        /** What a reading found, whole. Taken apart into the rule and the handles, this would hold
+         *  a second answer to what makes two of these one and a second way of putting two together
+         *  — and the type that has those is the one the readers produced. */
         public static QuestionUnanswered of(StandingQuestion asked) {
             return new QuestionUnanswered(asked);
         }
@@ -149,8 +94,8 @@ public sealed interface ClosureGap {
             return question.fact();
         }
 
-        /** The other one, where it really is one of these, for the reason {@link RuleUnread}
-         *  gives. */
+        /** The other one, where it really is one of these. Two gaps filed under one fact and not
+         *  of one kind is a fact two arms answer with, which nothing here can put together. */
         QuestionUnanswered andAlso(ClosureGap other) {
             if (other instanceof QuestionUnanswered it) {
                 return it;

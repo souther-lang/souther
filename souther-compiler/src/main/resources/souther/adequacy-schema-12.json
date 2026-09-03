@@ -1246,10 +1246,12 @@
       }
     },
     "coverageQuestion": {
-      "description": "What a rule of the model raises that something has to answer. `admitted_values` is which values may stand at a position, and `boundary` is a border rows are owed at; those two are what this compiler issues, and a word arrives here in the same change that starts raising it. `singleton` and `partition` are retired: a comparison this compiler reads owes the row at the value it singles out and the rows in the classes its line makes, and it owes them by having been read — so they are carried as the partition's own geometry rather than as questions standing against an answer. They are kept because reports of this version carried them, and a reader of an older document still meets them.",
+      "description": "What a rule of the model leaves that something has to answer. `admitted_values` is which values may stand at a position, and `boundary` is a border rows are owed at. The other two are rules this compiler did not read far enough to classify, and they are not one word because they are not one state: `boundaryNotDetermined` is a rule read far enough to say it restricts the values where it was filed and not far enough to say whether it also puts an end there — the classes are settled and only the border measure waits on it — while `notDetermined` is a rule nothing worked out at all, which holds both measures. Neither names a subject, since working one out is part of what did not happen, and the `stopped` beside either says what would have to be read further. Those four are what this compiler issues, and a word arrives here in the same change that starts raising it. `singleton` and `partition` are retired: a comparison this compiler reads owes the row at the value it singles out and the rows in the classes its line makes, and it owes them by having been read — so they are carried as the partition's own geometry rather than as questions standing against an answer. They are kept because reports of this version carried them, and a reader of an older document still meets them.",
       "enum": [
         "admitted_values",
         "boundary",
+        "boundaryNotDetermined",
+        "notDetermined",
         "singleton",
         "partition"
       ]
@@ -2448,7 +2450,7 @@
               },
               "subject": {
                 "type": "object",
-                "description": "What the question is about. The two questions do not share a subject: which values may stand somewhere is about the position, and a border on one position is about a number of it — the position's own values, or what an operation answers of them. A border between two things that both move with the row is on neither of them, and is not here: a comparison this compiler reads owes the rows either side of its line by having been read, so no such question is ever outstanding, and what it owes is carried as the partition's own geometry.",
+                "description": "What the question is about, or where a reader is sent to look where nothing worked that out. The two answered questions do not share a subject: which values may stand somewhere is about the position, and a border on one position is about a number of it — the position's own values, or what an operation answers of them. A `filedAt` subject is neither: the rule's reading did not finish, so what the rule is about is the part that was not read, and the path is where the walk was looking when it stopped. A border between two things that both move with the row is on neither of them, and is not here: a comparison this compiler reads owes the rows either side of its line by having been read, so no such question is ever outstanding, and what it owes is carried as the partition's own geometry.",
                 "required": [
                   "kind"
                 ],
@@ -2458,6 +2460,21 @@
                     "properties": {
                       "kind": {
                         "const": "position"
+                      }
+                    },
+                    "not": {
+                      "required": [
+                        "at"
+                      ]
+                    },
+                    "required": [
+                      "path"
+                    ]
+                  },
+                  {
+                    "properties": {
+                      "kind": {
+                        "const": "filedAt"
                       }
                     },
                     "not": {
@@ -2495,17 +2512,18 @@
                   "kind": {
                     "enum": [
                       "position",
+                      "filedAt",
                       "comparison"
                     ],
-                    "description": "`position` is a position of an input or a number taken of one. `comparison` is retired: it was to have been the place a comparison of two moving things draws, and no compiler ever wrote it — such a line owes its rows by having been read, so it never stands as a question. It is kept because this version promised it, and a reader holding the schema still meets the word."
+                    "description": "`position` is a position of an input or a number taken of one. `filedAt` is where a reader is sent to look at a rule this compiler did not read far enough to classify — a place and not a subject, since what such a rule states there is what nothing worked out. It is one word for both of those questions, because where to look is one thing however much of the rule was classified; which of them it is, is what the entry's `question` says. `comparison` is retired: it was to have been the place a comparison of two moving things draws, and no compiler ever wrote it — such a line owes its rows by having been read, so it never stands as a question. It is kept because this version promised it, and a reader holding the schema still meets the word."
                   },
                   "path": {
                     "type": "string",
-                    "description": "The position, spelled as the entry's `at` is. Written for a `position` subject."
+                    "description": "The position, spelled as the entry's `at` is. Written for a `position` subject, and for a `filedAt` one, where it is the place the reading stopped rather than what the rule is about."
                   },
                   "measure": {
                     "type": "string",
-                    "description": "The number the line falls on, where it falls on a count rather than on the position's own values — `String.length(code)` beside a `path` of `code`. Written only where the question is about a count."
+                    "description": "The number the line falls on, where it falls on a count rather than on the position's own values — `String.length(code)` beside a `path` of `code`. Written where the question is about a count, and for a `filedAt` subject where the walk had named a number before it stopped, which is what tells two of those apart at one path."
                   },
                   "at": {
                     "$ref": "#/$defs/at",

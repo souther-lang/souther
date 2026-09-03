@@ -273,7 +273,7 @@ class ARuleWithoutALineIsNamedByTheRuleTest {
                 """;
 
         List<java.util.Set<souther.compiler.check.RuleCitation>> cited = rulesNotRead(model).stream()
-                .map(each -> ((PartitionEvidence.NotRead.ARule) each).finding().cited())
+                .map(ARuleWithoutALineIsNamedByTheRuleTest::citedIn)
                 .distinct().toList();
 
         assertEquals(2, cited.size(),
@@ -324,11 +324,17 @@ class ARuleWithoutALineIsNamedByTheRuleTest {
                         + findings);
     }
 
-    /** Every rule of the behavior that this could not turn into a line. */
+    /**
+     * Every rule of the behavior that this could not turn into a line.
+     *
+     * <p>Both of the shapes that name one. A rule read to the end that draws no line and a rule
+     * nothing worked out the questions of are opposite sentences about this compiler and are one
+     * thing here: what is asked is that a reader is told which rule, which is owed either way.
+     */
     private static List<PartitionEvidence.NotRead> rulesNotRead(String model) {
         List<PartitionEvidence.NotRead> out = new ArrayList<>();
         for (PartitionEvidence.NotRead each : measured(model).notRead()) {
-            if (each instanceof PartitionEvidence.NotRead.ARule) {
+            if (ruleOf(each) != null) {
                 out.add(each);
             }
         }
@@ -339,9 +345,28 @@ class ARuleWithoutALineIsNamedByTheRuleTest {
     private static Set<souther.compiler.check.RuleRef> ruleIdsNotRead(String model) {
         Set<souther.compiler.check.RuleRef> out = new LinkedHashSet<>();
         for (PartitionEvidence.NotRead each : rulesNotRead(model)) {
-            out.add(((PartitionEvidence.NotRead.ARule) each).rule());
+            out.add(ruleOf(each));
         }
         return out;
+    }
+
+    /** How a reader is sent to the rule one of these names. */
+    private static java.util.Set<souther.compiler.check.RuleCitation> citedIn(
+            PartitionEvidence.NotRead said) {
+        return switch (said) {
+            case PartitionEvidence.NotRead.ARule it -> it.cited();
+            case PartitionEvidence.NotRead.AnUnclassifiedRule it -> it.cited();
+            case PartitionEvidence.NotRead.APosition _ -> java.util.Set.of();
+        };
+    }
+
+    /** Which rule one of these names, or null where it names a position and no rule. */
+    private static souther.compiler.check.RuleRef ruleOf(PartitionEvidence.NotRead said) {
+        return switch (said) {
+            case PartitionEvidence.NotRead.ARule it -> it.rule();
+            case PartitionEvidence.NotRead.AnUnclassifiedRule it -> it.rule();
+            case PartitionEvidence.NotRead.APosition _ -> null;
+        };
     }
 
     private static PartitionEvidence measured(String model) {

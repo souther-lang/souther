@@ -16,17 +16,19 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
- * The readers that find a rule with no line put their findings together in one place, and it keeps
- * every handle.
+ * The readers that find a rule with no line put their findings in one place, which keeps every
+ * handle and holds the two halves apart.
  *
- * <p>Six readers gathered these, and each did it by walking what it already had and keeping the
- * first where it matched. So a rule found by two readers came out cited whichever way was met
- * first, and a fold further down that accumulated could only accumulate what these let through —
- * which is what made the claim that nothing depends on the readers agreeing untrue one level up
- * from where it was made.
+ * <p>One fold for six readers. A rule found by two of them is one thing with both of their handles
+ * beside it, and what makes two findings one is the rule, the place and the limit — so a fold each
+ * reader wrote for itself would keep whichever handle it met first, and a fold further down could
+ * only accumulate what those let through.
  *
- * <p>What is asked here is the fold itself, because that is what those six became. Asked of what
- * the fold produces and not of a report, so that it says something about a rule found twice
+ * <p>And two lists there, folded apart. What a report says about a rule that came to no line and
+ * what holds a measure open until somebody reads further are different things about one rule, so
+ * neither is an account of the other and each is folded on its own.
+ *
+ * <p>Asked of the fold and not of a report, so that it says something about a rule found twice
  * whether or not this compiler's readers do that today.
  */
 class OneIdentityIsFoldedOnceAndKeepsEveryHandleTest {
@@ -37,37 +39,39 @@ class OneIdentityIsFoldedOnceAndKeepsEveryHandleTest {
 
     @Test
     void oneRuleFoundTwiceIsOneFindingCitedBothWays() {
-        RuleWithoutALine.Gathered gathered = new RuleWithoutALine.Gathered();
+        RulesWithNoLine.Gathered gathered = new RulesWithNoLine.Gathered();
         gathered.add(found(NAMED, "x"));
         gathered.add(found(PLACED, "x"));
 
-        assertEquals(1, gathered.all().size(),
-                () -> "one rule at one position for one reason is one finding: " + gathered.all());
-        assertEquals(Set.of(NAMED, PLACED), gathered.all().get(0).cited(),
+        assertEquals(1, gathered.found().reported().size(),
+                () -> "one rule at one position for one reason is one finding: "
+                        + gathered.found().reported());
+        assertEquals(Set.of(NAMED, PLACED), gathered.found().reported().get(0).cited(),
                 "and a reader can be sent to it either way either reader offered");
     }
 
     /** Which of the two was found first decides nothing about what comes out. */
     @Test
     void whichReaderFoundItFirstDecidesNothing() {
-        RuleWithoutALine.Gathered one = new RuleWithoutALine.Gathered();
+        RulesWithNoLine.Gathered one = new RulesWithNoLine.Gathered();
         one.add(found(NAMED, "x"));
         one.add(found(PLACED, "x"));
-        RuleWithoutALine.Gathered theOtherWayRound = new RuleWithoutALine.Gathered();
+        RulesWithNoLine.Gathered theOtherWayRound = new RulesWithNoLine.Gathered();
         theOtherWayRound.add(found(PLACED, "x"));
         theOtherWayRound.add(found(NAMED, "x"));
 
-        assertEquals(one.all(), theOtherWayRound.all());
+        assertEquals(one.found(), theOtherWayRound.found(),
+                "and what each hands on is one value, which compares by what is in it");
     }
 
     /** And two rules are two findings, so the fold is on the rule and not on everything at once. */
     @Test
     void twoRulesAreTwoFindings() {
-        RuleWithoutALine.Gathered gathered = new RuleWithoutALine.Gathered();
+        RulesWithNoLine.Gathered gathered = new RulesWithNoLine.Gathered();
         gathered.add(found(NAMED, "x"));
         gathered.add(found(NAMED, "y"));
 
-        assertEquals(2, gathered.all().size(), () -> gathered.all().toString());
+        assertEquals(2, gathered.found().reported().size(), () -> gathered.found().reported().toString());
     }
 
     /** And nothing puts together two findings that are not one rule. */
@@ -77,6 +81,30 @@ class OneIdentityIsFoldedOnceAndKeepsEveryHandleTest {
         RuleWithoutALine elsewhere = found(NAMED, "y");
 
         assertThrows(IllegalArgumentException.class, () -> here.mergedWith(elsewhere));
+    }
+
+    /**
+     * A question about a rule nothing classified is folded the way a finding is, and beside them.
+     *
+     * <p>Two lists and one fold each. What a report says about a rule and what holds a measure open
+     * are different things about it, so one is no account of the other — and a rule met twice is
+     * one entry in whichever of them it is in, with both handles.
+     */
+    @Test
+    void aQuestionAboutAnUnclassifiedRuleIsFoldedBesideTheFindings() {
+        RulesWithNoLine.Gathered gathered = new RulesWithNoLine.Gathered();
+        gathered.unclassified(comparison(), NAMED, at("x"), new BlockReason.UnreadComparisonForm());
+        gathered.unclassified(comparison(), PLACED, at("x"),
+                new BlockReason.UnreadComparisonForm());
+        gathered.add(comparison(), NAMED, at("x"), new BlockReason.ComparisonBetweenPositions());
+
+        assertEquals(1, gathered.found().unclassified().size(),
+                () -> "one rule, one place, one limit: " + gathered.found().unclassified());
+        assertEquals(Set.of(NAMED, PLACED), gathered.found().unclassified().get(0).cited(),
+                "and both handles are kept, as they are for a finding");
+        assertEquals(1, gathered.found().reported().size(),
+                () -> "the rule read to the end is beside it and not folded into it: "
+                        + gathered.found().reported());
     }
 
     /** A question two readers cited two ways is one question with both handles, and what the author
@@ -103,15 +131,64 @@ class OneIdentityIsFoldedOnceAndKeepsEveryHandleTest {
         assertThrows(IllegalArgumentException.class, () -> one.mergedWith(theOtherWayRound));
     }
 
+    /** And a question that asks something is not an account of one that asks nothing. */
+    @Test
+    void theTwoKindsOfStandingQuestionAreNotTwoAccountsOfOneThing() {
+        StandingQuestion asks = asked(NAMED, List.of(new BlockReason.UnreadComparisonForm()));
+        StandingQuestion unclassified = StandingQuestion.NothingClassifiesIt.of(
+                comparison(), NAMED, at("x"), new BlockReason.UnreadComparisonForm());
+
+        assertThrows(IllegalArgumentException.class, () -> asks.mergedWith(unclassified));
+        assertThrows(IllegalArgumentException.class, () -> unclassified.mergedWith(asks));
+    }
+
+    /**
+     * And what stopped a reading here is asked of both lists, because either can be the only one
+     * saying so.
+     *
+     * <p>A rule whose questions an accounting raised leaves a finding and no question of this kind;
+     * a rule nothing classified leaves a question and no finding. A caller reading one list for
+     * this is told nothing at a place holding the other, and hands the values there on as what the
+     * rules leave.
+     */
+    @Test
+    void whatStoppedAReadingIsAskedOfTheFindingsAndOfTheQuestions() {
+        BlockReason.RuleReadingStopped form = new BlockReason.UnreadComparisonForm();
+        RulesWithNoLine.Gathered asFinding = new RulesWithNoLine.Gathered();
+        asFinding.add(comparison(), NAMED, at("x"), form);
+        RulesWithNoLine.Gathered asQuestion = new RulesWithNoLine.Gathered();
+        asQuestion.unclassified(comparison(), NAMED, at("x"), form);
+
+        assertEquals(null, RulesWithNoLine.NONE.aReadingThatStopped(),
+                "nothing found, so nothing stopped");
+        assertEquals(form, asFinding.found().aReadingThatStopped(),
+                "a rule the accounting asked about leaves the finding and no question of that kind");
+        assertEquals(form, asQuestion.found().aReadingThatStopped(),
+                "and a rule nothing classified leaves the question and no finding");
+    }
+
+    /** And a rule read from end to end stopped nothing, which is the sentence it is not. */
+    @Test
+    void aRuleReadFromEndToEndStoppedNothing() {
+        RulesWithNoLine.Gathered gathered = new RulesWithNoLine.Gathered();
+        gathered.add(found(NAMED, "x"));
+
+        assertEquals(null, gathered.found().aReadingThatStopped(),
+                () -> "the reading got through it: " + gathered.found().reported());
+    }
+
     private static RuleWithoutALine found(RuleCitation cited, String at) {
-        return RuleWithoutALine.of(comparison(), cited,
-                new FilingCoordinate.AtPosition(TermPath.of(at)),
-                new BlockReason.UnreadComparisonForm());
+        return RuleWithoutALine.of(comparison(), cited, at(at),
+                new BlockReason.ComparisonBetweenPositions());
+    }
+
+    private static FilingCoordinate at(String path) {
+        return new FilingCoordinate.AtPosition(TermPath.of(path));
     }
 
     private static StandingQuestion asked(RuleCitation cited,
                                           List<BlockReason.AboutARule> stopped) {
-        return StandingQuestion.of(comparison(), cited,
+        return StandingQuestion.Exact.of(comparison(), cited,
                 new InputQuestion.AboutAPosition(TermPath.of("x")), stopped);
     }
 

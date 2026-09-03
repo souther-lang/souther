@@ -298,11 +298,24 @@ public final class UnreadComparison {
             // operation made of what stands here is a rule to be followed back through that
             // operation; anything else is a form this did not read, and which number of the
             // position it was about is the part that went unread.
-            case RuleAt.NotAboutOwnValues<K> _ ->
-                    madeByAnOperation(notRead.stoppedAt())
-                            ? new BlockReason.RuleAboutADerivedValue()
-                            : new BlockReason.UnreadComparisonForm();
+            case RuleAt.NotAboutOwnValues<K> _ -> notAboutOwnValues(notRead.stoppedAt());
         };
+    }
+
+    /**
+     * The same at a place the rule states nothing about the values of, from what the walk stopped
+     * at and from nothing else.
+     *
+     * <p>Its own way in because it is asked on both sides of the arrangement: by a reading that
+     * gave up on a comparison, and by the classification of a clause, which has to say the same
+     * thing about the same expression without asking what any reading came back with. What it reads
+     * is the expression — {@link ValueOrigin} is what a side is made of — so both callers are
+     * looking at the model.
+     */
+    public static <K> BlockReason.RuleReadingStopped notAboutOwnValues(ValueOrigin<K> stoppedAt) {
+        return madeByAnOperation(stoppedAt)
+                ? new BlockReason.RuleAboutADerivedValue()
+                : new BlockReason.UnreadComparisonForm();
     }
 
     /** Whether what a reading stopped at is a value an operation made of a position. */

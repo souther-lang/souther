@@ -7,7 +7,10 @@ import souther.compiler.check.FieldDomains;
 import souther.compiler.check.NarrowedBounds;
 import souther.compiler.check.RuleKey;
 import souther.compiler.check.Owed;
+import souther.compiler.check.Requirement;
 import souther.compiler.check.RuleAccounting;
+import souther.compiler.check.RuleCitation;
+import souther.compiler.check.RuleRef;
 import souther.compiler.check.ProjectionEvidence;
 import souther.compiler.check.Rules;
 import souther.compiler.check.Shape;
@@ -306,6 +309,37 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
         }
         return List.copyOf(out);
     }
+
+    /**
+     * The rules reaching this value that nothing worked out what they raise at {@code path}, each
+     * with the rule and what stopped there.
+     *
+     * <p>Beside the questions and not among them, for the reason they are told apart at all: a
+     * question names what has to be answered and this names a place where nothing knows what the
+     * question is. Both hold the measures open, and which of the two a reader is being told is
+     * what says whether there is anything to go and answer.
+     */
+    List<RuleUnclassifiedAt> unclassified(TermPath path) {
+        RuleKey where = keyOf(path);
+        if (where == null) {
+            return List.of();
+        }
+        List<RuleUnclassifiedAt> out = new ArrayList<>();
+        bounds().accounting().forEach((rule, accounting) ->
+                accounting.undetermined().stream()
+                        .filter(each -> each.at().equals(where))
+                        .forEach(each -> out.add(new RuleUnclassifiedAt(rule, accounting.cited(),
+                                each))));
+        TermPath above = alsoAt(path);
+        if (above != null) {
+            out.addAll(alsoReaching.outer().unclassified(above));
+        }
+        return List.copyOf(out);
+    }
+
+    /** One rule, how a reader finds it, and one place its classification did not come out. */
+    record RuleUnclassifiedAt(RuleRef rule, RuleCitation cited,
+                              Requirement.BoundaryUndetermined at) {}
 
     /**
      * How much of what the rules say the bounds at {@code path} are able to state.

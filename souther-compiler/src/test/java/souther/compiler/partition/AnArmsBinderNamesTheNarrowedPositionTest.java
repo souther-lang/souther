@@ -77,7 +77,7 @@ class AnArmsBinderNamesTheNarrowedPositionTest {
         Partitions.Partitioning base = Partitions.of(spec.name(), read, rules,
                 ReadAs.THE_COMPILATION_DOES);
         return Partitions.withThresholds(base, read.quantities(rules), guards.thresholds(),
-                rules, ReadAs.THE_COMPILATION_DOES, guards.rulesWithoutALine(), guards.singled(),
+                rules, ReadAs.THE_COMPILATION_DOES, guards.noLine(), guards.singled(),
                 guards.between()).axes();
     }
 

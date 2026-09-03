@@ -1,6 +1,9 @@
 package souther.compiler.check;
 
+import souther.compiler.inputs.BlockReason;
+
 import java.util.List;
+import java.util.SequencedMap;
 import java.util.Set;
 
 /**
@@ -102,27 +105,48 @@ sealed interface ClauseStates {
      * to stop: the question is raised by the model, and whether anything answered it is asked
      * afterwards.
      *
-     * @param named the ones the clause writes, which may be none. A rule cannot cost a name it does
-     *              not write, so these and not every name of the value — and a clause writing none
-     *              of them raises no question about one, which is what
+     * @param named the ones the clause states something about, which may be none. A rule cannot
+     *              cost a name it does not write, so these and not every name of the value — and a
+     *              clause writing none of them raises no question about one, which is what
      *              {@link Required#ofInvariant} makes of an empty set. Filed at the value instead,
      *              {@code invariant t = 1 >= 0} was a rule nothing had accounted for
+     * @param unread the names whose line the reading of the form did not settle, each with what
+     *              stopped it, and empty where it ran to the end. A name a clause states an order
+     *              about, in a form nothing took apart, may have a line and may not, and which of
+     *              those is what reading further would answer; one read to the end that draws no
+     *              line draws none, and that is the model.
+     *
+     *              <p>Per name, because what a rule raises is asked per name. One comparison has
+     *              one arithmetic and so answers alike at every name it writes; a clause is as many
+     *              comparisons as the author conjoined, and each is read on its own and met here as
+     *              its own state. Held as one answer for the clause, a name whose line was settled
+     *              would lose it to a name beside it that was not
      */
-    record SomethingElse(Set<RuleKey> named) implements ClauseStates {
+    record SomethingElse(Set<RuleKey> named,
+                         SequencedMap<RuleKey, BlockReason.RuleReadingStopped> unread)
+            implements ClauseStates {
 
         public SomethingElse {
             // Insertion order: `Set.of` and `Set.copyOf` iterate in an order salted once per JVM
             // run, and what is built from these reaches a checked-in document.
             named = java.util.Collections.unmodifiableSet(
                     new java.util.LinkedHashSet<>(named));
+            unread = java.util.Collections.unmodifiableSequencedMap(
+                    new java.util.LinkedHashMap<>(unread));
         }
 
         static SomethingElse naming(List<RuleKey> found) {
-            return new SomethingElse(new java.util.LinkedHashSet<>(found));
+            return new SomethingElse(new java.util.LinkedHashSet<>(found),
+                    new java.util.LinkedHashMap<>());
+        }
+
+        /** The same, told which names the reading of the form left a line undecided at. */
+        SomethingElse unread(SequencedMap<RuleKey, BlockReason.RuleReadingStopped> why) {
+            return why.isEmpty() ? this : new SomethingElse(named, why);
         }
     }
 
-    /** The names this clause is about, by which a rule can cost one. */
+    /** The names this clause states something about, by which a rule can cost one. */
     default Set<RuleKey> about() {
         return switch (this) {
             case ABound bound -> bound.named();
