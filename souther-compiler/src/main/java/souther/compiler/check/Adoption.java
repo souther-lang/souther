@@ -183,8 +183,9 @@ record Adoption<A>(Set<A> read, Set<A> settled, Set<A> missed, boolean dropped) 
      * a value can satisfy instead, so what was said of the position beside it binds nothing.
      *
      * <p>Here rather than at a caller, so that the subtraction is made wherever the question is
-     * asked. Spelled at one reader, {@code value /= 5 || f(value)} with {@code f} unread answers
-     * that the clause holds the position away from five.
+     * asked. Left to a reader to make, {@code value /= 5 || f(value)} with {@code f} unread answers
+     * that the clause holds the position away from five — and a value satisfying the branch nothing
+     * read owes the other one nothing.
      */
     boolean constrains(A position) {
         return read.contains(position) && !missed.contains(position);

@@ -2,7 +2,6 @@ package souther.compiler.check;
 
 import souther.compiler.semantics.ConditionJoin;
 import souther.compiler.values.AdmissibleValues;
-import souther.compiler.values.ValueSet;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.Combinators.Handed;
 import souther.compiler.check.PathEngine.Entered;
@@ -1485,7 +1484,7 @@ public final class InvariantChecker {
         if (withoutParts.excludes(from, clause)) {
             return;
         }
-        restricting(clause, from, part, byName, parts, values, noLines);
+        restricting(clause, from, part, byName, parts, noLines);
         if (!(clause instanceof Core.Binary bin)) {
             // Nothing but a binary is written as a comparison, so there is no reading of one for
             // the classification to be handed.
@@ -1945,7 +1944,6 @@ public final class InvariantChecker {
      */
     private void restricting(Core clause, RuleRef.Invariant from, int part,
                              Map<FactSubject, Coordinate> byName, PartsRead parts,
-                             AdmissibleValues<FactSubject> together,
                              List<FieldDomains.NoLine> noLines) {
         ReadByClauses.OfAPart account = parts.accountIn(from, clause);
         ReadByClauses.OfARule rule = parts.ruleIn(from);
@@ -1961,19 +1959,11 @@ public final class InvariantChecker {
             if (!account.restricts(position) || account.bounds(position)) {
                 continue;
             }
-            // And what the rule came to once its conjuncts are put together, which is what says
-            // whether it holds the position down at all: in `value == 5 || value /= 5` each side
-            // names values and the rule leaves the position exactly as wide as it was.
+            // And what the rule itself came to once its own choices are decided and its own
+            // languages built, which is what says whether it holds the position down at all: in
+            // `value == 5 || value /= 5` each side names values and the rule leaves the position
+            // exactly as wide as it was.
             if (!rule.narrows(position)) {
-                continue;
-            }
-            // And what the values come to once they are built, which is the one thing the rule's
-            // own reading cannot say: a pattern is named there and not made, so a format that
-            // accepts every string and one that accepts some read alike until a machine exists.
-            // Made once, for the position, out of every rule that reached it — so this is asked of
-            // the declaration's answer and is asked only to refuse.
-            ValueSet left = together.at(position);
-            if (!together.speaksFor(position) || left.isAny() || left.isEmpty()) {
                 continue;
             }
             FieldDomains.NoLine said = new FieldDomains.NoLine(each.getValue().at(), from, clause,

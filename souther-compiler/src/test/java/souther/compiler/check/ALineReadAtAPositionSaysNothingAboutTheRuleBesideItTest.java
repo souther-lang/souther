@@ -161,6 +161,35 @@ class ALineReadAtAPositionSaysNothingAboutTheRuleBesideItTest {
     }
 
     /**
+     * A branch this rule's own clauses rule out is this rule's work, and counts as what it did.
+     *
+     * <p>Nothing is both {@code "A"} and {@code "B"}, so the branch asking for both is one nobody
+     * can take — and the rule is what is left of it, which holds {@code s} to one string. Which
+     * branch that is cannot be read off the clause: two languages are a machine, and whether their
+     * meet holds anything is not known until the machine exists.
+     *
+     * <p>The other half of the rule beside it. There a branch stands until a neighbouring rule
+     * refuses it, and crediting this rule with that is how one that states nothing was reported as
+     * holding a position down; here the refusal is the rule's own, and dropping it loses a
+     * restriction the model does state.
+     */
+    @Test
+    void aBranchThisRulesOwnClausesRuleOutIsPartOfWhatItRestricts() {
+        FieldDomains read = readingOf("""
+                module example.parcels
+
+                data Code = { t: String, s: String }
+                    invariant r = (String.matches("A", t) && String.matches("B", t))
+                        || String.matches("C", s)
+                """, "Code");
+
+        assertEquals(List.of(new BlockReason.RuleRestrictingToAdmittedValues()),
+                reasonsAt(read, "s"),
+                () -> "the branch that survives holds `s` to one string: "
+                        + read.noLineAt(RuleKey.of("s")));
+    }
+
+    /**
      * A conjunct whose surviving branch is about another position does not hold this one down.
      *
      * <p>What a reading settled and what it constrained are two answers, and only the second is a

@@ -216,29 +216,6 @@ sealed interface StatedByClauses {
         };
     }
 
-    /**
-     * What this rule's own clauses leave, with its choices settled by nothing outside it.
-     *
-     * <p>The rule alone, which is what a reader asking what <em>this</em> rule did to a position
-     * has to be given. A fate is the whole declaration's to say, so a branch of this rule that
-     * nobody can be in is one a neighbouring rule ruled out — and a reading that took the fates
-     * would hand this rule its neighbour's narrowing: in {@code value == 5 || value /= 5} beside
-     * {@code value == 7}, the first branch is dead and what is left of a rule that states nothing
-     * is a rule that holds the position away from five.
-     *
-     * <p>Its own connectives, and the same ones the clauses were read with, so this is the reading
-     * projected rather than a second one. Free of any allowance: joining two descriptions is
-     * arithmetic over what is written down, and a machine is made where an answer is resolved.
-     */
-    default souther.compiler.values.PlannedValues<FactSubject> alone(Alternatives held) {
-        return switch (this) {
-            case Said it -> it.values();
-            case Choice it -> held == Alternatives.APART
-                    ? it.left().alone(held).joinApart(it.right().alone(held))
-                    : it.left().alone(held).join(it.right().alone(held));
-        };
-    }
-
     /** The reading of one value's positions, made once and used over however many clauses reach it.
      *  Built per clause, this walk paid for a pair of readers at every clause of every value. */
     static Reading readingOf(Terms terms, Denotations at, Map<FactSubject, Type> byName,
@@ -549,31 +526,41 @@ sealed interface StatedByClauses {
          * read, so nothing here builds a machine and nothing here can be widened by a constraint a
          * neighbouring rule stated: no neighbouring rule is in the tree.
          */
-        Account accountOf(StatedByClauses rule, Settlement made) {
-            return new Account(narrowedBy(rule.alone(alternatives), made.made().unbuilt()),
+        Account accountOf(StatedByClauses rule, Settlement made, Settlement alone) {
+            return new Account(narrowedBy(alone.made().values()),
                     partsOf(accounted(rule, made.outcomes()), made));
         }
 
         /**
-         * The positions the rule itself leaves holding less than every value.
+         * The positions the rule itself holds to less than every value.
          *
-         * <p>Off the rule alone ({@link #alone}) and not off the account beside it, because the
-         * account takes the fates of its choices from the whole declaration and a fate is a
-         * neighbouring rule's work. Free: what a position holds is a description the reading
-         * already has, and being narrowed is that description being one shape rather than another.
+         * <p>Off the rule settled on its own and not off the declaration's answer, because that one
+         * is met from every rule that reached the position: read there, a rule that holds nothing
+         * down is handed whatever its neighbours held down.
          *
-         * <p>A position whose answer was not built is not one of these — this reading cannot say
-         * what it narrowed there — and neither is one the rule leaves nothing at, which is a fact
-         * about emptiness and is said where emptiness is.
+         * <p><b>And settled, rather than composed and left at that.</b> A choice is decided by
+         * whether anything satisfies each branch, which for a language is not known until the
+         * machine exists — {@code (String.matches("A", t) && String.matches("B", t)) ||
+         * String.matches("C", s)} holds {@code s} to one string, because nothing is both {@code "A"}
+         * and {@code "B"} and the branch asking for both is one nobody can take. Joined without
+         * deciding, the two branches leave {@code s} at every value and the rule looks like one that
+         * states nothing.
+         *
+         * <p>Its own fates and not the declaration's, which is the whole of the distinction. A
+         * branch this rule's own clauses rule out is this rule's work and belongs to what it did; a
+         * branch that stands until a neighbour refuses it is the neighbour's, and lending it here is
+         * how a rule that states nothing came to be reported as holding a position down.
+         *
+         * <p>Built, so a pattern is a set here rather than a name for one. That is what tells a
+         * format admitting some strings from one admitting every string, which no description of an
+         * unmade machine can answer — and a position the rule leaves holding nothing, or one it
+         * cannot promise the width of, is not one it narrowed.
          */
         private Set<FactSubject> narrowedBy(
-                souther.compiler.values.PlannedValues<FactSubject> mine,
-                Set<FactSubject> unbuilt) {
+                souther.compiler.values.AdmissibleValues<FactSubject> mine) {
             Set<FactSubject> out = new java.util.LinkedHashSet<>();
             for (FactSubject each : mine.adoptedAt()) {
-                if (!unbuilt.contains(each)
-                        && !(mine.at(each)
-                                instanceof souther.compiler.values.AdmittedPlan.Nothing)) {
+                if (mine.speaksFor(each) && !mine.at(each).isEmpty()) {
                     out.add(each);
                 }
             }
@@ -827,7 +814,12 @@ sealed interface StatedByClauses {
             Adoption<FactSubject> byValues = Adoption.nothing();
             Adoption<FactSubject> byOrder = Adoption.nothing();
             for (Map.Entry<K, StatedByClauses> each : trees.entrySet()) {
-                Account mine = reader.accountOf(each.getValue(), made);
+                // The rule on its own as well as in the declaration, because what it did to a
+                // position and what the position came to are two questions. A choice of its own is
+                // decided here by its own clauses; met with its neighbours first, a branch they
+                // refuse is dropped and the rule is credited with a narrowing it did not do.
+                Account mine = reader.accountOf(each.getValue(), made,
+                        reader.settle(each.getValue().together(), by));
                 said.putAll(mine.parts());
                 ReadByClauses.OfAPart clause = mine.parts().get(byClause.get(each.getKey()));
                 clauses.put(each.getKey(), new ReadByClauses.OfARule(mine.narrowed(), clause));

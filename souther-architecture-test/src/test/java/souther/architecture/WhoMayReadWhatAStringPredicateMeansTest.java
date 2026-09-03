@@ -9,6 +9,7 @@ import java.io.UncheckedIOException;
 import java.lang.classfile.ClassFile;
 import java.lang.classfile.constantpool.ClassEntry;
 import java.lang.classfile.constantpool.MemberRefEntry;
+import java.lang.classfile.constantpool.Utf8Entry;
 import java.lang.classfile.constantpool.PoolEntry;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -87,8 +88,11 @@ class WhoMayReadWhatAStringPredicateMeansTest {
 
     private static final String WITNESS = "souther/compiler/partition/Partitions -> " + OWNER;
 
+    private static final String IN_A_DESCRIPTOR = " (in a descriptor)";
+
     private static final List<String> READING_ONE = List.of(
             READS,
+            READS + IN_A_DESCRIPTOR,
             READS + "#statedByChecked(Lsouther/compiler/core/Core;"
                     + "Lsouther/compiler/check/Symbols;)L" + OWNER + "$Stated;",
             READS + "$Reading",
@@ -101,6 +105,7 @@ class WhoMayReadWhatAStringPredicateMeansTest {
             READS + "$Stated#reading()L" + OWNER + "$Reading;",
             READS + "$Stated#subject()Lsouther/compiler/core/Core;",
             WITNESS,
+            WITNESS + IN_A_DESCRIPTOR,
             WITNESS + "#statedByWritten(Lsouther/compiler/ast/Hir$Expr;"
                     + "Lsouther/compiler/check/Symbols;)L" + OWNER + "$Reading;",
             WITNESS + "$Reading",
@@ -195,6 +200,14 @@ class WhoMayReadWhatAStringPredicateMeansTest {
         }
         if (entry instanceof ClassEntry type && names(type.name().stringValue())) {
             return type.name().stringValue();
+        }
+        // And the type written into a descriptor or a signature, which is how a class holds one
+        // without ever asking it anything: a method handing a reading along names the type in what
+        // it takes and answers with, and needs no class constant to do it. Held by a class that
+        // reads nothing, such a type is still the reading crossing a boundary it has no business
+        // crossing, and a walk over classes and members alone passes over it.
+        if (entry instanceof Utf8Entry text && text.stringValue().contains("L" + OWNER)) {
+            return OWNER + " (in a descriptor)";
         }
         return null;
     }
