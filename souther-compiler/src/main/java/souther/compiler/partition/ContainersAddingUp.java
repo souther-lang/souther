@@ -441,17 +441,24 @@ final class ContainersAddingUp {
         java.util.Set<CompositionBudget> cutBy = java.util.EnumSet.noneOf(CompositionBudget.class);
         List<TermPath> nothingStandsAt = new ArrayList<>();
         java.util.Deque<TermPath> asking = new java.util.ArrayDeque<>(List.of(demand));
+        int tried = 0;
         while (!asking.isEmpty()) {
             TermPath fixed = asking.removeFirst();
-            // What this walk stops at, and not what the offering does. A way that plans is not a
-            // container that was offered -- the values are composed afterwards and a case may be
-            // refused there -- so spending the offer's figure here would leave a case never tried
-            // because an earlier one planned and then built nothing, which is the declaration order
-            // deciding what is offered.
-            if (found.size() == MOST_WAYS_DOWN_TRIED) {
+            // What this walk did, and not what it kept. Every position that has to be narrowed
+            // multiplies what is left to ask about, and a walk none of whose branches plans keeps
+            // none of them -- so a figure counting what was kept bounds nothing at all and the
+            // cases of every sum on the way are walked through in full.
+            //
+            // And this walk's figure rather than the offering's. A way that plans is not a
+            // container that was offered, since the values are composed afterwards and a case may
+            // be refused there; spending the offer's figure here would leave a case never tried
+            // because an earlier one planned and then built nothing, which is the declaration
+            // order deciding what is offered.
+            if (tried == MOST_WAYS_DOWN_TRIED) {
                 cutBy.add(CompositionBudget.WAYS_DOWN_TO_A_TOTAL_TRIED);
                 break;
             }
+            tried++;
             switch (ConstructionPlan.of(element, at, ruleSource.symbols(), java.util.Set.of(fixed),
                     Requirements.NONE,
                     (_, building) -> Partitions.leastHeld(building, ruleSource))) {

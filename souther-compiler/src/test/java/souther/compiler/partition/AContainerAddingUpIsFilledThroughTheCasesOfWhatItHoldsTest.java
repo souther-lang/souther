@@ -130,6 +130,74 @@ class AContainerAddingUpIsFilledThroughTheCasesOfWhatItHoldsTest {
                 "and the ways it did try composed containers");
     }
 
+    /**
+     * The figure counts what this walk did, so a walk that keeps nothing is stopped by it too.
+     *
+     * <p>Every position that has to be narrowed multiplies what is left to ask about. Where the
+     * branches plan, a figure over what was kept stops the walk soon enough that nothing shows;
+     * where none of them does — here the number stands deeper than a value is built — nothing is
+     * kept, and a figure over what was kept would let the cases of every sum on the way be walked
+     * in full while saying the walk was never stopped.
+     */
+    @Test
+    void theFigureCountsTheWaysTriedAndNotTheOnesKept() {
+        TermRealizations.Realization came = realizing(DEEP_UNDER_SUMS, DEEPLY);
+
+        assertEquals(java.util.Set.of(CompositionBudget.WAYS_DOWN_TO_A_TOTAL_TRIED,
+                        CompositionBudget.DEPTH_A_CONSTRUCTION_PLAN_DESCENDS),
+                assertInstanceOf(TermRealizations.Realization.Stopped.class, came,
+                        "no way down was kept, so there is no container and no reason of the"
+                                + " model's").by(),
+                "and both figures are said: the ways this tried, and what each of them was planned"
+                        + " no further than");
+    }
+
+    /** The amount under two sums and then below more levels than a value is built through. */
+    private static final List<String> DEEPLY = List.of("first", "second", "down", "down", "down",
+            "down", "down", "down", "down", "amount");
+
+    /**
+     * Two sums on the way down, with the number below the depth a plan descends.
+     *
+     * <p>So every combination of their cases is a way to ask about and none of them plans, which is
+     * the walk a figure over what was kept does not bound.
+     */
+    private static final String DEEP_UNDER_SUMS = """
+            module g
+
+            data Amount = Int
+                invariant value >= 0
+
+            data Common = { amount: Amount }
+
+            data L8 = { ...Common, tag: Int }
+            data L7 = { down: L8 }
+            data L6 = { down: L7 }
+            data L5 = { down: L6 }
+            data L4 = { down: L5 }
+            data L3 = { down: L4 }
+            data L2 = { down: L3 }
+            data L1 = { down: L2 }
+
+            data A1 = { down: L1 }
+            data A2 = { down: L1 }
+            data A3 = { down: L1 }
+            data A4 = { down: L1 }
+            data Second = A1 | A2 | A3 | A4
+
+            data B1 = { second: Second }
+            data B2 = { second: Second }
+            data B3 = { second: Second }
+            data B4 = { second: Second }
+            data First = B1 | B2 | B3 | B4
+
+            data Entry = { first: First, settled: Bool }
+
+            data Page = { count: Int }
+
+            behavior readArticles : (ns: List<Entry>) -> Page
+            """;
+
     /** The same sum with more cases than the ways down are tried. */
     private static final String MANY_CASES = SHARED.replace(
             "data Method = Card | Cash",
