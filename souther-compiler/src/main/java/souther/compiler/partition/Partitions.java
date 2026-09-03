@@ -818,8 +818,13 @@ public final class Partitions {
         List<RuleWithoutALine> rules = gathered.reported();
         // And what these readers could not classify, beside the questions the base reading already
         // had. One list of what holds a measure open, for the one reader of it.
-        List<StandingQuestion> asked = new ArrayList<>(base.unanswered());
-        asked.addAll(rulesWithoutALine.unclassified());
+        //
+        // Taken from the same fold as the findings, because a rule both readers met is one rule
+        // however many of them say so. Concatenated instead, the reader of the report was told
+        // twice about one rule nothing worked out.
+        List<StandingQuestion> asked = new ArrayList<>(base.unanswered().stream()
+                .filter(each -> !(each instanceof StandingQuestion.Unclassified)).toList());
+        asked.addAll(gathered.unclassified());
         List<PositionMeasurements> measurements = new ArrayList<>();
         EvidenceAccount account = new EvidenceAccount(evidence);
         // A position at a time, so that what a body's rules add is added where the position already

@@ -76,6 +76,37 @@ public record RulesWithNoLine(List<RuleWithoutALine> reported,
                 .toList();
     }
 
+    /**
+     * A rule here that this compiler got partway through, as what stopped it, or null where none
+     * did.
+     *
+     * <p>What such a rule costs a reading is everything it would have said, so a place holding one
+     * has values nothing can claim are what the rules leave. That is what a caller does with this,
+     * and it is why the rules read from end to end are not here: a rule that placed no line because
+     * it relates two positions, or because its quantity is empty, was taken in whole and takes
+     * nothing back. Handed one of those, a reading called itself partial over a position nothing
+     * had been short of, and every claim about its cases came back unsettled because a rule went
+     * unread.
+     *
+     * <p>Any of them, and the rest say the same thing. Each costs the reading the same — the values
+     * are an upper bound and there is no more or less of that — and which rule to go and look at is
+     * the findings' to say, one per rule, where they are all named.
+     *
+     * <p><b>Asked of both of the lists, which is why it is asked here.</b> A rule of a declaration
+     * whose line nothing could fold leaves a finding and its question is the accounting's; a rule
+     * nothing classified at all leaves a question and no finding. A caller reading either list for
+     * this finds nothing at a place holding the other kind, and hands the values on as what the
+     * rules leave.
+     */
+    public BlockReason.RuleReadingStopped aReadingThatStopped() {
+        for (RuleWithoutALine each : reported) {
+            if (each.why() instanceof BlockReason.RuleReadingStopped stopped) {
+                return stopped;
+            }
+        }
+        return unclassified.isEmpty() ? null : unclassified.get(0).why();
+    }
+
     /** Both readers' answers, as one, each fact still once. */
     public RulesWithNoLine and(RulesWithNoLine other) {
         Gathered both = new Gathered();

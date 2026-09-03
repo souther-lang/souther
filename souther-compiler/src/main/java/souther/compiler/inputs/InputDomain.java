@@ -1385,15 +1385,20 @@ public final class InputDomain {
         // own type draws a line, because a clause relating two fields is not a partition of one.
         NumericDomain.Bounds admissible = nothingExists ? null
                 : TypeBounds.admissible(own, projected.bounds(), term);
-        RulesWithNoLine noLine = rulesWithoutALineAt(placed, path, type, source, found);
-        List<RuleWithoutALine> withoutALine = noLine.reported();
+        rulesWithoutALineAt(placed, path, type, source, found);
         // Everything left open about the rules of this position: what the accounting of the
         // declaration's clauses could not classify, and what this walk itself could not — which of
         // the position's two numbers it is measured at is decided here and nowhere else, so no
-        // accounting has it.
-        List<StandingQuestion> open = standingAt(placed, path, noLine);
+        // accounting has it. The ones nothing classified go into the gathering beside the findings,
+        // so that what the position's rules came to is one value and a caller asking whether a
+        // reading stopped here has one place to ask.
+        List<StandingQuestion> exact = standingAt(placed, path, found);
+        RulesWithNoLine noLine = found.found();
+        List<RuleWithoutALine> withoutALine = noLine.reported();
+        List<StandingQuestion> open = new ArrayList<>(noLine.unclassified());
+        open.addAll(exact);
 
-        ReadingResult reading = crossed(declared, view, admissible, admitted, source, open,
+        ReadingResult reading = crossed(declared, view, admissible, admitted, source, noLine, open,
                 nothingExists, type);
         return new ReadPosition(path, view, term, admissible, own, projected,
                 // Where the position actually stops, which the ends as written do not say: a clause
@@ -1439,13 +1444,13 @@ public final class InputDomain {
     private static ReadingResult crossed(List<Case> declared, TypeView view,
                                          NumericDomain.Bounds admissible, AdmissibleSet admitted,
                                          RuleReadingSource source,
-                                         List<StandingQuestion> open,
+                                         RulesWithNoLine found, List<StandingQuestion> open,
                                          boolean nothingExists, Type type) {
         BlockReason.AboutThePosition unreadable = Distinctions.unreadableAt(view);
         if (unreadable != null) {
             return new ReadingResult.Unsupported(unreadable);
         }
-        BlockReason.RuleReadingStopped here = stoppedOn(open);
+        BlockReason.RuleReadingStopped here = found.aReadingThatStopped();
         if (!declared.isEmpty()) {
             return Crossing.of(declared, view, admissible, admitted, source.symbols(), here);
         }
@@ -1463,30 +1468,6 @@ public final class InputDomain {
         return admitted.alternativesNotSeparated()
                 ? new ReadingResult.NotSeparated(named, List.of())
                 : new ReadingResult.Complete(named, List.of());
-    }
-
-    /**
-     * A rule at this position that this compiler got partway through, or null where there is none.
-     *
-     * <p>What such a rule costs the reading is everything it would have said, so a position holding
-     * one has values this cannot claim are what the rules leave. That is what a caller does with
-     * this, and it is why the rules read from end to end are not here: a rule that placed no line
-     * because it relates two positions, or because its quantity is empty, was taken in whole and
-     * takes nothing back. Handed one of those, the reading called itself partial over a position
-     * nothing had been short of, and every claim about its cases came back unsettled because a rule
-     * went unread.
-     *
-     * <p>The first, and the rest say the same thing. Any one of them costs the reading the same —
-     * the values are an upper bound and there is no more or less of that — and which rule to go and
-     * look at is the finding's to say, one per rule, where they are all named.
-     */
-    private static BlockReason.RuleReadingStopped stoppedOn(List<StandingQuestion> open) {
-        for (StandingQuestion each : open) {
-            if (each instanceof StandingQuestion.Unclassified it) {
-                return it.why();
-            }
-        }
-        return null;
     }
 
     /**
@@ -1638,12 +1619,17 @@ public final class InputDomain {
      * which of a position's numbers it is measured at is settled here. Taken from the accounting
      * alone, a position both of whose coordinates are spoken for came back with nothing standing at
      * it and its measures closed over a rule this compiler could not use.
+     *
+     * <p>The questions nothing classified are put into the gathering and the rest are returned, so
+     * that everything saying a reading stopped here is in one value. Kept in a list of its own
+     * beside it, a caller asking what stopped had two places to ask and answered from whichever it
+     * had in hand.
      */
     private static List<StandingQuestion> standingAt(PlacedRules placed, TermPath path,
-                                                     RulesWithNoLine here) {
-        List<StandingQuestion> out = new ArrayList<>(here.unclassified());
+                                                     RulesWithNoLine.Gathered found) {
+        List<StandingQuestion> out = new ArrayList<>();
         for (PlacedRules.RuleUnclassifiedAt each : placed.unclassified(path)) {
-            out.add(StandingQuestion.BoundaryUndetermined.of(each.rule(), each.cited(),
+            found.asked(StandingQuestion.BoundaryUndetermined.of(each.rule(), each.cited(),
                     FilingCoordinate.at(path), each.at().why()));
         }
         for (souther.compiler.check.RuleAccounting.Unanswered each : placed.unanswered(path)) {
@@ -1713,9 +1699,9 @@ public final class InputDomain {
      * to rewrite is what an author acts on, and a position is not it. Kept per reason, the second
      * of them was dropped as a repeat of the first.
      */
-    private static RulesWithNoLine rulesWithoutALineAt(PlacedRules placed, TermPath path, Type type,
-                                                  RuleReadingSource source,
-                                                  RulesWithNoLine.Gathered out) {
+    private static void rulesWithoutALineAt(PlacedRules placed, TermPath path, Type type,
+                                            RuleReadingSource source,
+                                            RulesWithNoLine.Gathered out) {
         for (FieldDomains.NoLine each : placed.noLineAt(path)) {
             // The rule the reading of ends was holding when it gave up, carried rather than left
             // behind. It is a clause of an invariant, so it has a name and the handle is that name.
@@ -1728,6 +1714,5 @@ public final class InputDomain {
                     filedAt(path, each.at(), type, source),
                     each.why());
         }
-        return out.found();
     }
 }

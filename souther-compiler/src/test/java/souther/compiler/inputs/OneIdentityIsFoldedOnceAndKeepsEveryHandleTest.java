@@ -142,6 +142,41 @@ class OneIdentityIsFoldedOnceAndKeepsEveryHandleTest {
         assertThrows(IllegalArgumentException.class, () -> unclassified.mergedWith(asks));
     }
 
+    /**
+     * And what stopped a reading here is asked of both lists, because either can be the only one
+     * saying so.
+     *
+     * <p>A rule whose questions an accounting raised leaves a finding and no question of this kind;
+     * a rule nothing classified leaves a question and no finding. A caller reading one list for
+     * this is told nothing at a place holding the other, and hands the values there on as what the
+     * rules leave.
+     */
+    @Test
+    void whatStoppedAReadingIsAskedOfTheFindingsAndOfTheQuestions() {
+        BlockReason.RuleReadingStopped form = new BlockReason.UnreadComparisonForm();
+        RulesWithNoLine.Gathered asFinding = new RulesWithNoLine.Gathered();
+        asFinding.add(comparison(), NAMED, at("x"), form);
+        RulesWithNoLine.Gathered asQuestion = new RulesWithNoLine.Gathered();
+        asQuestion.unclassified(comparison(), NAMED, at("x"), form);
+
+        assertEquals(null, RulesWithNoLine.NONE.aReadingThatStopped(),
+                "nothing found, so nothing stopped");
+        assertEquals(form, asFinding.found().aReadingThatStopped(),
+                "a rule the accounting asked about leaves the finding and no question of that kind");
+        assertEquals(form, asQuestion.found().aReadingThatStopped(),
+                "and a rule nothing classified leaves the question and no finding");
+    }
+
+    /** And a rule read from end to end stopped nothing, which is the sentence it is not. */
+    @Test
+    void aRuleReadFromEndToEndStoppedNothing() {
+        RulesWithNoLine.Gathered gathered = new RulesWithNoLine.Gathered();
+        gathered.add(found(NAMED, "x"));
+
+        assertEquals(null, gathered.found().aReadingThatStopped(),
+                () -> "the reading got through it: " + gathered.found().reported());
+    }
+
     private static RuleWithoutALine found(RuleCitation cited, String at) {
         return RuleWithoutALine.of(comparison(), cited, at(at),
                 new BlockReason.ComparisonBetweenPositions());
