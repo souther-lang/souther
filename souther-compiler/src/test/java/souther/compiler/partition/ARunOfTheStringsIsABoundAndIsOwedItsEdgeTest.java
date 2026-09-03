@@ -135,6 +135,68 @@ class ARunOfTheStringsIsABoundAndIsOwedItsEdgeTest {
     }
 
     /**
+     * A rule nobody could read in a branch nobody can take hides no run of the branch that stands.
+     *
+     * <p>What a rule about the strings leaves is what its own branch of every choice in it leaves,
+     * and so is whether the strings were worked out. The left branch asks for a string below the
+     * least one there is, so nobody can take it, and what it could not read goes with it — read as
+     * a fact about the clause, the branch that stands would have no run at a position its own rule
+     * runs between two places.
+     */
+    @Test
+    void aRuleNobodyCouldReadInADeadBranchHidesNoRunOfTheOneThatStands() {
+        String report = report("""
+                module branches
+
+                data Code = String
+                    invariant (value < "" && String.matches("%s", value))
+                        || String.startsWith("JP", value)
+
+                data Ok = { size: Int }
+
+                behavior onCode : (v: Code) -> Ok
+                    constructs Ok
+                let onCode (v) = Ok { size = String.length(v.value) }
+                """.formatted(NESTED_PAST_WHAT_IS_READ));
+
+        assertTrue(report.contains(
+                "undecided whether a row is at the ON point value = JP (invariant Code #1)"),
+                "the branch that stands runs from JP:\n" + report);
+    }
+
+    /**
+     * A rule this reads no further into leaves the question of where the values stop standing, and
+     * not answered.
+     *
+     * <p>What such a rule admits is not every string; it is not known. Read off what the reading
+     * left, the rule would look like one that admits every string and states no bound — which is a
+     * fact about the model, where what is true is that nobody worked out whether it states one.
+     */
+    @Test
+    void aRuleThisReadsNoFurtherIntoLeavesTheBoundaryStanding() {
+        String report = report("""
+                module unread
+
+                data Code = String invariant String.matches("%s", value)
+
+                data Ok = { size: Int }
+
+                behavior onCode : (v: Code) -> Ok
+                    constructs Ok
+                let onCode (v) = Ok { size = String.length(v.value) }
+                """.formatted(NESTED_PAST_WHAT_IS_READ));
+
+        assertTrue(report.contains("not accounted for: invariant Code #1 — whether the values stop"
+                        + " on v: written more deeply nested than this compiler reads"),
+                "the question stands and says what stopped it:\n" + report);
+    }
+
+    /** A pattern written more deeply than the subset reads, which is a rule this reads no further
+     *  into and no error. */
+    private static final String NESTED_PAST_WHAT_IS_READ =
+            "(".repeat(201) + "a" + ")".repeat(201);
+
+    /**
      * A reading that ran out of what it may build says so, and is not read as a rule that draws no
      * line.
      *
@@ -192,38 +254,6 @@ class ARunOfTheStringsIsABoundAndIsOwedItsEdgeTest {
         assertEquals(1, report.lines()
                         .filter(each -> each.contains("point value = m")).count(),
                 "one line, owed once:\n" + report);
-    }
-
-    /**
-     * A rule whose text this could not work out draws no line, and is not read as one admitting
-     * every string.
-     *
-     * <p>What the reading left where it worked nothing out is every value — which is what a
-     * position nothing was read about holds, and the run of every string begins where the strings
-     * begin. Read off what was left, such a rule would arrive here as one that admits every string,
-     * and what it draws would be settled by a set nobody established.
-     *
-     * <p>The pattern is written out of a name this module holds, so what stops the reading is the
-     * text and not the pattern: the call is a rule about {@code value} either way, and only the
-     * strings are missing.
-     */
-    @Test
-    void aRuleWhoseTextWasNotWorkedOutDrawsNoLine() {
-        String report = report("""
-                module unread
-
-                data Code = String invariant String.matches(pattern(), value)
-
-                data Ok = { size: Int }
-
-                behavior pattern : () -> String
-                behavior onCode : (v: Code) -> Ok
-                    constructs Ok
-                let onCode (v) = Ok { size = String.length(v.value) }
-                """);
-
-        assertFalse(report.contains("point v = "), "no edge is owed for it:\n" + report);
-        assertFalse(report.contains("point value = "), report);
     }
 
     /** What {@code behavior} is asked for, as the report writes it against the behavior's own

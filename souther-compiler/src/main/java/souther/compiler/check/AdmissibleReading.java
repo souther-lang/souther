@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import souther.compiler.core.Core;
 import souther.compiler.regex.PatternPlan;
+import souther.compiler.inputs.BlockReason;
 import souther.compiler.regex.PatternRead;
 import souther.compiler.types.Type;
 import souther.compiler.values.AdmittedPlan;
@@ -65,15 +66,6 @@ final class AdmissibleReading implements ClauseReading<PlannedValues<FactSubject
      * are two places in a declaration, and what each of them is about is asked of the one in hand.
      */
     private final Map<Core, StringPredicates.Stated> asStated = new IdentityHashMap<>();
-    /**
-     * What each node's whole subtree states about the strings, worked out once for the node.
-     *
-     * <p>The walk that reads a clause asks this of every node it passes, and each answer is the
-     * answer of everything under it — so a clause of any depth would be walked once per node
-     * without this, which is the reading paying for the shape of the tree rather than for what is
-     * written in it.
-     */
-    private final Map<Core, StringRestriction.Found> stringRules = new IdentityHashMap<>();
 
     private AdmissibleReading(Terms terms, Denotations at, Map<FactSubject, Type> byName,
                               Symbols symbols, Alternatives alternatives, Allowance<FactSubject> allowed) {
@@ -307,29 +299,40 @@ final class AdmissibleReading implements ClauseReading<PlannedValues<FactSubject
      * the conjunct states such a rule about — a denial and a choice inside it are still the
      * conjunct's.
      */
-    StringRestriction.Found stringRulesIn(Core e) {
-        StringRestriction.Found had = stringRules.get(e);
-        if (had != null) {
-            return had;
-        }
-        Set<FactSubject> read = new LinkedHashSet<>();
-        Set<FactSubject> notRead = new LinkedHashSet<>();
-        gatherStringRules(e, read, notRead);
-        read.removeAll(notRead);
-        StringRestriction.Found found = new StringRestriction.Found(read, notRead);
-        stringRules.put(e, found);
-        return found;
-    }
-
-    private void gatherStringRules(Core e, Set<FactSubject> read, Set<FactSubject> notRead) {
+    Map<FactSubject, StringRestriction> stringRuleIn(Core e, PlannedValues<FactSubject> said) {
         StringPredicates.Stated stated = statedIn(e);
         FactSubject position = stated == null ? null : positionIn(stated.subject());
-        if (position != null) {
-            (stated.reading() instanceof StringPredicates.Reading.Accepting ? read : notRead)
-                    .add(position);
-            return;   // what a predicate is about is the call's, and nothing under it is another
+        if (position == null) {
+            return Map.of();
         }
-        Core.forEachChild(e, child -> gatherStringRules(child, read, notRead));
+        // What the rule admits where it was worked out, and what stopped the reading where it was
+        // not. The reading is the one recognition's and is projected here once: a reader working out
+        // where the values stop and a reader saying what a rule left unread want the same fact, and
+        // asking the table twice is one question with two derivations.
+        //
+        // Exhaustive with no `default`: an outcome added to the recognition is one somebody decides
+        // about here, rather than one that quietly takes the answer its neighbours were given.
+        return Map.of(position, switch (stated.reading()) {
+            case StringPredicates.Reading.Accepting _ ->
+                    new StringRestriction.Admitting(said.at(position));
+            case StringPredicates.Reading.PatternNotRead it ->
+                    new StringRestriction.NotKnown(stoppedAt(it.why()));
+            case StringPredicates.Reading.WrittenArgumentNotKnown _ ->
+                    new StringRestriction.NotKnown(new BlockReason.UnreadValueRule());
+        });
+    }
+
+    /**
+     * What a pattern this reading stopped short of is, in the words a rule left unread is said in.
+     *
+     * <p>The same two answers {@link #stoppedBy} gives the values, said for the other reader. A
+     * construct the subset does not hold is a rule this could not read; one written more deeply
+     * than this reads is the reading's own limit and is said as itself, so that an author is sent to
+     * the brackets rather than to a construct that was never the trouble.
+     */
+    private static BlockReason.RuleReadingStopped stoppedAt(PatternRead.Unsupported why) {
+        return why == PatternRead.Unsupported.NESTED_TOO_DEEPLY
+                ? new BlockReason.PatternTooDeeplyNested() : new BlockReason.UnreadValueRule();
     }
 
     /**

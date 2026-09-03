@@ -117,6 +117,62 @@ class AQuestionExistsBecauseTheModelStatesItAndNotBecauseAReadingSucceededTest {
     }
 
     /**
+     * A rule about the strings at the position states where they stop, and raises the question
+     * about it like any other rule that does.
+     *
+     * <p>Not a comparison, and that is the point. What the model states is where the values stop —
+     * {@code String.startsWith("JP", value)} admits the strings from {@code "JP"} up to but not
+     * including {@code "JQ"} — and which call an author wrote it as is no part of that. Raised off
+     * the shape of the clause, the question existed for one of the two spellings and the accounting
+     * for the other came back complete.
+     */
+    @Test
+    void aRuleAboutTheStringsThatStatesWhereTheyStopRaisesTheQuestionAboutItsLine() {
+        String clause = "invariant top = String.startsWith(\"JP\", value)";
+        assertEquals(BOTH, onAString(clause),
+                "the model states where the strings stop, so both are asked about");
+    }
+
+    /**
+     * And one whose strings stop nowhere raises no question about a line.
+     *
+     * <p>{@code [0-9]{4}} leaves out a string between two it admits, so there is no stretch of the
+     * order it holds the values between — which is what the rule states and not what a reading of it
+     * managed. A question raised here would be one no line could ever answer.
+     */
+    @Test
+    void aRuleWhoseStringsStopNowhereRaisesNoQuestionAboutALine() {
+        assertEquals(Set.of(CoverageObligation.ADMITTED_VALUES),
+                onAString("invariant top = String.matches(\"[0-9]{4}\", value)"));
+    }
+
+    /** The same of a declaration over strings, since a run is a statement about those. */
+    private static Set<CoverageObligation> onAString(String clause) {
+        String source = """
+                module example.rooms
+
+                data Code = String
+                    %s
+                """.formatted(clause);
+        Compilation compilation = Compilation.ofSource(source, "Main");
+        compilation.answerEverything();
+        String module = compilation.modules().get(0);
+        Symbols symbols = Scopes.derived(compilation.db(), module).value();
+        assertNotNull(symbols);
+        TypeSymbol.AtModule named = TypeSymbols.declared(new TypeKey(module, "Code"));
+        Hir.Data data = (Hir.Data) symbols.declaredNode(named.key());
+        assertNotNull(data, "no `Code` declared");
+        FieldDomains domains = FieldDomains.of(named, data, RuleReadings.of(compilation, module),
+                souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+        assertEquals(1, domains.required().size(),
+                () -> "one clause, one rule: " + domains.required().keySet());
+        Set<CoverageObligation> out = new LinkedHashSet<>();
+        domains.required().values().iterator().next().obligations()
+                .forEach(owed -> out.add(owed.obligation()));
+        return out;
+    }
+
+    /**
      * A bound the order has no value past, which is a rule read to the end and not a rule missed.
      *
      * <p>{@code value > 9223372036854775807} steps off the order: the count beside the one named is
