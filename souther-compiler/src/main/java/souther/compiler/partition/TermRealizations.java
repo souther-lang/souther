@@ -3,7 +3,6 @@ package souther.compiler.partition;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.ReadingPolicy;
 import souther.compiler.check.RuleReadingSource;
-import souther.compiler.check.TypeOps;
 import souther.compiler.check.TypeView;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermOrders;
@@ -252,8 +251,8 @@ final class TermRealizations {
             return new Realization.None(
                     Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
         }
-        Type holder = TypeOps.base(sourceType, ruleSource.symbols());
-        Witnesses.Sized built = Witnesses.ofSize(holder, many, ruleSource, policy, Set.of());
+        TypeView holder = TypeView.of(sourceType, ruleSource.symbols());
+        Witnesses.Sized built = Witnesses.ofSize(holder.shape(), many, ruleSource, policy, Set.of());
         if (built.values().isEmpty()) {
             // Read off the build that was already done. `Witnesses` keeps what it made and why it
             // stopped as two halves of one answer for exactly this, and asking it again would be
@@ -264,10 +263,9 @@ final class TermRealizations {
                             Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE)
                     : new Realization.Stopped(built.heldBack());
         }
-        List<TypeOps.Layer> worn = TypeView.of(sourceType, ruleSource.symbols()).wrappers();
         List<FixtureTemplate> out = new ArrayList<>();
         for (FixtureTemplate each : built.values()) {
-            FixtureTemplate standing = WornNames.under(worn, each, ruleSource);
+            FixtureTemplate standing = WornNames.under(holder.wrappers(), each, ruleSource);
             // A name this module cannot write leaves no value to write, which is a position nothing
             // composes one for rather than a value written without the name.
             if (standing == null) {

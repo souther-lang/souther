@@ -3,7 +3,6 @@ package souther.compiler.partition;
 import souther.compiler.check.ReadingPolicy;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.RuleReadingSource;
-import souther.compiler.check.TypeOps;
 import souther.compiler.check.TypeView;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Quantities;
@@ -289,8 +288,7 @@ final class Intervals {
         TypeView view = TypeView.of(type, ruleSource.symbols());
         List<FixtureTemplate> out = new ArrayList<>();
         for (FixtureTemplate each
-                : Witnesses.ofSize(TypeOps.base(type, ruleSource.symbols()), size, ruleSource,
-                        policy, Set.of()).values()) {
+                : Witnesses.ofSize(view.shape(), size, ruleSource, policy, Set.of()).values()) {
             out.add(WornNames.under(view.wrappers(), each, ruleSource));
         }
         return List.copyOf(out);

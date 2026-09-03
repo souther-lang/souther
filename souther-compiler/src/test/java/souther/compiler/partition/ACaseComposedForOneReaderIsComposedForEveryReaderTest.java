@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
+import souther.compiler.check.TypeView;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbols;
@@ -85,7 +86,8 @@ class ACaseComposedForOneReaderIsComposedForEveryReaderTest {
     @Test
     void aCollectionRequiredToHoldOneOfASumOfRecordsIsBuilt() {
         List<FixtureTemplate> held =
-                Witnesses.holding(new Type.ListOf(sum()), 1, rules, souther.compiler.query.ReadAs.THE_COMPILATION_DOES, Set.of());
+                Witnesses.holding(TypeView.of(new Type.ListOf(sum()), rules.symbols()).shape(),
+                        1, rules, souther.compiler.query.ReadAs.THE_COMPILATION_DOES, Set.of());
 
         assertFalse(held.isEmpty(), "a list of one is built from a case of the sum");
     }
@@ -95,7 +97,8 @@ class ACaseComposedForOneReaderIsComposedForEveryReaderTest {
     @Test
     void aSetOfTwoIsBuiltFromTwoCasesOfASumOfRecords() {
         List<FixtureTemplate> held =
-                Witnesses.holding(new Type.SetOf(sum()), 2, rules, souther.compiler.query.ReadAs.THE_COMPILATION_DOES, Set.of());
+                Witnesses.holding(TypeView.of(new Type.SetOf(sum()), rules.symbols()).shape(),
+                        2, rules, souther.compiler.query.ReadAs.THE_COMPILATION_DOES, Set.of());
 
         assertFalse(held.isEmpty(), "the two cases are two distinct values");
     }

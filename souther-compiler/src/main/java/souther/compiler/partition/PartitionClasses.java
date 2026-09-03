@@ -213,14 +213,16 @@ final class PartitionClasses {
                             RepresentativeSource.of(FixtureTemplate.unitCase(names))));
         }
         if (data.newtype()) {
-            List<FixtureTemplate> inner =
-                    Partitions.insideTheNewtype(declared, ruleSource, policy);
-            return inner.isEmpty()
+            // Values of the case, which is a position of its own: it is read like any other, and
+            // what comes back already wears the case's own name. Under the position's names as well,
+            // since a case of a `data DecisionN = Decision` is written inside that name too.
+            List<FixtureTemplate> values = Partitions.representativesOf(
+                    Type.ref(declared), ruleSource, policy, null, java.util.Set.of());
+            return values.isEmpty()
                     ? PartitionClass.ungeneratable(idOfCase(leaf), leaf.name(), is,
-                            "nothing here composed a value of what `" + leaf.name() + "` wraps")
+                            "nothing here composed a value of `" + leaf.name() + "`")
                     : PartitionClass.of(idOfCase(leaf), leaf.name(), is,
-                            RepresentativeSource.under(writes, RepresentativeSource.under(
-                                    List.of(names), RepresentativeSource.of(inner))));
+                            RepresentativeSource.under(writes, RepresentativeSource.of(values)));
         }
         // A record case is written field by field, which is the generator's composition. So the class
         // names the constructor and the generator does the composing — the same walk every other
