@@ -250,7 +250,7 @@ final class RuntimeOrder {
      * will — the same units are chosen again, and each time round leaves a string below the last.
      */
     static String leastOf(Automaton machine) {
-        boolean[] reaches = reaching(machine);
+        boolean[] reaches = machine.reachingSomewhereItStops();
         if (!reaches[Automaton.START]) {
             return null;
         }
@@ -389,36 +389,6 @@ final class RuntimeOrder {
     /** The first unit of the pair {@code symbol} is written as. */
     private static int highOf(int symbol) {
         return HIGH_FROM + ((symbol - PAIRED_FROM) >> 10);
-    }
-
-    /** For each state, whether a walk from it may still reach somewhere it stops. */
-    private static boolean[] reaching(Automaton machine) {
-        List<List<Integer>> back = new ArrayList<>();
-        for (int at = 0; at < machine.size(); at++) {
-            back.add(new ArrayList<>());
-        }
-        for (int at = 0; at < machine.size(); at++) {
-            for (Automaton.Step each : machine.stepsFrom(at)) {
-                back.get(each.to()).add(at);
-            }
-        }
-        boolean[] out = new boolean[machine.size()];
-        List<Integer> waiting = new ArrayList<>();
-        for (int at = 0; at < machine.size(); at++) {
-            if (machine.stopsAt(at)) {
-                out[at] = true;
-                waiting.add(at);
-            }
-        }
-        for (int at = 0; at < waiting.size(); at++) {
-            for (int from : back.get(waiting.get(at))) {
-                if (!out[from]) {
-                    out[from] = true;
-                    waiting.add(from);
-                }
-            }
-        }
-        return out;
     }
 
     private RuntimeOrder() {}

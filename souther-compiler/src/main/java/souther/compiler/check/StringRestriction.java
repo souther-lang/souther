@@ -49,23 +49,6 @@ sealed interface StringRestriction {
     record NotKnown() implements StringRestriction {}
 
     /**
-     * The two of them together, which is what a part holding both comes to.
-     *
-     * <p>Not knowing wins. A part whose strings are the ones one leaf admits together with the ones
-     * another leaf admits, where the second was not read, admits something this cannot name — and a
-     * run read off the half that was read would be a run of a set the rule does not have.
-     */
-    static StringRestriction and(StringRestriction one, StringRestriction other) {
-        if (one == null) {
-            return other;
-        }
-        if (other == null) {
-            return one;
-        }
-        return one instanceof NotKnown || other instanceof NotKnown ? new NotKnown() : one;
-    }
-
-    /**
      * The positions a clause states a rule about the strings of, told apart by whether the rule was
      * read to the strings it admits.
      *
@@ -81,8 +64,6 @@ sealed interface StringRestriction {
      */
     record Found(java.util.Set<FactSubject> read, java.util.Set<FactSubject> notRead) {
 
-        static final Found NONE = new Found(java.util.Set.of(), java.util.Set.of());
-
         public Found {
             read = java.util.Set.copyOf(read);
             notRead = java.util.Set.copyOf(notRead);
@@ -91,13 +72,6 @@ sealed interface StringRestriction {
         /** Whether the clause states no rule about the strings anywhere. */
         boolean isEmpty() {
             return read.isEmpty() && notRead.isEmpty();
-        }
-
-        /** Every position, whichever of the two it is in. */
-        java.util.Set<FactSubject> anywhere() {
-            java.util.Set<FactSubject> out = new java.util.LinkedHashSet<>(read);
-            out.addAll(notRead);
-            return out;
         }
     }
 }

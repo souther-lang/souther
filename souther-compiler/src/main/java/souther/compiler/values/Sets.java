@@ -140,7 +140,7 @@ public final class Sets {
 
 
     /** The strings among {@code values}, which are the only ones a language has a word for. */
-    private static Set<String> textsIn(Set<Value> values) {
+    static Set<String> textsIn(Set<Value> values) {
         Set<String> out = new LinkedHashSet<>();
         values.forEach(each -> {
             if (each instanceof Value.Text text) {

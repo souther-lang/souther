@@ -110,7 +110,7 @@ final class Automaton {
     boolean mayStopHavingReadALoneSurrogatePair() {
         CodePoints high = CodePoints.between(0xD800, 0xDBFF);
         CodePoints low = CodePoints.between(0xDC00, 0xDFFF);
-        boolean[] reaches = reaching();
+        boolean[] reaches = reachingSomewhereItStops();
         for (int at = 0; at < steps.size(); at++) {
             for (Step first : steps.get(at)) {
                 if (first.over().and(high).isEmpty()) {
@@ -126,8 +126,15 @@ final class Automaton {
         return false;
     }
 
-    /** For each state, whether a walk from it may still reach one it stops at. */
-    private boolean[] reaching() {
+    /**
+     * For each state, whether a walk from it may still reach one it stops at.
+     *
+     * <p>Here because it is a fact about the machine and about nothing else, and because more than
+     * one reader wants it: what a walk looking for a string does with a step is settled by whether
+     * anything is stopped at past it, and so is whether a shape the machine has is one a string
+     * ever reaches. Worked out by each of them, the two would be one walk written twice.
+     */
+    boolean[] reachingSomewhereItStops() {
         List<List<Integer>> back = new ArrayList<>();
         for (int at = 0; at < steps.size(); at++) {
             back.add(new ArrayList<>());

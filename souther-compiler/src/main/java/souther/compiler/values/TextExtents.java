@@ -75,34 +75,21 @@ public final class TextExtents {
         };
     }
 
-    /** The same for a set already worked out. */
+    /**
+     * The same for a set already worked out.
+     *
+     * <p>Which strings a set of values holds is {@link Sets}', asked here rather than picked out
+     * again: a set stands at one position and a position holds values of its type, so what a set
+     * beside a rule about a string holds is strings, and a second reader deciding that for itself
+     * is a second answer to it.
+     */
     private static Language languageOf(ValueSet set, Meter meter) {
         return switch (set) {
             case ValueSet.Matching it -> it.language();
-            case ValueSet.Finite it -> Language.ofWords(texts(it.values()), meter);
+            case ValueSet.Finite it -> Language.ofWords(Sets.textsIn(it.values()), meter);
             case ValueSet.Cofinite it ->
-                    Language.EVERY_STRING.without(texts(it.excluded()), meter);
+                    Language.EVERY_STRING.without(Sets.textsIn(it.excluded()), meter);
         };
-    }
-
-    /**
-     * The strings among {@code values}.
-     *
-     * <p>All of them or this compiler has gone wrong. A set stands at one position and a position
-     * holds values of its type, so a set reaching here beside a rule about a string holds strings —
-     * one holding anything else belongs to no position at all ({@link ValueSet}), which is nothing a
-     * model can write.
-     */
-    private static java.util.List<String> texts(java.util.Set<Value> values) {
-        java.util.List<String> out = new java.util.ArrayList<>();
-        for (Value each : values) {
-            if (!(each instanceof Value.Text text)) {
-                throw new IllegalStateException(
-                        "a rule about the strings at a position left " + each + " standing there");
-            }
-            out.add(text.value());
-        }
-        return out;
     }
 
     /**
