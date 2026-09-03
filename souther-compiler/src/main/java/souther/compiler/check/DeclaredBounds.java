@@ -138,16 +138,19 @@ public final class DeclaredBounds {
 
     /** What a numeric newtype's own rules leave its value between, for a caller that is asking about
      * the value and not about anything taken of it. */
-    public static Bounds of(Type type, RuleReadingSource source) {
-        return of(type, source, Carrier.ofValue(type, source.symbols()), null);
+    public static Bounds of(TypeView view, RuleReadingSource source) {
+        return of(view, source, Carrier.ofValue(view.declared(), source.symbols()), null);
     }
 
     /**
+     * @param view    the position as it was read: the rules of every name it wears are the rules of
+     *                its value, and which names those are is that reading's answer rather than one
+     *                worked out again here
      * @param carrier what the clauses' values are read on, or null where nothing here reads them
      * @param measure the operation the number is taken by, or null where the number is the value
      *                itself
      */
-    public static Bounds of(Type type, RuleReadingSource source, Carrier carrier,
+    public static Bounds of(TypeView view, RuleReadingSource source, Carrier carrier,
                             ValueName measure) {
         if (carrier == null) {
             return null;
@@ -156,7 +159,7 @@ public final class DeclaredBounds {
         End max = null;
         // The ends of the clauses, which is one projection of them and not the reading of them.
         // Every layer that put an end where it is is kept, because each is a rule a row is owed.
-        for (DeclaredClauses.Conjunct each : DeclaredClauses.of(type, source)) {
+        for (DeclaredClauses.Conjunct each : DeclaredClauses.allOf(view.wrappers(), source)) {
             // An end and nothing else. A rule this reads no end from narrows nothing here, and a
             // rule stepping past the last value of the order states an end no value is at — which
             // is a declaration with no value, answered where counts are and not by a bound written
@@ -301,7 +304,8 @@ public final class DeclaredBounds {
     public static CountRange countsHeld(Type type, RuleReadingSource source,
                                         FieldDomains.Held held) {
         ValueName.Stdlib counts = NumericMeasures.takenOf(type, source.symbols());
-        Bounds sized = counts == null ? null : of(type, source, Carrier.WHOLE, counts);
+        Bounds sized = counts == null ? null
+                : of(TypeView.of(type, source.symbols()), source, Carrier.WHOLE, counts);
         Endpoint least = sized == null || sized.min() == null ? null : sized.min().at();
         Endpoint most = sized == null || sized.max() == null ? null : sized.max().at();
         return new CountRange(

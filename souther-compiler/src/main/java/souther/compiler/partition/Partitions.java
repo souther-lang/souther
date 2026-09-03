@@ -10,6 +10,7 @@ import souther.compiler.check.DeclaredBounds;
 import souther.compiler.check.ClauseHelpers;
 import souther.compiler.check.StringPredicates;
 import souther.compiler.check.TypeOps;
+import souther.compiler.check.TypeView;
 import souther.compiler.check.FieldDomains;
 import souther.compiler.check.NarrowedBounds;
 import souther.compiler.inputs.InputDomain;
@@ -1504,7 +1505,8 @@ public final class Partitions {
         if (base == null) {
             return null;
         }
-        NumericDomain.Bounds range = TypeBounds.admissible(DeclaredBounds.of(type, ruleSource), null);
+        NumericDomain.Bounds range = TypeBounds.admissible(
+                DeclaredBounds.of(TypeView.of(type, ruleSource.symbols()), ruleSource), null);
         Place from = inside(range, base == Type.DECIMAL ? Carrier.DENSE : Carrier.WHOLE);
         if (from == null || base != Type.INT) {
             return from != null && index == 0 ? from : null;
@@ -1586,7 +1588,8 @@ public final class Partitions {
         if (numeric == null) {
             return List.copyOf(base);
         }
-        NumericDomain.Bounds range = TypeBounds.admissible(DeclaredBounds.of(type, ruleSource), within);
+        NumericDomain.Bounds range = TypeBounds.admissible(
+                DeclaredBounds.of(TypeView.of(type, ruleSource.symbols()), ruleSource), within);
         Carrier carrier = numeric == Type.INT ? Carrier.WHOLE : Carrier.DENSE;
         Place step = displaced(range, carrier);
         if (step == null) {
@@ -1661,7 +1664,8 @@ public final class Partitions {
         Type base = TypeOps.newtypeInner(newtype, ruleSource.symbols());
         List<FixtureTemplate> candidates = new ArrayList<>();
 
-        DeclaredBounds.Bounds own = DeclaredBounds.of(new Type.Ref(newtype), ruleSource);
+        DeclaredBounds.Bounds own =
+                DeclaredBounds.of(TypeView.of(new Type.Ref(newtype), ruleSource.symbols()), ruleSource);
         NumericDomain.Bounds bounds = TypeBounds.admissible(own, within);
         Place held = bounds == null || bounds.saysNothing() ? null : inside(bounds, own.carrier());
         FixtureTemplate at = held == null ? null
@@ -1769,7 +1773,8 @@ public final class Partitions {
                 || !data.newtype()) {
             return List.of();
         }
-        DeclaredBounds.Bounds own = DeclaredBounds.of(type, ruleSource);
+        DeclaredBounds.Bounds own =
+                DeclaredBounds.of(TypeView.of(type, ruleSource.symbols()), ruleSource);
         NumericDomain.Bounds bounds = TypeBounds.admissible(own, within);
         // The far end has to be a value the position holds. Where the range stops short of it there
         // is nothing there to hold back, and a dense order has no value beside it to hold back
