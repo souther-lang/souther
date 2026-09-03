@@ -81,6 +81,22 @@ public final class Language {
     }
 
     /**
+     * Every string there is, or null past what {@code meter} allows.
+     *
+     * <p>Which is not what {@link #not} of nothing comes to. A machine steps over what a matcher
+     * reads, and a high surrogate followed by a low one is one symbol rather than two — so there are
+     * sequences of symbols no string is read as, and a complement holds them like anything else.
+     * Where a caller is asking whether two languages hold the same strings, two machines that differ
+     * only over those are two spellings of one answer, and this is what takes them out.
+     *
+     * <p>For a caller composing an answer out of complements. One asking whether a string is held
+     * needs nothing of it: that walk is over the string, and a string is never read as one of them.
+     */
+    public static Language everyString(Meter meter) {
+        return canonical(RuntimeOrder.everyString(meter), meter);
+    }
+
+    /**
      * The least string it holds, or null where it holds none and where the ones it holds have no
      * least among them.
      *

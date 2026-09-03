@@ -116,6 +116,46 @@ class TheRuntimesOrderIsWhatTheseMachinesAnswerAboutTest {
         }
     }
 
+    /**
+     * The least string a language holds is a string it holds.
+     *
+     * <p>The law the walk is held to, beside the one about the order. A machine steps over what a
+     * matcher reads, so a high surrogate and a low one standing next to each other are the pair and
+     * not two symbols — and a walk that took them as two answers with a sequence of symbols no
+     * string is written as. Asked whether it holds that, the language says no, and the two answers
+     * are about the same string.
+     *
+     * <p>Over languages built by taking one away from another, which is where such a sequence turns
+     * up: the strings above a pair that a prefix of it does not admit begin with the same two units
+     * as the prefix does, and only the reading of those units tells them apart.
+     */
+    @Test
+    void theLeastStringALanguageHoldsIsOneItHolds() {
+        for (String pattern : List.of("JP[\\s\\S]*", "a*b", "𐀀[\\s\\S]*",
+                "[\\s\\S]*", "\uD800[\\s\\S]*", "(JP|US)[\\s\\S]*")) {
+            for (Language each : List.of(of(pattern), leftOver(of(pattern)))) {
+                String least = each.least();
+                if (least != null) {
+                    assertTrue(each.has(least),
+                            shown(least) + " is answered as the least of a language that does not"
+                                    + " hold it, from " + pattern);
+                }
+            }
+        }
+    }
+
+    /** What a language leaves out from its least string upwards, which is where the two readings of
+     *  a pair's units part. */
+    private static Language leftOver(Language language) {
+        Meter meter = allowing();
+        String least = language.least();
+        if (least == null) {
+            return language;
+        }
+        Language above = Language.before(least, meter).not(meter);
+        return above.and(language.not(meter), meter);
+    }
+
     /** A language with nothing in it has no least string, which is not a string it holds. */
     @Test
     void aLanguageHoldingNothingHasNoLeast() {

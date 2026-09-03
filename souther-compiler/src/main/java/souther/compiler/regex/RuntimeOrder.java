@@ -150,6 +150,40 @@ final class RuntimeOrder {
     }
 
     /**
+     * The symbol sequences some string is read as, or null past what {@code meter} allows.
+     *
+     * <p>Not every sequence of symbols is one. A high surrogate followed by a low one is the pair —
+     * that is what a matcher reads and what a walk over a string takes in — so those two symbols
+     * never stand beside each other, and a sequence holding them is one no string produces.
+     *
+     * <p>Which matters wherever a set question is asked rather than a membership one. Whether a
+     * string is held is walked out of the string and never meets such a sequence; whether two
+     * languages hold the same strings is a walk over two machines, and two machines telling the
+     * same strings apart from each other only over sequences no string reads as are two spellings of
+     * one set. So a reader taking a complement to ask about strings meets it with this, and a reader
+     * asking whether a string is in something does not need it.
+     */
+    static Automaton everyString(Meter meter) {
+        Meter.Making making = meter.making();
+        if (!making.states(2)) {
+            return null;
+        }
+        CodePoints high = CodePoints.between(HIGH_FROM, HIGH_TO);
+        CodePoints low = CodePoints.between(LOW_FROM, LOW_TO);
+        List<List<Automaton.Step>> steps = new ArrayList<>();
+        steps.add(new ArrayList<>(List.of(
+                new Automaton.Step(CodePoints.EVERYTHING.less(high), 0),
+                new Automaton.Step(high, 1))));
+        steps.add(new ArrayList<>(List.of(
+                new Automaton.Step(CodePoints.EVERYTHING.less(high).less(low), 0),
+                new Automaton.Step(high, 1))));
+        BitSet accepting = new BitSet();
+        accepting.set(0);
+        accepting.set(1);
+        return Automaton.madeOf(steps, accepting);
+    }
+
+    /**
      * The least string {@code machine} accepts, or null where it accepts none and where the ones it
      * accepts have no least among them.
      *
@@ -176,7 +210,7 @@ final class RuntimeOrder {
             return null;
         }
         StringBuilder out = new StringBuilder();
-        Set<Where> here = Set.of(new Where(Automaton.START, null));
+        Set<Where> here = Set.of(new Where(Automaton.START, null, false));
         Set<Set<Where>> been = new LinkedHashSet<>();
         while (been.add(here)) {
             if (stops(here, machine)) {
@@ -200,8 +234,13 @@ final class RuntimeOrder {
      *              symbol boundary. A high surrogate read at a boundary is both a symbol and the
      *              first unit of a pair, so both are held and the walk is in as many places as the
      *              units so far leave it
+     * @param loneHigh whether the last symbol read was a high surrogate standing alone. A string
+     *              holding one followed by a low surrogate is a string holding the pair — that is
+     *              what a matcher reads and what {@link Automaton#accepts} walks — so the two
+     *              symbols never stand beside each other and a walk that let them would answer with
+     *              a string the language does not hold
      */
-    private record Where(int state, CodePoints lows) {}
+    private record Where(int state, CodePoints lows, boolean loneHigh) {}
 
     /** Whether a walk in one of these may stop, which it may only at a symbol boundary. */
     private static boolean stops(Set<Where> here, Automaton machine) {
@@ -257,17 +296,20 @@ final class RuntimeOrder {
         for (Where each : here) {
             if (each.lows() != null) {
                 if (each.lows().has(unit)) {
-                    out.add(new Where(each.state(), null));
+                    out.add(new Where(each.state(), null, false));
                 }
                 continue;
             }
+            // A low surrogate after a high one standing alone is the pair, not two symbols, so the
+            // walk that read the high one alone has nowhere to go.
+            boolean paired = each.loneHigh() && unit >= LOW_FROM && unit <= LOW_TO;
             for (Automaton.Step step : machine.stepsFrom(each.state())) {
-                if (step.over().has(unit) && unit <= LAST_UNIT) {
-                    out.add(new Where(step.to(), null));
+                if (!paired && unit <= LAST_UNIT && step.over().has(unit)) {
+                    out.add(new Where(step.to(), null, unit >= HIGH_FROM && unit <= HIGH_TO));
                 }
                 CodePoints lows = lowsOf(step.over(), unit);
                 if (!lows.isEmpty()) {
-                    out.add(new Where(step.to(), lows));
+                    out.add(new Where(step.to(), lows, false));
                 }
             }
         }
