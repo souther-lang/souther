@@ -240,6 +240,12 @@ class EveryPlaceAnAnswerAboutAConstructionIsNamedTest {
         assertEquals(List.of(), SETTLERS.stream().map(Settler::signature)
                         .filter(each -> !declaredInThatPackage().contains(each)).toList(),
                 "a settlers row names a member this package does not declare");
+        // And the other way round, which is what makes the table the members rather than the ones
+        // that happen to be called. An overload nobody calls yet settles what its siblings settle,
+        // and a table that waited for a caller would be answered about it by whoever wrote one.
+        assertEquals(everyOverloadOfASettler(),
+                SETTLERS.stream().map(Settler::signature).sorted().toList(),
+                "an overload of a settling member is a way in whether or not anything uses it yet");
     }
 
     @Test
@@ -396,6 +402,14 @@ class EveryPlaceAnAnswerAboutAConstructionIsNamedTest {
                 });
             }
         }
+    }
+
+    /** Every overload the package declares of a member the table names, by the whole of what it is
+     *  — what the table is required to hold, read off the classes rather than off the calls. */
+    private static List<String> everyOverloadOfASettler() {
+        return declaredInThatPackage().stream()
+                .filter(each -> settlingMembers().contains(each.substring(0, each.indexOf('('))))
+                .sorted().toList();
     }
 
     /** Every method the package that declares these forms holds, by the whole of what it is. */

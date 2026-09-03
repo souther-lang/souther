@@ -185,8 +185,11 @@ public final class CallElaborator {
         // declared elsewhere, and it is the only one that carries a binding into the emitted tree
         if (callee != null && callee.denotes() instanceof ValueName.Local local
                 && env.typeOf(local.id()) instanceof Type.FnOf) {
+            // The binding's own name, as every other read of one is built with. What the author
+            // applied is the application's answer and not this read's: where a lowering bound what
+            // was applied, the two are a field read and the name it was bound to.
             return new Core.Apply(
-                    new Core.Read(call.written(), local.id(), env.typeOf(local.id()), call.pos()),
+                    new Core.Read(local.name(), local.id(), env.typeOf(local.id()), call.pos()),
                     ca.cores(), result, call.pos());
         }
         // Typing the call above refuses what is not a name outright, so what is left here names a
