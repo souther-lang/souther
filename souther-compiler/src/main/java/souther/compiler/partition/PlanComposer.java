@@ -7,7 +7,6 @@ import souther.compiler.check.TypeOps;
 import souther.compiler.check.TypeView;
 import souther.compiler.types.TypeReachName;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -89,30 +88,8 @@ final class PlanComposer {
         if (value == null || worn.isEmpty()) {
             return value;
         }
-        List<TypeReachName.Written> names = written(worn, ruleSource);
-        return names == null ? null : RepresentativeSource.under(names, value);
-    }
-
-    /**
-     * The names a position wears as this module writes them, or null where one of them is a name it
-     * cannot write.
-     *
-     * <p>Null takes the whole value with it: the name goes on the value as it is written, and a
-     * value composed without one is of a type the parameter does not declare. Asked in one place
-     * because every value this composes needs the same answer, and three copies of the loop are
-     * three chances to differ about what a name this module cannot reach comes to.
-     */
-    private static List<TypeReachName.Written> written(List<TypeOps.Layer> worn,
-                                                       RuleReadingSource ruleSource) {
-        List<TypeReachName.Written> names = new ArrayList<>();
-        for (TypeOps.Layer layer : worn) {
-            if (!(ruleSource.symbols().scope().reach(layer.named())
-                    instanceof TypeReachName.Written name)) {
-                return null;
-            }
-            names.add(name);
-        }
-        return names;
+        return WornNames.of(worn, ruleSource) instanceof WornNames.Spelled spelled
+                ? RepresentativeSource.under(spelled.names(), value) : null;
     }
 
     /**
@@ -142,8 +119,7 @@ final class PlanComposer {
             return null;
         }
         // A name this module cannot write leaves no value to write.
-        List<TypeReachName.Written> worn = written(plan.worn(), ruleSource);
-        return worn == null ? null : RepresentativeSource.under(worn, collection);
+        return worn(plan.worn(), collection, ruleSource);
     }
 
     /** One record of the plan, out of whatever the caller has at the positions under it. */
@@ -158,17 +134,15 @@ final class PlanComposer {
         // off to find them. A row at a `data SlotN = Slot` carries `SlotN(Slot { ... })`, and a value
         // composed without them is of a type the parameter does not declare.
         // A name this module cannot write leaves no value to write.
-        List<TypeReachName.Written> worn = written(built.worn(), ruleSource);
-        if (worn == null
-                || !(ruleSource.symbols().scope().reach(built.of())
-                        instanceof TypeReachName.Written written)) {
+        if (!(ruleSource.symbols().scope().reach(built.of())
+                instanceof TypeReachName.Written written)) {
             return null;
         }
         // Under every name the position wears, which where a refinement narrowed it are the names
         // it wore before the narrowing and the ones the narrowed value wears after it. One list and
         // one putting-back-on: read as two, the outer names had to be recovered from the class that
         // asked for the narrowing rather than from the position they belong to.
-        return RepresentativeSource.under(worn, FixtureTemplate.record(written, fields));
+        return worn(built.worn(), FixtureTemplate.record(written, fields), ruleSource);
     }
 
     private PlanComposer() {}

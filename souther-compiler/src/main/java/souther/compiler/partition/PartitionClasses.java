@@ -53,18 +53,17 @@ final class PartitionClasses {
         // observed value is under this class is asked of the declarations, and what a row writes it
         // under is asked of the module doing the writing — one of these is an identity and the other
         // is a reference, and a module reaching a name through an alias answers them differently.
-        List<TypeReachName.Written> writes = new ArrayList<>();
-        for (TypeSymbol each : worn) {
-            if (!(ruleSource.symbols().scope().reach(each) instanceof TypeReachName.Written written)) {
-                return unwritable(cases, view, ruleSource, policy, worn, each);
+        return switch (WornNames.of(view.wrappers(), ruleSource)) {
+            case WornNames.Unwritable unwritable ->
+                    unwritable(cases, view, ruleSource, policy, worn, unwritable);
+            case WornNames.Spelled spelled -> {
+                List<PartitionClass> out = new ArrayList<>();
+                for (Case one : cases) {
+                    out.add(classOf(one, view, worn, policy, spelled.names(), ruleSource));
+                }
+                yield List.copyOf(out);
             }
-            writes.add(written);
-        }
-        List<PartitionClass> out = new ArrayList<>();
-        for (Case one : cases) {
-            out.add(classOf(one, view, worn, policy, writes, ruleSource));
-        }
-        return List.copyOf(out);
+        };
     }
 
     /**
@@ -77,8 +76,8 @@ final class PartitionClasses {
      */
     private static List<PartitionClass> unwritable(List<Case> cases, TypeView view, RuleReadingSource ruleSource,
                                                    ReadingPolicy policy,
-                                                   List<TypeSymbol> worn, TypeSymbol unnamed) {
-        String why = notExposed(unnamed);
+                                                   List<TypeSymbol> worn, WornNames.Unwritable unnamed) {
+        String why = unnamed.why();
         List<PartitionClass> out = new ArrayList<>();
         // The classes of the same position with no names to write them under. What each is and what
         // reads a value into it are the position's either way; only the recipes are dropped, and
@@ -90,17 +89,6 @@ final class PartitionClasses {
                     .holding(each.denotes()).selecting(each.selects()));
         }
         return List.copyOf(out);
-    }
-
-    /** Why nothing here can write a value of {@code unnamed}: no spelling reaches it. */
-    private static String notExposed(TypeSymbol unnamed) {
-        return unnamed instanceof TypeSymbol.AtModule at
-                ? "`" + at.module() + "` does not expose `" + at.name()
-                        + "`, so nothing here can name it"
-                // What the language declares is kept by nobody: a declaration of this module
-                // spells it, so the language's has no name left here.
-                : "`" + unnamed.name() + "` is declared here, so what the language declares under"
-                        + " that name has no name here";
     }
 
     /** What a case's class is called, in one place: a reading that decides which cases the position
@@ -212,7 +200,8 @@ final class PartitionClasses {
         // author here can write down. Said as that, rather than offered under a spelling that
         // resolves to nothing wherever the row is pasted (issue #696).
         if (!(ruleSource.symbols().scope().reach(leaf) instanceof TypeReachName.Written names)) {
-            return PartitionClass.ungeneratable(idOfCase(leaf), leaf.name(), is, notExposed(leaf));
+            return PartitionClass.ungeneratable(idOfCase(leaf), leaf.name(), is,
+                    WornNames.noSpellingFor(leaf));
         }
         // A case of a primitive-headed union is a primitive or one of the language's own, which
         // no module declares and nothing composes field by field: naming it builds it, the same as
