@@ -228,7 +228,7 @@ public final class Elaborator {
                     }
                     yield value;
                 }
-                // A value this representation kept standing, read as the type its own check
+                // A value this representation kept standing, read under the signature its own check
                 // settled. What the value is a constant of is not asked here: that is folded into
                 // the reference where the reference is written, so nothing downstream of this has
                 // to learn that a name can stand for one.

@@ -700,15 +700,11 @@ public final class OperationFacts {
         return Index.QUANTIFIERS;
     }
 
-    /** The size {@code operation}'s emptiness check means, or null where it is no such check. */
-    public static ValueName meansTheSameAsASizeOfNought(ValueName operation) {
-        return Index.EMPTINESS.get(operation);
-    }
-
-    /** The operations that ask whether a container is empty. */
-    public static java.util.Set<ValueName> meansTheSameAsASizeOfNought() {
-        return Index.EMPTINESS.keySet();
-    }
+    /* No index for what an emptiness check means. What a reader does with that fact is write a
+     * call of the size where a call of the check stands, and the two declarations have to admit
+     * that — so the fact is answered only once it has been held to them, and reading it from here
+     * would be reading it before anything asked. The fact is still declared below with the rest and
+     * reaches its reader through the binding. */
 
     /** What {@code operation} computes and where it answers it, or null where it computes no
      *  arithmetic of its own. */
@@ -859,10 +855,6 @@ public final class OperationFacts {
         private static final Map<ValueName, ArgumentRef> PROJECTIONS =
                 index(OperationFact.IsStatedOverAProjection.class,
                         OperationFact.IsStatedOverAProjection::projection);
-
-        private static final Map<ValueName, ValueName> EMPTINESS =
-                index(OperationFact.MeansTheSameAsASizeOfNought.class,
-                        OperationFact.MeansTheSameAsASizeOfNought::size);
 
         private static final java.util.Set<ValueName> QUANTIFIERS =
                 stating(OperationFact.StatesItsPredicateOfEveryElement.class);

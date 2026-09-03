@@ -16,7 +16,6 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -35,15 +34,17 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class WhichArgumentsAStringPredicateNamesAreOnesItsDeclarationHasTest {
 
     @Test
-    void everyPredicateNamesAnOperationTheLibraryDeclares() {
-        assertEquals(List.of(), unmatched(), "no library operation is declared to be this kernel");
+    void everyPredicateNamesOneOperationTheLibraryDeclares() {
+        for (StringPredicates predicate : StringPredicates.values()) {
+            assertEquals(1, declaring(predicate.kernel()).size(),
+                    predicate + " is about the operations " + declaring(predicate.kernel())
+                            + ", and a rule about it is read off one declaration");
+        }
     }
 
     @Test
     void andThereAreSomeToSayThatOf() {
-        assertFalse(StringPredicates.values().length == 0, "the table is empty");
-        assertEquals(StringPredicates.values().length, declaring().size(),
-                "each predicate is matched to the one operation declared to be its kernel");
+        assertFalse(declaring().isEmpty(), "the table is empty, so the rules below saw nothing");
     }
 
     @Test
@@ -69,37 +70,36 @@ class WhichArgumentsAStringPredicateNamesAreOnesItsDeclarationHasTest {
         });
     }
 
-    /** Which library operation each predicate is about, by the kernel it is declared to be. */
+    /**
+     * Which library operation each predicate is about, for the ones the library declares exactly
+     * one of. What the rules below are asked over, once the test above has said that is all of
+     * them.
+     */
     private static Map<StringPredicates, ValueName.Stdlib.Operation> declaring() {
         Map<StringPredicates, ValueName.Stdlib.Operation> out = new LinkedHashMap<>();
         for (StringPredicates predicate : StringPredicates.values()) {
-            ValueName.Stdlib.Operation declared = declaring(predicate.kernel());
-            if (declared != null) {
-                out.put(predicate, declared);
+            List<ValueName.Stdlib.Operation> declared = declaring(predicate.kernel());
+            if (declared.size() == 1) {
+                out.put(predicate, declared.get(0));
             }
         }
         return out;
     }
 
-    private static List<StringPredicates> unmatched() {
-        List<StringPredicates> out = new ArrayList<>();
-        for (StringPredicates predicate : StringPredicates.values()) {
-            if (declaring(predicate.kernel()) == null) {
-                out.add(predicate);
-            }
-        }
-        return out;
-    }
-
-    /** The one operation the library declares to be {@code kernel}. */
-    private static ValueName.Stdlib.Operation declaring(Kernel kernel) {
+    /**
+     * Every operation the library declares to be {@code kernel}.
+     *
+     * <p>All of them and not the first: a rule here is read off a declaration, so two operations
+     * declared as one kernel is two declarations for one rule to be about, and answering with
+     * whichever came first would be this test choosing between them.
+     */
+    private static List<ValueName.Stdlib.Operation> declaring(Kernel kernel) {
         Stdlib stdlib = DefaultStdlib.get();
         Symbols symbols = Symbols.none(stdlib);
-        ValueName.Stdlib.Operation found = null;
+        List<ValueName.Stdlib.Operation> found = new ArrayList<>();
         for (ValueName.Stdlib.Operation each : stdlib.entries().keySet()) {
             if (symbols.kernelOf(each) == kernel) {
-                assertNotNull(each);
-                found = found == null ? each : found;
+                found.add(each);
             }
         }
         return found;

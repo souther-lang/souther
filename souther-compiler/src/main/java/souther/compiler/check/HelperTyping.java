@@ -55,9 +55,9 @@ public final class HelperTyping {
         // What each value of this module was settled as, filled in as they are checked. A value is
         // checked against these rather than against a copy of the body each of them stands for,
         // which is the same answer worked out once instead of once per name that reaches it.
-        Map<ValueName, CompleteSignature> settledTypes = new HashMap<>();
+        Map<ValueName, CompleteSignature> settledSignatures = new HashMap<>();
         Map<ValueName, Object> settledConstants = new HashMap<>();
-        Preserved standing = Preserved.valuesAlreadySettled(settledTypes::get);
+        Preserved standing = Preserved.valuesAlreadySettled(settledSignatures::get);
         for (Hir.FnDef h : valuesBeforeTheValuesThatNameThem(inliner, symbols.library(), toCheck)) {
             boolean recursive = recursiveHelperFns.containsKey(h.name());
             // Where this definition stands, or null where it stands nowhere: the one thing every
@@ -188,7 +188,7 @@ public final class HelperTyping {
                 // the empty parameter list is why this is a value at all, and the result is what
                 // checking its body just answered. A reader given the type alone would have to
                 // decide for itself that a value takes no arguments.
-                settledTypes.put(settled, CompleteSignature.ofSettledValue(settled, bodyType));
+                settledSignatures.put(settled, CompleteSignature.ofSettledValue(settled, bodyType));
                 // What it is a constant of, read off the body it was checked as. A reference to it
                 // is written out as that constant, so every position that asks whether an
                 // expression is known at compile time goes on reading a literal.

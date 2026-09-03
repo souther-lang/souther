@@ -450,9 +450,7 @@ final class DischargeRules {
         }
 
         private static Set<ValueName> meansTheSameAsASizeOfNought() {
-            return SEMANTICS.sizes().keySet().stream()
-                    .map(DeclaredOperation::operation)
-                    .collect(java.util.stream.Collectors.toCollection(java.util.LinkedHashSet::new));
+            return EMPTINESS_CHECKS;
         }
         /** What the declarations came to, held to the library. The list is walked whole, so a fact
          *  nothing here looks up is one this has held all the same. */
@@ -461,6 +459,17 @@ final class DischargeRules {
         /* Holding the declarations to the library is a pure function of it, so this holder is the
          * only thing here that reaches for the process's own — {@link DefaultStdlib} says who may
          * and why the loader may not. */
+
+        /* The bound emptiness checks under the names a census asks by. Built once, here and after
+         * the binding it reads: a set worked out at each ask is one more place the bound facts are
+         * taken apart, and would be taken apart the same way every time. */
+        private static final Set<ValueName> EMPTINESS_CHECKS = emptinessChecks(SEMANTICS);
+
+        private static Set<ValueName> emptinessChecks(OperationFactBinder.Binding bound) {
+            Set<ValueName> named = new LinkedHashSet<>();
+            bound.sizes().keySet().forEach(each -> named.add(each.operation()));
+            return java.util.Collections.unmodifiableSet(named);
+        }
 
         /**
          * What the language declares an operation answers.

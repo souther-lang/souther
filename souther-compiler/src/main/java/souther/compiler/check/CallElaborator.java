@@ -167,7 +167,7 @@ public final class CallElaborator {
         CompleteSignature kept = callee == null
                 ? null : ctx.preserved().signatureOf(callee.denotes());
         if (kept != null) {
-            return preservedCall(call, callee, kept, env, ctx, expected);
+            return preservedCall(call, kept, env, ctx, expected);
         }
         CallArgs ca = new CallArgs(call.args(), env, ctx);
         // A temporal written out is a value, not an application: which it is was settled when the
@@ -223,9 +223,12 @@ public final class CallElaborator {
      * was given. What differs is only that this one is a node of its own, so a reader that has no
      * business with a call left standing meets it as itself rather than as an ordinary call it might
      * try to emit.
+     *
+     * <p>What is applied comes from {@code kept} and is not taken from the call a second time. The
+     * signature was looked up under what the callee denotes, and it says which operation it is the
+     * signature of, so the two cannot come apart.
      */
-    private static Core preservedCall(Hir.Apply call, Hir.Var.Denoting callee,
-                                      CompleteSignature kept, Scope env,
+    private static Core preservedCall(Hir.Apply call, CompleteSignature kept, Scope env,
                                       CheckContext ctx, Type expected) {
         List<Type> params = kept.params();
         CallArgs ca = new CallArgs(call.args(), env, ctx);
