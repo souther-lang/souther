@@ -2176,6 +2176,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 case SHAPES_OF_A_TOTAL_OFFERED -> "how many containers are offered for one total";
                 case DECOMPOSITIONS_OF_A_TOTAL_OFFERED ->
                         "how many ways a total is decomposed";
+                case WAYS_DOWN_TO_A_TOTAL_TRIED ->
+                        "how many ways down to what a total adds up are tried";
                 case PLACES_A_PAIR_IS_TRIED_AT -> "how many places a pair is tried at";
                 case STEPS_A_SEARCH_MAY_TAKE -> "how many steps a search takes";
                 case ASSIGNMENTS_A_SEARCH_COMPOSES -> "how many assignments a search composes";

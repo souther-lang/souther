@@ -1379,16 +1379,40 @@ public final class Partitions {
      * @param given what stands at some of the fields, by name. A name no field has is nothing this
      *              can build, and is the caller asking for a value of another type
      */
-    private static List<FixtureTemplate> composed(TypeSymbol.AtModule record, RuleReadingSource ruleSource,
-                                                  ReadingPolicy policy,
-                                                  java.util.Set<TypeSymbol> expanding,
-                                                  Map<String, FixtureTemplate> given) {
+    static List<FixtureTemplate> composed(TypeSymbol.AtModule record, RuleReadingSource ruleSource,
+                                          ReadingPolicy policy,
+                                          java.util.Set<TypeSymbol> expanding,
+                                          Map<String, FixtureTemplate> given) {
         if (expanding.contains(record) || !(ruleSource.symbols().declaredNode(record) instanceof Hir.Data data)) {
             return List.of();
         }
+        Map<String, FixtureTemplate> chosen =
+                fieldsOf(record, ruleSource, policy, expanding, given);
+        return chosen == null || !(ruleSource.symbols().scope().reach(record)
+                instanceof TypeReachName.Written written)
+                        ? List.of() : List.of(FixtureTemplate.record(written, chosen));
+    }
+
+    /**
+     * What stands at each field of {@code record}, or null where one of them has nothing to stand
+     * for it.
+     *
+     * <p>Beside {@link #composed} and under it: this is the choosing, and writing the record is what
+     * a caller then does with it. Asked on its own by the composing of a plan, which has the record
+     * to write and needs what goes in it — a caller that took a written record apart again to get at
+     * the fields would be reading one answer back out of another.
+     */
+    static Map<String, FixtureTemplate> fieldsOf(TypeSymbol.AtModule record,
+                                                 RuleReadingSource ruleSource, ReadingPolicy policy,
+                                                 java.util.Set<TypeSymbol> expanding,
+                                                 Map<String, FixtureTemplate> given) {
+        if (expanding.contains(record)
+                || !(ruleSource.symbols().declaredNode(record) instanceof Hir.Data data)) {
+            return null;
+        }
         Map<String, Type> fields = TypeOps.fieldTypes(data, ruleSource.symbols());
         if (fields.isEmpty()) {
-            return List.of();   // a unit has no fields to compose, and is named rather than built
+            return null;   // a unit has no fields to compose, and is named rather than built
         }
         java.util.Set<TypeSymbol> inside = new LinkedHashSet<>(expanding);
         inside.add(record);
@@ -1396,7 +1420,7 @@ public final class Partitions {
         FieldDomains left = FieldDomains.of(record, data, ruleSource, policy, settled);
         Map<String, FixtureTemplate> chosen = new LinkedHashMap<>();
         if (!fields.keySet().containsAll(given.keySet())) {
-            return List.of();
+            return null;
         }
         for (Map.Entry<String, Type> field : fields.entrySet()) {
             FixtureTemplate at = given.get(field.getKey());
@@ -1406,7 +1430,7 @@ public final class Partitions {
                 List<FixtureTemplate> stands = representativesHolding(field.getValue(), ruleSource,
                         policy, left.at(named).bounds(), left.heldAt(named), inside);
                 if (stands.isEmpty()) {
-                    return List.of();
+                    return null;
                 }
                 at = stands.get(0);
             }
@@ -1419,57 +1443,7 @@ public final class Partitions {
                 left = FieldDomains.of(record, data, ruleSource, policy, settled);
             }
         }
-        return ruleSource.symbols().scope().reach(record) instanceof TypeReachName.Written written
-                ? List.of(FixtureTemplate.record(written, chosen)) : List.of();
-    }
-
-    /**
-     * A value of {@code type} whose position at {@code under} holds {@code value}, or null where
-     * nothing here builds one.
-     *
-     * <p>What a caller wanting a particular number somewhere inside a value asks for. The value at
-     * the position is the caller's and everything beside it is chosen the way any value of the type
-     * is — against the rules of the record it sits in, read again once the caller's value is in
-     * them, so what is offered is a value the model may well admit rather than a shape that carries
-     * the number and breaks a rule about the field next to it.
-     *
-     * <p><b>Steps under the value and not a path.</b> A {@link TermPath} is rooted at a parameter and
-     * says where a location of a row is; what is named here is a way down from a value whose own
-     * location this does not know. Written as a path, one vocabulary would spell two things.
-     *
-     * <p>Fields, and nothing else. A step into a sequence asks for a value inside a container and how
-     * many of them there are, which is a question about the container and not about this value; a
-     * step into a case of a sum asks for a value narrowed to that case, which is composed where the
-     * narrowings are read. Both come back null, which says nothing composes one and leaves what does
-     * to whoever writes it.
-     */
-    static FixtureTemplate carrying(Type type, List<TermPath.Step> under, FixtureTemplate value,
-                                    RuleReadingSource ruleSource, ReadingPolicy policy) {
-        if (value == null) {
-            return null;
-        }
-        // The value itself, under every name the position wears. A newtype around a number is the
-        // number as it is written there, and putting the names on is the one reader that does it.
-        if (under.isEmpty()) {
-            return Witnesses.wrapped(type, value, ruleSource);
-        }
-        if (!(under.getFirst() instanceof TermPath.Step.Field(String name))) {
-            return null;
-        }
-        if (!(TypeOps.base(type, ruleSource.symbols()) instanceof Type.Ref(TypeSymbol.AtModule named))
-                || !(ruleSource.symbols().declaredNode(named) instanceof Hir.Data data)
-                || data.newtype()) {
-            return null;
-        }
-        Type at = TypeOps.fieldTypes(data, ruleSource.symbols()).get(name);
-        FixtureTemplate inner = at == null ? null
-                : carrying(at, under.subList(1, under.size()), value, ruleSource, policy);
-        if (inner == null) {
-            return null;
-        }
-        List<FixtureTemplate> whole =
-                composed(named, ruleSource, policy, java.util.Set.of(), Map.of(name, inner));
-        return whole.isEmpty() ? null : Witnesses.wrapped(type, whole.getFirst(), ruleSource);
+        return chosen;
     }
 
     /** How many of whatever counts a value the rules on it require it to hold, read where the rules

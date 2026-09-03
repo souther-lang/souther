@@ -13,6 +13,7 @@ import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.reading.PathAccess;
+import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.Requirements;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
@@ -452,6 +453,7 @@ public final class Generator {
                              PLACES_A_PAIR_IS_TRIED_AT -> NOTHING_COMPOSES_ONE;
                         case PAIRINGS_BUILT_AT_ONCE, ELEMENTS_A_TOTAL_IS_SPREAD_OVER,
                              SHAPES_OF_A_TOTAL_OFFERED, DECOMPOSITIONS_OF_A_TOTAL_OFFERED,
+                             WAYS_DOWN_TO_A_TOTAL_TRIED,
                              STEPS_A_SEARCH_MAY_TAKE, ASSIGNMENTS_A_SEARCH_COMPOSES,
                              VALUES_OF_AN_UNBOUNDED_PROGRESSION_TRIED,
                              LEVELS_A_SIDE_IS_ASKED_AT -> SEARCH_LIMIT;
@@ -2499,7 +2501,8 @@ public final class Generator {
                 // sentences and only the first names something anybody could raise.
                 return edge.stoppedBy().isEmpty()
                         ? new BoundaryAttempt.Unresolved(
-                                new UnresolvedCombination(List.of(label), edge.reason()),
+                                new UnresolvedCombination(List.of(label), edge.reason(),
+                                        edge.detail()),
                                 where.unrepresented())
                         : BoundaryAttempt.Stopped.at(label, edge.stoppedBy(),
                                 where.unrepresented());
@@ -3657,6 +3660,21 @@ public final class Generator {
             case ConstructionPlan.Result.Beyond(Set<CompositionBudget> by) -> {
                 return new Outcome.Unplanned(by);
             }
+            // Something is asked for under a position that holds nothing until a narrowing says
+            // what stands there, and this search has not said which. There is no plan, so nothing
+            // was searched and nothing was refused: what a reader is owed is that no value was
+            // composed and where the way down stopped. Said as a row nothing composes rather than
+            // as a failure of this compiler, because a model reaches it — a class may state a
+            // narrowing below a position nothing narrows.
+            case ConstructionPlan.Result.Unnarrowed(TermPath where, List<Refinement> narrowings) -> {
+                return new Outcome.Unresolved(UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
+                        narrowings.isEmpty()
+                                ? "`" + where + "` holds nothing that could be built under it"
+                                : "`" + where + "` stands at "
+                                        + narrowings.stream().map(Refinement::spelled)
+                                                .collect(java.util.stream.Collectors.joining(" or "))
+                                        + ", and nothing said which of them the value under it is");
+            }
         }
         Choices choices = choicesOf(subject, p, plan, decided, settled);
         if (choices.missingAt() != null) {
@@ -4499,114 +4517,37 @@ public final class Generator {
     private static FixtureTemplate compose(ConstructionPlan.Node node,
                                            Map<TermPath, FixtureTemplate> chosen, RuleReadingSource ruleSource,
                                            ReadingPolicy policy) {
-        return switch (node) {
-            // Under the names the position wore before a narrowing reached it, and under none where
-            // none did: what is chosen at a slot is a value of the narrowed type, already written
-            // under whatever names that type wears, and a `data DecisionN = Decision` narrowed to
-            // one of its cases is written `DecisionN(...)` all the same.
-            case ConstructionPlan.Slot slot -> worn(slot.worn(), chosen.get(slot.at()), ruleSource);
-            case ConstructionPlan.Built built -> composed(built, chosen, ruleSource, policy);
-            case ConstructionPlan.Held held -> held(held, chosen, ruleSource, policy);
-            // The requirement settled this one, so nothing was chosen for it and there is nothing to
-            // look up. Under every name the position wears, since the value arrives bare.
-            case ConstructionPlan.Exact exact -> worn(exact.worn(), exact.exact(), ruleSource);
-        };
+        return PlanComposer.compose(node, new FromTheAssignment(chosen), ruleSource, policy);
     }
 
     /**
-     * {@code value} under {@code worn}, or {@code value} where nothing is worn over it.
+     * The values of a plan as the search's assignment settled them.
      *
-     * <p>Null where a name the position wears is one this module cannot write, which is a value
-     * that cannot be written rather than one written without the name.
+     * <p>Every position of the plan is one the search chose at, so every field of a record is
+     * composed from what stands under it and nothing here reads a rule. What is left where a
+     * position has nothing is nothing: a row missing a value the plan asks for is not a row.
      */
-    private static FixtureTemplate worn(List<TypeOps.Layer> worn, FixtureTemplate value,
-                                        RuleReadingSource ruleSource) {
-        if (value == null || worn.isEmpty()) {
-            return value;
+    private record FromTheAssignment(Map<TermPath, FixtureTemplate> chosen)
+            implements PlanComposer.Values {
+
+        @Override
+        public FixtureTemplate at(ConstructionPlan.Slot slot) {
+            return chosen.get(slot.at());
         }
-        List<TypeReachName.Written> names = written(worn, ruleSource);
-        return names == null ? null : RepresentativeSource.under(names, value);
-    }
 
-    /**
-     * The names a position wears as this module writes them, or null where one of them is a name it
-     * cannot write.
-     *
-     * <p>Null takes the whole value with it: the name goes on the value as it is written, and a
-     * value composed without one is of a type the parameter does not declare. Asked in one place
-     * because every value this composes needs the same answer, and three copies of the loop are
-     * three chances to differ about what a name this module cannot reach comes to.
-     */
-    private static List<TypeReachName.Written> written(List<TypeOps.Layer> worn, RuleReadingSource ruleSource) {
-        List<TypeReachName.Written> names = new ArrayList<>();
-        for (TypeOps.Layer layer : worn) {
-            if (!(ruleSource.symbols().scope().reach(layer.named()) instanceof TypeReachName.Written name)) {
-                return null;
+        @Override
+        public Map<String, FixtureTemplate> under(ConstructionPlan.Built built,
+                                                  PlanComposer.Under under) {
+            Map<String, FixtureTemplate> fields = new LinkedHashMap<>();
+            for (Map.Entry<String, ConstructionPlan.Node> each : built.under().entrySet()) {
+                FixtureTemplate value = under.of(each.getValue());
+                if (value == null) {
+                    return null;
+                }
+                fields.put(each.getKey(), value);
             }
-            names.add(name);
+            return fields;
         }
-        return names;
-    }
-
-    /**
-     * The list of one this plan builds around what stands at its element.
-     *
-     * <p>Under the names the position is written with, as a record is: a row at a
-     * {@code data Basket = List<Item>} carries {@code Basket([...])}, and a list composed without
-     * them is of a type the parameter does not declare.
-     */
-    private static FixtureTemplate held(ConstructionPlan.Held plan,
-                                        Map<TermPath, FixtureTemplate> chosen, RuleReadingSource ruleSource,
-                                        ReadingPolicy policy) {
-        FixtureTemplate element = compose(plan.under(), chosen, ruleSource, policy);
-        if (element == null) {
-            return null;
-        }
-        // The one placed in the class, and enough beside it for the collection to be one the rules
-        // admit. What may stand beside it is the carrier's business — a list may hold the same
-        // value again and a set may not — so the collection is asked for whole rather than padded
-        // here.
-        if (!(souther.compiler.check.TypeView.of(plan.type(), ruleSource.symbols()).shape()
-                instanceof souther.compiler.check.Shape.Sequence carrier)) {
-            return null;
-        }
-        FixtureTemplate collection =
-                Witnesses.holdingAlso(carrier, element, plan.least(), ruleSource, policy);
-        if (collection == null) {
-            return null;
-        }
-        // A name this module cannot write leaves no value to write.
-        List<TypeReachName.Written> worn = written(plan.worn(), ruleSource);
-        return worn == null ? null : RepresentativeSource.under(worn, collection);
-    }
-
-    /** One record of the plan, out of what the assignment put at the positions under it. */
-    private static FixtureTemplate composed(ConstructionPlan.Built built,
-                                            Map<TermPath, FixtureTemplate> chosen, RuleReadingSource ruleSource,
-                                            ReadingPolicy policy) {
-        Map<String, FixtureTemplate> fields = new LinkedHashMap<>();
-        for (Map.Entry<String, ConstructionPlan.Node> under : built.under().entrySet()) {
-            FixtureTemplate value = compose(under.getValue(), chosen, ruleSource, policy);
-            if (value == null) {
-                return null;
-            }
-            fields.put(under.getKey(), value);
-        }
-        // Under the names the position is written with, which the descent that found the fields took
-        // off to find them. A row at a `data SlotN = Slot` carries `SlotN(Slot { ... })`, and a value
-        // composed without them is of a type the parameter does not declare.
-        // A name this module cannot write leaves no value to write.
-        List<TypeReachName.Written> worn = written(built.worn(), ruleSource);
-        if (worn == null
-                || !(ruleSource.symbols().scope().reach(built.of())
-                        instanceof TypeReachName.Written written)) {
-            return null;
-        }
-        // Under every name the position wears, which where a refinement narrowed it are the names
-        // it wore before the narrowing and the ones the narrowed value wears after it. One list and
-        // one putting-back-on: read as two, the outer names had to be recovered from the class that
-        // asked for the narrowing rather than from the position they belong to.
-        return RepresentativeSource.under(worn, FixtureTemplate.record(written, fields));
     }
 
     /**
@@ -4642,6 +4583,17 @@ public final class Generator {
                 case TermRealizations.Realization.Stopped stopped -> stopped.by();
                 case TermRealizations.Realization.None _ -> java.util.Set.of();
             };
+        }
+
+        /**
+         * What this edge found, beside the word, or null where it has nothing to add.
+         *
+         * <p>Carried from the walk that composed nothing rather than worked out here. Two walks
+         * come back with one word and what they met differs, and a reader left with the word alone
+         * would be telling them apart by what the sentence does not say.
+         */
+        String detail() {
+            return came instanceof TermRealizations.Realization.None none ? none.detail() : null;
         }
 
         /** What to report where no value was offered here at all. */

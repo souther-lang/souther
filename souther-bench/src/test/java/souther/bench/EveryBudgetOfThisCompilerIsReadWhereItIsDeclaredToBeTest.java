@@ -83,6 +83,11 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/check/ReadingPolicy;)"
                             + "Lsouther/compiler/partition/TermRealizations$Realization;",
                     "records the three a total can be short of, where each decides not to go on"),
+            Map.entry("souther.compiler.partition.ContainersAddingUp$Asking#next()"
+                            + "Lsouther/compiler/partition/ConstructionPlan$Result;",
+                    "stops asking about ways down to the number, which is the one place they are"
+                            + " asked about, and hands the figure over with whatever the planning"
+                            + " gave up at"),
             Map.entry("souther.compiler.partition.LevelRealizer#<clinit>()V",
                     "the places a pair is tried at, the steps, the progression — and the re-reads,"
                             + " which travel nowhere because reaching that one gives nothing up:"

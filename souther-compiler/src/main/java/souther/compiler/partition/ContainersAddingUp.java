@@ -10,6 +10,8 @@ import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeView;
 import souther.compiler.inputs.BoundaryDomain;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.Refinement;
+import souther.compiler.inputs.Requirements;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.TermPath;
@@ -62,6 +64,9 @@ final class ContainersAddingUp {
     private static final int HOW_MANY_SHAPES_ARE_OFFERED =
             CompositionBudget.SHAPES_OF_A_TOTAL_OFFERED.maximum();
 
+    private static final int MOST_WAYS_DOWN_TRIED =
+            CompositionBudget.WAYS_DOWN_TO_A_TOTAL_TRIED.maximum();
+
     /**
      * How many ways a difference is spread over the elements, which is how many this walk has.
      *
@@ -110,7 +115,11 @@ final class ContainersAddingUp {
             // is said as a container this composed none of rather than as a total nothing reaches.
             return none(Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
         }
-        List<TermPath.Step> under = stepsInsideAnElement(target);
+        // How a value of the element is built with the number written where the total reads it,
+        // asked of the plan and once per way down. A sum puts nothing under it until a case is
+        // named, so what comes back is one way per case and the walk offers each of them.
+        Ways ways = waysDown(holding.element(), target.writeRoot().element(), occurrences(target),
+                ruleSource);
         List<FixtureTemplate> built = new ArrayList<>();
         int cap = Math.min(howMany.most(), MOST_ELEMENTS_A_ROW_CARRIES);
         // What this walk did not do, recorded as it decides not to do it, and as which budget of
@@ -118,9 +127,16 @@ final class ContainersAddingUp {
         // were one fact and a reader was told a search stopped without being told what would let it
         // go further — and worked out afterwards from the ends, they cannot all be seen at once.
         java.util.Set<CompositionBudget> left = java.util.EnumSet.noneOf(CompositionBudget.class);
-        if (cap < howMany.most()) {
+        // Where there is a way down to fill a container along. A figure over how many elements one
+        // is worth carrying stopped nothing where nothing was ever filled, and a reader told to
+        // raise it would be raising a figure that took nothing away.
+        if (cap < howMany.most() && !ways.filled().isEmpty()) {
             left.add(CompositionBudget.ELEMENTS_A_TOTAL_IS_SPREAD_OVER);
         }
+        // What the planning gave up at, which is this compiler's the same way the figures below are.
+        // A way down that was never planned is a value never composed, and a reader told only that
+        // nothing was composed would look for the rule that refuses it.
+        left.addAll(ways.cutBy());
         // Asked where a container is added and nowhere else. What the budget counts is containers,
         // and a walk that asked at the top of the counts was asking about containers in a place that
         // steps by counts — so a count offering two of them stepped past the figure by one, and how
@@ -130,21 +146,30 @@ final class ContainersAddingUp {
             // More than one element is more than one decomposition, whether or not this made a
             // second: what is offered is two shapes of the many, and the many are what a rule taking
             // a value out of the middle of a run tells apart.
-            if (many > 1) {
+            if (many > 1 && !ways.filled().isEmpty()) {
                 left.add(CompositionBudget.DECOMPOSITIONS_OF_A_TOTAL_OFFERED);
             }
             for (Spread how : Spread.values()) {
                 List<BigDecimal> split = splitting(total.at(), many, ends, how, elements);
-                FixtureTemplate one = split == null ? null
-                        : filled(split, holding, container, under, elements, ruleSource, policy);
-                if (one == null || built.contains(one)) {
+                if (split == null) {
                     continue;
                 }
-                if (built.size() == HOW_MANY_SHAPES_ARE_OFFERED) {
-                    left.add(CompositionBudget.SHAPES_OF_A_TOTAL_OFFERED);
-                    break offering;
+                // Every way down at this count, and the whole container by one of them. Which case
+                // an element is is a fact about the value, so a container whose elements are of
+                // several would be offering a shape nothing asked for; what the walk owes is to
+                // offer each case and to say the rest were never made.
+                for (Filling filling : ways.filled()) {
+                    FixtureTemplate one =
+                            filled(split, holding, container, filling, elements, ruleSource, policy);
+                    if (one == null || built.contains(one)) {
+                        continue;
+                    }
+                    if (built.size() == HOW_MANY_SHAPES_ARE_OFFERED) {
+                        left.add(CompositionBudget.SHAPES_OF_A_TOTAL_OFFERED);
+                        break offering;
+                    }
+                    built.add(one);
                 }
-                built.add(one);
             }
         }
         if (!built.isEmpty()) {
@@ -152,9 +177,12 @@ final class ContainersAddingUp {
         }
         // Nothing was composed, so what the budgets stopped is the composing itself and not the rest
         // of an offer. Where none of them ran out, this is a total nothing here writes a container
-        // for, which is a different thing to tell anybody.
+        // for — and what a reader is then owed is which of the ways to one were walked, since a
+        // figure having stopped the walk is exactly what says the ways were not all tried.
         return left.isEmpty()
-                ? none(Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE)
+                ? new TermRealizations.Realization.None(
+                        Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
+                        ways.said(occurrences(target)))
                 : new TermRealizations.Realization.Stopped(left);
     }
 
@@ -202,19 +230,6 @@ final class ContainersAddingUp {
             case RealizationTarget.AtOnePosition one -> one.term().position().element();
             case RealizationTarget.OverARun over -> over.term().source().subjectPath();
         };
-    }
-
-    /**
-     * The way down from one element to the number, which is the occurrences' path with the container
-     * and the step into it taken off.
-     *
-     * <p>Steps and not a path. What is named is a way down from a value whose own location the
-     * element composer does not know, and a {@link TermPath} is rooted at a parameter — so a
-     * relative path written as one would be a second spelling of a location.
-     */
-    private static List<TermPath.Step> stepsInsideAnElement(RealizationTarget target) {
-        List<TermPath.Step> steps = occurrences(target).steps();
-        return List.copyOf(steps.subList(target.writeRoot().steps().size() + 1, steps.size()));
     }
 
     /**
@@ -331,16 +346,18 @@ final class ContainersAddingUp {
      * rather than composed as a list, so that the day one arrives it arrives here.
      */
     private static FixtureTemplate filled(List<BigDecimal> split, Shape.Sequence holding,
-                                          Type container, List<TermPath.Step> under,
+                                          Type container, Filling filling,
                                           Carrier elements, RuleReadingSource ruleSource, ReadingPolicy policy) {
         if (holding.kind() != Shape.Sequence.Kind.LIST) {
             return null;
         }
         List<FixtureTemplate> values = new ArrayList<>();
         for (BigDecimal each : split) {
-            FixtureTemplate one = Partitions.carrying(holding.element(), under,
-                    FixtureTemplate.on(elements, Count.of(each),
-                            ruleSource.symbols().scope()::reach),
+            FixtureTemplate one = PlanComposer.compose(filling.plan().root(),
+                    new ValuesCarryingANumber(filling.fixed(),
+                            FixtureTemplate.on(elements, Count.of(each),
+                                    ruleSource.symbols().scope()::reach),
+                            ruleSource, policy),
                     ruleSource, policy);
             if (one == null) {
                 return null;
@@ -348,6 +365,220 @@ final class ContainersAddingUp {
             values.add(one);
         }
         return Witnesses.wrapped(container, FixtureTemplate.collection(values), ruleSource);
+    }
+
+    /**
+     * One way of building an element with the number in it: the plan, and the position the number
+     * is written at under it.
+     *
+     * <p>Both, because the second is what the first was planned against. A narrowing is written into
+     * the path — {@code items[*].kind@Card.amount} — so a plan and a path from another way down are
+     * a plan with nowhere to put the value.
+     */
+    private record Filling(ConstructionPlan plan, TermPath fixed) {}
+
+    /**
+     * The ways down, and what the planning gave up at.
+     *
+     * @param filled  one per way that planned, in the order they were reached
+     * @param cutBy   the figures the planning stopped at, which are this compiler's
+     */
+    private record Ways(List<Filling> filled, java.util.Set<CompositionBudget> cutBy,
+                        List<TermPath> nothingStandsAt) {
+
+        Ways {
+            filled = List.copyOf(filled);
+            cutBy = java.util.Set.copyOf(cutBy);
+            nothingStandsAt = List.copyOf(nothingStandsAt);
+        }
+
+        /**
+         * What this walk found, said where a reader is told nothing was composed.
+         *
+         * <p>One sentence per thing that happened, and never one for two of them. A way that was
+         * walked and built nothing says the ways are exhausted; a position nothing stands under
+         * says there was never a way to try. Told the same thing, a reader would be working out
+         * which of them it was from what the sentence left out.
+         */
+        String said(TermPath demand) {
+            if (!filled.isEmpty()) {
+                return spelling(filled.stream().map(Filling::fixed).toList())
+                        + (filled.size() == 1 ? " was a way down to `" : " were ways down to `")
+                        + demand + "`, and none of them composed a value";
+            }
+            return nothingStandsAt.isEmpty()
+                    ? "nothing here reaches `" + demand + "`"
+                    : "nothing standing at " + spelling(nothingStandsAt)
+                            + " gives a way down to `" + demand + "`";
+        }
+
+        private static String spelling(List<TermPath> paths) {
+            return paths.stream().map(each -> "`" + each + "`")
+                    .collect(java.util.stream.Collectors.joining(", "));
+        }
+    }
+
+    /**
+     * Every way an element of {@code element} holds the number at {@code demand}.
+     *
+     * <p>One where the way down is a record's fields all the way, and one per case where it crosses
+     * a position that holds nothing until a narrowing says what stands there. The plan is what says
+     * which of those it is: a demand under such a position comes back as the position and what it
+     * stands at, and this states one of them and asks again — so which cases there are, and which
+     * of them a field is under, are read where a position's divisions are read and nowhere here.
+     *
+     * <p>Bounded by its own figure, and the figure travels so that a reader is told the rest were
+     * never tried.
+     *
+     * <p><b>One occurrence of the number per element, and nothing here has to check it.</b> The
+     * split this fills a container from is one number per element, so a way down that passed
+     * through a container of its own would build a value coming to a multiple of the total. No such
+     * way is asked about: a run is read from a path standing inside one sequence
+     * ({@link souther.compiler.inputs.RunSource}), and a total of what a location holds is read at
+     * the element itself — so a position under the element with a sequence on the way to it is not
+     * a number this is ever asked to write for. Guarded here as well, the guard would be one
+     * nothing can reach and nothing could show wrong.
+     *
+     * <p>The narrowings of one position in the order the declarations write them, and a second
+     * position's under whichever of the first's it was reached by. Nothing here orders the ways of
+     * two positions against each other: what a caller does with them is try each, and the figure
+     * above is what says how many.
+     */
+    private static Ways waysDown(Type element, TermPath at, TermPath demand,
+                                 RuleReadingSource ruleSource) {
+        List<Filling> found = new ArrayList<>();
+        List<TermPath> nothingStandsAt = new ArrayList<>();
+        Asking asking = new Asking(element, at, ruleSource);
+        asking.add(demand);
+        for (ConstructionPlan.Result answer = asking.next(); answer != null;
+                answer = asking.next()) {
+            TermPath fixed = asking.asked();
+            switch (answer) {
+                // A way whose number stands inside a container of its own holds as many occurrences
+                // of it as that container's rules ask for, and the split above is one number per
+                // element of the outer one. So a value built along it comes to a multiple of the
+                // total it was built for, and nothing composes one until what is decomposed is the
+                // occurrences rather than the elements.
+                case ConstructionPlan.Result.Planned(ConstructionPlan plan) ->
+                        found.add(new Filling(plan, fixed));
+                // A narrowing to state, and the walk states each of them. Asked again rather than
+                // planned around: a second narrowing may stand under the first, and which one that
+                // is depends on the case this settled on.
+                case ConstructionPlan.Result.Unnarrowed(TermPath where, List<Refinement> narrowings) -> {
+                    // A position nothing stands under is not a way that was tried and refused.
+                    // Kept as itself so that a reader is told there was never a way down rather
+                    // than that the ways came to nothing.
+                    if (narrowings.isEmpty()) {
+                        nothingStandsAt.add(where);
+                    }
+                    for (Refinement narrowing : narrowings) {
+                        asking.add(narrowed(fixed, where, narrowing));
+                    }
+                }
+                case ConstructionPlan.Result.Beyond(java.util.Set<CompositionBudget> by) ->
+                        asking.gaveUpAt(by);
+                // Two narrowings at one position, which nothing here writes: every one of them was
+                // stated by this walk, one at a time, at a position the plan named.
+                case ConstructionPlan.Result.Conflict conflict ->
+                        throw new IllegalStateException("`" + conflict.at() + "` would have to be"
+                                + " both " + conflict.one().spelled() + " and "
+                                + conflict.other().spelled() + ", though one narrowing was stated");
+            }
+        }
+        return new Ways(found, asking.stoppedBy(), nothingStandsAt);
+    }
+
+    /**
+     * The ways this walk has left to ask the plan about, and the figure that says how many it may.
+     *
+     * <p><b>The asking and the counting are one thing.</b> What multiplies here is the cases of
+     * every position that has to be narrowed, and what bounds the walk is therefore how many times
+     * it asks — not how many answers it keeps, which is nothing at all where no branch plans. Held
+     * apart, the figure was written against whichever count was nearest the top of the loop, and a
+     * walk that kept none of what it asked about ran through the whole cross product saying nothing
+     * had stopped it.
+     *
+     * <p>So a caller cannot ask without being counted: there is one way in, and a second place that
+     * reached the plan another way would be a second walk rather than an unbounded one.
+     */
+    private static final class Asking {
+
+        private final Type element;
+        private final TermPath at;
+        private final RuleReadingSource ruleSource;
+        private final java.util.Deque<TermPath> left = new java.util.ArrayDeque<>();
+        private final java.util.Set<CompositionBudget> stoppedBy =
+                java.util.EnumSet.noneOf(CompositionBudget.class);
+        private TermPath asked;
+        private int asks;
+
+        Asking(Type element, TermPath at, RuleReadingSource ruleSource) {
+            this.element = element;
+            this.at = at;
+            this.ruleSource = ruleSource;
+        }
+
+        /** One more way to ask about, which is what stating a narrowing leaves. */
+        void add(TermPath way) {
+            left.addLast(way);
+        }
+
+        /**
+         * What the plan says about the next way, or null where there is no next one to ask about.
+         *
+         * <p>Null for two reasons and the figures tell them apart: nothing is left to ask, or this
+         * has asked as often as it may — which {@link #stoppedBy()} says and a reader is owed.
+         */
+        ConstructionPlan.Result next() {
+            if (left.isEmpty()) {
+                return null;
+            }
+            if (asks == MOST_WAYS_DOWN_TRIED) {
+                stoppedBy.add(CompositionBudget.WAYS_DOWN_TO_A_TOTAL_TRIED);
+                return null;
+            }
+            asks++;
+            asked = left.removeFirst();
+            return ConstructionPlan.of(element, at, ruleSource.symbols(),
+                    java.util.Set.of(asked), Requirements.NONE,
+                    (_, building) -> Partitions.leastHeld(building, ruleSource));
+        }
+
+        /** The way the last answer is about. */
+        TermPath asked() {
+            return asked;
+        }
+
+        /** What the planning of one way gave up at, which is this compiler's as the figure here is. */
+        void gaveUpAt(java.util.Set<CompositionBudget> by) {
+            stoppedBy.addAll(by);
+        }
+
+        /** Every figure reached, whether by the planning or by this walk. */
+        java.util.Set<CompositionBudget> stoppedBy() {
+            return stoppedBy;
+        }
+    }
+
+    /**
+     * {@code demand} with {@code narrowing} written in at {@code where}.
+     *
+     * <p>Written into the path rather than carried beside it, because a path states the
+     * requirements for the position it names to exist ({@link TermPath#requirements}) and the plan
+     * names every position below a narrowing under the narrowed spelling. Kept beside it, the value
+     * would be fixed at a position the plan has none of.
+     */
+    private static TermPath narrowed(TermPath demand, TermPath where, Refinement narrowing) {
+        TermPath out = where.refine(narrowing);
+        for (TermPath.Step step
+                : demand.steps().subList(where.steps().size(), demand.steps().size())) {
+            out = switch (step) {
+                case TermPath.Step.Field(String name) -> out.then(name);
+                case TermPath.Step.Element _ -> out.element();
+                case TermPath.Step.Refine(Refinement already) -> out.refine(already);
+            };
+        }
+        return out;
     }
 
     /**

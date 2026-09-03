@@ -89,8 +89,26 @@ final class TermRealizations {
             }
         }
 
-        /** Nothing here writes a value answering it, and no budget of this compiler's is why. */
-        record None(Generator.UnresolvedCombination.Reason why) implements Realization {}
+        /**
+         * Nothing here writes a value answering it, and no budget of this compiler's is why.
+         *
+         * <p>The word is how a reader downstream treats it and {@code detail} is what happened in
+         * this attempt, which is the arrangement {@link Generator.UnresolvedCombination} has. A
+         * word read for the shape of the question outlives whatever made it true, so what a reader
+         * is owed beyond it is evidence rather than another word.
+         *
+         * @param detail what this walk found, or null where it has nothing to add to the word. Two
+         *               of these that came about differently do not carry the same sentence: a
+         *               reader told the same thing twice is the reader working the difference out
+         *               from an absence
+         */
+        record None(Generator.UnresolvedCombination.Reason why, String detail)
+                implements Realization {
+
+            None(Generator.UnresolvedCombination.Reason why) {
+                this(why, null);
+            }
+        }
     }
 
     /**

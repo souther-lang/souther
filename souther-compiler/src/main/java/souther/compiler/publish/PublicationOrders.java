@@ -233,6 +233,7 @@ public final class PublicationOrders {
                     CompositionBudget.ELEMENTS_A_TOTAL_IS_SPREAD_OVER,
                     CompositionBudget.SHAPES_OF_A_TOTAL_OFFERED,
                     CompositionBudget.DECOMPOSITIONS_OF_A_TOTAL_OFFERED,
+                    CompositionBudget.WAYS_DOWN_TO_A_TOTAL_TRIED,
                     CompositionBudget.VALUES_OF_AN_UNBOUNDED_PROGRESSION_TRIED,
                     CompositionBudget.PLACES_A_PAIR_IS_TRIED_AT,
                     CompositionBudget.VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT,
