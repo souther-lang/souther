@@ -1691,8 +1691,7 @@ public final class HelperInliner {
      * name was written rather than in the body it came from.
      */
     private Hir.Expr settled(Hir.Var.Denoting v) {
-        Type type = settledValues.valueKept(v.denotes());
-        if (type == null) {
+        if (settledValues.valueKept(v.denotes()) == null) {
             return null;
         }
         Object constant = settledConstants.apply(v.denotes());

@@ -298,12 +298,19 @@ final class Conditions {
         return null;
     }
 
-    /** An emptiness check as the comparison it means, or {@code e} unchanged. */
+    /**
+     * An emptiness check as the comparison it means, or {@code e} unchanged.
+     *
+     * <p>The arguments move across as they stand. Nothing is checked of them here: what the call
+     * takes is what its declaration takes, and that the size takes the same is what the two
+     * declarations were held to each other for ({@link DischargeRules#sizeMeantBy}). A reader that
+     * counted them would be asking a third time.
+     */
     static Core asSizeComparison(Core e) {
-        if (e instanceof Core.PreservedCall call && call.args().size() == 1
-                && DischargeRules.sizeMeantBy(call.operation()) != null) {
-            Core size = new Core.PreservedCall(DischargeRules.sizeMeantBy(call.operation()),
-                    call.args(), Type.INT, call.pos());
+        if (e instanceof Core.PreservedCall call
+                && DischargeRules.sizeMeantBy(call.declared())
+                        instanceof BoundOperationFact.MeansTheSameAsSizeOfNought means) {
+            Core size = new Core.PreservedCall(means.size(), call.args(), Type.INT, call.pos());
             return new Core.Binary(BinOp.EQ, size, new Core.Int(0, Type.INT, call.pos()),
                     CoverageOrigin.unwritten(), Type.BOOL, call.pos());
         }

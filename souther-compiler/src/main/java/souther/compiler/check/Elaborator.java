@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.ast.Hir;
+import souther.compiler.core.CompleteSignature;
 import souther.compiler.core.Core;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
@@ -227,13 +228,12 @@ public final class Elaborator {
                     }
                     yield value;
                 }
-                // A value this representation kept standing, read as the type its own check
+                // A value this representation kept standing, read under the signature its own check
                 // settled. What the value is a constant of is not asked here: that is folded into
                 // the reference where the reference is written, so nothing downstream of this has
                 // to learn that a name can stand for one.
                 case ValueName.Helper _ when ctx.preserved().valueKept(v.denotes()) != null ->
-                        new Core.PreservedCall(v.denotes(), List.of(),
-                                ctx.preserved().valueKept(v.denotes()), v.pos());
+                        keptValue(ctx.preserved().valueKept(v.denotes()), v.pos());
                 default -> throw notAValue(v, env);
             };
             case Hir.FieldAccess fa -> elaborateFieldAccess(fa, env, ctx);
@@ -1487,6 +1487,19 @@ public final class Elaborator {
             return value;
         }
         return new Core.OptionSome(value, expected, value.pos());
+    }
+
+    /**
+     * A reference to a value the representation keeps standing, as the node one becomes.
+     *
+     * <p>An application of no arguments, which is what a reference to a value is: reading a value's
+     * name is running its body (ADR-0072), and a representation that did not substitute it kept
+     * that. So it is built the way a kept call is — from the signature the name was settled with —
+     * and is held to it the same way. Nothing about this node says it came from a name rather than
+     * from a call, because nothing downstream asks.
+     */
+    private static Core keptValue(CompleteSignature settled, SourcePos pos) {
+        return new Core.PreservedCall(settled.declaring(), List.of(), settled.result(), pos);
     }
 
     /**

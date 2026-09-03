@@ -4,9 +4,12 @@ import souther.compiler.stdlib.Stdlib;
 import souther.compiler.semantics.ArgumentRef;
 import souther.compiler.semantics.OperationFact;
 import souther.compiler.semantics.OperationFacts;
+import souther.compiler.core.DeclaredOperation;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Holds what is declared of the language's operations to what the library declares.
@@ -42,15 +45,31 @@ import java.util.List;
 final class OperationFactBinder {
 
     /**
-     * Holds every fact of {@code declared} to the library, and answers with the ones it visited.
+     * What one walk of the declarations came to.
+     *
+     * <p>{@code visited} is the authoring declarations themselves, in the order they were held.
+     * That is what they are: this says a declaration was held to the library and does not say it in
+     * the type of what it hands back. A reader that wants a fact asks {@link OperationFacts} for
+     * the authoring value, so what holds such a reader up is that this walk refused a declaration
+     * the library disagrees with — a check that ran, rather than a value carrying what it settled.
+     *
+     * <p>{@code sizes} is the exception and the shape the rest are headed for: an emptiness check,
+     * against the size it means, with both operations read against their declarations. Keyed by the
+     * emptiness check, which is what a reader holding a call has.
+     */
+    record Binding(List<OperationFacts.Declared> visited,
+                   Map<DeclaredOperation, BoundOperationFact.MeansTheSameAsSizeOfNought> sizes) {}
+
+    /**
+     * Holds every fact of {@code declared} to the library, and answers with what the walk came to.
      *
      * <p>The source is a parameter so that what this covers can be asked of it with a source of
      * one's own. Reading {@link OperationFacts#declarations()} directly, a test could show that the
      * facts there are valid and not that a fact added later would be visited at all.
      */
-    static List<OperationFacts.Declared> bindAll(Stdlib stdlib,
-                                                List<OperationFacts.Declared> declared) {
+    static Binding bindAll(Stdlib stdlib, List<OperationFacts.Declared> declared) {
         List<OperationFacts.Declared> visited = new ArrayList<>();
+        Map<DeclaredOperation, BoundOperationFact.MeansTheSameAsSizeOfNought> sizes = new LinkedHashMap<>();
         for (OperationFacts.Declared each : declared) {
             // Before the switch and outside it, so that being declared is what holds a fact to the
             // library rather than being a kind that happens to name an argument. An arm below with
@@ -97,12 +116,34 @@ final class OperationFactBinder {
                                 new ArgumentRef.TheClosure(),
                                 TypeRequirement.CLOSURE,
                                 "the projection a predicate is stated over");
-                // None of these names an argument — a silence names none by definition — so there
-                // is nothing about one to hold to a signature. Their operation is held above with
-                // every other, which is what makes this arm a statement about these facts rather
-                // than a gap.
+                // Names no argument, but it does name another operation — and what a reader does
+                // with it is write a call of that one where a call of this one stands. So the two
+                // declarations are held to each other, and what comes back is the fact with both
+                // operations read against them.
+                case OperationFact.MeansTheSameAsASizeOfNought means -> {
+                    BoundOperationFact.MeansTheSameAsSizeOfNought bound =
+                            DischargeRules.holdSizeEquivalence(stdlib, each.operation(),
+                                    means.size());
+                    // One operation, one bound fact of a kind. A second declaration of the same
+                    // kind about one operation is two answers to a question that has one, and a map
+                    // written into keeps whichever arrived last — so the rewrite a call gets would
+                    // depend on the order the declarations are written in.
+                    // One operation, one bound fact of a kind. A second declaration of the same kind
+                    // about one operation is two answers to a question that has one, and a map
+                    // written into keeps whichever arrived last — so the rewrite a call gets would
+                    // depend on the order the declarations are written in. The authoring index that
+                    // used to refuse this answers nothing now, and refusing it belongs where the
+                    // bound facts are collected.
+                    if (sizes.put(bound.predicate(), bound) != null) {
+                        throw new IllegalStateException(bound.predicate()
+                                + " is declared to mean a size of nought twice");
+                    }
+                }
+                // Neither of these names anything beyond the operation it is about — a silence names
+                // nothing by definition — so there is nothing about one to hold to a signature.
+                // Their operation is held above with every other, which is what makes this arm a
+                // statement about these facts rather than a gap.
                 case OperationFact.StatesItsPredicateOfEveryElement _,
-                     OperationFact.MeansTheSameAsASizeOfNought _,
                      OperationFact.SaysNothingOf _ -> { }
                 // Stated of the number an operation answers, so an operation that answers none is
                 // one the proposition is not about. Waved through, it was a fact anything could
@@ -124,11 +165,11 @@ final class OperationFactBinder {
             }
             visited.add(each);
         }
-        return visited;
+        return new Binding(List.copyOf(visited), Map.copyOf(sizes));
     }
 
     /** The same, over what the language declares. */
-    static List<OperationFacts.Declared> bindAll(Stdlib stdlib) {
+    static Binding bindAll(Stdlib stdlib) {
         return bindAll(stdlib, OperationFacts.declarations());
     }
 

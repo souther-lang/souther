@@ -1,11 +1,13 @@
 package souther.compiler.check;
 
 import souther.compiler.DefaultStdlib;
+import souther.compiler.KeptCalls;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
 import souther.compiler.types.Type;
+import souther.compiler.types.ValueName;
 
 import org.junit.jupiter.api.Test;
 
@@ -304,17 +306,17 @@ class WhatMakesTwoSubjectsOneIsAskedWhereASubjectIsBuiltTest {
     }
 
     private static Core length(Core of) {
-        return new Core.PreservedCall(souther.compiler.types.ValueName.Stdlib.operation("List", "length"),
+        return KeptCalls.to(ValueName.Stdlib.operation("List", "length"),
                 java.util.List.of(of), Type.INT, POS);
     }
 
     private static Core reverse(Core of) {
-        return new Core.PreservedCall(souther.compiler.types.ValueName.Stdlib.operation("List", "reverse"),
+        return KeptCalls.to(ValueName.Stdlib.operation("List", "reverse"),
                 java.util.List.of(of), of.type(), POS);
     }
 
     private static Core distinct(Core of) {
-        return new Core.PreservedCall(souther.compiler.types.ValueName.Stdlib.operation("List", "distinct"),
+        return KeptCalls.to(ValueName.Stdlib.operation("List", "distinct"),
                 java.util.List.of(of), of.type(), POS);
     }
 

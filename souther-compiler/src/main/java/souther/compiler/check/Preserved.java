@@ -1,16 +1,19 @@
 package souther.compiler.check;
 
 import souther.compiler.DefaultStdlib;
+import souther.compiler.core.CompleteSignature;
 import souther.compiler.stdlib.Stdlib;
-import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
- * The names the representation being typed keeps standing, and what each of them is known to be: a
- * signature for a call, a settled type for a reference to a value.
+ * The names the representation being typed keeps standing, and the signature each of them is known
+ * by: what the library declared an operation with, and what a value's own check settled it as.
  *
  * <p>Which calls a representation keeps is the representation's to decide
  * ({@link InliningPolicy}), so it is decided once, where that representation is built, and handed to
@@ -28,38 +31,71 @@ import java.util.Map;
  * one this representation never said it would keep, is this compiler having failed to expand it, and
  * is reported as that rather than typed.
  */
-public record Preserved(Map<ValueName, CompleteSignature> operations, SettledValues values) {
+public final class Preserved {
 
     /**
-     * What a value's own check settled it as, asked by the name it was resolved to.
+     * The values a representation keeps a reference to, filled in as their own checks settle them.
      *
-     * <p>A lookup rather than a map, because the answers arrive while the representation is being
-     * read: a module's values are checked one after another, each against what the ones it names
-     * were settled as, and a snapshot taken per definition would copy the whole set once per
-     * definition — the cost this was for.
+     * <p>Filled in rather than handed over whole, because the answers arrive while the
+     * representation is being read: a module's values are checked one after another, each against
+     * what the ones it names were settled as, and a snapshot taken per definition would copy the
+     * whole set once per definition — the cost this was for.
+     *
+     * <p>A value of its own rather than a lookup a caller supplies. What a signature is the
+     * signature of is on the signature, so a caller that also said which name it was filing one
+     * under could file it under another — and a reference to the second name would then be
+     * elaborated as the first. There is nothing to say here: a signature is recorded under the name
+     * it carries.
      */
-    @FunctionalInterface
-    public interface SettledValues {
+    public static final class Settling {
 
-        /** Nothing settled: every value is substituted, which is what every representation but the
-         * standalone check of a value does. */
-        SettledValues NONE = _ -> null;
+        private final Map<ValueName, CompleteSignature> settled = new LinkedHashMap<>();
 
-        /** The type {@code name} was settled as, or null where nothing settled it. */
-        Type typeOf(ValueName name);
+        /** Records what a value's own check settled it as. */
+        public void settled(CompleteSignature signature) {
+            settled.put(signature.declaring().operation(), signature);
+        }
+
+        private CompleteSignature settledAs(ValueName name) {
+            return settled.get(name);
+        }
+    }
+
+    private final Map<ValueName, CompleteSignature> operations;
+    private final Settling values;
+
+    private Preserved(Map<ValueName, CompleteSignature> operations, Settling values) {
+        this.operations = Map.copyOf(operations);
+        this.values = values;
     }
 
     /** Every representation that keeps nothing standing — the tree the backend emits from, and every
      *  expression checked outside one. */
-    public static final Preserved NONE = new Preserved(Map.of(), SettledValues.NONE);
+    public static final Preserved NONE = new Preserved(Map.of(), new Settling());
 
-    public Preserved(Map<ValueName, CompleteSignature> operations) {
-        this(operations, SettledValues.NONE);
+    /**
+     * A representation that keeps each of {@code kept} standing, under the signature it carries.
+     *
+     * <p>Which name each is filed under is the signature's own answer. A caller stating it beside
+     * the signature would be stating a second time what the signature already says, and the day the
+     * two disagree a call written to one operation is elaborated as another — a substitution no
+     * arity check catches, since the wrong declaration is applied consistently.
+     */
+    public static Preserved keeping(Collection<CompleteSignature> kept) {
+        Map<ValueName, CompleteSignature> operations = new LinkedHashMap<>();
+        for (CompleteSignature signature : kept) {
+            CompleteSignature already = operations.put(signature.declaring().operation(), signature);
+            if (already != null) {
+                throw new IllegalStateException(signature.declaring()
+                        + " is kept standing under two signatures, and a call of it is typed"
+                        + " against whichever was handed over last");
+            }
+        }
+        return new Preserved(operations, new Settling());
     }
 
     /**
-     * A representation that keeps a reference to each of {@code settled} standing, under the type
-     * that value's own check settled for it.
+     * A representation that keeps a reference to each value {@code settled} records standing.
      *
      * <p>What a value means is settled where it is declared and is the same wherever it is named
      * (ADR-0072), so a check that has that answer already needs nothing from the value's body. The
@@ -67,19 +103,28 @@ public record Preserved(Map<ValueName, CompleteSignature> operations, SettledVal
      * where the reference is written, so everything downstream reads a literal exactly as it did
      * when the whole body was copied there.
      */
-    public static Preserved valuesAlreadySettled(SettledValues settled) {
+    public static Preserved valuesAlreadySettled(Settling settled) {
         return new Preserved(Map.of(), settled);
     }
 
     /**
-     * The type {@code name} was settled as, or null where this representation does not keep a
+     * The signature {@code name} was settled with, or null where this representation does not keep a
      * reference to it standing.
      *
      * <p>Asked of what the name was resolved to, as an operation is: a binding spelled like a value
      * is a binding, and two modules' same-named values are two values.
+     *
+     * <p>A signature and not the type alone, because what a reference to a value becomes is an
+     * application of no arguments: the reader that builds one is held to what the name declares in
+     * the same way a call is, and a value declaring no parameters is what makes that hold.
      */
-    public Type valueKept(ValueName name) {
-        return name == null ? null : values.typeOf(name);
+    public CompleteSignature valueKept(ValueName name) {
+        return name == null ? null : values.settledAs(name);
+    }
+
+    /** What this keeps standing, for a reader that wants to say something of all of them. */
+    public Map<ValueName, CompleteSignature> operations() {
+        return operations;
     }
 
     /**
@@ -114,16 +159,12 @@ public record Preserved(Map<ValueName, CompleteSignature> operations, SettledVal
      * the process's own — {@link souther.compiler.DefaultStdlib} says who may and why the loader
      * may not. */
     private static Preserved readTheLibrary(Stdlib stdlib) {
-        Map<ValueName, CompleteSignature> operations = new LinkedHashMap<>();
+        List<CompleteSignature> operations = new ArrayList<>();
         stdlib.entries().forEach((operation, entry) -> {
-            operations.put(operation, CompleteSignature.of(
+            operations.add(CompleteSignature.ofDeclaration(
                     operation, entry.signature().params(), entry.signature().result()));
         });
-        return new Preserved(operations);
-    }
-
-    public Preserved {
-        operations = Map.copyOf(operations);
+        return keeping(operations);
     }
 
     /**

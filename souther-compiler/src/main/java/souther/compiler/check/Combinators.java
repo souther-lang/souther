@@ -88,9 +88,12 @@ final class Combinators {
      * then this has already read it. Nothing about arguments or parameters a call does not have is
      * true, so nothing is said, and the arity is reported by the check whose question it is.
      *
-     * <p>The tree a representation keeps standing needs no such answer: a {@code PreservedCall} is
-     * built only where the signature it was applied to accepted the arguments and typed the block it
-     * was handed, so one that exists has both.
+     * <p>The tree a representation keeps standing needs the first of those answers and not the
+     * second, and the two come from different places. A {@code PreservedCall} has the arguments its
+     * declaration takes, so the argument positions this table names are positions it has — that is
+     * the node's own and holds however one was built. What stands in the closure argument having as
+     * many parameters as the rule reaches for is a separate matter, settled where the block was
+     * typed against the signature; nothing about a call says it.
      */
     static Written handedTo(Hir.Apply call) {
         // A call applying a name nothing declares hands its closure to no operation this table

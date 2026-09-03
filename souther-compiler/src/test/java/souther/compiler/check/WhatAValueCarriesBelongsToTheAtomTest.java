@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.DefaultStdlib;
+import souther.compiler.KeptCalls;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.numeric.NumericDomain;
@@ -42,7 +43,8 @@ class WhatAValueCarriesBelongsToTheAtomTest {
 
     private static final SourcePos POS = new SourcePos(1, 1);
 
-    private static final ValueName LENGTH = ValueName.Stdlib.operation("List", "length");
+    private static final ValueName.Stdlib.Operation LENGTH =
+            ValueName.Stdlib.operation("List", "length");
 
     private static BindingId binding(int index) {
         return new BindingId(new BindingOwner.OfValue("demo", "f"), index);
@@ -61,11 +63,11 @@ class WhatAValueCarriesBelongsToTheAtomTest {
     }
 
     private static Core length(Core of) {
-        return new Core.PreservedCall(LENGTH, List.of(of), Type.INT, POS);
+        return KeptCalls.to(LENGTH, List.of(of), Type.INT, POS);
     }
 
     private static Core distinct(Core of) {
-        return new Core.PreservedCall(ValueName.Stdlib.operation("List", "distinct"), List.of(of),
+        return KeptCalls.to(ValueName.Stdlib.operation("List", "distinct"), List.of(of),
                 of.type(), POS);
     }
 

@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.DefaultStdlib;
+import souther.compiler.KeptCalls;
 import souther.compiler.stdlib.Stdlib;
 import souther.compiler.semantics.OperationFact;
 import souther.compiler.core.Core;
@@ -110,6 +111,8 @@ class EveryCaseALibraryDefinitionIsWrittenInBecomesAnArmTest {
         for (int i = 0; i < params.size(); i++) {
             args.add(new Core.Read("arg" + i, new BindingId(OWNER, i), params.get(i), POS));
         }
-        return new Core.PreservedCall(operation, args, entry.signature().result(), POS);
+        return new Core.PreservedCall(
+                KeptCalls.declared((ValueName.Stdlib.Operation) operation), args,
+                entry.signature().result(), POS);
     }
 }

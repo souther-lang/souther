@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import souther.compiler.DefaultStdlib;
 import souther.compiler.ast.Hir;
+import souther.compiler.core.CompleteSignature;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.Type;
@@ -11,7 +12,6 @@ import souther.compiler.types.ValueName;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
-import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -96,8 +96,8 @@ class WhatARepresentationKeepsIsTheRepresentationsToSayTest {
     }
 
     private static Preserved keeping(ValueName operation, Type.FnOf signature) {
-        return new Preserved(Map.of(operation,
-                new CompleteSignature(signature.params(), signature.result())));
+        return Preserved.keeping(List.of(CompleteSignature.ofDeclaration(operation,
+                signature.params(), signature.result())));
     }
 
     private static Core elaborate(Hir.Expr e, Preserved kept) {
