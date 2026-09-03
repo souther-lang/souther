@@ -149,8 +149,13 @@ public sealed interface ObligationDisposition {
              * measurement over rows. The obligation is the model's either way — what the rows were
              * not read against is not something the model stopped owing (issue #1249) — so the
              * question is open and says which of the two left it so.
+             *
+             * <p>Every reason the readings gave, as the coverage holds them. A count and a build's
+             * refusal read this beside the document, and asking for one reason here would put the
+             * refusal of an account too wide for a sentence in front of all three — where what is
+             * too wide is the sentence, which is written somewhere else.
              */
-            record NothingWasRead(NotMeasuredReason why) implements WhetherARowIsThere {
+            record NothingWasRead(UnaskedReasons why) implements WhetherARowIsThere {
 
                 public NothingWasRead {
                     Objects.requireNonNull(why, "a point nobody read against says why nobody did");
@@ -282,13 +287,8 @@ public sealed interface ObligationDisposition {
             // whether a row is owed here is the model's answer, and no row naming the behavior is a
             // setting of this build (issue #1249). What is known about a row being writable there
             // is said beside that rather than instead of it.
-            // The reason as a surface that says one says it. What the point is open on is written
-            // into a sentence and into one opening, and both have room for one reason — so the
-            // account asks for one here rather than each of them choosing from what the readings
-            // gave.
             case ObligationCoverage.NotMeasured it -> Undecided.about(alsoWritability(
-                    new Uncertainty.WhetherARowIsThere.NothingWasRead(it.why().asOne()),
-                    knowledge));
+                    new Uncertainty.WhetherARowIsThere.NothingWasRead(it.why()), knowledge));
         };
     }
 

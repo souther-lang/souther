@@ -54,33 +54,76 @@ class FoldingOneReadingsSearchesDoesNotMoveTheDebtTest {
     }
 
     /**
-     * Every measurement a reading of one line can be in, under one level.
+     * What the readings of one behavior's rows can come back as.
      *
-     * <p>Written from the gates the reading goes through: a build that reads no rows says so before
-     * anything is looked at, a build that runs no instrumented rows says it of a line a fork drew,
-     * and what is left is what the rows came to. An invariant's line is never waiting on the arms,
-     * which is why the two kinds have different sets.
+     * <p>The half of the input the gates read. Nothing here decides what a reading comes to — that
+     * is asked of the gates below — and these are what a behavior hands them: rows nobody wrote,
+     * rows nothing came back from, rows read without the instrumentation that records what they
+     * went through, and rows this run read.
      */
-    private static List<Measurement<ItemAssessment.Coverage>> everyShape(Reading of) {
-        if (!of.level().readsRows()) {
-            return List.of(new Measurement.NotMeasured<>(ItemAssessment.Coverage.NotAsked.NOT_ASKED));
+    private static List<Adequacy.RowReading> everyReadingOfTheRows() {
+        return List.of(
+                Adequacy.RowReading.NONE,
+                readingThatMet(Incompleteness.Code.OBSERVATION_ABSENT),
+                readingThatMet(Incompleteness.Code.INSTRUMENTATION_ABSENT),
+                readingThatMet(Incompleteness.Code.VALUE_UNREADABLE),
+                Adequacy.RowReading.NOT_ASKED);
+    }
+
+    private static Adequacy.RowReading readingThatMet(Incompleteness.Code code) {
+        return Adequacy.RowReading.of(List.of(),
+                List.of(Incompleteness.of(code, Incompleteness.Scope.BEHAVIOR, "b")));
+    }
+
+    /**
+     * What two searches of one reading can each come to.
+     *
+     * <p>One reading is one line of one behavior in one run, so the gates are asked once and both
+     * searches get that answer. Where the gates leave the rows to answer, the two searches can
+     * differ — they composed over different regions — and what they differ in is the value and what
+     * each went without.
+     *
+     * <p><b>The reasons come from the gates and not from a table here.</b> Which reason a reading
+     * gives is settled by {@link Coverages#whyNothingWasReadAgainstTheLine}, and a population that
+     * wrote the gates out again would be a second statement of them — green over a producer that
+     * had stopped agreeing with it, which is the shape this file's own subject is about one layer
+     * down.
+     */
+    private static List<Measurement<ItemAssessment.Coverage>> everySearchOfOneReading(
+            Reading of, Adequacy.RowReading rows) {
+        Measurement<ItemAssessment.Coverage> nothingWasRead =
+                Coverages.whyNothingWasReadAgainstTheLine(
+                        of.kind() == LineKind.A_FORK, rows, of.level());
+        if (nothingWasRead != null) {
+            return List.of(nothingWasRead);
         }
-        if (of.kind() == LineKind.A_FORK && !of.level().runsInstrumentedRows()) {
-            return List.of(
-                    new Measurement.NotMeasured<>(ItemAssessment.Coverage.NotAsked.ARMS_NOT_ASKED));
-        }
-        List<Measurement<ItemAssessment.Coverage>> out = new ArrayList<>(List.of(
+        // Nothing back from the gates is them leaving the rows to answer, which is the gates' own
+        // way of saying it and not something read off the level here. What a search then comes to
+        // is a row at the point or none, read to the end or as far as it got.
+        return List.of(
                 new Measurement.Complete<>(new ItemAssessment.Coverage.Hit()),
                 new Measurement.Complete<>(new ItemAssessment.Coverage.NoHit()),
                 new Measurement.Partial<>(new ItemAssessment.Coverage.Hit(), truncated()),
                 new Measurement.Partial<>(new ItemAssessment.Coverage.NoHit(), truncated()),
-                new Measurement.Partial<>(new ItemAssessment.Coverage.NoHit(), unreadable()),
-                new Measurement.NotMeasured<>(ItemAssessment.Coverage.NotAsked.NO_ROWS)));
-        if (of.kind() == LineKind.A_FORK) {
-            // The rows ran and what they went through was not recorded, which takes a run that
-            // instruments them. An invariant's line has no arms to be waiting on.
-            out.add(new Measurement.FailedToMeasure<>(
-                    ItemAssessment.Coverage.CouldNotAsk.ARMS_UNREADABLE, unreadable()));
+                new Measurement.Partial<>(new ItemAssessment.Coverage.NoHit(), unreadable()));
+    }
+
+    /**
+     * What the readings of one line in one run can each come to.
+     *
+     * <p>Beside the one above and not the same set. A line is read once per behavior carrying the
+     * type, and two behaviors of one run hand the gates different readings of their rows — so what
+     * two readings of one line can be is wider than what two searches of one reading can be, and a
+     * law about one of them run over the other asks its subject to answer for pairs it never sees.
+     */
+    private static List<Measurement<ItemAssessment.Coverage>> everyReadingOfOneLine(Reading of) {
+        List<Measurement<ItemAssessment.Coverage>> out = new ArrayList<>();
+        for (Adequacy.RowReading rows : everyReadingOfTheRows()) {
+            for (Measurement<ItemAssessment.Coverage> each : everySearchOfOneReading(of, rows)) {
+                if (!out.contains(each)) {
+                    out.add(each);
+                }
+            }
         }
         return List.copyOf(out);
     }
@@ -96,7 +139,7 @@ class FoldingOneReadingsSearchesDoesNotMoveTheDebtTest {
     void everyReasonAQuestionIsNotPutForIsSomewhereInThePopulation() {
         List<ItemAssessment.Coverage.NotAsked> found = new ArrayList<>();
         for (Reading reading : everyReading()) {
-            for (Measurement<ItemAssessment.Coverage> shape : everyShape(reading)) {
+            for (Measurement<ItemAssessment.Coverage> shape : everyReadingOfOneLine(reading)) {
                 if (shape instanceof Measurement.NotMeasured<ItemAssessment.Coverage> none) {
                     ItemAssessment.Coverage.NotAsked why =
                             (ItemAssessment.Coverage.NotAsked) none.why();
@@ -118,7 +161,7 @@ class FoldingOneReadingsSearchesDoesNotMoveTheDebtTest {
     void noOneReadingCanGiveTwoOfTheRunsReasons() {
         for (Reading reading : everyReading()) {
             List<ItemAssessment.Coverage.NotAsked> ofTheRun = new ArrayList<>();
-            for (Measurement<ItemAssessment.Coverage> shape : everyShape(reading)) {
+            for (Measurement<ItemAssessment.Coverage> shape : everyReadingOfOneLine(reading)) {
                 if (shape instanceof Measurement.NotMeasured<ItemAssessment.Coverage> none
                         && ((ItemAssessment.Coverage.NotAsked) none.why()).about()
                                 == MeasureReason.About.THE_RUN) {
@@ -140,14 +183,19 @@ class FoldingOneReadingsSearchesDoesNotMoveTheDebtTest {
     void whatTheDebtSaysIsTheSameWhicheverWayThePairReachesIt() {
         List<String> apart = new ArrayList<>();
         for (Reading reading : everyReading()) {
-            for (Measurement<ItemAssessment.Coverage> a : everyShape(reading)) {
-                for (Measurement<ItemAssessment.Coverage> b : everyShape(reading)) {
-                    ObligationCoverage read = ObligationCoverage.acrossTheReadings(List.of(a, b));
-                    ObligationCoverage folded = ObligationCoverage.acrossTheReadings(
-                            List.of(ObligationCoverage.acrossOneReadingsSearches(a, b)));
-                    if (!read.equals(folded)) {
-                        apart.add(reading + ": " + a + " with " + b + ": read " + read
-                                + ", folded " + folded);
+            for (Adequacy.RowReading rows : everyReadingOfTheRows()) {
+                for (Measurement<ItemAssessment.Coverage> a
+                        : everySearchOfOneReading(reading, rows)) {
+                    for (Measurement<ItemAssessment.Coverage> b
+                            : everySearchOfOneReading(reading, rows)) {
+                        ObligationCoverage read =
+                                ObligationCoverage.acrossTheReadings(List.of(a, b));
+                        ObligationCoverage folded = ObligationCoverage.acrossTheReadings(
+                                List.of(ObligationCoverage.acrossOneReadingsSearches(a, b)));
+                        if (!read.equals(folded)) {
+                            apart.add(reading + ": " + a + " with " + b + ": read " + read
+                                    + ", folded " + folded);
+                        }
                     }
                 }
             }
@@ -162,15 +210,19 @@ class FoldingOneReadingsSearchesDoesNotMoveTheDebtTest {
     void thePairIsTheSameWhicheverOfThemCameFirst() {
         List<String> apart = new ArrayList<>();
         for (Reading reading : everyReading()) {
-            for (Measurement<ItemAssessment.Coverage> a : everyShape(reading)) {
-                for (Measurement<ItemAssessment.Coverage> b : everyShape(reading)) {
-                    ObligationCoverage one = ObligationCoverage.acrossTheReadings(
-                            List.of(ObligationCoverage.acrossOneReadingsSearches(a, b)));
-                    ObligationCoverage other = ObligationCoverage.acrossTheReadings(
-                            List.of(ObligationCoverage.acrossOneReadingsSearches(b, a)));
-                    if (!one.equals(other)) {
-                        apart.add(reading + ": " + a + " with " + b + ": " + one + " one way, "
-                                + other + " the other");
+            for (Adequacy.RowReading rows : everyReadingOfTheRows()) {
+                for (Measurement<ItemAssessment.Coverage> a
+                        : everySearchOfOneReading(reading, rows)) {
+                    for (Measurement<ItemAssessment.Coverage> b
+                            : everySearchOfOneReading(reading, rows)) {
+                        ObligationCoverage one = ObligationCoverage.acrossTheReadings(
+                                List.of(ObligationCoverage.acrossOneReadingsSearches(a, b)));
+                        ObligationCoverage other = ObligationCoverage.acrossTheReadings(
+                                List.of(ObligationCoverage.acrossOneReadingsSearches(b, a)));
+                        if (!one.equals(other)) {
+                            apart.add(reading + ": " + a + " with " + b + ": " + one + " one way, "
+                                    + other + " the other");
+                        }
                     }
                 }
             }
@@ -192,15 +244,19 @@ class FoldingOneReadingsSearchesDoesNotMoveTheDebtTest {
     void thePairIsTheSameValueWhicheverOfThemCameFirst() {
         List<String> apart = new ArrayList<>();
         for (Reading reading : everyReading()) {
-            for (Measurement<ItemAssessment.Coverage> a : everyShape(reading)) {
-                for (Measurement<ItemAssessment.Coverage> b : everyShape(reading)) {
-                    Measurement<ItemAssessment.Coverage> one =
-                            ObligationCoverage.acrossOneReadingsSearches(a, b);
-                    Measurement<ItemAssessment.Coverage> other =
-                            ObligationCoverage.acrossOneReadingsSearches(b, a);
-                    if (!one.equals(other)) {
-                        apart.add(reading + ": " + a + " with " + b + ": " + one + " one way, "
-                                + other + " the other");
+            for (Adequacy.RowReading rows : everyReadingOfTheRows()) {
+                for (Measurement<ItemAssessment.Coverage> a
+                        : everySearchOfOneReading(reading, rows)) {
+                    for (Measurement<ItemAssessment.Coverage> b
+                            : everySearchOfOneReading(reading, rows)) {
+                        Measurement<ItemAssessment.Coverage> one =
+                                ObligationCoverage.acrossOneReadingsSearches(a, b);
+                        Measurement<ItemAssessment.Coverage> other =
+                                ObligationCoverage.acrossOneReadingsSearches(b, a);
+                        if (!one.equals(other)) {
+                            apart.add(reading + ": " + a + " with " + b + ": " + one + " one way, "
+                                    + other + " the other");
+                        }
                     }
                 }
             }
@@ -225,8 +281,8 @@ class FoldingOneReadingsSearchesDoesNotMoveTheDebtTest {
     @Test
     void whatTheReadingsOfOneRunComeToIsOneReasonADocumentCanSay() {
         for (Reading reading : everyReading()) {
-            for (Measurement<ItemAssessment.Coverage> a : everyShape(reading)) {
-                for (Measurement<ItemAssessment.Coverage> b : everyShape(reading)) {
+            for (Measurement<ItemAssessment.Coverage> a : everyReadingOfOneLine(reading)) {
+                for (Measurement<ItemAssessment.Coverage> b : everyReadingOfOneLine(reading)) {
                     ObligationCoverage debt = ObligationCoverage.acrossTheReadings(List.of(a, b));
                     if (debt instanceof ObligationCoverage.NotMeasured it) {
                         assertEquals(1, it.why().reasons().size(),
@@ -285,27 +341,50 @@ class FoldingOneReadingsSearchesDoesNotMoveTheDebtTest {
     }
 
     /**
-     * A reading with nothing to look at is held beside one the run never asked, and does not take
-     * it back.
+     * What a debt says is what put it in the state it is in, and a reading with nothing to look at
+     * did not.
      *
-     * <p>The fold's own rule and not a claim about what a run reaches. The pair takes a build that
-     * read no rows beside a behavior that has none, which the gates settle before the rows are
-     * looked at — so what this pins is that the fold keeps both facts rather than that anything
-     * hands it both.
+     * <p>The fold ranks the states, and inside the one state a reason decides — nothing was read —
+     * the reasons that outrank a miss are the ones that could be hiding a row. So those are what
+     * the debt says, the way an undecided one says what left it undecided rather than everything
+     * every reading went without. A reading with no rows hides nothing: it neither takes the state
+     * back nor joins the reasons that reached it.
      */
     @Test
-    void aReadingWithNoRowsIsHeldBesideOneNobodyAsked() {
+    void aReadingWithNoRowsIsNotOneOfTheReasonsThePointIsOpen() {
         ObligationCoverage debt = ObligationCoverage.acrossTheReadings(List.of(
                 new Measurement.NotMeasured<>(ItemAssessment.Coverage.NotAsked.NOT_ASKED),
                 new Measurement.NotMeasured<>(ItemAssessment.Coverage.NotAsked.NO_ROWS)));
 
-        assertEquals(new ObligationCoverage.NotMeasured(UnaskedReasons.ofAll(List.of(
-                        ItemAssessment.Coverage.NotAsked.NOT_ASKED,
-                        ItemAssessment.Coverage.NotAsked.NO_ROWS))),
+        assertEquals(new ObligationCoverage.NotMeasured(
+                        UnaskedReasons.of(ItemAssessment.Coverage.NotAsked.NOT_ASKED)),
                 debt,
-                "both readings said why they read nothing, and the debt says both");
-        assertFalse(debt.settled(), "and the point is still open, because one of them may hide a"
-                + " row");
+                "the rows nobody looked at are why the point is open, and the behavior with none"
+                        + " is not");
+        assertFalse(debt.settled(), "and the point is open, because those rows may be at it");
+    }
+
+    /**
+     * A surface that says one reason refuses an account of two, and does not pick from it.
+     *
+     * <p>The negative control on the projection, and it is needed because nothing produces two
+     * today: a law over what the producers make would pass just as well against a projection that
+     * quietly took the first. What is refused is exactly the defect this issue is about, one layer
+     * along — an answer chosen from a set by whatever order it happened to be in.
+     *
+     * <p>Built here rather than folded to, because the carrier admits the pair and the fold does
+     * not make one. What the carrier admits is a question about the reasons; what the fold makes is
+     * a question about the readings, and this is about neither.
+     */
+    @Test
+    void aSurfaceThatSaysOneReasonRefusesTwoRatherThanChoosing() {
+        UnaskedReasons two = UnaskedReasons.ofAll(List.of(
+                ItemAssessment.Coverage.NotAsked.NOT_ASKED,
+                ItemAssessment.Coverage.NotAsked.NO_ROWS));
+
+        assertEquals(2, two.reasons().size(), "the carrier holds both, which is what it is for");
+        assertThrows(IllegalStateException.class, two::asOne,
+                "and a surface with room for one says so rather than taking whichever is first");
     }
 
     private static WeakeningSet truncated() {

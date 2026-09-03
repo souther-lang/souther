@@ -61,6 +61,7 @@ import souther.compiler.query.ObligationCoverage;
 import souther.compiler.query.ObligationDisposition;
 import souther.compiler.query.ObligationSummary;
 import souther.compiler.query.ReadingReasons;
+import souther.compiler.query.UnaskedReasons;
 import souther.compiler.query.EstablishmentGap;
 import souther.compiler.query.WritabilityKnowledge;
 import souther.compiler.publish.CanonicalSelection;
@@ -829,8 +830,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         for (ObligationDisposition.Uncertainty each : undecided.because().written()) {
             switch (each) {
                 case ObligationDisposition.Uncertainty.WhetherARowIsThere.ReadingsStopped _ -> { }
+                // One opening, which says one reason. What the readings gave is a set, and asking
+                // for it as one is where an opening with no room for the second says so.
                 case ObligationDisposition.Uncertainty.WhetherARowIsThere.NothingWasRead it ->
-                        out.add(new AdequacyOpening.NotMeasured(it.why()));
+                        out.add(new AdequacyOpening.NotMeasured(it.why().asOne()));
                 case ObligationDisposition.Uncertainty.WhetherARowCanBeWritten.Stopped it ->
                         it.by().by().written().forEach(gap ->
                                 out.add(new AdequacyOpening.ShowingStopped(gap)));
@@ -1907,9 +1910,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 // that reached past it for the evidence would be one more reader working the
                 // answer out on its own terms.
                 case ObligationDisposition.Uncertainty.WhetherARowIsThere.NothingWasRead(
-                        MeasureReason why) ->
+                        UnaskedReasons why) ->
                         "undecided whether a row is at the " + point + " — "
-                                + ReasonProse.of(why).clause();
+                                + ReasonProse.of(why.asOne()).clause();
                 // Named for what happened, which is not one thing. A reading that did not come
                 // back is of a row this compiler composed; a composing that stopped never had one
                 // — and an opening written for the first says a row was built at a point where

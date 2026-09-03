@@ -754,9 +754,8 @@ final class Coverages {
         // clause's are about the values — one refuses everything outside its bound, the other states
         // a relation — so for both of those writing the value is the whole of what there is to reach.
         boolean guard = border.origin().comparisonAt().isPresent();
-        Measurement<ItemAssessment.Coverage> absent = guard
-                ? whyNoGuardLine(observed, level)
-                : whyNoInvariantLine(observed, level);
+        Measurement<ItemAssessment.Coverage> absent =
+                whyNothingWasReadAgainstTheLine(guard, observed, level);
 
         // The rows as the values they hold and what running them recorded, which is the whole of
         // what a point is met by. Read once for the border: what a row is stays the same however
@@ -1246,6 +1245,21 @@ final class Coverages {
         ItemAssessment.Coverage seen = new ItemAssessment.Coverage.NoHit();
         return by.isEmpty() ? new Measurement.Complete<>(seen)
                 : new Measurement.Partial<>(seen, WeakeningSet.ofAll(by));
+    }
+
+    /**
+     * Why nothing was read against a line at all, or null where the rows are what answer it.
+     *
+     * <p>The gates, behind one name. Which of them a line goes through is settled by the level the
+     * build asked for and by whether a fork or an invariant drew it, and that is one decision with
+     * one owner — a caller writing the choice out again, and a check enumerating what a reading can
+     * come to, would be two more statements of it, free to say what this stopped saying.
+     */
+    static Measurement<ItemAssessment.Coverage> whyNothingWasReadAgainstTheLine(
+            boolean drawnByAFork,
+            souther.compiler.query.Adequacy.RowReading observed,
+            souther.compiler.query.Adequacy.Level level) {
+        return drawnByAFork ? whyNoGuardLine(observed, level) : whyNoInvariantLine(observed, level);
     }
 
     /**

@@ -360,11 +360,10 @@ public sealed interface ItemAssessment {
                 return MeasureReason.About.THE_BEHAVIOR;
             }
 
-            /** Whether a row at the point could be sitting behind this, as {@link NotAsked} answers
-             *  it. The rows ran, so one of them may have reached the comparison unrecorded. */
-            public boolean mayHideARow() {
-                return true;
-            }
+            // Whether a row could be sitting behind one of these is not asked, the way it is of
+            // NotAsked. A measurement that failed says what it went without and cannot say nothing,
+            // so every one of these leaves the point undecided whatever the reason — which is the
+            // state's answer and not a reason's.
         }
 
         /**

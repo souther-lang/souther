@@ -148,11 +148,13 @@ public sealed interface ObligationCoverage {
                 // A reading of this line that did not run out. Whatever it could not read may be
                 // holding the row.
                 case Measurement.Partial<ItemAssessment.Coverage> in -> unread = unread.union(in.by());
-                case Measurement.FailedToMeasure<ItemAssessment.Coverage> stopped -> {
-                    if (((ItemAssessment.Coverage.CouldNotAsk) stopped.why()).mayHideARow()) {
+                // And one that was started and could not be finished, which is the same thing said
+                // by a state with no value: it did not run out, and what it went without may be
+                // holding the row. Asked of the state and not of the reason — a measurement that
+                // failed carries what it went without and cannot carry nothing, so there is no
+                // failure here that leaves the point where it found it.
+                case Measurement.FailedToMeasure<ItemAssessment.Coverage> stopped ->
                         unread = unread.union(stopped.by());
-                    }
-                }
                 // The reasons a question was not put are kept as themselves rather than turned into
                 // weakenings: nothing was read, so there is no reading for a weakening to be about.
                 // Every one of them, whatever it is a fact about — which of these outranks a miss
@@ -166,19 +168,25 @@ public sealed interface ObligationCoverage {
         if (!unread.isEmpty()) {
             return new Undecided(unread);
         }
-        UnaskedReasons why = unasked.isEmpty() ? null : UnaskedReasons.ofAll(unasked);
         // Above a miss another reading established, because a reading that looked at nothing leaves
-        // the rows it would have looked at unaccounted for. Asked of the reasons together: one that
-        // could be hiding a row leaves the point unanswered whatever the readings beside it said,
-        // and the reasons that hide nothing are held all the same, because each of them is still
-        // why one reading read nothing.
-        if (why != null && why.mayHideARow()) {
-            return new NotMeasured(why);
+        // the rows it would have looked at unaccounted for. All of them and not one, and every one
+        // of them is one that could be hiding a row: what a debt says is what put it in the state
+        // it is in, the way an undecided one says what left it undecided. A reading with nothing to
+        // look at did not put it here — it hides nothing, so it neither takes back a miss nor joins
+        // the reasons that outranked one.
+        List<ItemAssessment.Coverage.NotAsked> mayHideARow = new ArrayList<>();
+        for (ItemAssessment.Coverage.NotAsked each : unasked) {
+            if (each.mayHideARow()) {
+                mayHideARow.add(each);
+            }
+        }
+        if (!mayHideARow.isEmpty()) {
+            return new NotMeasured(UnaskedReasons.ofAll(mayHideARow));
         }
         // Nothing among them hides a row, so a miss another reading established stands. Where there
         // was no such reading, every reading had nothing to look at and neither has the debt — said
         // in the reasons they gave rather than in one minted here.
-        return missed ? new Missed() : new NotMeasured(why);
+        return missed ? new Missed() : new NotMeasured(UnaskedReasons.ofAll(unasked));
     }
 
     /**

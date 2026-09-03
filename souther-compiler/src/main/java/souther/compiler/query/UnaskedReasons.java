@@ -70,16 +70,6 @@ public final class UnaskedReasons {
         return new UnaskedReasons(held);
     }
 
-    /** Both, as one. A reason given by two readings arrives once. */
-    public UnaskedReasons union(UnaskedReasons other) {
-        if (other == null || other.reasons.equals(reasons)) {
-            return this;
-        }
-        List<ItemAssessment.Coverage.NotAsked> both = new ArrayList<>(reasons.written());
-        both.addAll(other.reasons.written());
-        return ofAll(both);
-    }
-
     /** The reasons, each once, in the order a document says them. */
     public CanonicalSelection<ItemAssessment.Coverage.NotAsked> reasons() {
         return reasons;

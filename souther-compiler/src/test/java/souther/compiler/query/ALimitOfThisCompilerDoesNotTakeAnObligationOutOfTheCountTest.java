@@ -122,7 +122,7 @@ class ALimitOfThisCompilerDoesNotTakeAnObligationOutOfTheCountTest {
     void aPointNothingWasReadAgainstIsUndecidedAboutBoth() {
         assertEquals(ObligationDisposition.Undecided.about(List.of(
                         new ObligationDisposition.Uncertainty.WhetherARowIsThere.NothingWasRead(
-                                ItemAssessment.Coverage.NotAsked.NO_ROWS),
+                                UnaskedReasons.of(ItemAssessment.Coverage.NotAsked.NO_ROWS)),
                         new ObligationDisposition.Uncertainty
                                 .WhetherARowCanBeWritten.NothingShowedIt())),
                 ObligationDisposition.of(
