@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.coverage.ArmProbe;
 import souther.compiler.coverage.CoverageSites;
 
 import java.util.ArrayList;
@@ -49,11 +50,11 @@ record ArmAccount(List<ArmObligation> obligations, ArmCensus census) {
      * @param rowsUnread what the reading of this behavior's rows went without
      * @param census     whether anything has shown {@code owed} to be short of an arm
      */
-    static ArmAccount of(List<CoverageSites.Site> owed, Set<Integer> covered,
+    static ArmAccount of(List<CoverageSites.ArmSite> owed, Set<ArmProbe> covered,
                          WeakeningSet rowsUnread, ArmCensus census) {
-        java.util.SequencedMap<CoverageSites.Obligation, List<CoverageSites.Site>> byObligation =
+        java.util.SequencedMap<CoverageSites.Obligation, List<CoverageSites.ArmSite>> byObligation =
                 new LinkedHashMap<>();
-        for (CoverageSites.Site site : owed) {
+        for (CoverageSites.ArmSite site : owed) {
             byObligation.computeIfAbsent(site.obligation(), _ -> new ArrayList<>()).add(site);
         }
         List<ArmObligation> arms = new ArrayList<>();

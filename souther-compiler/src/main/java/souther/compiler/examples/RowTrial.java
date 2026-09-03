@@ -6,11 +6,13 @@ import souther.compiler.ast.Hir;
 import souther.compiler.check.BoundaryInput;
 import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
+import souther.compiler.coverage.NumberingIdentity;
 import souther.compiler.coverage.Observation;
 import souther.compiler.coverage.Probe;
 import souther.compiler.evaluate.EvaluationContext;
 import souther.compiler.generated.GeneratedImplementations;
 import souther.compiler.generated.MemoryClassLoader;
+import souther.compiler.generated.ProbeImage;
 import souther.compiler.jvm.ClassFileImage;
 
 import java.util.ArrayList;
@@ -64,6 +66,7 @@ public final class RowTrial {
                               Map<String, ClassFileImage> classes,
                               ClassLoader parent,
                               Map<String, Hir.FnDef> values, GeneratedImplementations generated,
+                              ProbeImage probes,
                               EvaluationPolicy steps) {
         MemoryClassLoader loader = new MemoryClassLoader(classes, parent);
         Answerer answerer = Answering.generatedHere().over(generated, loader);
@@ -75,7 +78,7 @@ public final class RowTrial {
             // expands a value is that row's, and a reader kept between them would be a session
             // spanning every candidate of every combination.
             return went(new FixtureReader(module, symbols, fields, values, loader), applies, behavior, sig,
-                    inputs, steps);
+                    inputs, probes, steps);
         };
     }
 
@@ -88,7 +91,7 @@ public final class RowTrial {
      */
     private static Optional<Observation> went(FixtureReader fixtures,
                                               Answerer.Answer.Something applies, String behavior,
-                                              Sig sig, List<Hir.Expr> inputs,
+                                              Sig sig, List<Hir.Expr> inputs, ProbeImage probes,
                                               EvaluationPolicy steps) {
         List<BoundaryInput> ins = sig.ins();
         if (inputs.size() != ins.size()) {
@@ -116,7 +119,14 @@ public final class RowTrial {
             // went is how a defect in the runner comes back as a defect in the model.
             return Optional.empty();
         }
-        Probe.begin();
+        // Under the numbering the classes about to be run were emitted with. Classes that record
+        // nothing start no recording: what comes back then is no account of a run rather than an
+        // account of one that went nowhere.
+        NumberingIdentity under = probes instanceof ProbeImage.Instrumented(var numbering)
+                ? numbering : null;
+        if (under != null) {
+            Probe.begin(under);
+        }
         try {
             EvaluationContext.begin(steps.stepLimit(), steps.recursionDepthLimit());
             try {
@@ -137,7 +147,10 @@ public final class RowTrial {
             } finally {
                 EvaluationContext.end();
             }
-            return Optional.of(Probe.snapshot());
+            // Nothing was watching where the classes record nothing, so the row ran and there is no
+            // account of where it went — which is not the same as an account of it reaching
+            // nothing, and is what an empty answer means here.
+            return under == null ? Optional.empty() : Optional.of(Probe.snapshot());
         } finally {
             // On every way out, including one nothing here catches. A recording left installed is
             // where the next reader on this thread would start.

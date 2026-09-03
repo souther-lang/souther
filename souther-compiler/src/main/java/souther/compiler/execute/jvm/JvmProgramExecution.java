@@ -152,7 +152,7 @@ public final class JvmProgramExecution implements ProgramExecution {
         return RowTrial.over(asked.forExamples(), asked.symbols(), asked.fieldTypes(),
                 image.program().classes(),
                 image.around(), asked.definitions(), image.program().implementations(),
-                asked.policy());
+                image.program().probes(), asked.policy());
     }
 
     @Override

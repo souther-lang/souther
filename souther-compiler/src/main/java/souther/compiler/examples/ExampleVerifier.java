@@ -18,7 +18,9 @@ import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 import souther.compiler.check.TypeOps;
 import souther.compiler.check.TypeView;
+import souther.compiler.coverage.RunRecord;
 import souther.compiler.coverage.Probe;
+import souther.compiler.generated.ProbeImage;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.jvm.GeneratedClass;
 import souther.compiler.jvm.SoutherJvmAbi;
@@ -221,7 +223,7 @@ public final class ExampleVerifier {
         MemoryClassLoader loader = new MemoryClassLoader(artifact.classes(), parent);
         return new ExampleVerifier(module, symbols, fields, sigs, requirements, loader, values,
                 deadline, policy, answering.over(artifact.implementations(), loader), declared,
-                contracts);
+                contracts, artifact.probes());
     }
 
     /**
@@ -703,6 +705,9 @@ public final class ExampleVerifier {
     /** What each behavior of this module takes injected, in the order its constructor takes it. */
     private final Map<String, List<BehaviorRequirement>> requirements;
     private final MemoryClassLoader loader;
+    /** Whether the classes a row is run against record where it goes, and in whose numbers. What a
+     * run leaves behind is those numbers, so this is what says what they address. */
+    private final ProbeImage probes;
     /** The values a row may name: this module's own, and the ones its imports bring in. */
     private final Map<String, Hir.FnDef> values;
     /** What one row gets to be evaluated within ({@link #checkRow}). Carried rather than looked up,
@@ -758,7 +763,9 @@ public final class ExampleVerifier {
                             MemoryClassLoader loader, Map<String, Hir.FnDef> values,
                             Deadline deadline, EvaluationPolicy policy, Answerer answerer,
                             Supplier<PublishedClasses> declared,
-                            Map<ValueName.Behavior, Contract> contracts) {
+                            Map<ValueName.Behavior, Contract> contracts,
+                            ProbeImage probes) {
+        this.probes = probes;
         this.ensures = new EnsuresChecks(loader, contracts, sigs.keySet());
         this.module = module;
         this.symbols = symbols;
@@ -1181,14 +1188,21 @@ public final class ExampleVerifier {
         @Override
         public List<Diagnostic> call() {
             List<Diagnostic> mine = new ArrayList<>();
-            Probe.begin();
+            // Under the numbering the classes this row runs against were emitted with. Classes
+            // that record nothing start no recording, and what comes back is no account of a run.
+            if (verifier.probes
+                    instanceof ProbeImage.Instrumented(var numbering)) {
+                Probe.begin(numbering);
+            }
             // On this thread, because this thread is the evaluation: the budget belongs to the row,
             // and a worker reused for the next row would otherwise start where this one left off.
             EvaluationContext.begin(verifier.policy.stepLimit(),
                     verifier.policy.recursionDepthLimit());
             try {
                 verifier.checkRowNow(fixtures, target, sig, outCases, row, mine, state);
-                state.seen = Probe.snapshot();
+                if (verifier.probes instanceof ProbeImage.Instrumented) {
+                    state.recorded = new RunRecord.Recorded(Probe.snapshot());
+                }
             } finally {
                 // Read on every way out, not only the one where the row came back. A row stopped by
                 // its budget is the row whose cost is most worth knowing, and reading it after the
@@ -1246,11 +1260,11 @@ public final class ExampleVerifier {
          * it, and what it says then is what it said before the row began.
          */
         private volatile RowStatement statement = new RowStatement.StoppedBeforeItsValues();
-        /** What this row was seen to do, where the classes it ran were generated to say. Empty
-         * otherwise, and empty for a row that did not finish — a snapshot read from a row still
-         * running would be some of what it did rather than what it did. */
-        private souther.compiler.coverage.Observation seen =
-                souther.compiler.coverage.Observation.NONE;
+        /** What this row was seen to do, where the classes it ran were generated to say so. Nothing
+         * recorded otherwise, and nothing recorded for a row that did not finish — a snapshot read
+         * from a row still running would be some of what it did rather than what it did, and a row
+         * nobody watched did not pass nowhere. */
+        private RunRecord recorded = new RunRecord.NotRecording();
         /** What the row cost, in the unit it is held to. Written by the worker when it finishes, so
          * read only for a row that did. */
         private long stepsSpent;
@@ -1331,7 +1345,7 @@ public final class ExampleVerifier {
         return new RowOutcome(row.pos(), target.name(), row.identity(),
                 reached.stage(), state.disposition, state.failurePhase, state.expectedArm,
                 state.resultArm, state.inputCases, state.inputs, state.statement,
-                ran(reached, new Counting.Read(state.stepsSpent, state.seen)));
+                ran(reached, new Counting.Read(state.stepsSpent, state.recorded)));
     }
 
     /**

@@ -19,12 +19,13 @@ class AnObservationHoldsWhatItSaysAboutItselfTest {
 
     @Test
     void awayOutOfAComparisonMeansTheComparisonWasReached() {
-        ComparisonOutcome held = new ComparisonOutcome(new ComparisonEmissionSite(7), true);
+        ComparisonOutcome held = new ComparisonOutcome(7, true);
+        NumberingIdentity under = NumberingIdentity.of("fixture");
 
         assertThrows(IllegalArgumentException.class,
-                () -> new Observation(Set.of(), Set.of(held)),
+                () -> new Observation(under, Set.of(), Set.of(held)),
                 "a run that saw a comparison come out one way reached it");
-        assertTrue(new Observation(Set.of(7), Set.of(held)).saw(held),
+        assertTrue(new Observation(under, Set.of(7), Set.of(held)).comparisons().contains(held),
                 "and one that holds both says so");
     }
 
@@ -37,11 +38,10 @@ class AnObservationHoldsWhatItSaysAboutItselfTest {
      */
     @Test
     void bothWaysOutOfOneComparisonAreARunThatCameBackToIt() {
-        ComparisonEmissionSite twice = new ComparisonEmissionSite(3);
-        Observation seen = new Observation(Set.of(3),
-                Set.of(new ComparisonOutcome(twice, true), new ComparisonOutcome(twice, false)));
+        Observation seen = new Observation(NumberingIdentity.of("fixture"), Set.of(3),
+                Set.of(new ComparisonOutcome(3, true), new ComparisonOutcome(3, false)));
 
-        assertTrue(seen.saw(new ComparisonOutcome(twice, true)));
-        assertTrue(seen.saw(new ComparisonOutcome(twice, false)));
+        assertTrue(seen.comparisons().contains(new ComparisonOutcome(3, true)));
+        assertTrue(seen.comparisons().contains(new ComparisonOutcome(3, false)));
     }
 }

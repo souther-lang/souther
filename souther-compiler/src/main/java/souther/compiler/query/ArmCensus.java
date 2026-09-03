@@ -1,5 +1,7 @@
 package souther.compiler.query;
 
+import souther.compiler.coverage.ArmProbe;
+
 import java.util.LinkedHashSet;
 import java.util.Set;
 
@@ -55,12 +57,12 @@ public sealed interface ArmCensus {
      * @param behavior     whose arms these are, which is what the fact is named by
      * @param provedWrong  arms proven unreachable that a row went through anyway
      */
-    static ArmCensus of(String behavior, Set<Integer> provedWrong) {
+    static ArmCensus of(String behavior, Set<ArmProbe> provedWrong) {
         if (provedWrong.isEmpty()) {
             return new Settled();
         }
         Set<Weakening> by = new LinkedHashSet<>();
-        for (int probe : provedWrong) {
+        for (ArmProbe probe : provedWrong) {
             by.add(new Weakening.ProofContradicted(behavior, probe));
         }
         return new Undecided(WeakeningSet.ofAll(by));

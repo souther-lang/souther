@@ -1,5 +1,8 @@
 package souther.compiler.partition;
 
+import souther.compiler.coverage.Numberings;
+import souther.compiler.coverage.SiteNumbering;
+
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.RuleReadingSource;
@@ -212,6 +215,10 @@ class ABorderDebtIsTheLineTheAuthorWroteTest {
                 new Level.OnACarrier(carrier, souther.compiler.numeric.Count.of(at)));
     }
 
+    /** The numbering this fixture's places are of. One of them, so that two readings written here
+     *  as the same occurrence address one place. */
+    private static final SiteNumbering WHERE = Numberings.ofComparisons(8);
+
     /**
      * One reading of one comparison: the same rule and the same place it is written, at the
      * occurrence the call it was spliced into was numbered.
@@ -228,7 +235,7 @@ class ABorderDebtIsTheLineTheAuthorWroteTest {
                         new souther.compiler.check.RuleCitation.WrittenAt(
                                 souther.compiler.diag.Citation.of(
                                         new souther.compiler.diag.SourcePos(15, 16))),
-                        new souther.compiler.coverage.ComparisonEmissionSite(occurrence)),
+                        WHERE.comparison(occurrence)),
                 new LineFacts(new souther.compiler.check.ComparisonClaim.Cut(
                         souther.compiler.numeric.Towards.BELOW, true)));
     }

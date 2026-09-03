@@ -7,7 +7,10 @@ import souther.compiler.observe.ArmObservation;
 import souther.compiler.inputs.TermPath;
 
 
+import souther.compiler.coverage.AlignedObservation;
+import souther.compiler.coverage.ArmProbe;
 import souther.compiler.coverage.CoverageSites;
+import souther.compiler.coverage.SiteNumbering;
 import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.msg.DeadBranchMessage;
 import souther.compiler.diag.msg.ExampleMessage;
@@ -1121,10 +1124,14 @@ public final class Adequacy {
             if (!proven.present()) {
                 return Answer.absent();
             }
-            Set<Integer> lit = new LinkedHashSet<>();
+            // The numbering the recordings below are read under, which is this module's own.
+            Bodies.Elaborated checked = db.ask(new Bodies.Checked(name)).value();
+            CoverageSites.Plan plan =
+                    checked == null ? CoverageSites.Plan.NONE : checked.plan();
+            Set<ArmProbe> lit = new LinkedHashSet<>();
             for (RowReading observed : db.ask(new RowReadings(name)).value().values()) {
                 for (RowOutcome row : observed.rowsSeen()) {
-                    lit.addAll(seenBy(row).taken());
+                    lit.addAll(seenBy(row, plan).arms());
                 }
             }
             Map<String, souther.compiler.check.PathReachability.Answers.AsRun> out =
@@ -1514,7 +1521,8 @@ public final class Adequacy {
             }
             return Answer.of(Coverages.merged(Coverages.searched(measured, subject,
                     probing(sig, subject, constructing(db, name),
-                            runningRowsOf(trialling(db, name), behavior, sig)),
+                            runningRowsOf(trialling(db, name), behavior, sig,
+                                    numberingOf(db, name))),
                     divided.reaching())));
         }
 
@@ -1900,6 +1908,19 @@ public final class Adequacy {
         return spec == null ? null : subjectOf(db, module, spec);
     }
 
+    /**
+     * The numbering a run of {@code module}'s classes is read under.
+     *
+     * <p>Asked of the check that holds the bodies, which is where a module's numbering is derived.
+     * A module whose bodies were not read has none, and that is handed over as a numbering of
+     * nothing: what a recording made under a real one aligns to then is nothing, which is refused
+     * where the two meet rather than answered about places it was never near.
+     */
+    static CoverageSites.Plan numberingOf(Db db, String module) {
+        Bodies.Elaborated checked = db.ask(new Bodies.Checked(module)).value();
+        return checked == null ? CoverageSites.Plan.NONE : checked.plan();
+    }
+
     /** The behavior of that name that has inputs of its own, or null. A composition's inputs are its
      *  first stage's and are divided there. */
     private static Hir.SpecBehavior specOf(CheckSurface prepared,
@@ -2057,12 +2078,15 @@ public final class Adequacy {
             // measured against the rows at all, which is what `off` answers.
             Level level = levelOf(db);
             return Answer.of(assess(subject,
-                    RowReadings.readingFor(db.ask(new RowReadings(name)).value(), behavior), level));
+                    RowReadings.readingFor(db.ask(new RowReadings(name)).value(), behavior), level,
+                    // The numbering the rows' recordings are read under, which is this module's own.
+                    numberingOf(db, name).numbering()));
         }
 
         /** Every line of one behavior, with what the rows and the decoder say about each. */
         private static LineReadings assess(souther.compiler.partition.MeasuredInput subject,
-                                           RowReading observed, Level level) {
+                                           RowReading observed, Level level,
+                                           SiteNumbering numbering) {
             souther.compiler.partition.Partitions.Partitioning partitioning = subject.partitioning();
             // Two sources and not one. A line drawn at a count of a position comes off that position's
             // axis; a line drawn between two positions comes off the comparison and has no axis to come
@@ -2077,9 +2101,9 @@ public final class Adequacy {
                 // is answered at cannot arrive somewhere as the wrong one of the three.
                 out.addAll(Coverages.assess(partitioning.along(axis), subject, observed, level,
                         ItemAssessment.WritabilityProjection.ofReading(
-                                partitioning.edgeIsKnownWritable(axis.term()))));
+                                partitioning.edgeIsKnownWritable(axis.term())), numbering));
             }
-            out.addAll(Coverages.assessBetween(subject, observed, level));
+            out.addAll(Coverages.assessBetween(subject, observed, level, numbering));
             return new LineReadings(out);
         }
 
@@ -2202,8 +2226,8 @@ public final class Adequacy {
          * again where the numbers are made, and a second derivation beside this one would be two
          * denominators free to disagree about one body.
          */
-        public static List<souther.compiler.coverage.CoverageSites.Site> owed(
-                List<souther.compiler.coverage.CoverageSites.Site> all,
+        public static List<CoverageSites.ArmSite> owed(
+                List<CoverageSites.ArmSite> all,
                 souther.compiler.check.PathReachability.Answers.AsRun reachable) {
             return all.stream()
                     .filter(site -> !reachable.answers().nothingArrivesAt(site.index())).toList();
@@ -2228,8 +2252,8 @@ public final class Adequacy {
          * elsewhere in the body could not be told apart.
          */
         public static BranchEvidence measured(String behavior,
-                                              List<souther.compiler.coverage.CoverageSites.Site> all,
-                                              Set<Integer> covered,
+                                              List<CoverageSites.ArmSite> all,
+                                              Set<ArmProbe> covered,
                                               souther.compiler.check.PathReachability.Answers.AsRun reachable,
                                               WeakeningSet weakenings) {
             ArmAccount account = ArmAccount.of(owed(all, reachable), covered, weakenings,
@@ -2305,10 +2329,10 @@ public final class Adequacy {
             // compile stopped in report every behavior as one with no body (issue #996).
             boolean bodiesRead = checked != null;
             Map<String, RowReading> byTarget = db.ask(new RowReadings(name)).value();
-            Set<Integer> lit = new LinkedHashSet<>();
+            Set<ArmProbe> lit = new LinkedHashSet<>();
             for (RowReading observed : byTarget.values()) {
                 for (RowOutcome row : observed.rowsSeen()) {
-                    lit.addAll(seenBy(row).taken());
+                    lit.addAll(seenBy(row, plan).arms());
                 }
             }
 
@@ -2318,7 +2342,7 @@ public final class Adequacy {
                 // The arms, and not every site of the behavior. A comparison of a guard's condition
                 // has a site of its own and is not a fork a row is in or out of, so counting it here
                 // would report an arm the body does not have.
-                List<souther.compiler.coverage.CoverageSites.Site> arms =
+                List<CoverageSites.ArmSite> arms =
                         plan.arms(behavior.name());
                 RowReading observed = RowReadings.readingFor(byTarget, behavior.name());
                 souther.compiler.check.PathReachability.Answers.AsRun arrives =
@@ -2329,9 +2353,9 @@ public final class Adequacy {
                 if (absent != null) {
                     return absent;
                 }
-                Set<Integer> covered = new LinkedHashSet<>(lit);
+                Set<ArmProbe> covered = new LinkedHashSet<>(lit);
                 covered.retainAll(arms.stream()
-                        .map(souther.compiler.coverage.CoverageSites.Site::index).toList());
+                        .map(CoverageSites.ArmSite::index).toList());
                 return BranchEvidence.measured(behavior.name(), arms, covered,
                         arrives, rowsBehind(observed));
             });
@@ -2365,7 +2389,7 @@ public final class Adequacy {
          */
         private static BranchEvidence whyNoArms(String module, boolean writesItsOwnBody,
                 boolean bodiesRead,
-                List<souther.compiler.coverage.CoverageSites.Site> arms,
+                List<CoverageSites.ArmSite> arms,
                 souther.compiler.check.PathReachability.Answers.AsRun arrives,
                 boolean instrumented, RowReading observed) {
             if (!writesItsOwnBody) {
@@ -2809,7 +2833,7 @@ public final class Adequacy {
                         constructing(db, name),
                         read,
                         runningRowsOf(trialling(db, name),
-                                behavior, sig),
+                                behavior, sig, plan),
                         levelOf(db).runsInstrumentedRows(),
                         db.ask(new Front.Adequacy()).value().generation());
             } catch (LinkageError _) {
@@ -2965,8 +2989,9 @@ public final class Adequacy {
          * this finding is one of the arms that plan names — so the entry is there whatever the run
          * did, including the runs that never looked at anything.
          */
-        private static GenerationOutcome atArm(souther.compiler.coverage.CoverageSites.Site arm,
-                                               souther.compiler.partition.FillResult composed) {
+        private static GenerationOutcome atArm(
+                CoverageSites.ArmSite arm,
+                souther.compiler.partition.FillResult composed) {
             Generator.ArmOwed owed = new Generator.ArmOwed(arm.index());
             souther.compiler.partition.ArmDisposition answer = composed.discharge().at(owed);
             if (answer == null) {
@@ -3330,7 +3355,7 @@ public final class Adequacy {
             List<Generator.ObservedRow> existing = rows.stream()
                     .map(row -> new Generator.ObservedRow(
                             InputClassifications.of(row.inputs(), axes),
-                            watched(row, recording)))
+                            watched(row, recording, plan)))
                     .toList();
             return Generator.fill(asked, existing, check,
                     souther.compiler.reading.CoverageRead
@@ -3358,11 +3383,10 @@ public final class Adequacy {
             // them in. Handed over as a list rather than as the set that kept them once apiece:
             // what the plan is asking for is the order, and this is where what the order means is
             // known.
-            Set<Integer> arms = new LinkedHashSet<>();
+            Set<ArmProbe> arms = new LinkedHashSet<>();
             for (Finding finding : owed) {
                 if (finding.about()
-                        instanceof About.AnArmNoRowGoesThrough(
-                                souther.compiler.coverage.CoverageSites.Site arm)) {
+                        instanceof About.AnArmNoRowGoesThrough(CoverageSites.ArmSite arm)) {
                     arms.add(arm.index());
                 }
             }
@@ -3468,7 +3492,8 @@ public final class Adequacy {
      * what anybody asking after one does — the search that composes them, and whoever asks what one
      * of them would settle.
      */
-    static Generator.Trial runningRowsOf(RowTrials trials, String behavior, Sig sig) {
+    static Generator.Trial runningRowsOf(RowTrials trials, String behavior, Sig sig,
+                                         CoverageSites.Plan plan) {
         if (trials == null) {
             return Generator.Trial.NOTHING_RUNS;
         }
@@ -3476,7 +3501,11 @@ public final class Adequacy {
         return inputs -> application
                 .run(inputs.stream()
                         .map(souther.compiler.partition.FixtureTemplate::value).toList())
-                .<Generator.Watched>map(Generator.Watched.Ran::new)
+                // Read under the numbering the caller is asking about. What a run left behind says
+                // which numbering it was made under, so a recording of classes numbered otherwise
+                // is refused here rather than answered about places it was never near.
+                .<Generator.Watched>map(seen -> new Generator.Watched.Ran(
+                        plan.numbering().align(seen)))
                 .orElseGet(Generator.Watched.NoAccount::new);
     }
 
@@ -4989,10 +5018,12 @@ public final class Adequacy {
      * answer for. A row whose counting was never read is known to have done none of it, and that it
      * was left undecided is said where the row is reported.
      */
-    private static souther.compiler.coverage.Observation seenBy(RowOutcome row) {
-        return switch (ObservedInputs.of(row).watched()) {
+    private static AlignedObservation seenBy(
+            RowOutcome row, CoverageSites.Plan plan) {
+        return switch (ObservedInputs.of(row, plan.numbering()).watched()) {
             case Generator.Watched.Ran(var account) -> account;
-            case Generator.Watched.NoAccount _ -> souther.compiler.coverage.Observation.NONE;
+            case Generator.Watched.NoAccount _ ->
+                    AlignedObservation.NONE;
         };
     }
 
@@ -5005,7 +5036,8 @@ public final class Adequacy {
      * may well fill reads as one it was shown not to.
      */
     private static souther.compiler.partition.Generator.Watched watched(RowOutcome row,
-                                                                        boolean recording) {
+                                                                        boolean recording,
+                                                                        CoverageSites.Plan plan) {
         if (!recording) {
             // The row ran — every row of an evaluated source does — and nothing was recording it.
             // Answered as having no account rather than as a run with an empty one, which is what a
@@ -5015,7 +5047,7 @@ public final class Adequacy {
         // What the row's own run came to, which is one reading and is made where a tuple of values
         // is read. Whether this build was recording is the question above and is this caller's: it
         // follows from what was asked for rather than from the row.
-        return ObservedInputs.of(row).watched();
+        return ObservedInputs.of(row, plan.numbering()).watched();
     }
 
 }

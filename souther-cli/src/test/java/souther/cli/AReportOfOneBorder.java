@@ -49,6 +49,23 @@ import java.util.function.Function;
  */
 final class AReportOfOneBorder {
 
+    /**
+     * Where the comparison the lines below come off is recorded.
+     *
+     * <p>Stated rather than compiled, like the rest of this fixture. A place is a place of a
+     * numbering and of nothing else, so what is written here is the numbering — one comparison, in
+     * the body this fixture stands for — and the place is read out of it.
+     */
+    private static final souther.compiler.coverage.ComparisonEmissionSite WHERE =
+            souther.compiler.coverage.SiteNumbering.of(
+                            new souther.compiler.coverage.NumberingIdentity("example.rate",
+                                    Map.of(),
+                                    List.of(new souther.compiler.coverage.SiteAddress.Comparison(
+                                            new souther.compiler.coverage.NodeAddress("example.rate",
+                                                    java.util.Set.of(
+                                                            souther.compiler.coverage.CorePath.ROOT))))))
+                    .comparison(0);
+
     /** The number the lines below are on, which their orders are the orders of. */
     private static final NumericTerm.ValueOf AT_W_A =
             new NumericTerm.ValueOf(TermPath.of("w").then("a"));
@@ -99,7 +116,7 @@ final class AReportOfOneBorder {
                         new souther.compiler.check.RuleCitation.WrittenAt(
                                 souther.compiler.diag.Citation.of(
                                         new souther.compiler.diag.SourcePos(3, 5))),
-                        new souther.compiler.coverage.ComparisonEmissionSite(0)),
+                        WHERE),
                 new souther.compiler.partition.LineFacts(
                         new ComparisonClaim.Cut(souther.compiler.numeric.Towards.BELOW, true)));
         return Border.at(

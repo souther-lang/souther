@@ -1,5 +1,7 @@
 package souther.compiler.reach;
 
+import souther.compiler.coverage.ArmProbe;
+
 /**
  * What shows that something arrives.
  *
@@ -16,7 +18,7 @@ package souther.compiler.reach;
 public sealed interface Witness permits ARunWentThrough, EveryRuleReadAndNothingAbove {
 
     /** @see ARunWentThrough */
-    static Witness aRunWentThrough(int probe) {
+    static Witness aRunWentThrough(ArmProbe probe) {
         return new ARunWentThrough(probe);
     }
 
@@ -33,7 +35,7 @@ public sealed interface Witness permits ARunWentThrough, EveryRuleReadAndNothing
  * settles a proof that said otherwise: what a row did happened, so a reading that ruled it out was
  * wrong about the model rather than the row being wrong about the rules.
  */
-record ARunWentThrough(int probe) implements Witness {}
+record ARunWentThrough(ArmProbe probe) implements Witness {}
 
 /**
  * The rules leave the case standing, every rule reaching the position was read, and nothing stands

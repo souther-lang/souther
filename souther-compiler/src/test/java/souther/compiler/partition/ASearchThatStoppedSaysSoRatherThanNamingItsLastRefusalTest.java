@@ -8,7 +8,7 @@ import souther.compiler.check.RuleReadings;
 import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
 import souther.compiler.core.Core;
-import souther.compiler.coverage.Observation;
+import souther.compiler.coverage.AlignedObservation;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.reading.Interaction;
 import souther.compiler.reading.CoverageRead;
@@ -154,7 +154,7 @@ class ASearchThatStoppedSaysSoRatherThanNamingItsLastRefusalTest {
 
     /** A run that did nothing at all, which is a run that missed every combination. */
     private static final Generator.Watched MISSED =
-            new Generator.Watched.Ran(Observation.NONE);
+            new Generator.Watched.Ran(AlignedObservation.NONE);
 
     /** What the search made of the one combination named by {@code classes}. */
     private static Generator.UnresolvedCombination.Reason reasonFor(

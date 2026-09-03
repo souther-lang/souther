@@ -8,10 +8,9 @@ import souther.compiler.check.RuleReadings;
 import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
 import souther.compiler.core.Core;
-import souther.compiler.coverage.ComparisonOutcome;
+import souther.compiler.coverage.AlignedObservation;
 import souther.compiler.coverage.ControlClaim;
-import souther.compiler.coverage.ControlPointId;
-import souther.compiler.coverage.Observation;
+import souther.compiler.coverage.Runs;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.reading.Interaction;
 import souther.compiler.reading.CoverageRead;
@@ -74,7 +73,7 @@ class ACandidateThatMissedIsNotOfferedTest {
 
     /** A run that did nothing at all, which is a run that missed every combination. */
     private static final Generator.Watched MISSED =
-            new Generator.Watched.Ran(Observation.NONE);
+            new Generator.Watched.Ran(AlignedObservation.NONE);
 
     /**
      * A combination every candidate missed is not offered, and is not called impossible.
@@ -101,7 +100,7 @@ class ACandidateThatMissedIsNotOfferedTest {
     @Test
     void aCandidateThatArrivedIsOffered() {
         Model model = Model.of(SHIPPING, "shippingFee");
-        Observation everything = doing(everyClaimOf(model));
+        AlignedObservation everything = doing(everyClaimOf(model));
 
         FillResult filled =
                 fill(model, _ -> new Generator.Watched.Ran(everything));
@@ -186,19 +185,8 @@ class ACandidateThatMissedIsNotOfferedTest {
     }
 
     /** A run that did everything {@code claims} names. */
-    private static Observation doing(List<ControlClaim> claims) {
-        Set<Integer> taken = new LinkedHashSet<>();
-        Set<ComparisonOutcome> ways = new LinkedHashSet<>();
-        for (ControlClaim claim : claims) {
-            switch (claim.at()) {
-                case ControlPointId.ArmOccurrence arm -> taken.add(arm.probe().getAsInt());
-                case ControlPointId.ComparisonPoint point -> {
-                    taken.add(point.at().value());
-                    ways.add(point.way());
-                }
-            }
-        }
-        return new Observation(taken, ways);
+    private static AlignedObservation doing(List<ControlClaim> claims) {
+        return Runs.doing(claims);
     }
 
     private record Model(MeasuredInput subject, CoverageRead.Read read) {

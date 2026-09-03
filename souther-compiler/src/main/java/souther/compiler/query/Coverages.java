@@ -8,6 +8,7 @@ import souther.compiler.check.Symbols;
 import souther.compiler.numeric.Place;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.CoverageSites;
+import souther.compiler.coverage.SiteNumbering;
 import souther.compiler.observe.Classification;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.RowOutcome;
@@ -604,7 +605,8 @@ final class Coverages {
             List<Border> lines, souther.compiler.partition.MeasuredInput subject,
             souther.compiler.query.Adequacy.RowReading observed,
             souther.compiler.query.Adequacy.Level level,
-            ItemAssessment.WritabilityProjection projection) {
+            ItemAssessment.WritabilityProjection projection,
+            SiteNumbering numbering) {
         // One entry per reading and not per line. A guard inside a non-recursive helper is read once
         // per call of that helper, and the rows do not owe the same border twice for having been
         // offered it twice — but each reading is reached under its caller's own conditions, so what
@@ -612,7 +614,8 @@ final class Coverages {
         // still apart. They are brought together by {@link #merged}, after that.
         List<BorderAssessment> out = new ArrayList<>();
         for (Border each : lines) {
-            out.add(assessed(each, reading(subject.at(each), projection), observed, level));
+            out.add(assessed(each, reading(subject.at(each), projection), observed, level,
+                    numbering));
         }
         return List.copyOf(out);
     }
@@ -718,7 +721,8 @@ final class Coverages {
      */
     private static BorderAssessment assessed(Border border, OneShapeOfBorder shape,
                                              souther.compiler.query.Adequacy.RowReading observed,
-                                             souther.compiler.query.Adequacy.Level level) {
+                                             souther.compiler.query.Adequacy.Level level,
+                                             SiteNumbering numbering) {
         // Whether meeting this border takes the comparison having run, asked of the rule rather than
         // read off which kind it is, and asked once for the border rather than once per point. A
         // guard's line is about a place in a body and is reached or not; an invariant's and a
@@ -732,7 +736,8 @@ final class Coverages {
         // The rows as the values they hold and what running them recorded, which is the whole of
         // what a point is met by. Read once for the border: what a row is stays the same however
         // many of the four points it is put to.
-        List<ObservedInputs> rows = observed.rowsSeen().stream().map(ObservedInputs::of).toList();
+        List<ObservedInputs> rows = observed.rowsSeen().stream()
+                .map(row -> ObservedInputs.of(row, numbering)).toList();
 
         java.util.Map<DomainPoint, ItemAssessment> items = new java.util.LinkedHashMap<>();
         for (DomainPoint point : border.answers().keySet()) {
@@ -1143,7 +1148,8 @@ final class Coverages {
     static List<BorderAssessment> assessBetween(
             souther.compiler.partition.MeasuredInput subject,
             souther.compiler.query.Adequacy.RowReading observed,
-            souther.compiler.query.Adequacy.Level level) {
+            souther.compiler.query.Adequacy.Level level,
+            SiteNumbering numbering) {
         Partitions.Partitioning partitioning = subject.partitioning();
         // One entry per reading, the way a line at a place is read: what several readings of one
         // line come to is one answer, and it is put together where the last thing that is a
@@ -1152,7 +1158,7 @@ final class Coverages {
         for (Border each : partitioning.between()) {
             out.add(assessed(each, reading(subject.at(each),
                             ItemAssessment.WritabilityProjection.NOT_COMPUTED),
-                    observed, level));
+                    observed, level, numbering));
         }
         return List.copyOf(out);
     }

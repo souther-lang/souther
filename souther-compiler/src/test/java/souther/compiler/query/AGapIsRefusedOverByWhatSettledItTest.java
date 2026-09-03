@@ -2,8 +2,10 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.coverage.ArmProbe;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.coverage.DecidedBy;
+import souther.compiler.coverage.Numberings;
 import souther.compiler.coverage.SourceOutcome;
 import souther.compiler.diag.Citation;
 import souther.compiler.diag.SourcePos;
@@ -12,6 +14,7 @@ import souther.compiler.types.CoverageConstruct;
 import souther.compiler.types.CoverageOrigin;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -40,11 +43,15 @@ class AGapIsRefusedOverByWhatSettledItTest {
     private static final CoverageOrigin UNSETTLED =
             CoverageOrigin.written("m", 1, CoverageConstruct.IF);
 
-    private static CoverageSites.Site arm(CoverageOrigin fork, int index, DecidedBy decided) {
-        return new CoverageSites.Site("b",
+    /** Four places of one numbering, so that arms put in one list are addresses of one. */
+    private static final Map<Integer, ArmProbe> PLACES = Numberings.arms(4);
+
+    private static CoverageSites.ArmSite arm(CoverageOrigin fork, int index, DecidedBy decided) {
+        return new CoverageSites.ArmSite("b",
                 new SourceOutcome.Held(new SourceOutcome.HeldBy.Condition()),
                 Citation.of(new SourcePos(1, 1, new SourceId("0"))),
-                index, index, new CoverageSites.Obligation("b", fork, index, decided));
+                PLACES.get(index), index,
+                new CoverageSites.Obligation("b", fork, index, decided));
     }
 
     /** Every row read; one fork settled with a row through one of its arms, and one fork beside it
@@ -55,7 +62,7 @@ class AGapIsRefusedOverByWhatSettledItTest {
                         arm(SETTLED, 1, DecidedBy.THE_DECLARATION),
                         arm(UNSETTLED, 2, DecidedBy.NOT_SAID),
                         arm(UNSETTLED, 3, DecidedBy.NOT_SAID)),
-                Set.of(0), Adequacy.NOTHING_PROVEN, WeakeningSet.none()).arms();
+                Set.of(PLACES.get(0)), Adequacy.NOTHING_PROVEN, WeakeningSet.none()).arms();
     }
 
     @Test
@@ -80,7 +87,7 @@ class AGapIsRefusedOverByWhatSettledItTest {
                         arm(SETTLED, 1, DecidedBy.THE_DECLARATION),
                         arm(UNSETTLED, 2, DecidedBy.NOT_SAID),
                         arm(UNSETTLED, 3, DecidedBy.NOT_SAID)),
-                Set.of(0), Adequacy.NOTHING_PROVEN, WeakeningSet.none());
+                Set.of(PLACES.get(0)), Adequacy.NOTHING_PROVEN, WeakeningSet.none());
 
         assertEquals(WeakeningSet.of(new Weakening.ArmsUnsettled(UNSETTLED)),
                 measured.measured().weakening(),

@@ -133,7 +133,7 @@ class AnOutcomeIsNamedByWhatWasWrittenTest {
         // comprehension have none.
         assertEquals(List.of("constructed", "else"),
                 planOf(AN_ATTEMPTED_GUARD).sites().stream()
-                        .filter(CoverageSites.Site::isArm)
+                        .filter(site -> site instanceof CoverageSites.ArmSite)
                         .map(souther.compiler.report.ArmVocabulary::label).toList());
     }
 
@@ -156,7 +156,7 @@ class AnOutcomeIsNamedByWhatWasWrittenTest {
         // And the two conditions stay apart, which is what `lowered` is for. Four obligations and
         // not two: each condition owes a row through each of its ways.
         assertEquals(4, planOf(THROUGH_A_HELPER).sites().stream()
-                        .filter(CoverageSites.Site::isArm)
+                        .filter(site -> site instanceof CoverageSites.ArmSite)
                         .map(CoverageSites.Site::obligation).distinct().count(),
                 "two forks of the one comprehension, two ways each");
     }
@@ -245,8 +245,8 @@ class AnOutcomeIsNamedByWhatWasWrittenTest {
     /** And a site cannot be made holding one, which is where the two halves are first put together. */
     @Test
     void aSiteCannotHoldAPairTheLanguageDoesNotHave() {
-        assertThrows(IllegalArgumentException.class, () -> new CoverageSites.Site("b", built(), null,
-                0, 0, new CoverageSites.Obligation("b",
+        assertThrows(IllegalArgumentException.class, () -> new CoverageSites.ArmSite("b", built(),
+                null, Numberings.arm(1, 0), 0, new CoverageSites.Obligation("b",
                         CoverageOrigin.written("m", 0, CoverageConstruct.COMPREHENSION), 0,
                         souther.compiler.coverage.DecidedBy.THE_DECLARATION)));
     }
@@ -269,7 +269,7 @@ class AnOutcomeIsNamedByWhatWasWrittenTest {
                 } catch (IllegalArgumentException _) {
                     continue;   // not a pair the language has, so nothing to agree about
                 }
-                assertEquals(outcome.isArm(), name.isArm(),
+                assertEquals(outcome instanceof SourceOutcome.Arm, name.isArm(),
                         () -> construct + " with " + outcome + " is named " + name);
             }
         }
@@ -313,19 +313,19 @@ class AnOutcomeIsNamedByWhatWasWrittenTest {
 
     // --- helpers ------------------------------------------------------------------------------------
 
-    private static SourceOutcome held() {
+    private static SourceOutcome.Arm held() {
         return new SourceOutcome.Held(new SourceOutcome.HeldBy.Condition());
     }
 
-    private static SourceOutcome failed() {
+    private static SourceOutcome.Arm failed() {
         return new SourceOutcome.Failed(new SourceOutcome.FailedBy.Condition());
     }
 
-    private static SourceOutcome built() {
+    private static SourceOutcome.Arm built() {
         return new SourceOutcome.Held(new SourceOutcome.HeldBy.Construction());
     }
 
-    private static SourceOutcome refused() {
+    private static SourceOutcome.Arm refused() {
         return new SourceOutcome.Failed(
                 new SourceOutcome.FailedBy.Construction(Optional.empty()));
     }
@@ -333,7 +333,7 @@ class AnOutcomeIsNamedByWhatWasWrittenTest {
     /** Each arm as the pair that says what it is: what the author wrote, and which way through it. */
     private static List<String> namesIn(String source) {
         return planOf(source).sites().stream()
-                .filter(CoverageSites.Site::isArm)
+                .filter(site -> site instanceof CoverageSites.ArmSite)
                 .map(site -> site.construct() + " "
                         + site.name().name().toLowerCase(java.util.Locale.ROOT))
                 .toList();

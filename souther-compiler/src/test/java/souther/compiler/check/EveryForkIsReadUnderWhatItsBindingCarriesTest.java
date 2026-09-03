@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 import souther.compiler.Compiler;
+import souther.compiler.coverage.ArmProbe;
 import souther.compiler.coverage.ControlPointId;
 import souther.compiler.diag.CompileException;
 import souther.compiler.query.Adequacy;
@@ -183,7 +184,7 @@ class EveryForkIsReadUnderWhatItsBindingCarriesTest {
         // What that answer does with a run, at the value it is made of.
         PathReachability.Answers answers =
                 c.db().ask(new Adequacy.PathReached("demo")).value().get("charge");
-        int probe = answers.found().entrySet().stream()
+        ArmProbe probe = answers.found().entrySet().stream()
                 .filter(each -> each.getValue() instanceof Reachability.Unreachable)
                 .filter(each -> each.getKey() instanceof ControlPointId.ArmOccurrence)
                 .map(each -> (ControlPointId.ArmOccurrence) each.getKey())

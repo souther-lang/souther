@@ -22,7 +22,9 @@ import java.util.List;
  */
 public record CorePath(List<CoreStructure.Edge> edges) {
 
-    static final CorePath ROOT = new CorePath(List.of());
+    /** The body itself, which is where every way down starts. Public because the constructor
+     *  beside it is: this is that same value under the name for it. */
+    public static final CorePath ROOT = new CorePath(List.of());
 
     public CorePath {
         if (edges == null) {

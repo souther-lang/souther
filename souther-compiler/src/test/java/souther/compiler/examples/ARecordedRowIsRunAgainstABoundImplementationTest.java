@@ -11,6 +11,7 @@ import souther.compiler.diag.Diagnostic;
 import souther.compiler.generated.EvaluationArtifact;
 import souther.compiler.meta.PublishedClasses;
 import souther.compiler.observe.Applied;
+import souther.compiler.coverage.RunRecord;
 import souther.compiler.observe.Counting;
 import souther.compiler.observe.Disposition;
 import souther.compiler.observe.FailurePhase;
@@ -199,8 +200,10 @@ class ARecordedRowIsRunAgainstABoundImplementationTest {
         for (RowOutcome row : evaluated(ANSWERS).rows()) {
             Counting.Read read = assertInstanceOf(Counting.Read.class, row.run().counting(),
                     "the counting was read");
-            assertEquals(java.util.Set.of(), read.observation().taken(),
-                    "and lit no branch, there being no body to light one");
+            assertInstanceOf(RunRecord.NotRecording.class, read.recorded(),
+                    "and nothing recorded where the row went: the implementation is bound from"
+                            + " outside this compile, so there is no probed body to write anything"
+                            + " down — which is not the same as a run that lit no branch");
         }
     }
 

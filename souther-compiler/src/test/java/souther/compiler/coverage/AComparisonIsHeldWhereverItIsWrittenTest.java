@@ -332,14 +332,15 @@ class AComparisonIsHeldWhereverItIsWrittenTest {
     void aPlanCannotNumberAComparisonItsCatalogNeverHeld() {
         Checked checked = bodiesOf(NAMED_BEFORE_THE_FORK);
         ComparisonOccurrence elsewhere = new ComparisonOccurrence("nowhere", "fee", 0);
-        Map<ComparisonOccurrence, Integer> numbered = new LinkedHashMap<>();
-        numbered.put(elsewhere, 0);
+        SiteNumbering numbering = Numberings.ofComparisons(1);
+        Map<ComparisonOccurrence, ComparisonEmissionSite> numbered = new LinkedHashMap<>();
+        numbered.put(elsewhere, numbering.comparison(0));
 
         IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
                 () -> new CoverageSites.Plan(List.of(), List.of(), new IdentityHashMap<>(),
                         numbered, new IdentityHashMap<>(), new LinkedHashMap<>(),
                         java.util.Set.of(), new IdentityHashMap<>(), catalogOf(checked),
-                        NumberingIdentity.of("example")));
+                        numbering));
         assertTrue(refused.getMessage().contains("one answer or they are two"),
                 refused.getMessage());
     }

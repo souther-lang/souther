@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.coverage.ArmProbe;
 import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
@@ -113,19 +114,20 @@ public final class PathReachability {
          *
          * @param lit the probes a row was recorded at
          */
-        public AsRun asRunWith(java.util.Set<Integer> lit) {
+        public AsRun asRunWith(java.util.Set<ArmProbe> lit) {
             Map<ControlPointId, Reachability> out = new LinkedHashMap<>(found);
-            java.util.Set<Integer> provedWrong = new java.util.LinkedHashSet<>();
+            java.util.Set<ArmProbe> provedWrong =
+                    new java.util.LinkedHashSet<>();
             found.forEach((where, said) -> {
                 if (!(where instanceof ControlPointId.ArmOccurrence arm)
-                        || arm.probe().isEmpty() || !lit.contains(arm.probe().getAsInt())) {
+                        || arm.probe().isEmpty() || !lit.contains(arm.probe().get())) {
                     return;
                 }
                 if (said instanceof Reachability.Unreachable) {
-                    provedWrong.add(arm.probe().getAsInt());
+                    provedWrong.add(arm.probe().get());
                 }
                 out.put(where, new Reachability.Reachable(
-                        Witness.aRunWentThrough(arm.probe().getAsInt())));
+                        Witness.aRunWentThrough(arm.probe().get())));
             });
             // The arrivals as they were: a run corrects what an arm's denominator counts, and the
             // geometry the arrivals decide was settled from the model before any row ran.
@@ -139,7 +141,8 @@ public final class PathReachability {
          *                    the model is wrong then — this reading is — and a measure says so
          *                    rather than quietly counting the arm again
          */
-        public record AsRun(Answers answers, java.util.Set<Integer> provedWrong) {
+        public record AsRun(Answers answers,
+                            java.util.Set<ArmProbe> provedWrong) {
 
             public AsRun {
                 provedWrong = java.util.Set.copyOf(provedWrong);
@@ -154,10 +157,10 @@ public final class PathReachability {
 
         /** Whether nothing arrives at the arm recorded at {@code probe}. What every denominator
          *  takes an arm out by, and the one arm of the answer that takes anything out. */
-        public boolean nothingArrivesAt(int probe) {
+        public boolean nothingArrivesAt(ArmProbe probe) {
             for (Map.Entry<ControlPointId, Reachability> each : found.entrySet()) {
                 if (each.getKey() instanceof ControlPointId.ArmOccurrence arm
-                        && arm.probe().isPresent() && arm.probe().getAsInt() == probe) {
+                        && arm.probe().isPresent() && arm.probe().get().equals(probe)) {
                     return each.getValue() instanceof Reachability.Unreachable;
                 }
             }

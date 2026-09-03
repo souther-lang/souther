@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.coverage.ArmProbe;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.ast.Hir;
@@ -118,7 +119,7 @@ class AnAlternativeAssignmentIsAsCompatibleAsTheFirstTest {
     @Test
     void aCombinationRefusedAtItsFirstAssignmentIsTriedAtAnother() {
         Model model = model();
-        Set<Integer> every = Generator.everyArmACombinationMayTake(model.subject(), model.groups(),
+        Set<ArmProbe> every = Generator.everyArmACombinationMayTake(model.subject(), model.groups(),
                 Budgets.generation());
         assertFalse(every.isEmpty(), "the body has arms a combination takes");
 

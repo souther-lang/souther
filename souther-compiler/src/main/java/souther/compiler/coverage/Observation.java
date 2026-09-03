@@ -16,18 +16,27 @@ import java.util.Set;
  * second is one nothing produces. That holds by how the recording is written rather than by a rule
  * the emitter is asked to keep, which is the difference between an invariant and a convention.
  *
- * @param taken       the sites the run was recorded at, which is what a branch measure counts and
+ * <p><b>Numbers, and what numbering they are of.</b> A probed class is handed the number the
+ * emitter wrote into the call and has no numbering to ask what it addresses, so what a run leaves
+ * behind is numbers. What says which numbering they are of is the classes the run went through, and
+ * this carries what those classes were emitted under. So the two halves of "where was this run
+ * recorded" are here and nowhere else: a reader turns them into places by holding this against a
+ * numbering ({@link SiteNumbering#align}), and one that does not match is refused rather than
+ * answered.
+ *
+ * @param numbering   what the classes this run went through were numbered by
+ * @param taken       the numbers the run was recorded at, which is what a branch measure counts and
  *                    what a boundary drawn on a guard is met by
  * @param comparisons the ways the comparisons it evaluated came out
  */
-public record Observation(Set<Integer> taken, Set<ComparisonOutcome> comparisons) {
-
-    /** An empty snapshot: a run recorded as having passed nowhere. Not the same as having no
-     *  account of a run at all, which is not something this can say and is said where a run is
-     *  handed over. */
-    public static final Observation NONE = new Observation(Set.of(), Set.of());
+public record Observation(NumberingIdentity numbering, Set<Integer> taken,
+                          Set<ComparisonOutcome> comparisons) {
 
     public Observation {
+        if (numbering == null) {
+            throw new IllegalArgumentException(
+                    "a run was recorded under some numbering or its numbers mean nothing");
+        }
         taken = taken == null ? Set.of() : Set.copyOf(taken);
         comparisons = comparisons == null ? Set.of() : Set.copyOf(comparisons);
         // Held here and not left to whoever records one. What a recording is written like is a
@@ -39,26 +48,10 @@ public record Observation(Set<Integer> taken, Set<ComparisonOutcome> comparisons
         // place a run comes back to is evaluated more than once, and a recording that held only
         // which way it went the first time would be saying less than it saw.
         for (ComparisonOutcome way : comparisons) {
-            if (!taken.contains(way.at().value())) {
+            if (!taken.contains(way.at())) {
                 throw new IllegalArgumentException(
                         "a run that saw " + way + " is one that reached " + way.at());
             }
         }
-    }
-
-    /** Whether the run was recorded at {@code site}. */
-    public boolean lit(int site) {
-        return taken.contains(site);
-    }
-
-    /** Whether the run had {@code way} happen. Not the same as its comparison having been reached:
-     *  a comparison that came out the other way was reached and is not this. */
-    public boolean saw(ComparisonOutcome way) {
-        return comparisons.contains(way);
-    }
-
-    /** Whether the run reached {@code site} at all, whichever way the comparison there came out. */
-    public boolean reached(ComparisonEmissionSite site) {
-        return lit(site.value());
     }
 }

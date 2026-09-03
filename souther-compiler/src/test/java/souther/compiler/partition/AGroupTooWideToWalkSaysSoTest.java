@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.coverage.ArmProbe;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.ast.Hir;
@@ -204,9 +205,9 @@ class AGroupTooWideToWalkSaysSoTest {
         Model wide = Model.of(THIRTEEN);
         Model narrow = Model.of(TWELVE);
 
-        Set<Integer> fromWide =
+        Set<ArmProbe> fromWide =
                 Generator.everyArmACombinationMayTake(wide.subject(), wide.groups(), Budgets.generation());
-        Set<Integer> fromNarrow =
+        Set<ArmProbe> fromNarrow =
                 Generator.everyArmACombinationMayTake(narrow.subject(), narrow.groups(), Budgets.generation());
 
         assertFalse(fromWide.isEmpty(),
@@ -389,9 +390,9 @@ class AGroupTooWideToWalkSaysSoTest {
 
         // The held group is one arms were owed behind: without this, the answer below would hold of
         // a group that claimed nothing and would say nothing about when a group is named.
-        Set<Integer> owed = Generator.everyArmACombinationMayTake(
+        Set<ArmProbe> owed = Generator.everyArmACombinationMayTake(
                 model.subject(), model.groups(), budget);
-        Set<Integer> behindTheHeldGroup = new LinkedHashSet<>(armsIn(offered.notOffered().get(0)));
+        Set<ArmProbe> behindTheHeldGroup = new LinkedHashSet<>(armsIn(offered.notOffered().get(0)));
         behindTheHeldGroup.retainAll(owed);
         assertFalse(behindTheHeldGroup.isEmpty(),
                 "arms were owed behind the group that was held back");
@@ -404,12 +405,12 @@ class AGroupTooWideToWalkSaysSoTest {
     }
 
     /** Which arms a group the limit held back could have been searched at. */
-    private static List<Integer> armsIn(InteractionCells.NotOffered held) {
-        List<Integer> out = new java.util.ArrayList<>();
+    private static List<ArmProbe> armsIn(InteractionCells.NotOffered held) {
+        List<ArmProbe> out = new java.util.ArrayList<>();
         for (souther.compiler.coverage.ControlClaim claim : held.claims()) {
             if (claim.at() instanceof souther.compiler.coverage.ControlPointId.ArmOccurrence arm
                     && arm.probe().isPresent()) {
-                out.add(arm.probe().getAsInt());
+                out.add(arm.probe().get());
             }
         }
         return out;

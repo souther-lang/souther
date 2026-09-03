@@ -33,8 +33,17 @@ public final class Probe {
      * what a caller gets is {@link Observation}, which is a value. */
     private static final class Recording {
 
+        /** What the classes this run is going through were numbered by. Taken where the collecting
+         * starts, because that is where the classes about to be run are in hand — nothing inside
+         * one has a numbering to say what its numbers address. */
+        private final NumberingIdentity numbering;
+
         private final BitSet taken = new BitSet();
         private final Set<ComparisonOutcome> comparisons = new LinkedHashSet<>();
+
+        private Recording(NumberingIdentity numbering) {
+            this.numbering = numbering;
+        }
     }
 
     /** Called by probed code where an arm ran. Public and static because that is what an
@@ -62,28 +71,41 @@ public final class Probe {
         Recording recording = RECORDING.get();
         if (recording != null) {
             recording.taken.set(site);
-            recording.comparisons.add(
-                    new ComparisonOutcome(new ComparisonEmissionSite(site), held));
+            recording.comparisons.add(new ComparisonOutcome(site, held));
         }
     }
 
-    /** Starts collecting on this thread. */
-    public static void begin() {
-        RECORDING.set(new Recording());
+    /**
+     * Starts collecting on this thread, of classes numbered by {@code numbering}.
+     *
+     * <p>Said here because here is where it can be. The numbers a probed class writes are the
+     * numbering's, and the class has nothing to say about which numbering that was; what does is
+     * whoever loaded the classes and is about to run a row through them.
+     */
+    public static void begin(NumberingIdentity numbering) {
+        RECORDING.set(new Recording(numbering));
     }
 
-    /** What this thread has been through so far, as one value nothing can go on changing. */
+    /**
+     * What this thread has been through so far, as one value nothing can go on changing.
+     *
+     * <p>Refused where nothing is collecting. A snapshot has to say which numbering its numbers are
+     * of, and there is none to say when no recording was begun — so what a caller has then is no
+     * account of a run rather than a run that passed nowhere, and it is the caller that knows which:
+     * it is the one that decided whether to begin.
+     */
     public static Observation snapshot() {
         Recording recording = RECORDING.get();
         if (recording == null) {
-            return Observation.NONE;
+            throw new IllegalStateException("nothing is recording on this thread, so there is no"
+                    + " run to take a snapshot of; a row nobody watched has no account");
         }
         Set<Integer> sites = new LinkedHashSet<>();
         for (int at = recording.taken.nextSetBit(0); at >= 0;
                 at = recording.taken.nextSetBit(at + 1)) {
             sites.add(at);
         }
-        return new Observation(sites, recording.comparisons);
+        return new Observation(recording.numbering, sites, recording.comparisons);
     }
 
     /** Stops collecting, and lets go of the recording. A worker thread outlives the row it ran, so a

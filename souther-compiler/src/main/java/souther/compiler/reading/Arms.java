@@ -1,6 +1,7 @@
 package souther.compiler.reading;
 
 import souther.compiler.core.Core;
+import souther.compiler.coverage.ArmProbe;
 import souther.compiler.coverage.ControlClaim;
 import souther.compiler.coverage.ControlPointId;
 import souther.compiler.coverage.CoverageSites;
@@ -28,7 +29,8 @@ final class Arms {
 
     private final CoverageSites.Plan plan;
 
-    private final Map<Integer, PathAccess> byArm = new LinkedHashMap<>();
+    private final Map<ArmProbe, PathAccess> byArm =
+            new LinkedHashMap<>();
 
     Arms(CoverageSites.Plan plan) {
         this.plan = plan;
@@ -48,7 +50,7 @@ final class Arms {
             return;
         }
         ControlClaim.of(arms[part]).ifPresent(arrivesAt ->
-                byArm.put(arms[part].probe().getAsInt(), reach.told(arrivesAt)));
+                byArm.put(arms[part].probe().get(), reach.told(arrivesAt)));
     }
 
     /**
@@ -61,12 +63,13 @@ final class Arms {
      * really is beyond what the path language states. The check would then hold of a walk that
      * stopped early, which is the whole of what it is for.
      */
-    java.util.SequencedMap<Integer, PathAccess> found(String behavior) {
+    java.util.SequencedMap<ArmProbe, PathAccess> found(String behavior) {
         // Walked over the plan's own arms, so the order these come back in is the order the plan
         // holds the behavior's arms in. Which is what whoever asks for a row at each of them takes
         // as the order to ask in, and it is only that because this walk is where it comes from.
-        java.util.SequencedMap<Integer, PathAccess> out = new LinkedHashMap<>();
-        for (CoverageSites.Site arm : plan.arms(behavior)) {
+        java.util.SequencedMap<ArmProbe, PathAccess> out =
+                new LinkedHashMap<>();
+        for (CoverageSites.ArmSite arm : plan.arms(behavior)) {
             PathAccess access = byArm.get(arm.index());
             if (access == null) {
                 throw new IllegalStateException("the reading of `" + behavior + "` did not reach"

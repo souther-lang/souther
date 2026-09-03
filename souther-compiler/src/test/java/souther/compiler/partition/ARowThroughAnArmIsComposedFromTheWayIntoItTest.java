@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.coverage.ArmProbe;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.ast.Hir;
@@ -8,11 +9,10 @@ import souther.compiler.check.RuleReadings;
 import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
 import souther.compiler.core.Core;
-import souther.compiler.coverage.ComparisonOutcome;
+import souther.compiler.coverage.AlignedObservation;
 import souther.compiler.coverage.ControlClaim;
-import souther.compiler.coverage.ControlPointId;
 import souther.compiler.coverage.CoverageSites;
-import souther.compiler.coverage.Observation;
+import souther.compiler.coverage.Runs;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
@@ -161,8 +161,8 @@ class ARowThroughAnArmIsComposedFromTheWayIntoItTest {
     @Test
     void anotherArmIsTakenOffTheListByWhatTheRunWasSeenDoing() {
         Model model = Model.of(NESTED, "press");
-        Set<Integer> everyArm = model.read().arms().keySet();
-        Observation everywhere = doing(model.read());
+        Set<ArmProbe> everyArm = model.read().arms().keySet();
+        AlignedObservation everywhere = doing(model.read());
 
         FillResult watched = Generator.fill(model.subject(), List.of(),
                 Generator.CandidateCheck.ANY, model.read(),
@@ -198,7 +198,7 @@ class ARowThroughAnArmIsComposedFromTheWayIntoItTest {
     @Test
     void anArmWithNoWayIntoItSaysWhichKindOfSilenceItIs() {
         Model model = Model.of(NESTED, "press");
-        Set<Integer> everyArm = model.read().arms().keySet();
+        Set<ArmProbe> everyArm = model.read().arms().keySet();
 
         FillResult filled = Generator.fill(model.subject(), List.of(),
                 // Refuses every value, so every way in is a search that ran and composed nothing.
@@ -206,7 +206,7 @@ class ARowThroughAnArmIsComposedFromTheWayIntoItTest {
                 model.read(), Generator.Trial.NOTHING_RUNS, List.of(), List.of(), List.copyOf(everyArm),
                 Budgets.generation());
 
-        for (int probe : everyArm) {
+        for (ArmProbe probe : everyArm) {
             assertInstanceOf(ArmDisposition.Unresolved.class, filled.discharge().at(new Generator.ArmOwed(probe)),
                     "a way in this tried and composed nothing at is not one it never had: " + probe);
         }
@@ -224,25 +224,16 @@ class ARowThroughAnArmIsComposedFromTheWayIntoItTest {
 
     /** A run that was seen taking every arm the reading names, which is what a row through the
      *  outer arm and one of the inner ones is seen doing. */
-    private static Observation doing(CoverageRead.Read read) {
-        Set<Integer> taken = new LinkedHashSet<>();
-        Set<ComparisonOutcome> ways = new LinkedHashSet<>();
+    private static AlignedObservation doing(CoverageRead.Read read) {
+        List<ControlClaim> claims = new java.util.ArrayList<>();
         for (PathAccess each : read.arms().values()) {
-            if (each instanceof PathAccess.Ways ways0) {
-                for (souther.compiler.reading.WayIn way : ways0.ways()) {
-                    for (ControlClaim claim : way.claims()) {
-                        switch (claim.at()) {
-                            case ControlPointId.ArmOccurrence arm -> taken.add(arm.probe().getAsInt());
-                            case ControlPointId.ComparisonPoint point -> {
-                                taken.add(point.at().value());
-                                ways.add(point.way());
-                            }
-                        }
-                    }
+            if (each instanceof PathAccess.Ways ways) {
+                for (souther.compiler.reading.WayIn way : ways.ways()) {
+                    claims.addAll(way.claims());
                 }
             }
         }
-        return new Observation(taken, ways);
+        return Runs.doing(claims);
     }
 
     private record Model(MeasuredInput subject, CoverageRead.Read read) {

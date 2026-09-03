@@ -1,5 +1,8 @@
 package souther.compiler.partition;
 
+import souther.compiler.coverage.ComparisonEmissionSite;
+import souther.compiler.coverage.Numberings;
+
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.Carrier;
@@ -92,6 +95,10 @@ class AnAccountEstablishesItsDenominatorBeforeItCountsTest {
                 Towards.BELOW, origin()));
     }
 
+    /** The numbering this fixture's places are of. One of them, so that two origins built here
+     *  address one place rather than the same number of two numberings. */
+    private static final ComparisonEmissionSite WHERE = Numberings.comparison(1, 0);
+
     /** One rule, written in one place. Two lines of it are told apart by where they part the
      *  values, which is what the account may not be asked to do by name alone. */
     private static OriginRef origin() {
@@ -102,7 +109,7 @@ class AnAccountEstablishesItsDenominatorBeforeItCountsTest {
                         new souther.compiler.coverage.ComparisonOccurrence("example.one", "f", 0),
                         new RuleCitation.WrittenAt(Citation.of(
                                 new souther.compiler.diag.SourcePos(1, 1))),
-                        new souther.compiler.coverage.ComparisonEmissionSite(0)),
+                        WHERE),
                 new LineFacts(new souther.compiler.check.ComparisonClaim.Cut(Towards.BELOW, true)));
     }
 }

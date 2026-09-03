@@ -3,7 +3,7 @@ package souther.compiler.coverage;
 import souther.compiler.diag.Citation;
 import souther.compiler.types.CoverageOrigin;
 
-import java.util.OptionalInt;
+import java.util.Optional;
 
 /**
  * A place in a body that something can or cannot arrive at, named once.
@@ -47,8 +47,8 @@ public sealed interface ControlPointId {
      *               side of it can never take makes that side dead <em>here</em> while it is alive
      *               wherever else the library is used
      */
-    record ArmOccurrence(int controlId, OptionalInt probe, Citation at, CoverageOrigin origin)
-            implements ControlPointId {
+    record ArmOccurrence(int controlId, Optional<ArmProbe> probe, Citation at,
+                         CoverageOrigin origin) implements ControlPointId {
 
         /**
          * Whether {@code module}'s own source wrote the fork this is an arm of.
@@ -85,30 +85,26 @@ public sealed interface ControlPointId {
      * reached both by a value that made {@code B} false and by one that never reached {@code B} —
      * the arm cannot say which comparison came out which way, and a line is drawn on the comparison.
      *
-     * <p>The place and what a run records at it are the same value here ({@link #way}), rather than
-     * this holding a copy of its parts. A reading that carried the comparison and the way separately
-     * would be two halves a caller could pair with another place's, which is what asking a run
-     * whether it did this then takes on trust.
+     * <p>What a plan may claim, written in the plan's own vocabulary: the address this numbering
+     * issued for the comparison, and the way it came out. A running class records the number
+     * instead, having no numbering to ask what it addresses, and putting the two together is the
+     * boundary between a recording and a numbering rather than anything this holds.
      *
-     * @param way which comparison, coming out which way — as a run would record it
+     * <p>One place and one way, so there is nothing here for a caller to pair wrongly. Two halves
+     * carrying a place each — an address beside a recorded number — would be a control point saying
+     * where it is twice.
+     *
+     * @param at   where this numbering records a run through the comparison
+     * @param held the way it came out
      */
-    record ComparisonPoint(int controlId, ComparisonOutcome way) implements ControlPointId {
+    record ComparisonPoint(int controlId, ComparisonEmissionSite at, boolean held)
+            implements ControlPointId {
 
         public ComparisonPoint {
-            if (way == null) {
+            if (at == null) {
                 throw new IllegalArgumentException(
-                        "a place a comparison comes out one way is a place of one way");
+                        "a place a comparison comes out one way is a place");
             }
-        }
-
-        /** Where a run through this is recorded, which is what a claim about it is answered from. */
-        public ComparisonEmissionSite at() {
-            return way.at();
-        }
-
-        /** The way it came out. */
-        public boolean held() {
-            return way.held();
         }
     }
 }

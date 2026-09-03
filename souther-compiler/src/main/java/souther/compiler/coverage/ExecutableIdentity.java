@@ -34,7 +34,7 @@ import java.util.Map;
  * over a tree that is not the tree that runs — and a reading that quietly stood in for it would say
  * two bodies are one on the strength of a name the compiler invented.
  */
-public record ExecutableIdentity(Kind kind, List<Object> settled,
+public record ExecutableIdentity(Kind kind, List<Settled> settled,
                                  List<ExecutableIdentity> children) {
 
     /** Which node this is. Named rather than held as the class, so that what two of these compare
@@ -78,8 +78,8 @@ public record ExecutableIdentity(Kind kind, List<Object> settled,
         if (already != null) {
             return already;
         }
-        List<Object> settled = new ArrayList<>();
-        settled.add(typeOf(body));
+        List<Settled> settled = new ArrayList<>();
+        settled.add(new Settled.OfType(typeOf(body)));
         Kind kind = say(body, settled, binders);
         List<ExecutableIdentity> children = new ArrayList<>();
         for (CoreStructure.Child child : CoreStructure.childrenOf(body)) {
@@ -91,27 +91,27 @@ public record ExecutableIdentity(Kind kind, List<Object> settled,
     }
 
     /** Everything but the children and the type: what the node says on its own. */
-    private static Kind say(Core e, List<Object> settled, Binders binders) {
+    private static Kind say(Core e, List<Settled> settled, Binders binders) {
         return switch (e) {
             case Core.Int it -> {
-                settled.add(it.value());
+                settled.add(new Settled.Whole(it.value()));
                 yield Kind.INT;
             }
             case Core.Decimal it -> {
-                settled.add(it.value());
+                settled.add(new Settled.Fraction(it.value()));
                 yield Kind.DECIMAL;
             }
             case Core.Str it -> {
-                settled.add(it.value());
+                settled.add(new Settled.Word(it.value()));
                 yield Kind.STR;
             }
             case Core.Bool it -> {
-                settled.add(it.value());
+                settled.add(new Settled.Truth(it.value()));
                 yield Kind.BOOL;
             }
             case Core.Temporal it -> {
-                settled.add(it.kind());
-                settled.add(it.text());
+                settled.add(new Settled.TemporalKind(it.kind()));
+                settled.add(new Settled.Word(it.text()));
                 yield Kind.TEMPORAL;
             }
             // The place the name is bound, never the name: two bodies alike but for what a `let`
@@ -121,29 +121,29 @@ public record ExecutableIdentity(Kind kind, List<Object> settled,
                     throw new IllegalStateException("a body that runs reads no name nothing bound: `"
                             + it.name() + "` at " + it.pos());
                 }
-                settled.add(binders.at(it.binding()));
+                settled.add(new Settled.Bound(binders.at(it.binding())));
                 yield Kind.READ;
             }
             case Core.UnitValue it -> {
-                settled.add(it.data());
+                settled.add(new Settled.Names(it.data()));
                 yield Kind.UNIT_VALUE;
             }
             case Core.OptionNone _ -> Kind.OPTION_NONE;
             case Core.Unreachable it -> {
-                settled.add(it.reason());
+                settled.add(new Settled.Word(it.reason()));
                 yield Kind.UNREACHABLE;
             }
             case Core.Neg _ -> Kind.NEG;
             case Core.FieldAccess it -> {
-                settled.add(it.field());
+                settled.add(new Settled.Word(it.field()));
                 yield Kind.FIELD_ACCESS;
             }
             case Core.Binary it -> {
-                settled.add(it.op());
+                settled.add(new Settled.Operator(it.op()));
                 yield Kind.BINARY;
             }
             case Core.Call it -> {
-                settled.add(it.fn());
+                settled.add(new Settled.Applies(it.fn()));
                 yield Kind.CALL;
             }
             // What an analysis kept standing, which the tree that runs holds none of. Reaching one
@@ -155,31 +155,31 @@ public record ExecutableIdentity(Kind kind, List<Object> settled,
             // report quotes them, so two bodies that name their ways out differently say different
             // things.
             case Core.IfConstructed it -> {
-                it.els().forEach(arm -> settled.add(arm.clause()));
+                it.els().forEach(arm -> settled.add(new Settled.MaybeWord(arm.clause())));
                 yield Kind.IF_CONSTRUCTED;
             }
             case Core.LetIn _ -> Kind.LET_IN;
             // How many names it takes. Not a binder — those are where they are and are read as
             // places — but applying a function of two names to one is not what this does.
             case Core.Block it -> {
-                settled.add(it.params().size());
+                settled.add(new Settled.Count(it.params().size()));
                 yield Kind.BLOCK;
             }
             case Core.ListLit _ -> Kind.LIST_LIT;
             case Core.OptionSome _ -> Kind.OPTION_SOME;
             case Core.Tuple _ -> Kind.TUPLE;
             case Core.TupleGet it -> {
-                settled.add(it.index());
-                settled.add(it.arity());
+                settled.add(new Settled.Count(it.index()));
+                settled.add(new Settled.Count(it.arity()));
                 yield Kind.TUPLE_GET;
             }
             case Core.Construct it -> {
-                settled.add(it.typeName());
-                it.values().forEach(value -> settled.add(value.field()));
+                settled.add(new Settled.Names(it.typeName()));
+                it.values().forEach(value -> settled.add(new Settled.Word(value.field())));
                 yield Kind.CONSTRUCT;
             }
             case Core.Match it -> {
-                it.cases().forEach(one -> settled.add(one.pattern()));
+                it.cases().forEach(one -> settled.add(new Settled.Matching(one.pattern())));
                 yield Kind.MATCH;
             }
         };

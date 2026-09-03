@@ -2,6 +2,7 @@ package souther.compiler.coverage;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * What a numbering is, said so that two of them can be held against each other.
@@ -26,26 +27,57 @@ import java.util.Map;
  * {@link #executable} says what the code at those places does, because two bodies that do different
  * things are not two views of one measurement however their places line up.
  *
- * @param module   whose bodies these are numbered from
- * @param executable what each behavior of the module does, by name. A map and not a list: what
- *                   order a module declares its behaviors in is not part of what a number means,
- *                   and where it moves the numbers with it {@code byNumber} moves too
- * @param byNumber what each number is an address of, the number being the position in the list
+ * <p><b>The hash is kept, and it decides nothing.</b> Comparing two of these walks every place and
+ * every body, and an address carries one — so a set of addresses would hash the whole numbering per
+ * member. What the number saves is the walking, and where two hashes agree the fields are compared
+ * all the same: a hash is what makes an answer quick to reach and never what the answer is.
  */
-public record NumberingIdentity(String module, Map<String, ExecutableIdentity> executable,
-                                List<SiteAddress> byNumber) {
+public final class NumberingIdentity {
 
-    public NumberingIdentity {
+    private final String module;
+
+    private final Map<String, ExecutableIdentity> executable;
+
+    private final List<SiteAddress> byNumber;
+
+    private final int hash;
+
+    /**
+     * @param module     whose bodies these are numbered from
+     * @param executable what each behavior of the module does, by name. A map and not a list: what
+     *                   order a module declares its behaviors in is not part of what a number
+     *                   means, and where it moves the numbers with it {@code byNumber} moves too
+     * @param byNumber   what each number is an address of, the number being the position in the list
+     */
+    public NumberingIdentity(String module, Map<String, ExecutableIdentity> executable,
+                             List<SiteAddress> byNumber) {
         if (module == null) {
             throw new IllegalArgumentException("a numbering is of somebody's module");
         }
-        executable = Map.copyOf(executable);
-        byNumber = List.copyOf(byNumber);
+        this.module = module;
+        this.executable = Map.copyOf(executable);
+        this.byNumber = List.copyOf(byNumber);
+        this.hash = Objects.hash(this.module, this.executable, this.byNumber);
     }
 
     /** The numbering of nothing, which is what a module with no bodies to walk has. */
     static NumberingIdentity of(String module) {
         return new NumberingIdentity(module, Map.of(), List.of());
+    }
+
+    /** Whose bodies these are numbered from. */
+    public String module() {
+        return module;
+    }
+
+    /** What each behavior of the module does, by name. */
+    public Map<String, ExecutableIdentity> executable() {
+        return executable;
+    }
+
+    /** What each number is an address of, the number being the position in the list. */
+    public List<SiteAddress> byNumber() {
+        return byNumber;
     }
 
     /** What number {@code n} is an address of. */
@@ -55,6 +87,28 @@ public record NumberingIdentity(String module, Map<String, ExecutableIdentity> e
                     "this numbering handed out no " + n + "; it handed out " + byNumber.size());
         }
         return byNumber.get(n);
+    }
+
+    @Override
+    public boolean equals(Object other) {
+        if (this == other) {
+            return true;
+        }
+        if (!(other instanceof NumberingIdentity that)) {
+            return false;
+        }
+        // The number first and the fields all the same. Two numberings that hash alike and differ
+        // are two numberings, and a reader told otherwise would be reading a run against places it
+        // was never near — which is the one thing this value exists to stop.
+        return hash == that.hash
+                && module.equals(that.module)
+                && executable.equals(that.executable)
+                && byNumber.equals(that.byNumber);
+    }
+
+    @Override
+    public int hashCode() {
+        return hash;
     }
 
     @Override

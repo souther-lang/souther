@@ -1,5 +1,8 @@
 package souther.compiler.partition;
 
+import souther.compiler.coverage.ArmProbe;
+import souther.compiler.coverage.Numberings;
+
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.DefaultStdlib;
@@ -36,6 +39,9 @@ class NoAxesByItselfIsNotAGenerationReasonTest {
     private static final RuleReadingSource SYMBOLS =
             RuleReadings.ofNoClauseFiled(Symbols.none(DefaultStdlib.get()));
 
+    /** The one place this fixture's reading is about. */
+    private static final ArmProbe ARM = Numberings.arm(2, 1);
+
     private static final PathAccess NOT_ENUMERABLE =
             new PathAccess.Unsupported(PathAccess.Unsupported.Why.WAYS_NOT_ENUMERABLE);
 
@@ -51,7 +57,7 @@ class NoAxesByItselfIsNotAGenerationReasonTest {
     void anArmIsAnsweredWhereNoPositionIsDivided() {
         FillResult filled = filledOverOneArm();
 
-        assertEquals(Map.of(new Generator.ArmOwed(1), new ArmDisposition.NoWayIn(NOT_ENUMERABLE)),
+        assertEquals(Map.of(new Generator.ArmOwed(ARM), new ArmDisposition.NoWayIn(NOT_ENUMERABLE)),
                 filled.discharge().arms(),
                 "the arm's own entry, in the words the reading of the body used");
     }
@@ -68,12 +74,12 @@ class NoAxesByItselfIsNotAGenerationReasonTest {
     private static FillResult filledOverOneArm() {
         MeasuredInput subject = MeasuredInput.of("fee", readingOf("days", Type.INT),
                 AxesATestWrote.asAMeasurement("fee", List.of()));
-        java.util.SequencedMap<Integer, PathAccess> ways = new java.util.LinkedHashMap<>();
-        ways.put(1, NOT_ENUMERABLE);
+        java.util.SequencedMap<ArmProbe, PathAccess> ways = new java.util.LinkedHashMap<>();
+        ways.put(ARM, NOT_ENUMERABLE);
         CoverageRead.Read read = new CoverageRead.Read(List.of(), ways);
 
         return Generator.fill(subject, List.of(), Generator.CandidateCheck.ANY, read,
-                Generator.Trial.NOTHING_RUNS, List.of(), List.of(), List.of(1),
+                Generator.Trial.NOTHING_RUNS, List.of(), List.of(), List.of(ARM),
                 Budgets.generation());
     }
 }
