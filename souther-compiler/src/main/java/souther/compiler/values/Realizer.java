@@ -38,6 +38,21 @@ final class Realizer {
         this.meter = meter;
     }
 
+    /**
+     * What {@code plan} admits if that has already been worked out, and null where it has not.
+     *
+     * <p>Nothing is built and nothing is spent. A caller here is not asking what a plan admits — it
+     * is asking what this position's answer already established, which is a different question and
+     * the only one an account may ask: what a rule of the model did is read off the answer, and an
+     * account that built anything would be paying out of the budget the answer is bounded by.
+     *
+     * <p>So the absence of a row is an absence of evidence and never a fact about the plan. A
+     * caller told nothing is told exactly that, and what it does about it is decline to claim.
+     */
+    Realization known(AdmittedPlan plan) {
+        return done.get(plan);
+    }
+
     /** What {@code plan} admits, worked out at most once however often it is asked for. */
     Realization of(AdmittedPlan plan) {
         Realization had = done.get(plan);

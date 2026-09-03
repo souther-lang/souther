@@ -1683,11 +1683,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             case RULE_ABOUT_A_RUN ->
                     "it is about what the values here come to rather than about any one of them,"
                             + " so it draws its line and divides none of them";
-            // The one sentence here that is about this compiler's measure rather than about the
-            // rule. Said as a division that has no line, because that is what it is: an author
-            // reading "this compiler does not read it" would go and rewrite a rule that was read.
-            case PARTITION_NOT_REPRESENTABLE ->
-                    "it divides this position into values this measure draws no line between";
+            // What the rule does to the position, and not what this measure could not hold. An
+            // author reading "this compiler does not read it" would go and rewrite a rule that was
+            // read from end to end, and one told the position is divided would go looking for the
+            // class on the other side of a rule that refuses everything there.
+            case POSITION_RESTRICTED_TO_WHAT_A_RULE_ADMITS ->
+                    "it restricts this position to the values it admits, and no other value can be"
+                            + " built here";
             case RULE_ABOUT_A_DERIVED_VALUE ->
                     "it is about a value made from this one, and what it says about the values here"
                             + " is not worked out";

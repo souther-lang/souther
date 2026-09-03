@@ -32,6 +32,35 @@ record ReadByClauses(AdmissibleValues<FactSubject> values, OrderedIntervals<Fact
                      java.util.Map<souther.compiler.core.Core, OfAPart> parts) {
 
     /**
+     * What one rule came to on its own tree, once every branch of the value is decided.
+     *
+     * <p>Its own tree is the whole of it. What a neighbouring rule of the same declaration narrowed
+     * is no part of what this rule did, so a reader asking what this rule left has to be given an
+     * answer met from this rule's clauses alone — read off the whole, {@code invariant value == 7}
+     * beside a rule that says nothing would lend the second its narrowing, and a reason filed
+     * against the second would name a rule that holds the position to nothing.
+     *
+     * @param narrowed the positions this rule leaves holding less than every value, and whose
+     *                 answer was built. Free of any allowance: what each position holds is a
+     *                 description the reading already has, and being narrowed is that description
+     *                 being one shape rather than another ({@code PlannedValues#adoptedAt}). A
+     *                 position the rule leaves holding nothing is not one of these — the rules
+     *                 leaving no value is a fact about emptiness and is said where emptiness is
+     * @param account  what the rule's own clause took in, which is the part keyed by its root
+     */
+    record OfARule(java.util.Set<FactSubject> narrowed, OfAPart account) {
+
+        public OfARule {
+            narrowed = java.util.Set.copyOf(narrowed);
+        }
+
+        /** Whether this rule leaves {@code position} holding less than every value. */
+        boolean narrows(FactSubject position) {
+            return narrowed.contains(position);
+        }
+    }
+
+    /**
      * What one part of one clause came to, once every branch of the value is decided.
      *
      * <p>Answered over the part's own rule's tree, with the branches decided by the fates the
@@ -49,6 +78,31 @@ record ReadByClauses(AdmissibleValues<FactSubject> values, OrderedIntervals<Fact
         /** The positions some reading took the whole of this part in at. */
         java.util.Set<FactSubject> adopted() {
             return ReadByClauses.adopted(byValues, byOrder);
+        }
+
+        /**
+         * Whether this part put a constraint on which values stand at {@code position}.
+         *
+         * <p>Narrower than {@link #adopted}, and the difference is the whole of what a reader
+         * asking this wants. That one is every position either reading settled what the part does
+         * to, which a dead branch settles by imposing nothing and which the ordered reading settles
+         * by placing an end. Neither of those is a rule holding the values at the position down,
+         * and a reader told they were would say a position is restricted by a clause that leaves it
+         * exactly as wide as it was.
+         */
+        boolean restricts(FactSubject position) {
+            return byValues.constrains(position);
+        }
+
+        /**
+         * Whether this part put one on where those values stop.
+         *
+         * <p>Asked of the ordered reading, because that is what an end is read by. A part that
+         * placed one has a line at the position and is accounted for by whoever draws lines, so it
+         * is not a part a reader is owed a second sentence about.
+         */
+        boolean bounds(FactSubject position) {
+            return byOrder.constrains(position);
         }
     }
 

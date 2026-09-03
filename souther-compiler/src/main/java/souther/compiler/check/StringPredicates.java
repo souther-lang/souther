@@ -3,9 +3,7 @@ package souther.compiler.check;
 import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
 import souther.compiler.core.Kernel;
-import souther.compiler.regex.Language;
 import souther.compiler.regex.PatternParser;
-import souther.compiler.regex.PatternPlan;
 import souther.compiler.regex.PatternRead;
 import souther.compiler.regex.PatternSyntax;
 import souther.compiler.types.ValueName;
@@ -31,10 +29,17 @@ import java.util.List;
  *
  * <p><b>One clause, one reading, handed on.</b> What a clause states is worked out once, by the
  * entry point its tree has, and comes back as a {@link Reading} that holds what became of it — the
- * strings, or what stopped the reading short of them. Everything asked afterwards takes that value
- * ({@link #divides}), so no caller goes back to the clause to establish a second time what it
- * already has. Answering "was it read" from a re-read would be one question with two derivations,
- * and the day either the fold or the parser learns a form is the day they part.
+ * strings, or what stopped the reading short of them. A caller takes that value rather than going
+ * back to the clause to establish a second time what it already has: asking twice is one question
+ * with two derivations, and the day either the fold or the parser learns a form is the day they
+ * part.
+ *
+ * <p><b>And what it says about a position is nobody's answer here.</b> The strings are a fact about
+ * a language. Whether the position those strings stand at is restricted, divided, or left where it
+ * was found turns on what the rule is written in, and it is settled by the reading that holds every
+ * rule reaching the position — so this hands over the strings and stops. Answered here, the same
+ * language would mean one thing under an invariant, whose other side is refused at construction, and
+ * another under a behavior, where both sides stand.
  *
  * <p>{@code String.isEmpty} is not here, and is not missing. It is written in the library as
  * {@code String.length(s) == 0} and arrives as that comparison, which is a question about a number
@@ -287,67 +292,4 @@ public enum StringPredicates {
                 : new Stated(subject, new Reading.WrittenArgumentNotKnown());
     }
 
-    /**
-     * What a predicate's strings come to at the position it is about.
-     *
-     * <p>Read and divides are two questions, and one had been standing in for the other. A rule is
-     * read as a set of strings whether that set is some of them, all of them or none — and only the
-     * first is a division, so only the first is a position divided in a way no order carries. Asked
-     * as "was it read", {@code String.contains("", value)} came out as a position divided into
-     * values this measure draws no line between, and it makes no distinction at all.
-     *
-     * <p>Off the set and never off what was written. Whether the strings are all of them is a fact
-     * about the language, and a caller looking at the text for an empty one would be back to
-     * deciding meaning from a spelling — the thing that made {@code contains} unreadable in the
-     * first place.
-     */
-    public sealed interface Divides {
-
-        /** Some strings and not others, which is a division and is not one an order holds. */
-        record IntoTwo() implements Divides {}
-
-        /** Every string there is, so the rule tells no value here from another. */
-        record NothingIsRuledOut() implements Divides {}
-
-        /** No string at all, so the rules leave no value here — which is not a division either. */
-        record NothingIsLeft() implements Divides {}
-
-        /**
-         * A limit of this compiler stopped the machine being built, so which of the three it is was
-         * never worked out.
-         *
-         * <p>Its own answer and never one of the others. A limit read as "no division" would be a
-         * claim about the model made out of an allowance running down, which is the shape this
-         * whole reading exists to stop.
-         *
-         * <p>Which limit stopped it is not carried up. A machine larger than one is allowed to be
-         * and an answer that has spent all it may are two things to whoever counts them, and one
-         * thing here: neither is a division this can speak about.
-         */
-        record StoppedByLimit() implements Divides {}
-    }
-
-    /**
-     * What the strings a predicate admits divide the position it is about into.
-     *
-     * <p>Asked of a reading and never of a clause. What divides a position is what the rule admits
-     * there, so a caller that has read the clause hands the reading on — reading it again to answer
-     * this would be one clause with two derivations of one answer.
-     *
-     * <p>The machine is built here because the question is about the strings and there is no other
-     * way to ask it. What it costs is one language per clause of this kind, under the allowance one
-     * value is written from — the shapes composed above are a few states, and a pattern larger than
-     * that allowance is the one case that comes back stopped.
-     */
-    public static Divides divides(Reading.Accepting reading) {
-        Language strings = PatternPlan.of(reading.accepts())
-                .compile(PatternPlan.Budget.OF_A_WITNESS);
-        if (strings == null) {
-            return new Divides.StoppedByLimit();
-        }
-        if (strings.isEmpty()) {
-            return new Divides.NothingIsLeft();
-        }
-        return strings.isEverything() ? new Divides.NothingIsRuledOut() : new Divides.IntoTwo();
-    }
 }

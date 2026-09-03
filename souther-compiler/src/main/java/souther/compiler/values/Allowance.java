@@ -191,6 +191,24 @@ public final class Allowance<A> {
     }
 
     /**
+     * What {@code plan} was already worked out to admit at {@code atom}, or null where nothing
+     * worked it out.
+     *
+     * <p>The one way to ask this allowance a question without spending it, and it is for the
+     * accounts. What a rule of the model did to a position is read off the answer that was built
+     * for the position; asked by building, an account would be paying out of the budget the answer
+     * is bounded by, and a limit reached while attributing a reason would show up as the compiler
+     * being less able to answer about the model.
+     *
+     * <p>Null is "nothing established this" and never "this admits everything". The two read alike
+     * to a careless caller and mean opposite things: one is a fact about the values, and the other
+     * is an absence of evidence that a caller answers by declining to claim.
+     */
+    public ValueSet known(A atom, AdmittedPlan plan) {
+        return at(atom).known(plan) instanceof Realization.Exact it ? it.set() : null;
+    }
+
+    /**
      * The positions whose exact answer was given up on, in the order they were found.
      *
      * <p>Not how a reader learns of it. What each of them left is in the reading already — a
