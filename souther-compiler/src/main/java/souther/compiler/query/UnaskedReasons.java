@@ -9,13 +9,18 @@ import java.util.Collection;
 import java.util.List;
 
 /**
- * Why nothing was read against one authored line, over every reading of that line.
+ * Why one authored line is unmeasured, over the readings of it that account for that.
  *
  * <p>What {@link WeakeningSet} is to a reading that stopped short, one grain up: a debt is read at
- * every position of every behavior carrying the type, each of those readings says for itself why it
- * asked nothing, and what the debt says is all of them. Held as one reason, what a debt said was
- * whichever reading came later in the walk, and which reading comes later is the order the lines
- * were gathered in.
+ * every position of every behavior carrying the type, and where several of those readings are why
+ * nothing was read against the point, what the debt says is all of them. Held as one reason, what a
+ * debt said was whichever reading came later in the walk, and which reading comes later is the
+ * order the lines were gathered in.
+ *
+ * <p>The readings that account for it, and not every reading that said something. Which readings
+ * those are is {@link ObligationCoverage#acrossTheReadings}'s answer and no part of this: a
+ * reading with nothing to look at leaves a point where it found it, and one that is here is one
+ * this holds.
  *
  * <p><b>The cardinality comes from what the reasons are facts about.</b> A reason about the run is
  * an input to the whole run, so every reading of every line that reaches it says the same one and
@@ -95,11 +100,12 @@ public final class UnaskedReasons {
     /**
      * The one reason, for somewhere that has room for one.
      *
-     * <p>Two places do: a boundary item of the report says a single {@code reason}, which is what
-     * the document promises its reader, and a reading's own {@link Measurement.NotMeasured} says
-     * the one reason that reading asked nothing for. So the projection is written here rather than
-     * left to a caller taking whichever came first — an account holding more than one reason is not
-     * something either of them can say, and this says so instead of choosing.
+     * <p>A boundary item of the report says a single {@code reason}, the opening under a verdict
+     * names one, the sentence beside a point reads as one, and a reading's own
+     * {@link Measurement.NotMeasured} holds the one reason that reading asked nothing for. So the
+     * projection is written here rather than left to each of them taking whichever came first — an
+     * account holding more than one reason is not something any of them can say, and this says so
+     * instead of choosing.
      *
      * <p><b>The refusal is the contract and not a reading of what reaches it.</b> Nothing here
      * rests on the readings this compiler makes today coming to one. The day one comes to two, this

@@ -150,10 +150,10 @@ public sealed interface ObligationDisposition {
              * not read against is not something the model stopped owing (issue #1249) — so the
              * question is open and says which of the two left it so.
              *
-             * <p>Every reason the readings gave, as the coverage holds them. A count and a build's
-             * refusal read this beside the document, and asking for one reason here would put the
-             * refusal of an account too wide for a sentence in front of all three — where what is
-             * too wide is the sentence, which is written somewhere else.
+             * <p>Every reason that leaves the point unmeasured, as the coverage holds them. A count
+             * and a build's refusal read this beside the document, and asking for one reason here
+             * would put the refusal of an account too wide for a sentence in front of all three —
+             * where what is too wide is the sentence, which is written somewhere else.
              */
             record NothingWasRead(UnaskedReasons why) implements WhetherARowIsThere {
 

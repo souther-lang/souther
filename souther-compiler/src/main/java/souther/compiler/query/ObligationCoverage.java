@@ -46,12 +46,17 @@ public sealed interface ObligationCoverage {
     }
 
     /**
-     * Nothing was read against this point, and this is every reason the readings gave.
+     * Nothing was read against this point, and these are the reasons that leave it unmeasured.
      *
-     * <p>All of them, for the reason {@link Undecided} holds all of what left it undecided. One
-     * debt is read once per behavior carrying the type and each reading says for itself why it
-     * asked nothing, so these are independent facts about one point — and a debt holding one of
-     * them said whichever reading the walk reached last.
+     * <p>Every one of them and not one, for the reason {@link Undecided} holds everything that
+     * left it undecided. One debt is read once per behavior carrying the type, and where more than
+     * one of those readings accounts for this state they are independent facts about one point — so
+     * a debt holding one of them said whichever reading the walk reached last.
+     *
+     * <p><b>What accounts for the state, and not everything the readings said.</b> A reading that
+     * had nothing to look at does not put a point here: it hides nothing, so it neither takes back
+     * a miss nor is one of the reasons that outranked one. Which is the same thing {@code Undecided}
+     * does — a reading that ran to the end went without nothing, and nothing of it is in there.
      */
     record NotMeasured(UnaskedReasons why) implements ObligationCoverage {
 
@@ -125,9 +130,11 @@ public sealed interface ObligationCoverage {
      * miss another reading established, and where every reading is one there was nothing anywhere to
      * look at.
      *
-     * <p><b>What is ranked is the states and never the reasons inside one.</b> Two readings that
-     * asked nothing gave two facts about one point, and this keeps both — the reasons a debt has
-     * are a set for the reason what left it undecided is one.
+     * <p><b>The ranking chooses a state, and the state keeps every reason that accounts for it.</b>
+     * Which of the four this is turns on what the readings came to and, in the one state a reason
+     * decides, on what those reasons are. Once it is chosen, the readings that put it there can be
+     * several and none of them outranks another — so they are held as a set, the way everything
+     * that left a point undecided is.
      */
     static ObligationCoverage acrossTheReadings(
             List<Measurement<ItemAssessment.Coverage>> readings) {
