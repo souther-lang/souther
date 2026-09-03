@@ -3,6 +3,8 @@ package souther.compiler.partition;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
 import souther.compiler.check.TypeView;
+import souther.compiler.inputs.Case;
+import souther.compiler.inputs.Distinctions;
 import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.Requirements;
 import souther.compiler.check.ConstructionDescent;
@@ -240,15 +242,17 @@ final class ConstructionPlan {
     /**
      * A plan, or why there is none.
      *
-     * <p>The two ways of having none are whose fact it is. A caller asking for a class under one
-     * case of a sum beside a class under another has asked for a row no value is, which the model
+     * <p>The ways of having none are whose fact each is. A caller asking for a class under one case
+     * of a sum beside a class under another has asked for a row no value is, which the model
      * settles and this reports; nothing here fell short. A caller asking for a position deeper than
      * this plans has asked for something ordinary that this compiler declined to work out, and what
-     * would change it is somebody raising a figure.
+     * would change it is somebody raising a figure. A caller asking for something under a position
+     * that holds nothing until a narrowing says what stands there has not said which, and what
+     * would change that is the caller stating one.
      *
      * <p>Told apart because a reader acts on them differently, and reported rather than answered
-     * because neither is a plan. Handed back as one, the second would arrive in the words of the
-     * first — a limit of this compiler's said as a thing the model settles.
+     * because none of them is a plan. Handed back as one, a limit of this compiler's would arrive
+     * in the words of a thing the model settles.
      */
     sealed interface Result {
 
@@ -283,6 +287,33 @@ final class ConstructionPlan {
                     throw new IllegalArgumentException(
                             "a demand out of this compiler's reach says which figure put it there");
                 }
+            }
+        }
+
+        /**
+         * What the caller asked for stands under a position that holds nothing until a narrowing
+         * says what stands there, and nothing said which.
+         *
+         * <p>A sum is the one of these a model writes. Its cases are what put positions under it,
+         * so a path reaching a field of every case names a position of the sum and no case of it —
+         * which is how a rule about the shared part is read (spec §sum-data) and is not enough to
+         * write a value with. Reading and writing part here, and the reading is right: what has to
+         * be added is which case the value is, and the caller is the one with a reason to prefer
+         * one.
+         *
+         * <p>Handed back rather than chosen here. Which case a value is is a fact about the value
+         * and not about the plan, and a plan that took the first would answer a question nobody
+         * asked it — the narrowing the caller then states is what makes the position, and every
+         * path under it, the one the value is written at.
+         *
+         * @param narrowings what the position stands at, in the order the declarations write them.
+         *                   Empty where the position divides no way at all, which is a demand under
+         *                   a position nothing puts anything under
+         */
+        record Unnarrowed(TermPath at, List<Refinement> narrowings) implements Result {
+
+            public Unnarrowed {
+                narrowings = List.copyOf(narrowings);
             }
         }
     }
@@ -334,6 +365,8 @@ final class ConstructionPlan {
         return switch (node(declared, at, symbols, 0, decided, required, least)) {
             case NodeResult.Made(Node root) -> new Result.Planned(new ConstructionPlan(root));
             case NodeResult.Beyond(Set<CompositionBudget> by) -> new Result.Beyond(by);
+            case NodeResult.Unnarrowed(TermPath where, List<Refinement> narrowings) ->
+                    new Result.Unnarrowed(where, narrowings);
         };
     }
 
@@ -352,6 +385,10 @@ final class ConstructionPlan {
 
         /** Nothing was, because what the caller asked for is under a figure this reached. */
         record Beyond(Set<CompositionBudget> by) implements NodeResult {}
+
+        /** Nothing was, because what the caller asked for is under a position nothing stands at
+         *  until a narrowing says what does. */
+        record Unnarrowed(TermPath at, List<Refinement> narrowings) implements NodeResult {}
     }
 
     /**
@@ -493,6 +530,15 @@ final class ConstructionPlan {
         // however deep it is, and answering the figure first would file the model's own answer as
         // something this compiler declined to do.
         if (composed == null || composed.fields().isEmpty()) {
+            // A whole value is chosen here, so anything the caller asked for below it has nowhere
+            // to be written. Said rather than dropped, for the reason a demand under the figure is:
+            // a plan handed back all the same is one the composing satisfies while leaving the
+            // caller's value out of what it built. What the two answers differ in is what would
+            // change them — a figure is raised, and this is a narrowing the caller has yet to
+            // state.
+            if (anythingIsAskedUnder(here, decided, required)) {
+                return new NodeResult.Unnarrowed(here, narrowingsAt(view, symbols));
+            }
             return new NodeResult.Made(
                     new Slot(here, building, settled.outer(), new Leaf.Open()));
         }
@@ -509,6 +555,11 @@ final class ConstructionPlan {
                 // are two figures a reader could raise, and taking whichever the walk met first
                 // would make the answer turn on the order the fields are declared in.
                 case NodeResult.Beyond(Set<CompositionBudget> by) -> beyond.addAll(by);
+                // One position, and the first of them. A narrowing is stated at a position rather
+                // than gathered up, and the caller states one and asks again — so what it is owed
+                // is somewhere to begin, and the field a second one is under may not even be
+                // reached under the narrowing it settles on here.
+                case NodeResult.Unnarrowed unnarrowed -> { return unnarrowed; }
             }
         }
         if (!beyond.isEmpty()) {
@@ -532,6 +583,30 @@ final class ConstructionPlan {
         Set<CompositionBudget> by = Set.of(figure);
         return anythingIsAskedUnder(here, decided, required) ? new NodeResult.Beyond(by)
                 : new NodeResult.Made(new Slot(here, building, outer, new Leaf.Beneath(by)));
+    }
+
+    /**
+     * The narrowings a position stands at, in the order its declarations write them.
+     *
+     * <p>Asked of {@link Distinctions}, which is where what a position's type divides into is
+     * answered. A second reading here would be this deciding what a case is beside the reading that
+     * decides what a class is, and the two would be free to differ about a case that is itself a
+     * sum.
+     *
+     * <p>Those that narrow, which is not every distinction. A {@code Bool} divides into two values
+     * and puts no position under either, so nothing there is a narrowing to state and the list is
+     * empty — which says, correctly, that stating something here is not what would make the demand
+     * reachable.
+     */
+    private static List<Refinement> narrowingsAt(TypeView view, Symbols symbols) {
+        List<Refinement> out = new ArrayList<>();
+        for (Case one : Distinctions.ofType(view, symbols)) {
+            Refinement narrowing = Refinement.of(one);
+            if (narrowing != null) {
+                out.add(narrowing);
+            }
+        }
+        return List.copyOf(out);
     }
 
     /**

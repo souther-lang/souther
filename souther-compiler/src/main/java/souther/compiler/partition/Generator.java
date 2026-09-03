@@ -13,6 +13,7 @@ import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.reading.PathAccess;
+import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.Requirements;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
@@ -3657,6 +3658,18 @@ public final class Generator {
             case ConstructionPlan.Result.Beyond(Set<CompositionBudget> by) -> {
                 return new Outcome.Unplanned(by);
             }
+            // A class that puts a value under a case states the case (`PartitionClasses`), and a
+            // path that reaches one carries it (`TermPath.requirements`), so a search arriving here
+            // without one is this compiler asking for a position it has not said how to reach.
+            // Refused in the words the other arrangement of two accounts is refused in, rather than
+            // answered as a row nothing composes — a model has nothing to do with it.
+            case ConstructionPlan.Result.Unnarrowed(TermPath where, List<Refinement> narrowings) ->
+                    throw new IllegalStateException("a value is asked for under `" + where
+                            + "`, which stands at " + narrowings.stream().map(Refinement::spelled)
+                                    .collect(java.util.stream.Collectors.joining(" or "))
+                            + " and holds nothing until one of them is stated; the class or the"
+                            + " path that asked for it is keeping the narrowing it needs somewhere"
+                            + " this cannot read");
         }
         Choices choices = choicesOf(subject, p, plan, decided, settled);
         if (choices.missingAt() != null) {
