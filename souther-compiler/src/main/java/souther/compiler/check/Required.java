@@ -4,6 +4,7 @@ import souther.compiler.inputs.BlockReason;
 
 import java.util.Collections;
 import java.util.LinkedHashSet;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -288,12 +289,11 @@ public sealed interface Required {
      * a number and left the next standing. Read off one arm alone, the second clause's open
      * question went out as one nobody asked.
      */
-    private static java.util.Map<RuleKey, BlockReason.RuleReadingStopped> unreadIn(
-            ClauseStates states) {
+    private static Map<RuleKey, BlockReason.RuleReadingStopped> unreadIn(ClauseStates states) {
         return switch (states) {
             case ClauseStates.ABound it -> it.unread();
             case ClauseStates.SomethingElse it -> it.unread();
-            case ClauseStates.ARelation _, ClauseStates.NoRestriction _ -> java.util.Map.of();
+            case ClauseStates.ARelation _, ClauseStates.NoRestriction _ -> Map.of();
         };
     }
 

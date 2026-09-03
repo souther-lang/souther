@@ -2140,7 +2140,8 @@ public final class InvariantChecker {
                 return new Run.NotBounding();
             }
             case TextExtent.NotBuilt it -> {
-                return new Run.Undecided(new BlockReason.OrderedExtentTooCostly(it.stopped()));
+                return new Run.Undecided(
+                        List.of(new BlockReason.OrderedExtentTooCostly(it.stopped())));
             }
         }
     }
@@ -2176,8 +2177,14 @@ public final class InvariantChecker {
          *  not one stretch of the order, or the stretch they make is one the order already holds. */
         record NotBounding() implements Run {}
 
-        /** Whether it states where the values stop was not worked out, and what stopped it. */
-        record Undecided(BlockReason.RuleReadingStopped why) implements Run {}
+        /**
+         * Whether it states where the values stop was not worked out, and what stopped it.
+         *
+         * <p>Every reason, in the order the clause writes them. Two branches of one choice can be
+         * stopped by two different things and those go out under two different words, so which of
+         * them a reader is shown may not turn on which branch was written first.
+         */
+        record Undecided(List<BlockReason.RuleReadingStopped> why) implements Run {}
     }
 
     /** What one conjunct's rules about strings came to, per position. */
@@ -2210,7 +2217,10 @@ public final class InvariantChecker {
             byPosition.forEach((position, run) -> {
                 Coordinate found = byName.get(position);
                 if (run instanceof Run.Undecided it && found != null) {
-                    out.put(found.path(), it.why());
+                    // The first of them, which is the one the clause writes first. This door holds
+                    // one reason per name; the rest are kept where they were established, so that
+                    // the day it holds more they are there to be said.
+                    out.put(found.path(), it.why().get(0));
                 }
             });
             return out;
@@ -2223,7 +2233,7 @@ public final class InvariantChecker {
 
         /** What stopped the reading at {@code position}, or null where nothing did. */
         BlockReason.RuleReadingStopped stoppedAt(FactSubject position) {
-            return byPosition.get(position) instanceof Run.Undecided it ? it.why() : null;
+            return byPosition.get(position) instanceof Run.Undecided it ? it.why().get(0) : null;
         }
     }
 

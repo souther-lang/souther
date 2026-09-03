@@ -195,21 +195,45 @@ class AQuestionExistsBecauseTheModelStatesItAndNotBecauseAReadingSucceededTest {
                         + " them on");
     }
 
+    /**
+     * One clause can state where the values stop on two numbers, and both questions are raised.
+     *
+     * <p>Both branches of the choice state a run at each of the two positions, so the choice states
+     * one at each. Held as the number a clause stops the values on, one of them would have to be
+     * chosen between or refused — and read as the count of questions, the two collapse into one
+     * word, so what is asked here is which numbers they are about.
+     */
+    @Test
+    void oneClauseCanBoundTwoNumbers() {
+        String source = """
+                module example.rooms
+
+                data Code = { a: String, b: String }
+                    invariant one =
+                        (String.startsWith("A", a) && String.startsWith("B", b))
+                            || (String.startsWith("A", a) && String.startsWith("B", b))
+                """;
+        assertEquals(Set.of(RuleKey.of("a"), RuleKey.of("b")), boundedIn(source, "Code"),
+                "a line on each, and neither chosen between");
+    }
+
+    /** The numbers the one clause of {@code named} states the values stop on. */
+    private static Set<RuleKey> boundedIn(String source, String named) {
+        Set<RuleKey> out = new LinkedHashSet<>();
+        rulesOf(source, named).required().values().forEach(required ->
+                required.obligations().forEach(owed -> {
+                    if (owed instanceof Owed.Boundary line) {
+                        out.add(line.on().position());
+                    }
+                }));
+        return out;
+    }
+
     /** The names whose line the one clause of {@code named} leaves undecided. */
     private static Set<RuleKey> undeterminedIn(String source, String named) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
-        String module = compilation.modules().get(0);
-        Symbols symbols = Scopes.derived(compilation.db(), module).value();
-        assertNotNull(symbols);
-        TypeSymbol.AtModule at = TypeSymbols.declared(new TypeKey(module, named));
-        Hir.Data data = (Hir.Data) symbols.declaredNode(at.key());
-        assertNotNull(data);
         Set<RuleKey> out = new LinkedHashSet<>();
-        FieldDomains.of(at, data, RuleReadings.of(compilation, module),
-                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES)
-                .required().values().forEach(required ->
-                        required.undetermined().forEach(each -> out.add(each.at())));
+        rulesOf(source, named).required().values().forEach(required ->
+                required.undetermined().forEach(each -> out.add(each.at())));
         return out;
     }
 
@@ -257,6 +281,14 @@ class AQuestionExistsBecauseTheModelStatesItAndNotBecauseAReadingSucceededTest {
 
     /** What the one clause of {@code named} raises, over every place it writes. */
     private static Set<CoverageObligation> raisedIn(String source, String named) {
+        Set<CoverageObligation> out = new LinkedHashSet<>();
+        rulesOf(source, named).required().values().forEach(required ->
+                required.obligations().forEach(owed -> out.add(owed.obligation())));
+        return out;
+    }
+
+    /** The rules of {@code named} in {@code source}, read as the compilation reads them. */
+    private static FieldDomains rulesOf(String source, String named) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
         String module = compilation.modules().get(0);
@@ -265,12 +297,8 @@ class AQuestionExistsBecauseTheModelStatesItAndNotBecauseAReadingSucceededTest {
         TypeSymbol.AtModule at = TypeSymbols.declared(new TypeKey(module, named));
         Hir.Data data = (Hir.Data) symbols.declaredNode(at.key());
         assertNotNull(data, "no `" + named + "` declared");
-        FieldDomains domains = FieldDomains.of(at, data, RuleReadings.of(compilation, module),
+        return FieldDomains.of(at, data, RuleReadings.of(compilation, module),
                 souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
-        Set<CoverageObligation> out = new LinkedHashSet<>();
-        domains.required().values().forEach(required ->
-                required.obligations().forEach(owed -> out.add(owed.obligation())));
-        return out;
     }
 
     /** The same of a declaration over strings, since a run is a statement about those. */

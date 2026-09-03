@@ -3,8 +3,11 @@ package souther.compiler.check;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.values.AdmittedPlan;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -56,14 +59,44 @@ sealed interface StringRestriction {
      * fact itself is the recognition's ({@link StringPredicates.Reading}); this is that one fact
      * said in the words a rule left unread is written down in.
      */
-    record NotKnown(BlockReason.RuleReadingStopped why) implements StringRestriction {
+    record NotKnown(List<BlockReason.RuleReadingStopped> why) implements StringRestriction {
 
         public NotKnown {
-            if (why == null) {
+            if (why.isEmpty()) {
                 throw new IllegalArgumentException("a reading that stopped was stopped by something");
             }
+            why = List.copyOf(why);
+        }
+
+        NotKnown(BlockReason.RuleReadingStopped one) {
+            this(List.of(one));
+        }
+
+        /**
+         * Both of them, each reason once and in the order the clause writes them.
+         *
+         * <p>Every reason and not the first. Two branches of one choice can be stopped by two
+         * different things — one written more deeply than this reads, one written in a form it does
+         * not enter — and those go out under two different words. Keeping one, which of them a
+         * reader is shown would turn on which branch the author wrote first.
+         */
+        NotKnown and(NotKnown other) {
+            List<BlockReason.RuleReadingStopped> out = new ArrayList<>(why);
+            other.why().stream().filter(each -> !out.contains(each)).forEach(out::add);
+            return new NotKnown(out);
         }
     }
+
+    /**
+     * What a reading that states no rule about the strings at a position leaves there.
+     *
+     * <p>Every string, and known to be: a reading says nothing about a position by not writing
+     * about it, which is a fact about the clause and not something it could not work out. Written as
+     * an absence and read as one, the two operations below would each need a case for it — and the
+     * one that got a case was right at the first level and wrong as soon as its answer was composed
+     * again.
+     */
+    StringRestriction EVERY_STRING = new Admitting(AdmittedPlan.ANY);
 
     /**
      * What two readings of one position come to, held together or as a choice between them.
@@ -79,24 +112,61 @@ sealed interface StringRestriction {
      */
     static StringRestriction over(StringRestriction one, StringRestriction other, boolean met) {
         // A reading that states no rule about the strings here leaves every string standing, and
-        // every string is what a choice between it and anything else leaves. So for a choice it
-        // takes the answer over and there is nothing left to not know; for a conjunction it changes
-        // nothing and the other side stands as it is.
-        if (one == null || other == null) {
-            StringRestriction had = one == null ? other : one;
-            return met ? had : new Admitting(AdmittedPlan.ANY);
+        // that is a value like any other. Lifted first, so that everything below is one algebra
+        // over three kinds of answer rather than an algebra with a case for an absence — a case is
+        // what makes the first level right and the composition of its answer wrong.
+        StringRestriction here = one == null ? EVERY_STRING : one;
+        StringRestriction there = other == null ? EVERY_STRING : other;
+        // The laws about what is known, before what is not. Every string absorbs a choice and is
+        // the identity of a conjunction, and nothing at all absorbs a conjunction — each of them
+        // settles the pair whether or not the other side was worked out, so a reading that stopped
+        // does not make the answer unknown where the law already gives it.
+        if (met) {
+            if (admits(here, AdmittedPlan.Nothing.class)
+                    || admits(there, AdmittedPlan.Nothing.class)) {
+                return new Admitting(AdmittedPlan.NONE);
+            }
+            if (admits(here, AdmittedPlan.Everything.class)) {
+                return there;
+            }
+            if (admits(there, AdmittedPlan.Everything.class)) {
+                return here;
+            }
+        } else if (admits(here, AdmittedPlan.Everything.class)
+                || admits(there, AdmittedPlan.Everything.class)) {
+            return EVERY_STRING;
         }
-        if (one instanceof NotKnown it) {
-            return it;
+        // And then what neither law reaches. A pair one side of which was not worked out admits
+        // something this cannot name, and a run read off the side that was read is a run of a set
+        // the rule does not have.
+        if (here instanceof NotKnown a && there instanceof NotKnown b) {
+            return a.and(b);
         }
-        if (other instanceof NotKnown it) {
-            return it;
+        if (here instanceof NotKnown a) {
+            return a;
         }
-        AdmittedPlan here = ((Admitting) one).plan();
-        AdmittedPlan there = ((Admitting) other).plan();
+        if (there instanceof NotKnown b) {
+            return b;
+        }
+        AdmittedPlan first = ((Admitting) here).plan();
+        AdmittedPlan second = ((Admitting) there).plan();
         return new Admitting(met
-                ? AdmittedPlan.meeting(java.util.List.of(here, there))
-                : AdmittedPlan.joining(java.util.List.of(here, there)));
+                ? AdmittedPlan.meeting(List.of(first, second))
+                : AdmittedPlan.joining(List.of(first, second)));
+    }
+
+    /**
+     * Whether {@code said} is known to admit what {@code shape} names, read off the plan and
+     * nothing built.
+     *
+     * <p>A plan written as every value or as none says so by being that shape. One written as a
+     * pattern may come to either and is not read as one here: what would settle it is making the
+     * machine, and the laws above are the ones that hold without making anything. Where a plan
+     * that would have absorbed goes unrecognised, the answer falls through to the algebra over the
+     * plans, which normalises the same absorbers itself.
+     */
+    private static boolean admits(StringRestriction said, Class<? extends AdmittedPlan> shape) {
+        return said instanceof Admitting it && shape.isInstance(it.plan());
     }
 
     /**
@@ -124,6 +194,6 @@ sealed interface StringRestriction {
                 out.put(position, over(these.get(position), those.get(position), met)));
         // The order the positions were read in, kept: what is written out of these reaches a
         // report, and the iteration order of an immutable copy is salted once per run.
-        return java.util.Collections.unmodifiableMap(out);
+        return Collections.unmodifiableMap(out);
     }
 }
