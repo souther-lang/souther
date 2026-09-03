@@ -1386,9 +1386,33 @@ public final class Partitions {
         if (expanding.contains(record) || !(ruleSource.symbols().declaredNode(record) instanceof Hir.Data data)) {
             return List.of();
         }
+        Map<String, FixtureTemplate> chosen =
+                fieldsOf(record, ruleSource, policy, expanding, given);
+        return chosen == null || !(ruleSource.symbols().scope().reach(record)
+                instanceof TypeReachName.Written written)
+                        ? List.of() : List.of(FixtureTemplate.record(written, chosen));
+    }
+
+    /**
+     * What stands at each field of {@code record}, or null where one of them has nothing to stand
+     * for it.
+     *
+     * <p>Beside {@link #composed} and under it: this is the choosing, and writing the record is what
+     * a caller then does with it. Asked on its own by the composing of a plan, which has the record
+     * to write and needs what goes in it — a caller that took a written record apart again to get at
+     * the fields would be reading one answer back out of another.
+     */
+    static Map<String, FixtureTemplate> fieldsOf(TypeSymbol.AtModule record,
+                                                 RuleReadingSource ruleSource, ReadingPolicy policy,
+                                                 java.util.Set<TypeSymbol> expanding,
+                                                 Map<String, FixtureTemplate> given) {
+        if (expanding.contains(record)
+                || !(ruleSource.symbols().declaredNode(record) instanceof Hir.Data data)) {
+            return null;
+        }
         Map<String, Type> fields = TypeOps.fieldTypes(data, ruleSource.symbols());
         if (fields.isEmpty()) {
-            return List.of();   // a unit has no fields to compose, and is named rather than built
+            return null;   // a unit has no fields to compose, and is named rather than built
         }
         java.util.Set<TypeSymbol> inside = new LinkedHashSet<>(expanding);
         inside.add(record);
@@ -1396,7 +1420,7 @@ public final class Partitions {
         FieldDomains left = FieldDomains.of(record, data, ruleSource, policy, settled);
         Map<String, FixtureTemplate> chosen = new LinkedHashMap<>();
         if (!fields.keySet().containsAll(given.keySet())) {
-            return List.of();
+            return null;
         }
         for (Map.Entry<String, Type> field : fields.entrySet()) {
             FixtureTemplate at = given.get(field.getKey());
@@ -1406,7 +1430,7 @@ public final class Partitions {
                 List<FixtureTemplate> stands = representativesHolding(field.getValue(), ruleSource,
                         policy, left.at(named).bounds(), left.heldAt(named), inside);
                 if (stands.isEmpty()) {
-                    return List.of();
+                    return null;
                 }
                 at = stands.get(0);
             }
@@ -1419,8 +1443,7 @@ public final class Partitions {
                 left = FieldDomains.of(record, data, ruleSource, policy, settled);
             }
         }
-        return ruleSource.symbols().scope().reach(record) instanceof TypeReachName.Written written
-                ? List.of(FixtureTemplate.record(written, chosen)) : List.of();
+        return chosen;
     }
 
     /** How many of whatever counts a value the rules on it require it to hold, read where the rules

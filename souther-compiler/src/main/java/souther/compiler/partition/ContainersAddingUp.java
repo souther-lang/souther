@@ -127,7 +127,10 @@ final class ContainersAddingUp {
         // were one fact and a reader was told a search stopped without being told what would let it
         // go further — and worked out afterwards from the ends, they cannot all be seen at once.
         java.util.Set<CompositionBudget> left = java.util.EnumSet.noneOf(CompositionBudget.class);
-        if (cap < howMany.most()) {
+        // Where there is a way down to fill a container along. A figure over how many elements one
+        // is worth carrying stopped nothing where nothing was ever filled, and a reader told to
+        // raise it would be raising a figure that took nothing away.
+        if (cap < howMany.most() && !ways.filled().isEmpty()) {
             left.add(CompositionBudget.ELEMENTS_A_TOTAL_IS_SPREAD_OVER);
         }
         // What the planning gave up at, which is this compiler's the same way the figures below are.
@@ -143,7 +146,7 @@ final class ContainersAddingUp {
             // More than one element is more than one decomposition, whether or not this made a
             // second: what is offered is two shapes of the many, and the many are what a rule taking
             // a value out of the middle of a run tells apart.
-            if (many > 1) {
+            if (many > 1 && !ways.filled().isEmpty()) {
                 left.add(CompositionBudget.DECOMPOSITIONS_OF_A_TOTAL_OFFERED);
             }
             for (Spread how : Spread.values()) {
@@ -174,9 +177,12 @@ final class ContainersAddingUp {
         }
         // Nothing was composed, so what the budgets stopped is the composing itself and not the rest
         // of an offer. Where none of them ran out, this is a total nothing here writes a container
-        // for, which is a different thing to tell anybody.
+        // for — and what a reader is then owed is which of the ways to one were walked, since a
+        // figure having stopped the walk is exactly what says the ways were not all tried.
         return left.isEmpty()
-                ? none(Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE)
+                ? new TermRealizations.Realization.None(
+                        Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
+                        ways.said(occurrences(target)))
                 : new TermRealizations.Realization.Stopped(left);
     }
 
@@ -347,9 +353,11 @@ final class ContainersAddingUp {
         }
         List<FixtureTemplate> values = new ArrayList<>();
         for (BigDecimal each : split) {
-            FixtureTemplate one = ValuesCarryingANumber.carrying(filling.plan().root(), filling.fixed(),
-                    FixtureTemplate.on(elements, Count.of(each),
-                            ruleSource.symbols().scope()::reach),
+            FixtureTemplate one = PlanComposer.compose(filling.plan().root(),
+                    new ValuesCarryingANumber(filling.fixed(),
+                            FixtureTemplate.on(elements, Count.of(each),
+                                    ruleSource.symbols().scope()::reach),
+                            ruleSource, policy),
                     ruleSource, policy);
             if (one == null) {
                 return null;
@@ -375,11 +383,38 @@ final class ContainersAddingUp {
      * @param filled  one per way that planned, in the order they were reached
      * @param cutBy   the figures the planning stopped at, which are this compiler's
      */
-    private record Ways(List<Filling> filled, java.util.Set<CompositionBudget> cutBy) {
+    private record Ways(List<Filling> filled, java.util.Set<CompositionBudget> cutBy,
+                        List<TermPath> nothingStandsAt) {
 
         Ways {
             filled = List.copyOf(filled);
             cutBy = java.util.Set.copyOf(cutBy);
+            nothingStandsAt = List.copyOf(nothingStandsAt);
+        }
+
+        /**
+         * What this walk found, said where a reader is told nothing was composed.
+         *
+         * <p>Two answers and never one sentence for both. A way that was tried and built nothing
+         * says the ways are exhausted; a position nothing stands under says there was never a way
+         * to try. Told the same thing, a reader would be working out which of them it was from what
+         * the sentence left out.
+         */
+        String said(TermPath demand) {
+            if (filled.isEmpty()) {
+                return nothingStandsAt.isEmpty()
+                        ? "nothing here reaches `" + demand + "`"
+                        : "nothing standing at " + spelling(nothingStandsAt)
+                                + " gives a way down to `" + demand + "`";
+            }
+            return spelling(filled.stream().map(Filling::fixed).toList())
+                    + (filled.size() == 1 ? " was a way down to `" : " were ways down to `")
+                    + demand + "`, and none of them composed a value";
+        }
+
+        private static String spelling(List<TermPath> paths) {
+            return paths.stream().map(each -> "`" + each + "`")
+                    .collect(java.util.stream.Collectors.joining(", "));
         }
     }
 
@@ -404,6 +439,7 @@ final class ContainersAddingUp {
                                  RuleReadingSource ruleSource) {
         List<Filling> found = new ArrayList<>();
         java.util.Set<CompositionBudget> cutBy = java.util.EnumSet.noneOf(CompositionBudget.class);
+        List<TermPath> nothingStandsAt = new ArrayList<>();
         java.util.Deque<TermPath> asking = new java.util.ArrayDeque<>(List.of(demand));
         while (!asking.isEmpty()) {
             TermPath fixed = asking.removeFirst();
@@ -419,12 +455,26 @@ final class ContainersAddingUp {
             switch (ConstructionPlan.of(element, at, ruleSource.symbols(), java.util.Set.of(fixed),
                     Requirements.NONE,
                     (_, building) -> Partitions.leastHeld(building, ruleSource))) {
-                case ConstructionPlan.Result.Planned(ConstructionPlan plan) ->
+                // A way whose number stands inside a container of its own holds as many occurrences
+                // of it as that container's rules ask for, and the split above is one number per
+                // element of the outer one. So a value built along it comes to a multiple of the
+                // total it was built for, and nothing composes one until what is decomposed is the
+                // occurrences rather than the elements.
+                case ConstructionPlan.Result.Planned(ConstructionPlan plan) -> {
+                    if (!crossesAContainer(plan, fixed)) {
                         found.add(new Filling(plan, fixed));
+                    }
+                }
                 // A narrowing to state, and the walk states each of them. Asked again rather than
                 // planned around: a second narrowing may stand under the first, and which one that
                 // is depends on the case this settled on.
                 case ConstructionPlan.Result.Unnarrowed(TermPath where, List<Refinement> narrowings) -> {
+                    // A position nothing stands under is not a way that was tried and refused.
+                    // Kept as itself so that a reader is told there was never a way down rather
+                    // than that the ways came to nothing.
+                    if (narrowings.isEmpty()) {
+                        nothingStandsAt.add(where);
+                    }
                     for (Refinement narrowing : narrowings) {
                         asking.addLast(narrowed(fixed, where, narrowing));
                     }
@@ -439,7 +489,19 @@ final class ContainersAddingUp {
                                 + conflict.other().spelled() + ", though one narrowing was stated");
             }
         }
-        return new Ways(found, cutBy);
+        return new Ways(found, cutBy, nothingStandsAt);
+    }
+
+    /**
+     * Whether the way down to {@code fixed} passes through a container of its own.
+     *
+     * <p>Asked of the plan, which is what says where a container is built rather than chosen whole.
+     * Read off the path's steps instead, a step into a sequence the plan settled another way would
+     * be counted as one this builds around.
+     */
+    private static boolean crossesAContainer(ConstructionPlan plan, TermPath fixed) {
+        return plan.held().stream().anyMatch(each -> fixed.isAtOrUnder(each.at())
+                && !fixed.equals(each.at()));
     }
 
     /**

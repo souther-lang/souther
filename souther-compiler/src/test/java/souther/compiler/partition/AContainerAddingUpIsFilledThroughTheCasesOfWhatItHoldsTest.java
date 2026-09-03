@@ -66,7 +66,7 @@ class AContainerAddingUpIsFilledThroughTheCasesOfWhatItHoldsTest {
 
             data Method = Card | Cash
 
-            data Entry = { method: Method }
+            data Entry = { method: Method, settled: Bool }
 
             data Page = { count: Int }
 
@@ -91,14 +91,18 @@ class AContainerAddingUpIsFilledThroughTheCasesOfWhatItHoldsTest {
     @Test
     void aContainerIsOfferedForEachCaseOfWhatItHolds() {
         assertEquals(List.of(
-                        "[Entry { method = Card { amount = Amount(6), issuer = Issuer(\"x\") } }]",
-                        "[Entry { method = Cash { amount = Amount(6), note = Note(\"x\") } }]",
-                        "[Entry { method = Card { amount = Amount(6), issuer = Issuer(\"x\") } }"
-                                + ", Entry { method = Card { amount = Amount(0)"
-                                + ", issuer = Issuer(\"x\") } }]",
-                        "[Entry { method = Cash { amount = Amount(6), note = Note(\"x\") } }"
-                                + ", Entry { method = Cash { amount = Amount(0)"
-                                + ", note = Note(\"x\") } }]"),
+                        "[Entry { method = Card { amount = Amount(6), issuer = Issuer(\"x\") }"
+                                + ", settled = true }]",
+                        "[Entry { method = Cash { amount = Amount(6), note = Note(\"x\") }"
+                                + ", settled = true }]",
+                        "[Entry { method = Card { amount = Amount(6), issuer = Issuer(\"x\") }"
+                                + ", settled = true }, Entry { method = Card"
+                                + " { amount = Amount(0), issuer = Issuer(\"x\") }"
+                                + ", settled = true }]",
+                        "[Entry { method = Cash { amount = Amount(6), note = Note(\"x\") }"
+                                + ", settled = true }, Entry { method = Cash"
+                                + " { amount = Amount(0), note = Note(\"x\") }"
+                                + ", settled = true }]"),
                 offered().stream().map(FixtureTemplate::text).toList(),
                 "one container per case at each count, with the case's own field beside the"
                         + " amount");
@@ -142,6 +146,83 @@ class AContainerAddingUpIsFilledThroughTheCasesOfWhatItHoldsTest {
             data Method = Card | Cash | Cash2 | Cash3 | Cash4 | Cash5 | Cash6 | Cash7 | Cash8
                         | Cash9""");
 
+    /**
+     * Every way down was tried and none composed a value, which is not the answer a demand nothing
+     * reaches gets.
+     *
+     * <p>The evidence and not the word. What a reader downstream does with a total nothing composed
+     * is one classification; what happened in this attempt is another, and a walk that said the same
+     * thing about both would leave the difference to be worked out from what the sentence left out.
+     */
+    @Test
+    void everyWayTriedAndNoneComposedSaysSo() {
+        TermRealizations.Realization.None came = assertInstanceOf(
+                TermRealizations.Realization.None.class,
+                realizing(NO_CASE_COMPOSES, AMOUNT, namedIn(NO_CASE_COMPOSES, "Entries")),
+                "the ways down are there and neither of them builds a value");
+
+        assertEquals(Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE, came.why());
+        assertEquals("`ns[*].method@Card.amount`, `ns[*].method@Cash.amount` were ways down to"
+                        + " `ns[*].method.amount`, and none of them composed a value",
+                came.detail(),
+                "and the ways that were walked are named, so a reader is not left to tell this"
+                        + " from a demand nothing reaches");
+    }
+
+    /**
+     * A demand under a position nothing stands under says that instead.
+     *
+     * <p>The other corner. Both come back with the one word a reader downstream acts on, and what
+     * tells them apart is what each says it found.
+     */
+    @Test
+    void aDemandNothingStandsUnderSaysThatInstead() {
+        TermRealizations.Realization.None came = assertInstanceOf(
+                TermRealizations.Realization.None.class, realizing(SHARED, UNDER_A_TRUTH),
+                "a truth value holds no position, so there is no way down to ask for");
+
+        assertEquals(Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE, came.why());
+        assertEquals("nothing standing at `ns[*].settled` gives a way down to"
+                        + " `ns[*].settled.amount`",
+                came.detail(),
+                "and what it says is that there was never a way, which is not that the ways came"
+                        + " to nothing");
+    }
+
+    /** The amount, read through the sum every case spreads it in. */
+    private static final List<String> AMOUNT = List.of("method", "amount");
+
+    /** A way down that goes under a truth value, which divides into two values and holds no
+     *  position under either. */
+    private static final List<String> UNDER_A_TRUTH = List.of("settled", "amount");
+
+    /**
+     * The same sum with both cases holding a string longer than one is worth writing out, so the
+     * way down to the amount is there and neither case composes a value.
+     */
+    private static final String NO_CASE_COMPOSES = """
+            module g
+
+            data Amount = Int
+                invariant value >= 0
+
+            data Common = { amount: Amount }
+
+            data Card = { ...Common, inner: Method }
+            data Cash = { ...Common, inner: Method }
+
+            data Method = Card | Cash
+
+            data Entries = List<Entry>
+                invariant List.length(value) <= 1
+
+            data Entry = { method: Method, settled: Bool }
+
+            data Page = { count: Int }
+
+            behavior readArticles : (ns: List<Entry>) -> Page
+            """;
+
     /** The containers this offered for the model every test here is about. */
     private static List<FixtureTemplate> offered() {
         return offeredBy(SHARED);
@@ -154,15 +235,29 @@ class AContainerAddingUpIsFilledThroughTheCasesOfWhatItHoldsTest {
                 .values();
     }
 
-    /** What this walk came to for {@code source}. */
+    /** What this walk came to for {@code source}, with the amount read the way it is written. */
     private static TermRealizations.Realization realizing(String source) {
+        return realizing(source, AMOUNT);
+    }
+
+    /** The same, for a total read at {@code steps} below each element. */
+    private static TermRealizations.Realization realizing(String source, List<String> steps) {
+        return realizing(source, steps, new Type.ListOf(named("Entry")));
+    }
+
+    /** The same, over a container of {@code held}. */
+    private static TermRealizations.Realization realizing(String source, List<String> steps,
+                                                          Type held) {
         RuleReadingSource rules = RuleReadings.ofSource(source);
         Symbols symbols = rules.symbols();
-        Type entries = new Type.ListOf(named("Entry"));
+        Type entries = held;
+        TermPath read = TermPath.of("ns").element();
+        for (String step : steps) {
+            read = read.then(step);
+        }
         NumericTerm.TakenOver total = NumericTerm.TakenOver.of(
                 ValueName.Stdlib.operation("List", "sum"),
-                new RunSource.ProjectedOccurrences(
-                        TermPath.of("ns").element().then("method").then("amount")),
+                new RunSource.ProjectedOccurrences(read),
                 named("Amount"), symbols);
         assertNotNull(total, "adding up the amounts of a run is a number of it");
         TermOrders orders = TermOrdersFixtures.at(total, named("Amount"), symbols);
@@ -173,5 +268,11 @@ class AContainerAddingUpIsFilledThroughTheCasesOfWhatItHoldsTest {
 
     private static Type named(String data) {
         return Type.ref(TypeSymbols.declared(new TypeKey("g", data)));
+    }
+
+    /** The same, said of a model whose declarations are the ones being read. */
+    private static Type namedIn(String source, String data) {
+        assertTrue(source.contains("data " + data), "the model declares `" + data + "`");
+        return named(data);
     }
 }
