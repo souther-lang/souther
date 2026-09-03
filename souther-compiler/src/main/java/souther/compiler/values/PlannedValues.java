@@ -132,6 +132,33 @@ public sealed interface PlannedValues<A> {
     }
 
     /**
+     * Whether nothing is admitted, taking in what {@code by} has already worked out as well.
+     *
+     * <p>{@link #emptiness} answers off the descriptions alone, and a language is a description of
+     * a machine rather than the set it comes to — so two patterns nothing satisfies together read
+     * as undecided there, and stay undecided until something builds them. This asks the same
+     * question of the position's answer, which may have built exactly that: what a branch of a rule
+     * came to is a plan, and where the reading of the whole value already worked that plan out, the
+     * result is there to be read.
+     *
+     * <p>Nothing is built and nothing is spent. So a false here is "nothing established that this
+     * is empty" and never "something stands in this" — a caller acting on it declines to claim
+     * rather than claiming the opposite.
+     */
+    default boolean holdsNothingAsBuilt(Allowance<A> by) {
+        if (emptiness() == Emptiness.EMPTY) {
+            return true;
+        }
+        for (A atom : subjects()) {
+            ValueSet known = by.known(atom, at(atom));
+            if (known != null && known.isEmpty()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
      * The positions this reading narrowed, which is what a reader asking what it took in is asking.
      *
      * <p>Free, and no allowance is touched: a position was narrowed where what it holds is not

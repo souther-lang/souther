@@ -202,6 +202,48 @@ sealed interface StatedByClauses {
     StatedByClauses from(Core e);
 
     /**
+     * What this rule's own clauses leave, with its choices decided by its own clauses and by
+     * nothing that was built for the account.
+     *
+     * <p>The rule alone, which is what a reader asking what <em>this</em> rule did to a position has
+     * to be given. A branch its neighbours refuse is theirs to refuse, and a reading that took the
+     * declaration's fates would hand this rule their narrowing.
+     *
+     * <p>Its own branches are dropped where something has already established that nobody can be in
+     * them — off the descriptions where they say so, and otherwise off what the position's answer
+     * was built to be. Nothing is built here: an account that paid for a machine would be spending
+     * the budget the answer is bounded by, and a limit met while attributing a reason would come out
+     * as this compiler being less able to answer about the model.
+     *
+     * <p>So a branch nothing has shown impossible is kept, and the rule reads as one that leaves
+     * the position wider. That is an account declining to claim what nothing established, which is
+     * the direction an account has to fail in.
+     */
+    default souther.compiler.values.PlannedValues<FactSubject> alone(
+            Alternatives held, souther.compiler.values.Allowance<FactSubject> by) {
+        return switch (this) {
+            case Said it -> it.values();
+            case Choice it -> {
+                souther.compiler.values.PlannedValues<FactSubject> one = it.left().alone(held, by);
+                souther.compiler.values.PlannedValues<FactSubject> other =
+                        it.right().alone(held, by);
+                boolean hereIsEmpty = one.holdsNothingAsBuilt(by);
+                boolean thereIsEmpty = other.holdsNothingAsBuilt(by);
+                if (hereIsEmpty && thereIsEmpty) {
+                    yield one;
+                }
+                if (hereIsEmpty) {
+                    yield other;
+                }
+                if (thereIsEmpty) {
+                    yield one;
+                }
+                yield held == Alternatives.APART ? one.joinApart(other) : one.join(other);
+            }
+        };
+    }
+
+    /**
      * The same clauses with the account left behind, which is what the rules of a declaration are
      * met over.
      *
@@ -526,8 +568,9 @@ sealed interface StatedByClauses {
          * read, so nothing here builds a machine and nothing here can be widened by a constraint a
          * neighbouring rule stated: no neighbouring rule is in the tree.
          */
-        Account accountOf(StatedByClauses rule, Settlement made, Settlement alone) {
-            return new Account(narrowedBy(alone.made().values()),
+        Account accountOf(StatedByClauses rule, Settlement made,
+                          souther.compiler.values.Allowance<FactSubject> by) {
+            return new Account(narrowedBy(rule.alone(alternatives, by), by),
                     partsOf(accounted(rule, made.outcomes()), made));
         }
 
@@ -551,16 +594,19 @@ sealed interface StatedByClauses {
          * branch that stands until a neighbour refuses it is the neighbour's, and lending it here is
          * how a rule that states nothing came to be reported as holding a position down.
          *
-         * <p>Built, so a pattern is a set here rather than a name for one. That is what tells a
-         * format admitting some strings from one admitting every string, which no description of an
-         * unmade machine can answer — and a position the rule leaves holding nothing, or one it
-         * cannot promise the width of, is not one it narrowed.
+         * <p>Read against what was built and never by building. A pattern is a name for a machine
+         * until one exists, so a format admitting every string and one admitting some read alike on
+         * a description — and the position's answer, which was built, is where that is told apart.
+         * Where nothing built it, this says nothing: a position the answer never worked out is not
+         * one a rule can be said to have narrowed.
          */
         private Set<FactSubject> narrowedBy(
-                souther.compiler.values.AdmissibleValues<FactSubject> mine) {
+                souther.compiler.values.PlannedValues<FactSubject> mine,
+                souther.compiler.values.Allowance<FactSubject> by) {
             Set<FactSubject> out = new java.util.LinkedHashSet<>();
             for (FactSubject each : mine.adoptedAt()) {
-                if (mine.speaksFor(each) && !mine.at(each).isEmpty()) {
+                souther.compiler.values.ValueSet known = by.known(each, mine.at(each));
+                if (known != null && !known.isAny() && !known.isEmpty()) {
                     out.add(each);
                 }
             }
@@ -813,19 +859,32 @@ sealed interface StatedByClauses {
             Map<K, ReadByClauses.OfARule> clauses = new java.util.LinkedHashMap<>();
             Adoption<FactSubject> byValues = Adoption.nothing();
             Adoption<FactSubject> byOrder = Adoption.nothing();
+            // What the answer has left, before an account is made out of it. Every account below
+            // reads what was built and builds nothing, so this is what it costs — and an account
+            // that spent would be taking the budget the answer is bounded by to say which rule a
+            // reason belongs to.
+            //
+            // Here rather than around the whole of this: the answer above is what the allowance is
+            // for and spends it by design, so a check that started before it would be about
+            // something else and would never fail.
+            Map<FactSubject, Integer> unspent = leftOf(by, made.made().values().subjects());
             for (Map.Entry<K, StatedByClauses> each : trees.entrySet()) {
                 // The rule on its own as well as in the declaration, because what it did to a
-                // position and what the position came to are two questions. A choice of its own is
-                // decided here by its own clauses; met with its neighbours first, a branch they
-                // refuse is dropped and the rule is credited with a narrowing it did not do.
-                Account mine = reader.accountOf(each.getValue(), made,
-                        reader.settle(each.getValue().together(), by));
+                // position and what the position came to are two questions. Its own choices are
+                // decided by its own clauses against what the answer already established; met with
+                // its neighbours first, a branch they refuse is dropped and the rule is credited
+                // with a narrowing it did not do.
+                Account mine = reader.accountOf(each.getValue(), made, by);
                 said.putAll(mine.parts());
                 ReadByClauses.OfAPart clause = mine.parts().get(byClause.get(each.getKey()));
                 clauses.put(each.getKey(), new ReadByClauses.OfARule(mine.narrowed(), clause));
                 byValues = byValues.both(clause.byValues());
                 byOrder = byOrder.both(clause.byOrder());
             }
+            // An assertion because it is about this compiler and not about any model, and here
+            // rather than in one test because every declaration a corpus holds goes through it.
+            assert unspent.equals(leftOf(by, made.made().values().subjects()))
+                    : "making the accounts of a declaration spent its allowance";
             ReadByClauses read = new ReadByClauses(made.made().values(), made.ordered(),
                     byValues, byOrder, said);
             Map<K, java.util.List<Map.Entry<Core, ReadByClauses.OfAPart>>> parts =
@@ -861,4 +920,13 @@ sealed interface StatedByClauses {
      * two answers agree only for as long as nobody changes one of them.
      */
     record Account(Set<FactSubject> narrowed, Map<Core, ReadByClauses.OfAPart> parts) {}
+
+    /** What the allowance has left at each of {@code positions}, for holding an account to
+     *  spending nothing. */
+    private static Map<FactSubject, Integer> leftOf(
+            souther.compiler.values.Allowance<FactSubject> by, Set<FactSubject> positions) {
+        Map<FactSubject, Integer> out = new java.util.LinkedHashMap<>();
+        positions.forEach(each -> out.put(each, by.left(each)));
+        return out;
+    }
 }
