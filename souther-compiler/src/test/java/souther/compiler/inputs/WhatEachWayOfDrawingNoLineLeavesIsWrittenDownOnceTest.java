@@ -115,16 +115,17 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
         // values at one come to has nothing to wait for — the position has no class from it and
         // its border is drawn.
         table.put("ComparisonOverARun", "RULE_ABOUT_A_RUN/-");
-        // A new row, and here is what it is for. The three above are rules that divide no position:
-        // the quantity is empty, the line falls outside it, or the number is over a run. This one
-        // divides the position it is about — a format states which strings stand there, which is
-        // two classes — and what has no line is this measure's way of holding a class. Read as one
-        // of the three, such a position came back as one the model divides no way at all, which is
-        // the opposite of what its rule says (issue #1249).
+        // A row of its own, and here is what it is for. The three above are rules that leave the
+        // position where they found it: the quantity is empty, the line falls outside it, or the
+        // number is over a run. This one holds the position to the values it admits, and everything
+        // else is refused at construction — so what a reader acts on is that the value written here
+        // is one of them. Read as one of the three, such a position goes out with no rule saying
+        // anything about it.
         //
-        // Neither measure is short. The rule was read to the end and the classes it makes have no
-        // point on a line for a row to be owed at, so there is nothing to ask an author for.
-        table.put("RuleDividingOutsideAnOrder", "PARTITION_NOT_REPRESENTABLE/-");
+        // Neither measure is short. The rule was read to the end and there is no class away from
+        // what it admits for a row to be owed at, so there is nothing to ask an author for.
+        table.put("RuleRestrictingToAdmittedValues",
+                "POSITION_RESTRICTED_TO_WHAT_A_RULE_ADMITS/-");
         return table;
     }
 
@@ -367,7 +368,7 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
                 new BlockReason.ComparisonNothingArrivesAtItsLine(),
                 new BlockReason.ComparisonBetweenPositions(),
                 new BlockReason.ComparisonOverARun(),
-                new BlockReason.RuleDividingOutsideAnOrder(),
+                new BlockReason.RuleRestrictingToAdmittedValues(),
                 new BlockReason.TypeUnresolved(),
                 new BlockReason.RecursiveExpansion(
                         souther.compiler.types.TypeSymbols.declared(

@@ -137,20 +137,20 @@ class EverySpellingOfATruthValuedConditionIsOneConditionTest {
     /**
      * And a rule about a string is one rule however it is written against a truth value.
      *
-     * <p>The other reader of the same normalisation. Whether a position is divided by something no
-     * order carries is answered by the walk that draws lines, and that walk discriminated on the
-     * shape of the clause first — so a predicate written plainly reached the question and the same
-     * predicate compared with {@code true} did not, and one of the two spellings went on dividing a
-     * position nobody said was divided.
+     * <p>The other reader of the same normalisation. What such a rule does to the position is
+     * answered by the reading that turns clauses into sets, and the walk that draws lines takes
+     * that answer — so both spellings come to it through one reader. Answered by the walk itself,
+     * off the shape of the clause, a predicate written plainly reached the question and the same
+     * predicate compared with {@code true} did not.
      */
     @Test
-    void everySpellingOfAPredicateOverAStringDividesThePositionAlike() {
+    void everySpellingOfAPredicateOverAStringRestrictsThePositionAlike() {
         for (String rule : A_PREDICATE_HOLDS) {
             String report = report(divided(rule));
 
             assertTrue(report.contains(
-                            "no line: invariant S (it) — it divides this position into values"),
-                    () -> "`" + rule + "` divides `f.s`, and this measure has no line for it:\n"
+                            "no line: invariant S (it) — it restricts this position to the values"),
+                    () -> "`" + rule + "` holds `f.s` to what it admits, and this says so:\n"
                             + report);
         }
     }

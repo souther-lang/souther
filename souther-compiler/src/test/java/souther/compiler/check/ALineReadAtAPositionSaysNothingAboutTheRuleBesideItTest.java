@@ -132,14 +132,20 @@ class ALineReadAtAPositionSaysNothingAboutTheRuleBesideItTest {
     }
 
     /**
-     * A rule of another shape is not one of these either.
+     * A rule of another shape places no end, and what it did instead is what it is named for.
      *
-     * <p>A format, a membership, a denial: each says which values exist rather than where they
-     * stop, and a report has nowhere to put one as a line. Named here, an author would be sent
-     * after a boundary nobody wrote.
+     * <p>A denial says which values exist rather than where they stop, so a report has nowhere to
+     * put it as a line and an author named one would be sent after a boundary nobody wrote. What it
+     * does do is hold the position to what it admits — {@code length} is every whole number but
+     * five, and five cannot be built there — and that is a fact a reader acts on. Said by nothing,
+     * the position came back measured at nothing with no word for why.
+     *
+     * <p>Which values those are is not read here. The reading that turns clauses into sets answers
+     * it, and this is only asked whether what it left is narrower than everything — so a denial and
+     * a format arrive alike, as they do at every reader below.
      */
     @Test
-    void aRuleThatIsNotAboutWhereTheValuesStopIsNotNamedAsALine() {
+    void aRuleThatIsNotAboutWhereTheValuesStopIsNamedForWhatItRestricts() {
         FieldDomains read = readingOf("""
                 module example.parcels
 
@@ -148,8 +154,101 @@ class ALineReadAtAPositionSaysNothingAboutTheRuleBesideItTest {
                     invariant length /= 5
                 """, "Parcel");
 
-        assertEquals(List.of(), read.noLineAt(RuleKey.of("label")));
-        assertEquals(List.of(), read.noLineAt(RuleKey.of("length")));
+        assertTrue(read.placedAt(RuleKey.of("length")).isEmpty(),
+                "a denial is no line, which is what a report would send an author after");
+        assertEquals(List.of(new BlockReason.RuleRestrictingToAdmittedValues()),
+                reasonsAt(read, "length"));
+    }
+
+    /**
+     * A branch this rule's own clauses rule out is this rule's work, and counts as what it did.
+     *
+     * <p>Nothing is both {@code "A"} and {@code "B"}, so the branch asking for both is one nobody
+     * can take — and the rule is what is left of it, which holds {@code s} to one string. Which
+     * branch that is cannot be read off the clause: two languages are a machine, and whether their
+     * meet holds anything is not known until the machine exists.
+     *
+     * <p>The other half of the rule beside it. There a branch stands until a neighbouring rule
+     * refuses it, and crediting this rule with that is how one that states nothing was reported as
+     * holding a position down; here the refusal is the rule's own, and dropping it loses a
+     * restriction the model does state.
+     */
+    @Test
+    void aBranchThisRulesOwnClausesRuleOutIsPartOfWhatItRestricts() {
+        FieldDomains read = readingOf("""
+                module example.parcels
+
+                data Code = { t: String, s: String }
+                    invariant r = (String.matches("A", t) && String.matches("B", t))
+                        || String.matches("C", s)
+                """, "Code");
+
+        assertEquals(List.of(new BlockReason.RuleRestrictingToAdmittedValues()),
+                reasonsAt(read, "s"),
+                () -> "the branch that survives holds `s` to one string: "
+                        + read.noLineAt(RuleKey.of("s")));
+    }
+
+    /**
+     * And a branch its own clauses rule out by where the values stop counts the same way.
+     *
+     * <p>Whether anybody can be in a branch is asked of both languages, because each is short of
+     * what the other holds. Here the rule's own conjunct puts {@code n} above one and the branch
+     * asks for it below nothing, so no order admits it — and the branch that stands holds {@code s}
+     * to one string. Asked of the values alone, nothing is wrong with a branch that says nothing
+     * about values, and the restriction the rule does state is lost.
+     *
+     * <p>The pair with the branch ruled out by values above. One drop is a set with nothing in it
+     * and the other is an order with nothing between its ends, and a fold that reads one language
+     * finds only the branches that language could refuse.
+     */
+    @Test
+    void aBranchItsOwnClausesRuleOutByAnOrderCountsAlike() {
+        FieldDomains read = readingOf("""
+                module example.parcels
+
+                data Code = { n: Int, s: String }
+                    invariant r = (n < 0 || String.matches("C", s)) && n > 1
+                """, "Code");
+
+        assertEquals(List.of(new BlockReason.RuleRestrictingToAdmittedValues()),
+                reasonsAt(read, "s"),
+                () -> "no order admits the first branch, so the second holds `s` to one string: "
+                        + read.noLineAt(RuleKey.of("s")));
+    }
+
+    /**
+     * A conjunct whose surviving branch is about another position does not hold this one down.
+     *
+     * <p>What a reading settled and what it constrained are two answers, and only the second is a
+     * rule binding a value. No string is both {@code "A"} and {@code "B"}, so the branch asking for
+     * both is one nothing satisfies — and a dead branch settles every position it named by imposing
+     * nothing on it, which the account records as settled rather than as read. What is left of that
+     * conjunct is a rule about {@code b}, and taken for a constraint on {@code a} it is filed as
+     * holding {@code a} to what it admits: an author is sent to a clause about another field, and
+     * to a branch that is not there.
+     *
+     * <p>The pair of fields is what makes the difference visible. Where the surviving branch names
+     * the same position, the account reads it there anyway and the two answers agree; the one that
+     * is settled and not read is a position only the dead branch spoke of.
+     *
+     * <p>Asked of the reading and not of a report. Two rules with no line at one position come out
+     * as one finding, so a report shows one entry whichever answer the account gave.
+     */
+    @Test
+    void aConjunctSettledByADeadBranchIsNotOneThatRestricts() {
+        FieldDomains read = readingOf("""
+                module example.parcels
+
+                data Code = { a: String, b: Int }
+                    invariant r = ((String.matches("A", a) && String.matches("B", a)) || b == 1)
+                        && String.matches("T[0-9]{3}", a)
+                """, "Code");
+
+        assertEquals(List.of(new BlockReason.RuleRestrictingToAdmittedValues()),
+                reasonsAt(read, "a"),
+                () -> "the format holds `a` to what it admits and the conjunct beside it does not: "
+                        + read.noLineAt(RuleKey.of("a")));
     }
 
     /**

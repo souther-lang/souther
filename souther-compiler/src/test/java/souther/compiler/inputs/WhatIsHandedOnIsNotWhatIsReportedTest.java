@@ -62,11 +62,21 @@ class WhatIsHandedOnIsNotWhatIsReportedTest {
                 "the rule that placed an end is the one that is not here");
     }
 
-    /** And only the rule this reading owed a line for is reported. */
+    /**
+     * And only the rule this reading owed a line for is reported as one.
+     *
+     * <p>Asked of the reason and not of the list. What a reading found no line for is one list and
+     * holds two kinds of fact: a rule it owed a line for and drew none, and a rule that placed no
+     * end and held the position to what it admits instead. {@code notZero} is the second — every
+     * value but nothing is what it leaves {@code lo} — and read off the list alone it counts as a
+     * boundary an author was owed.
+     */
     @Test
     void onlyARuleALineWasOwedForIsReported() {
-        assertEquals(List.of("ordered"), reported(),
+        assertEquals(List.of("ordered"), reportedAsALineOwed(),
                 "naming a value is not a line this reading failed to draw");
+        assertEquals(List.of("notZero"), reportedAsARestriction(),
+                "and the rule that holds the position to what it admits says that instead");
     }
 
     /**
@@ -119,8 +129,18 @@ class WhatIsHandedOnIsNotWhatIsReportedTest {
                 .distinct().toList();
     }
 
-    private static List<String> reported() {
+    private static List<String> reportedAsALineOwed() {
+        return reportedFor(why -> !(why instanceof BlockReason.RuleRestrictingToAdmittedValues));
+    }
+
+    private static List<String> reportedAsARestriction() {
+        return reportedFor(why -> why instanceof BlockReason.RuleRestrictingToAdmittedValues);
+    }
+
+    private static List<String> reportedFor(
+            java.util.function.Predicate<BlockReason.RuleWithoutLineReason> of) {
         return read().bounds().noLines().stream()
+                .filter(each -> of.test(each.why()))
                 .map(each -> named(each.from()))
                 .distinct().toList();
     }

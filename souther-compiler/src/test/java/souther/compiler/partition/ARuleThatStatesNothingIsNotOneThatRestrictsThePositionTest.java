@@ -23,25 +23,25 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 /**
  * Two rules read from end to end that draw no line, and they are not the same news.
  *
- * <p>One of them divides nothing: {@code a - a > 0} names the position and states something about a
- * number the position does not appear in, so there is no class in it to have found. The other
- * divides the position in two — the strings a format accepts and the rest — and what is absent is
- * a line, because what this measure holds a class as is an interval on an order.
+ * <p>One of them states nothing about the position: {@code a - a > 0} names it and compares a
+ * number it does not appear in, so the values there are exactly what they were. The other holds the
+ * position to the strings a format accepts, and everything else is refused at construction — so the
+ * value written there has to be one of them, which is a fact a reader acts on.
  *
  * <p>Neither is a position the model divides no way, and their verdicts do not tell them apart:
  * what a verdict says is how far the readings got, and these two got equally far. What differs is
- * why no line came of the rule, and the reason is where that lives — so the difference is held
+ * what the rule did to the position, and the reason is where that lives — so the difference is held
  * there, which is the only place it can be held at all.
  *
- * <p><b>Which is what stops the next over-generalisation.</b> A reading that gave every rule
- * without a line the word for a division it cannot represent would say the model divides a position
- * that it does not, which is the mistake this pair was written after, made the other way round
- * (issue #1249).
+ * <p><b>Which is what stops the over-generalisation either way.</b> A reading that gave every rule
+ * without a line the word for a restriction would say the model holds down a position it leaves
+ * alone; one that gave a restriction the word for a division would say the model tells apart values
+ * the declaration refuses to build.
  */
-class ARuleThatDividesNothingIsNotARuleThisMeasureCannotHoldTest {
+class ARuleThatStatesNothingIsNotOneThatRestrictsThePositionTest {
 
-    /** A rule about a number the position cancels out of, which divides nothing. */
-    private static final String DIVIDES_NOTHING = """
+    /** A rule about a number the position cancels out of, which states nothing about it. */
+    private static final String STATES_NOTHING = """
             module probe
 
             data Ok
@@ -53,8 +53,8 @@ class ARuleThatDividesNothingIsNotARuleThisMeasureCannotHoldTest {
             let read (n) = Ok
             """;
 
-    /** A rule that divides the position into strings, which no order holds. */
-    private static final String DIVIDES_WITHOUT_AN_ORDER = """
+    /** A rule holding the position to the strings a format accepts. */
+    private static final String RESTRICTS_THE_POSITION = """
             module probe
 
             data Ok
@@ -70,13 +70,12 @@ class ARuleThatDividesNothingIsNotARuleThisMeasureCannotHoldTest {
      * Neither is a position the model divides no way, which is the claim they were both filed under.
      *
      * <p>The one thing both have to have. Each states a rule about the position it is at, so a
-     * verdict saying the model divides it no way denies the declaration two tokens away — and that
-     * is what a format got, because nothing recorded it as a rule the reading had finished with
-     * (issue #1249).
+     * verdict saying the model divides it no way denies the declaration two tokens away — which is
+     * what a rule nothing records as read to the end comes to.
      */
     @Test
     void neitherIsAPositionTheModelDividesNoWay() {
-        for (String source : List.of(DIVIDES_NOTHING, DIVIDES_WITHOUT_AN_ORDER)) {
+        for (String source : List.of(STATES_NOTHING, RESTRICTS_THE_POSITION)) {
             List<UndividedPosition> undivided = partitioningOf(source).undivided();
             assertEquals(1, undivided.size(), undivided.toString());
             assertFalse(undivided.get(0).why() instanceof UndividedPosition.Why.Absent, source);
@@ -101,20 +100,20 @@ class ARuleThatDividesNothingIsNotARuleThisMeasureCannotHoldTest {
      *
      * <p>The pair the reason exists for. Both are `String.matches` about one position, and what
      * tells them apart is whether the pattern was read — so a producer deciding from the operation
-     * alone would call the second a division this measure cannot hold, which says the reading
-     * finished where it stopped. A reader sent after a limit of the measure would be looking for one
-     * that is not there, and the rule they could rewrite would go unmentioned.
+     * alone would say the rule holds the position down, which claims a set nobody worked out. A
+     * reader told the value written there has to be one the rule admits would be acting on a fact
+     * this compiler never established, and the rule they could rewrite would go unmentioned.
      */
     @Test
-    void aPatternThisCouldNotReadIsNotADivisionThisMeasureCannotHold() {
+    void aPatternThisCouldNotReadRestrictsNothing() {
         List<UndividedPosition> undivided = partitioningOf(NOT_READ).undivided();
 
         assertEquals(1, undivided.size(), undivided.toString());
         assertInstanceOf(UndividedPosition.Why.CannotDerive.class, undivided.get(0).why(),
-                "the pattern was not read, so nothing about the division follows");
+                "the pattern was not read, so nothing about what stands there follows");
         assertFalse(reasonsOf(NOT_READ).contains(
-                        UndividedPosition.Reason.PARTITION_NOT_REPRESENTABLE),
-                "and the word for a division this measure cannot hold is not said of it: "
+                        UndividedPosition.Reason.POSITION_RESTRICTED_TO_WHAT_A_RULE_ADMITS),
+                "and the word for a rule that holds a position down is not said of it: "
                         + reasonsOf(NOT_READ));
     }
 
@@ -131,7 +130,7 @@ class ARuleThatDividesNothingIsNotARuleThisMeasureCannotHoldTest {
             let read (n) = Ok
             """;
 
-    /** And one no string satisfies, which leaves no value rather than dividing them. */
+    /** And one no string satisfies, which leaves no value rather than restricting to some. */
     private static final String LEAVES_NOTHING = """
             module probe
 
@@ -145,35 +144,73 @@ class ARuleThatDividesNothingIsNotARuleThisMeasureCannotHoldTest {
             """;
 
     /**
-     * A predicate that rules nothing out divides nothing, and a division is not what it is called.
+     * A predicate that rules nothing out holds the position to nothing, and is not called a
+     * restriction.
      *
-     * <p>Read and divides are two questions. {@code String.contains("", value)} is read perfectly —
-     * the strings it admits are every string there is — and a reading that answered the first for
-     * the second called it a position divided into values this measure draws no line between, which
-     * says the model tells values apart here and it does not.
+     * <p>Read and restricts are two questions. {@code String.contains("", value)} is read perfectly
+     * — the strings it admits are every string there is — and a reading that answered the first for
+     * the second would tell a reader the value written there has to be one the rule admits, which
+     * is every value and no help.
      *
-     * <p>The pair is the point: the same call, one needle apart, and only one of them is a
-     * division. A reading that decided from the operation, or from whether the text was written,
-     * would give them one answer.
+     * <p>The pair is the point: the same call, one needle apart, and only one of them holds the
+     * position down. A reading that decided from the operation, or from whether the text was
+     * written, would give them one answer.
      */
     @Test
-    void aPredicateThatRulesNothingOutIsNotADivisionThisMeasureCannotHold() {
+    void aPredicateThatRulesNothingOutRestrictsNothing() {
         assertFalse(reasonsOf(RULES_NOTHING_OUT)
-                        .contains(UndividedPosition.Reason.PARTITION_NOT_REPRESENTABLE),
-                () -> "every string satisfies it, so there is no distinction to have no line for: "
+                        .contains(UndividedPosition.Reason.POSITION_RESTRICTED_TO_WHAT_A_RULE_ADMITS),
+                () -> "every string satisfies it, so the position is left where it was found: "
                         + reasonsOf(RULES_NOTHING_OUT));
-        assertEquals(List.of(UndividedPosition.Reason.PARTITION_NOT_REPRESENTABLE),
-                reasonsOf(DIVIDES_WITHOUT_AN_ORDER),
-                "and the one that does divide still says so");
+        assertEquals(List.of(UndividedPosition.Reason.POSITION_RESTRICTED_TO_WHAT_A_RULE_ADMITS),
+                reasonsOf(RESTRICTS_THE_POSITION),
+                "and the one that does hold it down still says so");
     }
 
-    /** And one no string satisfies leaves no value, which is not a division either. */
+    /** And one no string satisfies leaves no value, which is not a restriction either. */
     @Test
-    void aPredicateNoStringSatisfiesIsNotADivisionEither() {
+    void aPredicateNoStringSatisfiesRestrictsNothingEither() {
         assertFalse(reasonsOf(LEAVES_NOTHING)
-                        .contains(UndividedPosition.Reason.PARTITION_NOT_REPRESENTABLE),
-                () -> "no string satisfies it, so the rules leave no value rather than two"
-                        + " classes: " + reasonsOf(LEAVES_NOTHING));
+                        .contains(UndividedPosition.Reason.POSITION_RESTRICTED_TO_WHAT_A_RULE_ADMITS),
+                () -> "no string satisfies it, so the rules leave no value rather than holding the"
+                        + " position to some: " + reasonsOf(LEAVES_NOTHING));
+    }
+
+    /** A rule that states nothing, standing beside one that holds the same position down. */
+    private static final String NOTHING_BESIDE_A_NARROWING = """
+            module probe
+
+            data Ok
+
+            data T = { value: Int }
+                invariant tautology = value == 5 || value /= 5
+                invariant narrows = value == 7
+
+            behavior read : (t: T) -> Ok
+            let read (t) = Ok
+            """;
+
+    /**
+     * A rule is answered for by what it did, and never by what the rule beside it did.
+     *
+     * <p>What the declaration leaves at a position is met from every rule that reached it, so a
+     * reading that took it for one rule's answer hands that rule its neighbour's narrowing. Here
+     * the first rule states nothing — every value satisfies one side or the other — and the second
+     * holds the position to a single value; read off the declaration, the first is reported as
+     * holding the position to what it admits, and an author is sent to a rule that admits
+     * everything.
+     *
+     * <p>The fates of its choices are the neighbour's work too, which is what makes the pair
+     * necessary rather than the tautology on its own. Nothing rules out {@code value == 5} until
+     * {@code value == 7} stands beside it, and a reading that answered over the rule's tree with
+     * those fates applied would find one branch dead and the other holding the position away from
+     * five — a narrowing assembled out of a rule that states none.
+     */
+    @Test
+    void aRuleIsNotHandedTheNarrowingItsNeighbourDid() {
+        assertEquals(List.of(), reasonsOf(NOTHING_BESIDE_A_NARROWING),
+                "one rule states nothing and the other draws a line, so neither holds the position"
+                        + " to what it admits");
     }
 
     /**
@@ -186,7 +223,7 @@ class ARuleThatDividesNothingIsNotARuleThisMeasureCannotHoldTest {
     @Test
     void theFormatIsAReadingThatRanToTheEnd() {
         assertInstanceOf(UndividedPosition.Why.StatedWithoutALine.class,
-                partitioningOf(DIVIDES_WITHOUT_AN_ORDER).undivided().get(0).why(),
+                partitioningOf(RESTRICTS_THE_POSITION).undivided().get(0).why(),
                 "the rule was taken in; what is absent is a line");
     }
 
@@ -194,11 +231,12 @@ class ARuleThatDividesNothingIsNotARuleThisMeasureCannotHoldTest {
     @Test
     void whatTellsThemApartIsTheReason() {
         assertEquals(List.of(UndividedPosition.Reason.RULE_CUTS_NOTHING),
-                reasonsOf(DIVIDES_NOTHING),
-                "a rule about a number the position cancels out of divides nothing");
-        assertEquals(List.of(UndividedPosition.Reason.PARTITION_NOT_REPRESENTABLE),
-                reasonsOf(DIVIDES_WITHOUT_AN_ORDER),
-                "a format divides the position, and no interval says which values are in");
+                reasonsOf(STATES_NOTHING),
+                "a rule about a number the position cancels out of cuts nothing");
+        assertEquals(List.of(UndividedPosition.Reason.POSITION_RESTRICTED_TO_WHAT_A_RULE_ADMITS),
+                reasonsOf(RESTRICTS_THE_POSITION),
+                "a format holds the position to the strings it admits, and nothing else can be"
+                        + " built there");
     }
 
     /** The words the rules of one model come to, in the order they are held. */

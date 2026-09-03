@@ -743,7 +743,8 @@ public final class InvariantChecker {
             // the two went unanswered would turn on the order they were written in.
             souther.compiler.values.Allowance<FactSubject> allowed =
                     souther.compiler.values.Allowance.ofAdmittedValues();
-            Map<RuleRef, Map<Core, Set<FactSubject>>> adoptedBy = new LinkedHashMap<>();
+            Map<RuleRef, Map<Core, ReadByClauses.OfAPart>> adoptedBy = new LinkedHashMap<>();
+            Map<RuleRef, ReadByClauses.OfARule> narrowedBy = new LinkedHashMap<>();
             // One reader for this value's positions, used over however many clauses reach it, and
             // the one that decides the choices in what they came to.
             StatedByClauses.Reading reader = StatedByClauses
@@ -774,13 +775,14 @@ public final class InvariantChecker {
             Map<FactSubject, Integer> unspent = leftOf(allowed, positions.keySet());
             AdmissibleValues<FactSubject> values = answered.whole().values();
             answered.perClause().forEach((each, one) -> {
-                one.adopted().forEach(position -> took.record(each.from(), position));
-                took.stoppedBy(each.from(), one.aboutARule());
+                narrowedBy.put(each.from(), one);
+                one.account().adopted().forEach(position -> took.record(each.from(), position));
+                took.stoppedBy(each.from(), one.account().aboutARule());
             });
             answered.perPart().forEach((each, parts) -> {
-                Map<Core, Set<FactSubject>> out = adoptedBy
+                Map<Core, ReadByClauses.OfAPart> out = adoptedBy
                         .computeIfAbsent(each.from(), _ -> new java.util.IdentityHashMap<>());
-                parts.forEach(part -> out.put(part.getKey(), part.getValue().adopted()));
+                parts.forEach(part -> out.put(part.getKey(), part.getValue()));
             });
             // And the same after it. Reading the account is reading an answer: the whole was worked
             // out once above, and what each clause and each part of it took in is looked up in
@@ -810,7 +812,7 @@ public final class InvariantChecker {
             // And which of the clauses place an edge, asked once the positions have names to be
             // recognised by.
             Reading reading = c.directsIn(written, at, atoms, keys, held, typeAt, took,
-                    new PartsRead(readBy, adoptedBy), reach.withoutParts());
+                    new PartsRead(readBy, adoptedBy, narrowedBy), reach.withoutParts());
             ConstraintState<FactSubject> constraints = k.constraints()
                     .takingValuesRead(values, allowed)
                     .taking(answered.whole().ordered());
@@ -1147,10 +1149,18 @@ public final class InvariantChecker {
      * finds this reading's own answer about the very node it holds rather than reading it again.
      *
      * @param read    what the reading that builds the numeric constraints made of each part
-     * @param adopted what the reading that turns clauses into sets of values took each part in about
+     * @param account what each reading made of each part, as each of them wrote it down. The
+     *                account itself and not one projection of it: what a part adopted and what it
+     *                put a constraint on are two questions, and a walk handed the first alone
+     *                answers the second by reading a set that holds more than it
+     * @param byRule  what each rule's own tree came to, which is the only thing that answers what
+     *                that rule did to a position. The declaration's answer is met from every rule
+     *                reaching the position, so a reader taking it for one rule's would lend a rule
+     *                that narrows nothing whatever its neighbours narrowed
      */
     record PartsRead(Map<RuleRef, Map<Core, PartRead>> read,
-                     Map<RuleRef, Map<Core, Set<FactSubject>>> adopted) {
+                     Map<RuleRef, Map<Core, ReadByClauses.OfAPart>> account,
+                     Map<RuleRef, ReadByClauses.OfARule> byRule) {
 
         /** What the reading that builds the bounds made of {@code part} of {@code rule}, or null
          *  where it read no such part — which is not the same as having read it and made nothing of
@@ -1160,9 +1170,20 @@ public final class InvariantChecker {
             return said == null ? null : said.get(part);
         }
 
-        Set<FactSubject> adoptedIn(RuleRef rule, Core part) {
-            Map<Core, Set<FactSubject>> said = adopted.get(rule);
+        /** What every reading made of {@code part} of {@code rule}, or null where none read it. */
+        ReadByClauses.OfAPart accountIn(RuleRef rule, Core part) {
+            Map<Core, ReadByClauses.OfAPart> said = account.get(rule);
             return said == null ? null : said.get(part);
+        }
+
+        Set<FactSubject> adoptedIn(RuleRef rule, Core part) {
+            ReadByClauses.OfAPart said = accountIn(rule, part);
+            return said == null ? null : said.adopted();
+        }
+
+        /** What {@code rule}'s own tree left, or null where no reading answered over it. */
+        ReadByClauses.OfARule ruleIn(RuleRef rule) {
+            return byRule.get(rule);
         }
     }
 
@@ -1459,24 +1480,7 @@ public final class InvariantChecker {
         if (withoutParts.excludes(from, clause)) {
             return;
         }
-        // A rule that divides the position by something no order carries, said as that. The
-        // reading took it in — which strings stand here is an answer, and this walk is the one that
-        // would have drawn a line from it — so what is absent is a line and not a reading. Passed
-        // over in silence, the position came back with no classes and nothing saying why, and every
-        // reader downstream took the silence for the model dividing it no way at all (issue #1249).
-        //
-        // Asked here and not inside one of the shapes below, because which shape the clause is
-        // written as is exactly what does not decide it: `String.contains(s, value)` is a call and
-        // `String.contains(s, value) == true` is a comparison, and both divide the position the
-        // same way.
-        Coordinate divided = dividedOutsideAnOrder(clause, at, byName);
-        if (divided != null) {
-            FieldDomains.NoLine said = new FieldDomains.NoLine(divided.at(), from, clause, part,
-                    new BlockReason.RuleDividingOutsideAnOrder());
-            if (!noLines.contains(said)) {
-                noLines.add(said);
-            }
-        }
+        restricting(clause, from, part, byName, parts, noLines);
         if (!(clause instanceof Core.Binary bin)) {
             // Nothing but a binary is written as a comparison, so there is no reading of one for
             // the classification to be handed.
@@ -1911,64 +1915,59 @@ public final class InvariantChecker {
     }
 
     /**
-     * The position a clause divides by something that is not an order, or null where it is no such
-     * clause.
+     * Written down where this conjunct holds a position's values down and places no end on them.
      *
-     * <p>Which calls those are is {@link StringPredicates}' and is asked rather than spelled: the
-     * same table says what such a call means about the strings at a position, and a second list of
-     * spellings here would be a second answer to which rules this compiler reads.
+     * <p>Everything outside what an invariant admits is refused at construction (E1903), so such a
+     * rule restricts the position and the values it leaves out are no class of it (ADR-0090). Said
+     * as a division, the sentence a reader is shown tells them the model divides a position its own
+     * declaration says cannot hold the other side; passed over in silence, the position comes back
+     * with no classes and nothing saying why, and a reader downstream takes the silence for the
+     * model dividing it no way at all.
      *
-     * <p>Only where the position is one this reading names. A predicate about something deeper than
-     * the coordinates in hand states nothing this walk can file, and filing it against the position
-     * above would put a rule's name on a division of something else.
+     * <p><b>Nothing here reads the rule.</b> What a clause states about the values at a position is
+     * worked out once, by the reading that turns clauses into sets, and every question below is put
+     * to whichever answer owns it — so a predicate this compiler learns to read, a language that
+     * turns out to be finite, and a congruence read one day all arrive without a word of this
+     * changing. Read a second time here, this walk would be deciding for itself what a rule means
+     * about a position, which is the one thing that has to have a single owner.
+     *
+     * <p><b>And every question is asked at the scope of what is filed.</b> What is written down
+     * names one rule and one of its conjuncts, so what the conjunct contributed is asked of that
+     * conjunct and what the rule left is asked of that rule's own tree. Taken from the declaration's
+     * answer, which is met from every rule reaching the position, {@code invariant value == 7}
+     * beside a rule that says nothing lends the second its narrowing — and the reason goes out
+     * against the one rule that holds the position to nothing.
      */
-    private Coordinate dividedOutsideAnOrder(Core clause, Denotations at,
-                                             Map<FactSubject, Coordinate> byName) {
-        // Through the one reading of what a spelling comes to, so that a predicate stated and one
-        // denied are the same rule here as they are everywhere else. Asked of the clause as
-        // written, `String.contains(s, value) == true` is a comparison and never reached this
-        // question, so one of the ways of writing a rule went on dividing a position nobody said
-        // was divided.
-        Core atom = clause;
-        for (Conditions.Restated under = Conditions.restated(atom); under != null;
-                under = Conditions.restated(atom)) {
-            atom = under.condition();
+    private void restricting(Core clause, RuleRef.Invariant from, int part,
+                             Map<FactSubject, Coordinate> byName, PartsRead parts,
+                             List<FieldDomains.NoLine> noLines) {
+        ReadByClauses.OfAPart account = parts.accountIn(from, clause);
+        ReadByClauses.OfARule rule = parts.ruleIn(from);
+        if (account == null || rule == null) {
+            return;
         }
-        // Whether the predicate is read, and whether what it says is a division, are the reading's
-        // answers and neither is a membership test. A pattern this compiler cannot take apart is a
-        // rule it did not read, and one whose strings are all of them or none of them divides
-        // nothing — filed as a division either way, the sentence would say the reading finished
-        // where it stopped, or that the model tells values apart where it does not.
-        StringPredicates.Stated stated = StringPredicates.statedByChecked(atom, symbols);
-        if (stated == null) {
-            return null;
+        for (Map.Entry<FactSubject, Coordinate> each : byName.entrySet()) {
+            FactSubject position = each.getKey();
+            // What this conjunct did to the position, asked of each reading about its own work. A
+            // part that put no constraint on the values restricts nothing, whatever else it settled
+            // — a dead branch settles every position it named by imposing nothing on it — and one
+            // that placed an end has a line, which is accounted for by whoever draws lines.
+            if (!account.restricts(position) || account.bounds(position)) {
+                continue;
+            }
+            // And what the rule itself came to once its own choices are decided and its own
+            // languages built, which is what says whether it holds the position down at all: in
+            // `value == 5 || value /= 5` each side names values and the rule leaves the position
+            // exactly as wide as it was.
+            if (!rule.narrows(position)) {
+                continue;
+            }
+            FieldDomains.NoLine said = new FieldDomains.NoLine(each.getValue().at(), from, clause,
+                    part, new BlockReason.RuleRestrictingToAdmittedValues());
+            if (!noLines.contains(said)) {
+                noLines.add(said);
+            }
         }
-        return switch (stated.reading()) {
-            case StringPredicates.Reading.Accepting accepting ->
-                    dividedBy(accepting, stated.subject(), at, byName);
-            // A rule this did not read says nothing here: the reading that stopped is the one that
-            // reports being stopped, and a second account of it from this side would be a limit
-            // filed as a fact about the model.
-            case StringPredicates.Reading.PatternNotRead _ -> null;
-            case StringPredicates.Reading.WrittenArgumentNotKnown _ -> null;
-        };
-    }
-
-    /** The same, off the strings the rule was read as. */
-    private Coordinate dividedBy(StringPredicates.Reading.Accepting accepting, Core subject,
-                                 Denotations at, Map<FactSubject, Coordinate> byName) {
-        return switch (StringPredicates.divides(accepting)) {
-            case StringPredicates.Divides.IntoTwo _ -> byName.get(nameOf(subject, at));
-            // Every string, so the rule tells no value here from another and the position is one
-            // the model divides no way — which is what it comes back as when nothing is filed.
-            case StringPredicates.Divides.NothingIsRuledOut _ -> null;
-            // No string, so the rules leave no value here. That is a fact about the values and is
-            // said where emptiness is, not as a division with no line through it.
-            case StringPredicates.Divides.NothingIsLeft _ -> null;
-            // And where a limit stopped the machine, the same as above: what it cost is reported by
-            // whoever spent it.
-            case StringPredicates.Divides.StoppedByLimit _ -> null;
-        };
     }
 
     /**
