@@ -36,8 +36,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class APointBelowWhatThisPlansIsOpenOnAFigureTest {
 
-    private static final String MODULE = "example.deep";
-
     /**
      * Nine steps from the parameter to the field the line is drawn on.
      *
@@ -132,10 +130,79 @@ class APointBelowWhatThisPlansIsOpenOnAFigureTest {
                 "and the figure is carried beside it rather than the word being taken off it");
     }
 
+    /**
+     * A point held back by two figures at once names both of them.
+     *
+     * <p>The parameter nests past what this plans and carries a line whose edge offered less than
+     * it had, so two different things are in the way at one point: a plan short of the value's
+     * positions, and values the edge never built. Neither stands for the other and raising one
+     * leaves the other where it was, so a reader asking what would let this go further is owed both
+     * — and an outcome that names one is an author raising a figure that changes nothing.
+     */
+    @Test
+    void aPointTwoFiguresHeldBackNamesEachOfThem() {
+        List<CompositionBudget> named = new ArrayList<>();
+        for (BorderAssessment border : lines(BOTH, "both")) {
+            if (border.at(PointRole.ON) instanceof ItemAssessment.Owed owed) {
+                for (ItemAssessment.Attempt each : owed.searches().each()) {
+                    if (each instanceof ItemAssessment.Attempt.Limited it) {
+                        named.addAll(assertInstanceOf(EstablishmentGap.Composition.class, it.by())
+                                .budgets().written());
+                    }
+                }
+            }
+        }
+
+        assertEquals(List.of(CompositionBudget.DECOMPOSITIONS_OF_A_TOTAL_OFFERED,
+                        CompositionBudget.DEPTH_A_CONSTRUCTION_PLAN_DESCENDS), named,
+                "the plan stopped short and the edge held values back, and the point is open on"
+                        + " each of them");
+    }
+
+    /**
+     * A parameter that both nests past the figure and carries a line whose edge holds values back.
+     *
+     * <p>The total is one no shape this offers reaches, which is what leaves the edge naming a
+     * figure of its own; the nesting beside it is what leaves the plan short. Nothing relates the
+     * two, which is the point — they are two pieces of work and a reader is owed both.
+     */
+    private static final String BOTH = """
+            module example.both
+
+            data Awkward = Int
+                invariant value >= 0
+                invariant value <= 10
+                invariant value /= 3
+                invariant value /= 4
+                invariant value /= 7
+
+            data Two = { xs: List<Awkward> }
+                invariant List.length(xs) == 2
+
+            data L8 = { v: Int }
+            data L7 = { down: L8 }
+            data L6 = { down: L7 }
+            data L5 = { down: L6 }
+            data L4 = { down: L5 }
+            data L3 = { down: L4 }
+            data L2 = { down: L3 }
+            data L1 = { down: L2 }
+
+            data Query = { two: Two, down: L1 }
+
+            data Yes
+            data No
+            data Verdict = Yes | No
+
+            behavior both : (q: Query) -> Verdict
+            let both (q) =
+                if List.sum(List.map(x -> x.value, q.two.xs)) >= 7 then Yes else No
+            """;
+
     /** Every search of the point in the role given, across the lines this behavior draws. */
     private static List<ItemAssessment.Attempt> searchesOf(PointRole role) {
         List<ItemAssessment.Attempt> out = new ArrayList<>();
-        for (BorderAssessment border : lines()) {
+        for (BorderAssessment border : lines(MODEL, "deeperThanThisPlans")) {
             if (border.at(role) instanceof ItemAssessment.Owed owed) {
                 out.addAll(owed.searches().each());
             }
@@ -143,17 +210,21 @@ class APointBelowWhatThisPlansIsOpenOnAFigureTest {
         return out;
     }
 
-    private static List<BorderAssessment> lines() {
+    /** The lines a behavior draws, read from the module the source declares itself to be. */
+    private static List<BorderAssessment> lines(String source, String behavior) {
+        String module = source.lines().filter(each -> each.startsWith("module "))
+                .map(each -> each.substring("module ".length()).trim())
+                .findFirst().orElseThrow();
         Map<String, List<BorderAssessment>> read =
-                Adequacy.readingsOf(measured().db(), MODULE);
+                Adequacy.readingsOf(measured(source).db(), module);
         assertNotNull(read, "the model under test compiles");
-        List<BorderAssessment> lines = read.get("deeperThanThisPlans");
+        List<BorderAssessment> lines = read.get(behavior);
         assertNotNull(lines, "the behavior was measured");
         return lines;
     }
 
-    private static Compilation measured() {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
+    private static Compilation measured(String source) {
+        Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         assertEquals(List.of(), compilation.diagnostics().values().stream()
