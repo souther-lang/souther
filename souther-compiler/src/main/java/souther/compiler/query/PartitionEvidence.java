@@ -1,6 +1,16 @@
 package souther.compiler.query;
 
+import souther.compiler.check.CoverageObligation;
+import souther.compiler.check.NumberAt;
+import souther.compiler.check.RuleCitation;
+import souther.compiler.check.RuleRef;
+import souther.compiler.inputs.BlockReason;
+import souther.compiler.inputs.FilingCoordinate;
+import souther.compiler.inputs.InputQuestion;
+import souther.compiler.inputs.StandingQuestion;
 import souther.compiler.observe.Incompleteness;
+import souther.compiler.partition.ReportedReason;
+import souther.compiler.partition.UndividedPosition;
 
 import java.util.List;
 import java.util.Set;
@@ -136,34 +146,35 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
      * producer kept them agreeing — which is the arrangement this whole change exists to remove,
      * left standing one layer from the document.
      */
-    public record Unanswered(souther.compiler.inputs.StandingQuestion asked) {
+    public record Unanswered(StandingQuestion asked) {
 
         /** Which rule of the model raised it, which is what tells one question from another. */
-        public souther.compiler.check.RuleRef rule() {
+        public RuleRef rule() {
             return asked.rule();
         }
 
         /** How a reader finds that rule, which is not what tells it from another. Every handle the
          *  readers offered, because one question found twice is one question a reader can be sent
          *  to either way; which of them a document writes is that document's to decide. */
-        public java.util.Set<souther.compiler.check.RuleCitation> cited() {
+        public java.util.Set<RuleCitation> cited() {
             return asked.cited();
         }
 
-        /** What it asks. Which measure's section a reader meets it in follows from this. */
-        public souther.compiler.check.CoverageObligation question() {
-            return asked.obligation();
+        /**
+         * The question itself, as the reading that raised it produced it.
+         *
+         * <p>Handed on whole rather than taken apart here. What it asks, what it asks it about and
+         * whether anything worked either of those out are the question's own answers, and a reader
+         * that needs one of them asks the question rather than a projection of it made here.
+         */
+        public StandingQuestion asked() {
+            return asked;
         }
 
-        /**
-         * The question itself, which is what it asks and what it asks it about, together.
-         *
-         * <p>As the reading that raised it named it, and not as words for it: a position, a number
-         * of one, and the comparison that drew a border between two moving terms are three things,
-         * and two of them cannot be told apart once they are one string.
-         */
-        public souther.compiler.inputs.InputQuestion asks() {
-            return asked.asks();
+        /** Whether {@code measure} stays open while this stands, which is the question's own
+         *  answer and the same one the closure reads. */
+        public boolean holdsOpen(CoverageObligation.Measure measure) {
+            return asked.holdsOpen(measure);
         }
 
         /**
@@ -171,10 +182,10 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
          *
          * <p>Every one of them, in the order the parts of the clause were met. Handed on as this
          * compiler's own account and projected onto a published word where a document is written
-         * ({@link souther.compiler.partition.ReportedReason}) — projected here instead, a surface
+         * ({@link ReportedReason}) — projected here instead, a surface
          * that says more than the document does would have nothing left to say it from.
          */
-        public java.util.List<souther.compiler.inputs.BlockReason.AboutARule> stopped() {
+        public java.util.List<BlockReason.AboutARule> stopped() {
             return asked.stopped();
         }
 
@@ -186,7 +197,15 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
          * has crossed into this vocabulary.
          */
         public String at() {
-            return asked.asks().path().toString();
+            return switch (asked) {
+                case StandingQuestion.Exact it ->
+                        it.asks().path().toString();
+                // Where the reader is sent to look, which is what such a question has instead of a
+                // subject. What the rule is about is the part that was not read, and a document
+                // printing this as the subject would name whichever position the walk was passing.
+                case StandingQuestion.Unclassified it ->
+                        it.at().path().toString();
+            };
         }
 
         /**
@@ -205,16 +224,29 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
          * vocabulary was then a projection of what this compiler can do.
          */
         public String measure() {
-            return switch (asked.asks()) {
-                case souther.compiler.inputs.InputQuestion.AboutAPosition _ -> null;
-                case souther.compiler.inputs.InputQuestion.AboutANumber it ->
-                        switch (it.about().of()) {
-                            // The position's own values, which the `path` beside this already says.
-                            case souther.compiler.check.NumberAt.OfWhatNumber
-                                    .OfItsOwnValue _ -> null;
-                            case souther.compiler.check.NumberAt.OfWhatNumber
-                                    .OfWhatAnOperationAnswers taken ->
-                                    named(taken.operation()) + "(" + at() + ")";
+            return switch (asked) {
+                case StandingQuestion.Exact one -> switch (one.asks()) {
+                    case InputQuestion.AboutAPosition _ -> null;
+                    case InputQuestion.AboutANumber it ->
+                            switch (it.about().of()) {
+                                // The position's own values, which the `path` beside this already
+                                // says.
+                                case NumberAt.OfWhatNumber
+                                        .OfItsOwnValue _ -> null;
+                                case NumberAt.OfWhatNumber
+                                        .OfWhatAnOperationAnswers taken ->
+                                        named(taken.operation()) + "(" + at() + ")";
+                            };
+                };
+                // The number the walk had named when it stopped, where it named one. Not what the
+                // rule is about — nothing worked that out — but which of a position's numbers a
+                // reader is being sent to look at, which is what tells two of these apart at one
+                // path.
+                case StandingQuestion.Unclassified one ->
+                        switch (one.at()) {
+                            case FilingCoordinate.AtPosition _ -> null;
+                            case FilingCoordinate.OfTerm it ->
+                                    it.term().toString();
                         };
             };
         }
@@ -270,7 +302,7 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
         String at();
 
         /** What stopped it, in the words a document promises. */
-        souther.compiler.partition.UndividedPosition.Reason reason();
+        UndividedPosition.Reason reason();
 
         /**
          * Whether this is a reading that stopped, rather than one that ran to the end and left the
@@ -294,23 +326,62 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
             }
 
             @Override
-            public souther.compiler.partition.UndividedPosition.Reason reason() {
-                return souther.compiler.partition.ReportedReason.of(finding.why());
+            public UndividedPosition.Reason reason() {
+                return ReportedReason.of(finding.why());
             }
 
             @Override
             public boolean readingStopped() {
-                return finding.why() instanceof souther.compiler.inputs.BlockReason.RuleReadingStopped;
+                return finding.why() instanceof BlockReason.RuleReadingStopped;
             }
 
             /** Which rule, which is what tells this finding from the one beside it. */
-            public souther.compiler.check.RuleRef rule() {
+            public RuleRef rule() {
                 return finding.rule();
             }
 
             /** And how a reader finds that rule, which is not what tells it from another. Every
              *  handle offered, for the reason a standing question gives. */
-            public java.util.Set<souther.compiler.check.RuleCitation> cited() {
+            public java.util.Set<RuleCitation> cited() {
+                return finding.cited();
+            }
+        }
+
+        /**
+         * A rule of the model this reading did not get far enough through to classify.
+         *
+         * <p>Beside {@link ARule} because a reader out here is asking what went unread, and this is
+         * what that is: the reading of the rule stopped, and what it raises is the part that was
+         * not read. It holds a measure open as well, and is among the questions for that — which is
+         * the other question and has the other reader.
+         */
+        record AnUnclassifiedRule(
+                StandingQuestion.NothingClassifiesIt finding)
+                implements NotRead {
+
+            @Override
+            public String at() {
+                return finding.at().toString();
+            }
+
+            @Override
+            public UndividedPosition.Reason reason() {
+                return ReportedReason.of(finding.why());
+            }
+
+            /** Always: nothing reaches this having been read to the end. */
+            @Override
+            public boolean readingStopped() {
+                return true;
+            }
+
+            /** Which rule, which is what tells this finding from the one beside it. */
+            public RuleRef rule() {
+                return finding.rule();
+            }
+
+            /** And how a reader finds that rule, which is not what tells it from another. */
+            public java.util.Set<RuleCitation> cited() {
                 return finding.cited();
             }
         }
@@ -325,8 +396,8 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
             }
 
             @Override
-            public souther.compiler.partition.UndividedPosition.Reason reason() {
-                return souther.compiler.partition.ReportedReason.of(finding.why());
+            public UndividedPosition.Reason reason() {
+                return ReportedReason.of(finding.why());
             }
 
             /** A walk that never arrived at the rules of a position is a reading that stopped,
@@ -357,11 +428,22 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
      * nothing. What is joined here are the two findings themselves, each from the
      * reader that made it.
      *
-     * <p>The rules come first and the positions after, in the order each was read.
+     * <p>What the model states first, what nothing classified after it, and the positions last,
+     * each in the order it was read.
      */
     public List<NotRead> notRead() {
         List<NotRead> out = new java.util.ArrayList<>();
         rulesWithoutALine.forEach(each -> out.add(new NotRead.ARule(each)));
+        // And the comparisons nothing worked out what they do, which nothing else says. A rule of a
+        // declaration that came to no line is already above, said by the reader that gave up on it;
+        // a comparison has no such finding, so the question is what a reader asking what went
+        // unread is told about it.
+        unanswered.forEach(each -> {
+            if (each.asked() instanceof StandingQuestion
+                    .NothingClassifiesIt it) {
+                out.add(new NotRead.AnUnclassifiedRule(it));
+            }
+        });
         blocked.forEach(each -> out.add(new NotRead.APosition(each)));
         return List.copyOf(out);
     }

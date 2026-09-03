@@ -12,6 +12,7 @@ import souther.compiler.report.AdequacyReport;
 
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -223,10 +224,14 @@ class WhatAReadingLeavesStandingIsAStateTheSchemaSaysTest {
         // is refused, so its bodies are not elaborated and there is no comparison to draw them. The
         // question the model raises about `r.n` is raised either way — it is read off the
         // declaration, which is what makes it the thing to assert here.
-        assertEquals(1, partition.get("unanswered").size(), partition.toString());
-        assertEquals("r.n", partition.get("unanswered").get(0).get("at").asString());
-        assertEquals("admitted_values",
-                partition.get("unanswered").get(0).get("question").asString());
+        assertEquals(List.of("r.n", "r.n"), partition.get("unanswered").valueStream()
+                .map(each -> each.get("at").asString()).toList(), partition.toString());
+        assertEquals(List.of("admitted_values", "boundaryNotDetermined"),
+                partition.get("unanswered").valueStream()
+                        .map(each -> each.get("question").asString()).sorted().toList(),
+                "which values may stand there is raised, and whether it bounds is not worked out —"
+                        + " which is its own word, since the classes are settled and only the"
+                        + " border waits on it");
 
         // And the rules out of sight, at the other position, which raises no question at all.
         JsonNode held = axisAt(partition, "r.deep").get("read");
@@ -250,9 +255,11 @@ class WhatAReadingLeavesStandingIsAStateTheSchemaSaysTest {
 
         assertEquals("partial", partition.get("axes").get(0).get("read").get("extent").asString());
         assertFalse(partition.get("axes").get(0).get("read").has("rulesNotReached"));
-        assertEquals(1, partition.get("unanswered").size());
-        assertEquals("invariant Length (square)",
-                partition.get("unanswered").get(0).get("rule").asString());
+        // Two entries and one rule: which values may stand there is raised and unanswered, and
+        // whether the clause also bounds the position is what folding the product would settle.
+        assertEquals(List.of("invariant Length (square)", "invariant Length (square)"),
+                partition.get("unanswered").valueStream()
+                        .map(each -> each.get("rule").asString()).toList());
     }
 
     /**

@@ -17,6 +17,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -94,24 +95,41 @@ class APositionSaysWhichOfItsRulesWentUnansweredTest {
     }
 
     /**
-     * A clause nothing took in leaves its question standing, and the question names the clause.
+     * A clause nothing took in leaves its questions standing, and each names the clause.
      *
      * <p>Which is what the report never had. An author was told that a rule about the position went
      * unread, with nothing saying which rule — two lines above a boundary drawn from one of the
      * rules the sentence was about.
+     *
+     * <p>Two of them, because the clause is read to two different depths. {@code value * value >= 4}
+     * restricts which values may stand at the position whatever anything folds, so that question is
+     * raised and nothing answered it; whether it also places an end there is what folding the
+     * product would decide, and nothing did.
      */
     @Test
     void aClauseNothingTookInIsNamed() {
         List<StandingQuestion> open = positionOf(ONE_RULE_UNANSWERED).unansweredQuestions();
 
-        assertEquals(1, open.size(), () -> "one clause, one question: " + open);
-        assertEquals("invariant Length (even)", open.get(0).rule().named(),
+        assertEquals(List.of("invariant Length (even)", "invariant Length (even)"),
+                open.stream().map(each -> each.rule().named()).toList(),
                 "the clause the author wrote, as a report names it — and not the position it "
                         + "is about");
-        assertEquals(CoverageObligation.ADMITTED_VALUES, open.get(0).obligation());
-        assertTrue(open.get(0).asks() instanceof InputQuestion.AboutAPosition at
+        StandingQuestion.Exact asked = open.stream()
+                .filter(StandingQuestion.Exact.class::isInstance)
+                .map(StandingQuestion.Exact.class::cast).findFirst().orElseThrow(
+                        () -> new AssertionError("which values may stand there is raised: " + open));
+        assertEquals(CoverageObligation.ADMITTED_VALUES, asked.obligation());
+        assertTrue(asked.asks() instanceof InputQuestion.AboutAPosition at
                         && at.path().equals(TermPath.of("length")),
                 () -> "about the position the newtype stands at, which is what the value its"
-                        + " clauses are written on is called out here: " + open.get(0).asks());
+                        + " clauses are written on is called out here: " + asked.asks());
+        StandingQuestion.BoundaryUndetermined undecided = open.stream()
+                .filter(StandingQuestion.BoundaryUndetermined.class::isInstance)
+                .map(StandingQuestion.BoundaryUndetermined.class::cast).findFirst().orElseThrow(
+                        () -> new AssertionError("and whether it bounds is not: " + open));
+        assertEquals(TermPath.of("length"), undecided.at().path(),
+                "the question nothing worked out is filed where the reading stopped");
+        assertFalse(undecided.holdsOpen(CoverageObligation.Measure.PARTITION),
+                "and it is about the end alone, so the classes rest on nothing here");
     }
 }

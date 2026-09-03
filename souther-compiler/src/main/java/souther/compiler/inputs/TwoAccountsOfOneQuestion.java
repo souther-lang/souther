@@ -23,7 +23,7 @@ public final class TwoAccountsOfOneQuestion extends IllegalArgumentException
 
     private static final long serialVersionUID = 1L;
 
-    public TwoAccountsOfOneQuestion(StandingQuestion.Fact question,
+    public TwoAccountsOfOneQuestion(StandingQuestion.Exact.Fact question,
                                     List<BlockReason.AboutARule> one,
                                     List<BlockReason.AboutARule> other) {
         super("two readings of " + question + " disagree about what the author wrote it short of: "

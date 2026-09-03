@@ -2,16 +2,13 @@ package souther.compiler.inputs;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.check.CoverageObligation;
 import souther.compiler.partition.ReportedReason;
 import souther.compiler.partition.UndividedPosition;
 import souther.compiler.values.UnreadReason;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * One rule, two readings, two answers — and one word for a reader of the document.
@@ -53,9 +50,6 @@ class OneRuleReadTwoWaysIsTwoAnswersAndOneWordTest {
     @Test
     void theLineReadingReadItToTheEnd() {
         assertInstanceOf(BlockReason.ReadToEndWithoutLine.class, THE_LINE_READING);
-
-        assertFalse(THE_LINE_READING.leavesShort(CoverageObligation.Measure.PARTITION));
-        assertFalse(THE_LINE_READING.leavesShort(CoverageObligation.Measure.BOUNDARY));
     }
 
     /**
@@ -72,9 +66,6 @@ class OneRuleReadTwoWaysIsTwoAnswersAndOneWordTest {
     @Test
     void theValueReadingStoppedOnIt() {
         assertInstanceOf(BlockReason.ReadingStopReason.class, THE_VALUE_READING);
-
-        assertTrue(THE_VALUE_READING.leavesShort(CoverageObligation.Measure.PARTITION));
-        assertTrue(THE_VALUE_READING.leavesShort(CoverageObligation.Measure.BOUNDARY));
     }
 
     /** And a reader of the document meets one word, which is what the two were made one for. */

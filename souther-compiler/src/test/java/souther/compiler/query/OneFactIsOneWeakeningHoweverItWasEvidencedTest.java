@@ -9,7 +9,6 @@ import souther.compiler.diag.SourcePos;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.FilingCoordinate;
 import souther.compiler.inputs.InputQuestion;
-import souther.compiler.inputs.RuleWithoutALine;
 import souther.compiler.inputs.StandingQuestion;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.observe.Incompleteness;
@@ -91,7 +90,7 @@ class OneFactIsOneWeakeningHoweverItWasEvidencedTest {
                 "which reader cited it first is no part of what the union comes to");
         assertEquals(Set.of(new RuleCitation.Named("n"),
                         new RuleCitation.WrittenAt(Citation.of(new SourcePos(3, 3)))),
-                ruleUnreadIn(named.union(placed)).finding().cited(),
+                questionIn(named.union(placed)).question().cited(),
                 "and the one rule keeps every handle a reader was offered");
     }
 
@@ -187,11 +186,6 @@ class OneFactIsOneWeakeningHoweverItWasEvidencedTest {
                 "and it was met at all three places");
     }
 
-    /** The one rule this compiler stopped on, out of a set holding nothing else. */
-    private static ClosureGap.RuleUnread ruleUnreadIn(WeakeningSet weakened) {
-        return (ClosureGap.RuleUnread) modelReadingIn(weakened);
-    }
-
     /** The one question that stands, out of a set holding nothing else. */
     private static ClosureGap.QuestionUnanswered questionIn(WeakeningSet weakened) {
         return (ClosureGap.QuestionUnanswered) modelReadingIn(weakened);
@@ -209,8 +203,8 @@ class OneFactIsOneWeakeningHoweverItWasEvidencedTest {
     }
 
     private static WeakeningSet ruleWithoutALine(RuleCitation cited) {
-        return of(new Weakening.ModelReadingIncomplete(ClosureGap.RuleUnread.of(
-                RuleWithoutALine.of(comparison(), cited,
+        return of(new Weakening.ModelReadingIncomplete(ClosureGap.QuestionUnanswered.of(
+                StandingQuestion.NothingClassifiesIt.of(comparison(), cited,
                         new FilingCoordinate.AtPosition(TermPath.of("x")),
                         new BlockReason.UnreadComparisonForm()))));
     }
@@ -218,7 +212,7 @@ class OneFactIsOneWeakeningHoweverItWasEvidencedTest {
     private static WeakeningSet standingQuestion(RuleCitation cited,
                                                  List<BlockReason.AboutARule> stopped) {
         return of(new Weakening.ModelReadingIncomplete(ClosureGap.QuestionUnanswered.of(
-                StandingQuestion.of(comparison(), cited,
+                StandingQuestion.Exact.of(comparison(), cited,
                         new InputQuestion.AboutAPosition(TermPath.of("x")), stopped))));
     }
 

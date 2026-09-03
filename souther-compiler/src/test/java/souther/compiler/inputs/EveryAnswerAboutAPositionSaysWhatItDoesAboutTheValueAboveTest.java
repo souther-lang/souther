@@ -69,6 +69,8 @@ class EveryAnswerAboutAPositionSaysWhatItDoesAboutTheValueAboveTest {
                         + ".aClauseThatComesToNoLineNamesTheSharedFieldUnderEachCase"));
         table.put("unanswered", new Decided(Above.ASKED, "both",
                 "AClauseAboveASumIsReadAtTheFieldItIsAboutTest.aQuestionRaisedAboveIsRaisedAtEachCase"));
+        table.put("unclassified", new Decided(Above.ASKED, "both, as the questions beside them are",
+                "AClauseAboveASumIsReadAtTheFieldItIsAboutTest.aQuestionRaisedAboveIsRaisedAtEachCase"));
         table.put("everyRuleReachedAt", new Decided(Above.ASKED, "both, and short if either is",
                 "AClauseAboveASumIsReadAtTheFieldItIsAboutTest"
                         + ".aClauseAboveThisReadingDidNotTakeInLeavesTheFieldShort"));

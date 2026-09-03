@@ -1677,7 +1677,45 @@ public final class InvariantChecker {
         })) {
             return new ClauseStates.ARelation();
         }
-        return ClauseStates.SomethingElse.naming(found);
+        return ClauseStates.SomethingElse.naming(found)
+                .unread(stoppedOnTheFormOf(found, read, byName));
+    }
+
+    /**
+     * What stopped the reading of this clause's form, or null where it ran to the end.
+     *
+     * <p>What it decides is whether the clause states where the values stop. A comparison the
+     * arithmetic took apart says so or does not, and either way the classification is made; one it
+     * did not says neither, and what would settle it is reading further.
+     *
+     * <p>Which values may stand at the names the clause writes is not asked here and is not what
+     * this is about. {@code value * value >= 4} restricts them whether or not anything folds the
+     * product, and a form nobody read is no reason to stop asking a question the model raises.
+     *
+     * <p><b>What the reading afterwards made of the clause is not read here.</b> The shape of the
+     * expression is the model, and this is asked of it: a quantity is what an answer about this
+     * classification is given in, and taking one would put the answer inside the thing it is an
+     * answer about.
+     */
+    private SequencedMap<RuleKey, BlockReason.RuleReadingStopped> stoppedOnTheFormOf(
+            List<RuleKey> found, CanonicalForm read, Map<FactSubject, Coordinate> byName) {
+        SequencedMap<RuleKey, BlockReason.RuleReadingStopped> out = new LinkedHashMap<>();
+        // Only a rule that orders the values. An equality singles one out and puts no end anywhere,
+        // which is what it states and not what a reading of it managed — so however little of the
+        // form was read, there is no line for anything to be undecided about.
+        if (!(read instanceof CanonicalForm.NotRead stopped)
+                || !(read.comparison().claim() instanceof ComparisonClaim.Cut)) {
+            return out;
+        }
+        // The same answer at each name the conjunct writes, because the form is what would settle
+        // any of them: one comparison has one arithmetic, and where that stopped no name it writes
+        // has a line worked out. What differs between names is settled per conjunct and arrives
+        // here as separate readings of separate comparisons, which is why this is asked per name
+        // rather than said once of the clause.
+        BlockReason.RuleReadingStopped why = UnreadComparison.notAboutOwnValues(
+                placesIn(stopped.stoppedAt(), stopped.under(), byName).origin());
+        found.forEach(each -> out.put(each, why));
+        return out;
     }
 
     /**

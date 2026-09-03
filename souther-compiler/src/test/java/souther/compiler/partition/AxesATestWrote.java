@@ -52,7 +52,7 @@ public final class AxesATestWrote {
         // not write down a second answer to what a closed measure is.
         MeasureClosure.Both closed = MeasureClosure.of(
                 measurements.stream().map(PositionMeasurements::position).toList(),
-                List.of(), List.of(), new LinesRead());
+                List.of(), new LinesRead());
         return new Partitions.Partitioning(measurements, List.of(), Set.of(), List.of(), List.of(),
                 List.of(), Map.of(), ReachingCuts.NONE,
                 closed.partition(), closed.border(), null);

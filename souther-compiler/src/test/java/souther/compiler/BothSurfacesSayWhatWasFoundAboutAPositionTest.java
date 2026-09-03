@@ -91,9 +91,12 @@ class BothSurfacesSayWhatWasFoundAboutAPositionTest {
         // below zero, and the guard above leaves nothing below sixty arriving at it, so the line it
         // draws has nothing either side of it. That line has never been measured; what is new is
         // that a reader is told why rather than finding it silently out of the denominator.
-        assertEquals(List.of("n:unsupported_syntax:comparison@0:11:32",
-                        "n:nothing_arrives_at_the_rules_line:"
-                                + "comparison in `Int.clamp`, reached at 0:11:11"),
+        // What the model states first and what nothing classified after, which is the order the two
+        // are asked in: a rule read to the end says something about the model, and a rule nothing
+        // worked out the questions of is this compiler saying it does not know.
+        assertEquals(List.of("n:nothing_arrives_at_the_rules_line:"
+                                + "comparison in `Int.clamp`, reached at 0:11:11",
+                        "n:unsupported_syntax:comparison@0:11:32"),
                 documentSaysNotRead(MEASURED_AND_UNREAD),
                 "the document says what the report said");
     }

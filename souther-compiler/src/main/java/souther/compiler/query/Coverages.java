@@ -1,6 +1,12 @@
 package souther.compiler.query;
 
+import souther.compiler.check.CoverageObligation;
 import souther.compiler.check.ReadingPolicy;
+import souther.compiler.inputs.FilingCoordinate;
+import souther.compiler.inputs.InputQuestion;
+import souther.compiler.inputs.RulesWithNoLine;
+import souther.compiler.inputs.StandingQuestion;
+import souther.compiler.partition.LinesWhereTheyFall;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.PathReachability;
 import souther.compiler.check.RuleReadingSource;
@@ -115,13 +121,25 @@ final class Coverages {
                 filed.evidence(), ruleSource, policy,
                 // And the lines this had nowhere to put, which are findings of the same kind: a rule
                 // of the model that came to no line at a position it is about.
-                both(both(clauses.rulesWithoutALine(), guards.rulesWithoutALine()),
-                        filed.notPlaced()),
+                everyRuleWithNoLine(clauses, guards, filed),
                 filed.between(),
                 // What a row had to satisfy to arrive at each comparison, from the walk that
                 // assumed it. A clause of a declaration is not written at a place in a body and has
                 // nothing on the way to it, so only the guards have any of this.
                 guards.reaching()), quantities);
+    }
+
+    /**
+     * Every rule that came to no line, from all three readers, sorted the one way.
+     *
+     * <p>Which of them found a rule is not part of what any of them found: a clause of a
+     * declaration, a body's comparison and a line nothing could place are three producers of one
+     * kind of evidence, and a reader downstream is told the same thing about any of them.
+     */
+    private static RulesWithNoLine everyRuleWithNoLine(
+            EnsuresThresholds.Clauses clauses, GuardThresholds.Guards guards,
+            LinesWhereTheyFall.Filed filed) {
+        return clauses.noLine().and(guards.noLine()).and(filed.notPlaced());
     }
 
     /** The two producers' lines, in one list. */
@@ -462,12 +480,19 @@ final class Coverages {
      * vocabulary and the comparison is between those two names — which is a different thing from
      * recovering the question's subject from what the axis happens to be measured at.
      */
-    private static boolean appliesTo(souther.compiler.inputs.StandingQuestion asked, Axis axis) {
-        return switch (asked.asks()) {
-            case souther.compiler.inputs.InputQuestion.AboutAPosition it ->
-                    it.path().equals(axis.path());
-            case souther.compiler.inputs.InputQuestion.AboutANumber it ->
-                    it.about().equals(axis.subject());
+    private static boolean appliesTo(StandingQuestion asked, Axis axis) {
+        return switch (asked) {
+            case StandingQuestion.Exact one -> switch (one.asks()) {
+                case InputQuestion.AboutAPosition it -> it.path().equals(axis.path());
+                case InputQuestion.AboutANumber it -> it.about().equals(axis.subject());
+            };
+            // Where the reader was sent, which is what such a question has instead of a subject.
+            // A measure of the place a rule was filed at is a reader of it: nothing worked out what
+            // the rule states there, so what this axis says about the place rests on it.
+            case StandingQuestion.Unclassified one -> switch (one.at()) {
+                case FilingCoordinate.AtPosition it -> it.path().equals(axis.path());
+                case FilingCoordinate.OfTerm it -> it.term().equals(axis.term());
+            };
         };
     }
 
@@ -495,8 +520,8 @@ final class Coverages {
                 // and are said there once.
                 partitioning.unanswered().stream()
                         .filter(each -> appliesTo(each, axis))
-                        .noneMatch(each -> each.obligation()
-                                == souther.compiler.check.CoverageObligation.ADMITTED_VALUES));
+                        .noneMatch(each -> each.holdsOpen(
+                                CoverageObligation.Measure.PARTITION)));
         // Nothing a body claims is in scope here. What a row is owed at is counted first and on its
         // own, and what was declared about those positions is put beside it afterwards
         // ({@link ClaimReport}) — which is what keeps a claim from narrowing a denominator by being

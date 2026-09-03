@@ -569,6 +569,39 @@
           "covered" : [ "None", "Some" ],
           "unclassifiedRows" : 0
         } ],
+        "unanswered" : [ {
+          "at" : "item.price",
+          "rule" : "comparison@0:68:15",
+          "ruleId" : {
+            "kind" : "comparison",
+            "declaredIn" : "conformance.catalog",
+            "behavior" : "discount",
+            "ordinal" : 8,
+            "lowered" : 0
+          },
+          "question" : "notDetermined",
+          "subject" : {
+            "kind" : "filedAt",
+            "path" : "item.price"
+          },
+          "stopped" : [ "unsupported_syntax" ]
+        }, {
+          "at" : "rate",
+          "rule" : "comparison@0:68:15",
+          "ruleId" : {
+            "kind" : "comparison",
+            "declaredIn" : "conformance.catalog",
+            "behavior" : "discount",
+            "ordinal" : 8,
+            "lowered" : 0
+          },
+          "question" : "notDetermined",
+          "subject" : {
+            "kind" : "filedAt",
+            "path" : "rate"
+          },
+          "stopped" : [ "unsupported_syntax" ]
+        } ],
         "claimsOffAxis" : [ ],
         "boundaries" : [ {
           "axis" : "discount/String.length(item.sku)",
@@ -883,6 +916,28 @@
           "lowered" : 0
         },
         "reason" : "unsupported_syntax"
+      }, {
+        "kind" : "rule_unaccounted",
+        "disposition" : "reported",
+        "subject" : "comparison@0:68:15 — what this rule states about item.price",
+        "ruleId" : {
+          "kind" : "comparison",
+          "declaredIn" : "conformance.catalog",
+          "behavior" : "discount",
+          "ordinal" : 8,
+          "lowered" : 0
+        }
+      }, {
+        "kind" : "rule_unaccounted",
+        "disposition" : "reported",
+        "subject" : "comparison@0:68:15 — what this rule states about rate",
+        "ruleId" : {
+          "kind" : "comparison",
+          "declaredIn" : "conformance.catalog",
+          "behavior" : "discount",
+          "ordinal" : 8,
+          "lowered" : 0
+        }
       } ]
     }, {
       "name" : "現価を引く",
@@ -1399,6 +1454,55 @@
           "status" : "complete",
           "covered" : [ "Time.hour(指示.集荷時刻)/0 <= x < 12", "Time.hour(指示.集荷時刻)/12 <= x <= 23" ],
           "unclassifiedRows" : 0
+        } ],
+        "unanswered" : [ {
+          "at" : "指示.受付日",
+          "rule" : "comparison@1:55:57",
+          "ruleId" : {
+            "kind" : "comparison",
+            "declaredIn" : "conformance.shipping",
+            "behavior" : "出荷する",
+            "ordinal" : 4,
+            "lowered" : 0
+          },
+          "question" : "notDetermined",
+          "subject" : {
+            "kind" : "filedAt",
+            "path" : "指示.受付日"
+          },
+          "stopped" : [ "rule_about_a_derived_value" ]
+        }, {
+          "at" : "指示.締切",
+          "rule" : "comparison@1:55:57",
+          "ruleId" : {
+            "kind" : "comparison",
+            "declaredIn" : "conformance.shipping",
+            "behavior" : "出荷する",
+            "ordinal" : 4,
+            "lowered" : 0
+          },
+          "question" : "notDetermined",
+          "subject" : {
+            "kind" : "filedAt",
+            "path" : "指示.締切"
+          },
+          "stopped" : [ "rule_about_a_derived_value" ]
+        }, {
+          "at" : "指示.品目",
+          "rule" : "comparison@1:75:39",
+          "ruleId" : {
+            "kind" : "comparison",
+            "declaredIn" : "conformance.shipping",
+            "behavior" : "出荷する",
+            "ordinal" : 8,
+            "lowered" : 0
+          },
+          "question" : "notDetermined",
+          "subject" : {
+            "kind" : "filedAt",
+            "path" : "指示.品目"
+          },
+          "stopped" : [ "unsupported_syntax" ]
         } ],
         "claimsOffAxis" : [ ],
         "boundaries" : [ {
@@ -2607,6 +2711,39 @@
           "lowered" : 0
         },
         "reason" : "unsupported_syntax"
+      }, {
+        "kind" : "rule_unaccounted",
+        "disposition" : "reported",
+        "subject" : "comparison@1:55:57 — what this rule states about 指示.受付日",
+        "ruleId" : {
+          "kind" : "comparison",
+          "declaredIn" : "conformance.shipping",
+          "behavior" : "出荷する",
+          "ordinal" : 4,
+          "lowered" : 0
+        }
+      }, {
+        "kind" : "rule_unaccounted",
+        "disposition" : "reported",
+        "subject" : "comparison@1:55:57 — what this rule states about 指示.締切",
+        "ruleId" : {
+          "kind" : "comparison",
+          "declaredIn" : "conformance.shipping",
+          "behavior" : "出荷する",
+          "ordinal" : 4,
+          "lowered" : 0
+        }
+      }, {
+        "kind" : "rule_unaccounted",
+        "disposition" : "reported",
+        "subject" : "comparison@1:75:39 — what this rule states about 指示.品目",
+        "ruleId" : {
+          "kind" : "comparison",
+          "declaredIn" : "conformance.shipping",
+          "behavior" : "出荷する",
+          "ordinal" : 8,
+          "lowered" : 0
+        }
       } ]
     } ]
   } ],

@@ -7,7 +7,6 @@ import souther.compiler.ast.Hir;
 import souther.compiler.check.Prepared;
 import souther.compiler.conformance.ConformanceCorpus;
 import souther.compiler.diag.Located;
-import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.RuleWithoutALine;
 import souther.compiler.inputs.StandingQuestion;
 import souther.compiler.inputs.TermPath;
@@ -172,9 +171,15 @@ class APositionIsUnderivableOnlyWhereSomethingStandsAtItTest {
     private static List<String> disagreeingIn(Compilation compilation) {
         List<String> out = new ArrayList<>();
         forEachBehavior(compilation, (behavior, divided) -> {
+            // Every question the rules of this behavior leave open, whichever kind it is: one about
+            // a subject nothing answered, and one about a rule nothing worked out the questions of.
+            // Both hold a position open and each names where it is.
             Set<TermPath> standing = new LinkedHashSet<>();
             for (StandingQuestion question : divided.unanswered()) {
-                standing.add(question.asks().path());
+                standing.add(switch (question) {
+                    case StandingQuestion.Exact it -> it.asks().path();
+                    case StandingQuestion.Unclassified it -> it.at().path();
+                });
             }
             Set<TermPath> unreached = new LinkedHashSet<>();
             for (PositionAccount at : divided.positions()) {
@@ -182,20 +187,10 @@ class APositionIsUnderivableOnlyWhereSomethingStandsAtItTest {
                     unreached.add(at.path());
                 }
             }
-            // And a rule filed at the position that a reading did not get through. Such a rule
-            // raises no question a caller can be told about where a body wrote it — a comparison
-            // raises and answers in one breath — so the accounting has nothing to say and the
-            // finding the reader made is what says it.
-            Set<TermPath> stopped = new LinkedHashSet<>();
-            for (RuleWithoutALine rule : divided.rulesWithoutALine()) {
-                if (rule.why() instanceof BlockReason.RuleReadingStopped) {
-                    stopped.add(rule.at().path());
-                }
-            }
             for (UndividedPosition each : divided.undivided()) {
                 boolean underivable = each.why() instanceof UndividedPosition.Why.CannotDerive;
-                boolean somethingStands = standing.contains(each.at())
-                        || unreached.contains(each.at()) || stopped.contains(each.at());
+                boolean somethingStands =
+                        standing.contains(each.at()) || unreached.contains(each.at());
                 if (underivable != somethingStands) {
                     out.add(behavior + " at " + each.at() + ": " + each.why()
                             + (somethingStands ? " with something standing at it"
@@ -214,13 +209,11 @@ class APositionIsUnderivableOnlyWhereSomethingStandsAtItTest {
         List<String> out = new ArrayList<>();
         forEachBehavior(compilation, (behavior, divided) -> {
             Set<TermPath> stated = new LinkedHashSet<>();
+            // Read from end to end, which is the model stating something. A rule a reading did not
+            // get through states nothing anybody here can act on, and it is a question rather than
+            // one of these.
             for (RuleWithoutALine rule : divided.rulesWithoutALine()) {
-                // Read from the end to the end, which is the model stating something. A rule a
-                // reading did not get through states nothing anybody here can act on, and counting
-                // it would be this check making the assumption the production code makes.
-                if (rule.why() instanceof BlockReason.ReadToEndWithoutLine) {
-                    stated.add(rule.at().path());
-                }
+                stated.add(rule.at().path());
             }
             for (UndividedPosition each : divided.undivided()) {
                 if (each.why() instanceof UndividedPosition.Why.CannotDerive) {

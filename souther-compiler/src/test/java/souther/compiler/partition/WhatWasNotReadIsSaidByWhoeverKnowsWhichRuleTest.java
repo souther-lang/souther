@@ -72,8 +72,8 @@ class WhatWasNotReadIsSaidByWhoeverKnowsWhichRuleTest {
     void aRuleThisReadAndCouldNotUseNamesIt() {
         PartitionEvidence.NotRead said = notRead(A_RULE).getFirst();
 
-        PartitionEvidence.NotRead.ARule rule =
-                assertInstanceOf(PartitionEvidence.NotRead.ARule.class, said);
+        PartitionEvidence.NotRead.AnUnclassifiedRule rule =
+                assertInstanceOf(PartitionEvidence.NotRead.AnUnclassifiedRule.class, said);
         assertInstanceOf(souther.compiler.check.RuleRef.Comparison.class, rule.rule());
         assertEquals(List.of(Adequacy.Kind.PARTITION_NOT_READ), kinds(A_RULE));
     }
@@ -93,7 +93,9 @@ class WhatWasNotReadIsSaidByWhoeverKnowsWhichRuleTest {
                         each instanceof PartitionEvidence.NotRead.APosition
                                 && each.reason() == UndividedPosition.Reason.RULES_NOT_READ_AT_ALL),
                 said::toString);
-        assertFalse(said.stream().anyMatch(each -> each instanceof PartitionEvidence.NotRead.ARule),
+        assertFalse(said.stream().anyMatch(each ->
+                        each instanceof PartitionEvidence.NotRead.ARule
+                                || each instanceof PartitionEvidence.NotRead.AnUnclassifiedRule),
                 said::toString);
     }
 

@@ -221,8 +221,10 @@ class WhatAClauseDrawsALineOnTest {
                 """, "look");
 
         assertEquals(List.of(), valuesOf(clauses));
-        assertEquals(List.of(), clauses.rulesWithoutALine(),
+        assertEquals(List.of(), clauses.noLine().reported(),
                 "this read the rule; what it draws no line at is a decision and not a limit");
+        assertEquals(List.of(), clauses.noLine().unclassified(),
+                "and nothing about it went unclassified");
         assertEquals(List.of(), clauses.between(),
                 "and it is not a line between two inputs either: what it relates is the answer,"
                         + " which is what the classification says of it");
@@ -257,8 +259,10 @@ class WhatAClauseDrawsALineOnTest {
 
         assertEquals(List.of(), valuesOf(clauses), "the line is on the answer, and a row has none");
         assertEquals(List.of(), clauses.between(), "and it is not a line between two inputs");
-        assertEquals(List.of(), clauses.rulesWithoutALine(),
+        assertEquals(List.of(), clauses.noLine().reported(),
                 "this read the rule; that it draws no line is a decision and not a limit");
+        assertEquals(List.of(), clauses.noLine().unclassified(),
+                "and nothing about it went unclassified");
 
     }
 
@@ -328,8 +332,12 @@ class WhatAClauseDrawsALineOnTest {
 
             assertEquals(1, clauses.thresholds().size(),
                     () -> measure + " draws a line: " + valuesOf(clauses));
-            assertEquals(List.of(), clauses.rulesWithoutALine(),
-                    () -> measure + " was read, so nothing says otherwise: " + clauses.rulesWithoutALine());
+            assertEquals(List.of(), clauses.noLine().reported(),
+                    () -> measure + " was read, so nothing says otherwise: "
+                            + clauses.noLine().reported());
+            assertEquals(List.of(), clauses.noLine().unclassified(),
+                    () -> measure + " was read, so nothing about it is unclassified: "
+                            + clauses.noLine().unclassified());
             assertTrue(clauses.thresholds().get(0).term() instanceof NumericTerm.TakenOf,
                     () -> measure + " is a line on the measure: "
                             + clauses.thresholds().get(0).term());
@@ -387,7 +395,8 @@ class WhatAClauseDrawsALineOnTest {
 
         assertEquals(List.of(), valuesOf(clauses));
         assertEquals(List.of("a.n"),
-                clauses.rulesWithoutALine().stream().map(each -> each.at().toString()).toList());
+                clauses.noLine().unclassified().stream()
+                        .map(each -> each.at().toString()).toList());
     }
 
     /**
@@ -434,7 +443,7 @@ class WhatAClauseDrawsALineOnTest {
                 line.demand(PointRole.IN).criterion().asked(line.cut().of()));
         assertEquals("in to < from", line.demand(PointRole.OUT).criterion().asked(line.cut().of()));
         assertEquals(List.of("from", "to"),
-                clauses.rulesWithoutALine().stream().map(each -> each.at().toString()).toList());
+                clauses.noLine().reported().stream().map(each -> each.at().toString()).toList());
     }
 
     /**
@@ -511,8 +520,9 @@ class WhatAClauseDrawsALineOnTest {
 
         assertEquals(List.of(), valuesOf(clauses), "nothing here reads a line out of that form");
         assertEquals(List.of("id"),
-                clauses.rulesWithoutALine().stream().map(each -> each.at().toString()).toList(),
-                "and the position it is about is named rather than passed over");
+                clauses.noLine().unclassified().stream()
+                        .map(each -> each.at().toString()).toList(),
+                "and the place it was filed at is named rather than passed over");
     }
 
     /** A behavior stating nothing draws nothing, and asking is not an error. */

@@ -672,7 +672,7 @@ public final class GeneratedRows {
             // given words here.
             case About.ACaseNothingWasSeenToProduce _,
                     About.APositionNoLineDivides _, About.APositionThisCouldNotRead _,
-                    About.ARuleWithoutALine _,
+                    About.ARuleWithoutALine _, About.ARuleNothingClassified _,
                     About.AQuestionNothingAnswered _,
                     About.APositionWhoseRulesWereNotReached _,
                     About.APositionReadWiderThanItsRules _ ->

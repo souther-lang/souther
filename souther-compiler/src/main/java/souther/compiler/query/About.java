@@ -268,6 +268,26 @@ public sealed interface About {
     }
 
     /**
+     * A rule of the model this did not read far enough to say what it raises, and what stopped it.
+     *
+     * <p>Beside {@link ARuleWithoutALine} and not among it. That one is the model stating that a
+     * rule draws no line here, which is a fact an author can read; this is this compiler saying it
+     * does not know what the rule states, which is a different sentence and sends a reader
+     * somewhere else.
+     */
+    record ARuleNothingClassified(PartitionEvidence.NotRead.AnUnclassifiedRule finding)
+            implements OfARule, OfSomethingNotRead {
+        public ARuleNothingClassified {
+            java.util.Objects.requireNonNull(finding, "a finding is about something");
+        }
+
+        @Override
+        public souther.compiler.check.RuleRef rule() {
+            return finding.rule();
+        }
+    }
+
+    /**
      * A position whose rules this reading never arrived at, with what stopped it.
      *
      * <p>Its own shape beside the rule above, and not that one with the rule left out. There is no

@@ -286,7 +286,7 @@ class AStopThisCompilerMadeIsSaidOnceTest {
         MeasureClosure.Both closed = MeasureClosure.of(
                 List.of(new PositionAccount("f", TermPath.of("r").then("cost"), Type.BOOL, residue,
                         null, List.of())),
-                List.of(), List.of(), new LinesRead());
+                List.of(), new LinesRead());
         return ((MeasureClosure.OfThePartition.Open) closed.partition()).by().stream()
                 .map(Object::getClass).collect(java.util.stream.Collectors.toSet());
     }

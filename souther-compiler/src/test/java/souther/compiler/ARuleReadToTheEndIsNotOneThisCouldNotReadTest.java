@@ -322,9 +322,12 @@ class ARuleReadToTheEndIsNotOneThisCouldNotReadTest {
         Measured measured = of("    invariant String.length(name) <= 1 - 0");
 
         assertEquals("partial", measured.status());
-        assertTrue(measured.weakening().contains("rule_unread"), measured.weakening().toString());
         assertTrue(measured.weakening().contains("question_unanswered"),
                 measured.weakening().toString());
+        // And one word for it. The clause states where the values stop, so the question is raised
+        // and nothing answered it; the finding the reader made when it gave up is what a report
+        // says about the same rule, and counting it here as well is one shortfall under two words.
+        assertFalse(measured.weakening().contains("rule_unread"), measured.weakening().toString());
         assertTrue(measured.says("written in a form this compiler does not read"), measured.human());
         assertTrue(measured.kinds().contains("rule_unaccounted"), measured.kinds().toString());
     }

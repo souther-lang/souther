@@ -5,9 +5,12 @@ import org.junit.jupiter.api.Test;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
-import souther.compiler.check.CoverageObligation;
+import souther.compiler.check.RuleCitation;
+import souther.compiler.check.RuleRef;
 import souther.compiler.observe.RunSensitivity;
 import souther.compiler.partition.ReportedReason;
+import souther.compiler.types.CoverageConstruct;
+import souther.compiler.types.CoverageOrigin;
 import souther.compiler.values.UnreadReason;
 
 import java.util.LinkedHashMap;
@@ -22,15 +25,13 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
  *
  * <p>The seal already refuses a reason nobody answered for: {@link BlockReason.RuleReadingStopped}
  * switches over its members with no {@code default}, so a fourteenth is a build failure. What it
- * does not refuse is a reason moved from one arm to another. Both switches keep compiling when a
- * reason changes which measure it leaves short or which word a document writes for it, and every
- * sentence built on the old answer goes on being written and is now wrong.
+ * does not refuse is a reason moved from one arm to another. Everything keeps compiling when a
+ * reason changes which half it is in or which word a document writes for it, and every sentence
+ * built on the old answer goes on being written and is now wrong.
  *
- * <p>Which is not hypothetical here. Six of the nine rules below say both measures are short of
- * something and three say neither is, and that difference is what decides whether a behavior is
- * taken out of the verdict — a reason that quietly stopped leaving the border measure short would
- * let a model be called adequate over a rule this compiler never read. Issue #1079 is what that
- * costs when the answer is arrived at rather than written down.
+ * <p>Which is not hypothetical here. The word is what a person is shown about their own model, and
+ * two of these are opposite sentences about this compiler under words a reader cannot tell apart —
+ * a reason moved between them sends an author to change a rule this compiler read perfectly well.
  *
  * <p>So the answers are here, written out, and this is where they are changed. A reason that moves
  * fails this test and is meant to: what it is asking is not whether the code is right but whether
@@ -41,15 +42,17 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
     /**
      * Every rule this compiler read and drew no line from, and what it leaves.
      *
-     * <p>Written as {@code partition/boundary/word/sensitivity}: which of the two measures the rule
-     * leaves short of something, the word a document writes for it, and whether a run of this
-     * compiler that allows more could get past it. A reason that leaves neither measure short is
-     * one the model states rather than one this compiler fell short on.
+     * <p>Written as {@code word/sensitivity}: the word a document writes for the reason, and whether
+     * a run of this compiler that allows more could get past it.
      *
      * <p>The last column is {@code -} for exactly those, and that is not a spare answer. A rule
      * read from end to end weakens no measurement, so it is in neither of the two capabilities that
      * answer {@code runSensitivity} — and a reason answering for a measure it does not weaken is an
      * answer a report could reach for.
+     *
+     * <p>What a measure is short of is not among the columns, and cannot be: that is a question
+     * about the rule, and which of these reasons a finding carries says only what became of the
+     * reading.
      */
     private static Map<String, String> theRulesWithNoLine() {
         Map<String, String> table = new LinkedHashMap<>();
@@ -59,11 +62,11 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
         // And nothing was compared against a figure in any of these four: a form nothing takes
         // apart, values no line can be drawn on, a rule about a value made from this one and a
         // value rule in a form nothing read are met again however much a run is allowed.
-        table.put("UnreadComparisonForm", "short/short/UNSUPPORTED_SYNTAX/UNAFFECTED");
-        table.put("UnreadComparisonDomain", "short/short/UNSUPPORTED_DOMAIN/UNAFFECTED");
+        table.put("UnreadComparisonForm", "UNSUPPORTED_SYNTAX/UNAFFECTED");
+        table.put("UnreadComparisonDomain", "UNSUPPORTED_DOMAIN/UNAFFECTED");
         table.put("RuleAboutADerivedValue",
-                "short/short/RULE_ABOUT_A_DERIVED_VALUE/UNAFFECTED");
-        table.put("UnreadValueRule", "short/short/UNSUPPORTED_SYNTAX/UNAFFECTED");
+                "RULE_ABOUT_A_DERIVED_VALUE/UNAFFECTED");
+        table.put("UnreadValueRule", "UNSUPPORTED_SYNTAX/UNAFFECTED");
         // A pattern read to the end and larger than this will make a machine of. Both measures are
         // short because both are read off the set it names: a class is a part of it and an end is
         // where it stops. Its own word and not the one above — that one sends an author after the
@@ -78,40 +81,40 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
         // Neither figure is one a caller can set today, which is not the question — what a wider
         // run is, is the allowances widened, and whether a knob exists for one is a fact about
         // which knobs exist this month.
-        table.put("PatternTooCostly", "short/short/EXACT_VALUES_TOO_COSTLY/MAY_CHANGE");
+        table.put("PatternTooCostly", "EXACT_VALUES_TOO_COSTLY/MAY_CHANGE");
         // And a rule this would not read that far in, which is short of both for the same reason:
         // what the rule says is unknown, so what it would have divided or bounded is unknown too.
         // Its own word and not the one above — that one reached the values and this did not.
         table.put("PatternTooDeeplyNested",
-                "short/short/PATTERN_TOO_DEEPLY_NESTED/MAY_CHANGE");
+                "PATTERN_TOO_DEEPLY_NESTED/MAY_CHANGE");
         // One word with `ComparisonBetweenPositions` below, and on purpose: they are the two
         // readings of `a < b`, opposite sentences about this compiler, and a document promises
         // its reader which kind of thing stopped a derivation rather than which reader stopped.
         table.put("ValueRuleRelatingTwoPositions",
-                "short/short/UNSUPPORTED_PARTITION_SHAPE/UNAFFECTED");
-        table.put("CompetingCoordinates", "short/short/COMPETING_COORDINATES/UNAFFECTED");
+                "UNSUPPORTED_PARTITION_SHAPE/UNAFFECTED");
+        table.put("CompetingCoordinates", "COMPETING_COORDINATES/UNAFFECTED");
         // Read to the end, and placed nowhere. Its own word beside the two above: the comparison
         // was taken apart, a line came out of it and every name it is between reached positions —
         // what was not reached is which of those positions the line runs between. Both measures are
         // short, because a row either side of the line is owed and there is nowhere to ask for one.
-        table.put("CasePairingNotDetermined", "short/short/UNRESOLVED_CASE_PAIRING/UNAFFECTED");
+        table.put("CasePairingNotDetermined", "UNRESOLVED_CASE_PAIRING/UNAFFECTED");
         // Read to the end. Whatever the rule places has been placed, and there is none to be owed —
         // and no measurement is weakened, so from here down there is no sensitivity to answer.
-        table.put("ComparisonCuttingNothing", "whole/whole/RULE_CUTS_NOTHING/-");
+        table.put("ComparisonCuttingNothing", "RULE_CUTS_NOTHING/-");
         table.put("ComparisonCuttingOutsideDomain",
-                "whole/whole/RULE_CUTS_OUTSIDE_WHAT_THE_QUANTITY_HOLDS/-");
+                "RULE_CUTS_OUTSIDE_WHAT_THE_QUANTITY_HOLDS/-");
         // Its own word beside the one above. There the declarations never run as far as the line,
         // wherever the rule stands; here they do, and the conditions on the way to the comparison
         // rule the line's values out. Read to the end either way, and nothing is owed: the classes
         // the line would make hold nothing that arrives, which is a fact about the model.
         table.put("ComparisonNothingArrivesAtItsLine",
-                "whole/whole/NOTHING_ARRIVES_AT_THE_RULES_LINE/-");
-        table.put("ComparisonBetweenPositions", "whole/whole/UNSUPPORTED_PARTITION_SHAPE/-");
+                "NOTHING_ARRIVES_AT_THE_RULES_LINE/-");
+        table.put("ComparisonBetweenPositions", "UNSUPPORTED_PARTITION_SHAPE/-");
         // Its own word beside the one above, because what a reader does about it differs: a rule
         // between two positions is waiting on a class about the pair, and a rule about what the
         // values at one come to has nothing to wait for — the position has no class from it and
         // its border is drawn.
-        table.put("ComparisonOverARun", "whole/whole/RULE_ABOUT_A_RUN/-");
+        table.put("ComparisonOverARun", "RULE_ABOUT_A_RUN/-");
         // A new row, and here is what it is for. The three above are rules that divide no position:
         // the quantity is empty, the line falls outside it, or the number is over a run. This one
         // divides the position it is about — a format states which strings stand there, which is
@@ -121,7 +124,7 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
         //
         // Neither measure is short. The rule was read to the end and the classes it makes have no
         // point on a line for a row to be owed at, so there is nothing to ask an author for.
-        table.put("RuleDividingOutsideAnOrder", "whole/whole/PARTITION_NOT_REPRESENTABLE/-");
+        table.put("RuleDividingOutsideAnOrder", "PARTITION_NOT_REPRESENTABLE/-");
         return table;
     }
 
@@ -190,11 +193,7 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
         Map<String, String> said = new LinkedHashMap<>();
         for (BlockReason.RuleWithoutLineReason each : everyRuleWithoutALine()) {
             said.put(each.getClass().getSimpleName(),
-                    (each.leavesShort(CoverageObligation.Measure.PARTITION) ? "short" : "whole")
-                            + "/"
-                            + (each.leavesShort(CoverageObligation.Measure.BOUNDARY)
-                                    ? "short" : "whole")
-                            + "/" + ReportedReason.of((BlockReason) each).name()
+                    ReportedReason.of((BlockReason) each).name()
                             + "/" + sensitivityOf((BlockReason) each));
         }
 
@@ -265,22 +264,32 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
     }
 
     /**
-     * Which half a reason is in decides both answers, and the table says the same thing.
+     * A finding is a finding whichever half its reason is in, and nothing here decides a measure.
      *
-     * <p>The rule under the thirteen rows: a reading that stopped leaves whatever the rule states
-     * unknown, so both measures are short of it; a rule read from end to end has had whatever it
-     * places placed, so neither is. Said as a rule beside the rows, a reason added to the table with
-     * the wrong pair of words fails here as well — the rows are what someone changing an answer has
-     * to write, and this is what says whether the answer they wrote is one the halves allow.
+     * <p>What a reason says is what became of the reading, and a reader is owed that either way. It
+     * does not say whether a measure stays open: that is a question about the rule, raised by
+     * whatever classifies the rule, and a reading that stopped is neither the only way to raise one
+     * nor by itself enough to.
      */
     @Test
-    void aReadingThatStoppedLeavesBothShortAndOneThatFinishedLeavesNeither() {
+    void aReasonSaysWhatBecameOfTheReadingAndNotWhatAMeasureIsShortOf() {
         for (BlockReason.RuleWithoutLineReason each : everyRuleWithoutALine()) {
-            boolean stopped = each instanceof BlockReason.RuleReadingStopped;
-            assertEquals(stopped, each.leavesShort(CoverageObligation.Measure.PARTITION),
-                    each.getClass().getSimpleName());
-            assertEquals(stopped, each.leavesShort(CoverageObligation.Measure.BOUNDARY),
-                    each.getClass().getSimpleName());
+            RulesWithNoLine.Gathered gathered = new RulesWithNoLine.Gathered();
+            gathered.add(new RuleRef.Comparison("b",
+                            new CoverageOrigin("m", 1, 1, CoverageConstruct.IF)),
+                    new RuleCitation.Named("n"),
+                    new FilingCoordinate.AtPosition(TermPath.of("x")), each);
+            RulesWithNoLine filed = gathered.found();
+
+            assertEquals(1, filed.reported().size(), each.getClass().getSimpleName());
+            assertEquals(each instanceof BlockReason.ReadToEndWithoutLine ? 1 : 0,
+                    filed.modelStatements().size(),
+                    () -> each.getClass().getSimpleName()
+                            + ": what the model states is asked of the reason, not of what a report"
+                            + " prints");
+            assertEquals(List.of(), filed.unclassified(),
+                    () -> each.getClass().getSimpleName()
+                            + ": a finding raises no question by having been filed");
         }
     }
 

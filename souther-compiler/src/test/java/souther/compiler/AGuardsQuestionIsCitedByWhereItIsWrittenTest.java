@@ -51,10 +51,10 @@ class AGuardsQuestionIsCitedByWhereItIsWrittenTest {
     }
 
     /** The findings this reading left that a reader is sent to a place for. */
-    private static List<PartitionEvidence.NotRead.ARule> writtenComparisons() {
+    private static List<PartitionEvidence.NotRead.AnUnclassifiedRule> writtenComparisons() {
         return partition().notRead().stream()
-                .filter(PartitionEvidence.NotRead.ARule.class::isInstance)
-                .map(PartitionEvidence.NotRead.ARule.class::cast)
+                .filter(PartitionEvidence.NotRead.AnUnclassifiedRule.class::isInstance)
+                .map(PartitionEvidence.NotRead.AnUnclassifiedRule.class::cast)
                 .filter(each -> each.cited().stream()
                         .anyMatch(RuleCitation.WrittenAt.class::isInstance))
                 .toList();
@@ -70,7 +70,7 @@ class AGuardsQuestionIsCitedByWhereItIsWrittenTest {
      */
     @Test
     void aComparisonNothingCouldReadIsStillReportedAtThePositionItIsAbout() {
-        List<PartitionEvidence.NotRead.ARule> said = writtenComparisons();
+        List<PartitionEvidence.NotRead.AnUnclassifiedRule> said = writtenComparisons();
 
         assertEquals(List.of("length"),
                 said.stream().map(PartitionEvidence.NotRead::at).toList(),
@@ -82,7 +82,7 @@ class AGuardsQuestionIsCitedByWhereItIsWrittenTest {
      *  the construct standing round it. */
     @Test
     void itIsCitedByThePlaceAndNamedByNothing() {
-        PartitionEvidence.NotRead.ARule one = writtenComparisons().getFirst();
+        PartitionEvidence.NotRead.AnUnclassifiedRule one = writtenComparisons().getFirst();
 
         RuleCitation.WrittenAt written = one.cited().stream()
                 .filter(RuleCitation.WrittenAt.class::isInstance)
