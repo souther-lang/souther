@@ -97,10 +97,9 @@ class WhatReadsADeclarationIntoASignatureIsWrittenDownTest {
                             + " representation keeps standing"),
             new Licence("souther.compiler.check.Preserved.valueKept",
                     "the same for a value it keeps a reference to"),
-            new Licence("souther.compiler.check.Preserved.SettledValues.settledAs",
-                    "what a representation is asked through for a value's settled signature"),
-            new Licence("souther.compiler.check.Preserved.SettledValues.lambda$static$0",
-                    "the representation that settled nothing, answering for every value"));
+            new Licence("souther.compiler.check.Preserved.Settling.settledAs",
+                    "hands on what a value's own check recorded, under the name that recording"
+                            + " carried"));
 
     /**
      * The ones that read a declaration. What may add to this is a decision about who is allowed to

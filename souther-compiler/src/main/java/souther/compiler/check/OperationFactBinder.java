@@ -124,7 +124,20 @@ final class OperationFactBinder {
                     BoundOperationFact.MeansTheSameAsSizeOfNought bound =
                             DischargeRules.holdSizeEquivalence(stdlib, each.operation(),
                                     means.size());
-                    sizes.put(bound.predicate(), bound);
+                    // One operation, one bound fact of a kind. A second declaration of the same
+                    // kind about one operation is two answers to a question that has one, and a map
+                    // written into keeps whichever arrived last — so the rewrite a call gets would
+                    // depend on the order the declarations are written in.
+                    // One operation, one bound fact of a kind. A second declaration of the same kind
+                    // about one operation is two answers to a question that has one, and a map
+                    // written into keeps whichever arrived last — so the rewrite a call gets would
+                    // depend on the order the declarations are written in. The authoring index that
+                    // used to refuse this answers nothing now, and refusing it belongs where the
+                    // bound facts are collected.
+                    if (sizes.put(bound.predicate(), bound) != null) {
+                        throw new IllegalStateException(bound.predicate()
+                                + " is declared to mean a size of nought twice");
+                    }
                 }
                 // Neither of these names anything beyond the operation it is about — a silence names
                 // nothing by definition — so there is nothing about one to hold to a signature.

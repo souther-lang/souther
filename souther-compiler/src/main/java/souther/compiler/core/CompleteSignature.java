@@ -42,11 +42,6 @@ public final class CompleteSignature {
     private final Type result;
 
     private CompleteSignature(ValueName operation, List<Type> params, Type result) {
-        if (result == null) {
-            throw new IllegalStateException("`" + operation + "` is kept standing by a representation"
-                    + " that reads it, so it must declare what it answers: a call kept unexpanded is"
-                    + " typed from its declaration alone");
-        }
         this.params = List.copyOf(params);
         this.result = result;
         this.declared = new DeclaredOperation(operation, this.params.size());
@@ -65,6 +60,11 @@ public final class CompleteSignature {
      */
     public static CompleteSignature ofDeclaration(ValueName operation, List<Type> params,
                                                   Type result) {
+        if (result == null) {
+            throw new IllegalStateException("`" + operation + "` is kept standing by a representation"
+                    + " that reads it, so it must declare what it answers: a call kept unexpanded is"
+                    + " typed from its declaration alone");
+        }
         return new CompleteSignature(operation, params, result);
     }
 
@@ -83,6 +83,11 @@ public final class CompleteSignature {
      * can stand for one.
      */
     public static CompleteSignature ofSettledValue(ValueName value, Type result) {
+        if (result == null) {
+            throw new IllegalStateException("`" + value + "` is kept standing by a representation"
+                    + " that reads it, and what it answers is what checking its body came to —"
+                    + " which nothing here has. A value states no result to fall back on");
+        }
         return new CompleteSignature(value, List.of(), result);
     }
 

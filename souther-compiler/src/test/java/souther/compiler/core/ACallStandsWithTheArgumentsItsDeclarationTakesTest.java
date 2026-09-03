@@ -64,6 +64,25 @@ class ACallStandsWithTheArgumentsItsDeclarationTakesTest {
     }
 
     /**
+     * And it goes on standing with them.
+     *
+     * <p>The statement is about the node and not about the moment it was built. A pass that kept
+     * the list it handed over could otherwise leave behind a call whose own statement about itself
+     * had stopped being true, with every reader below it reading the call afterwards.
+     */
+    @Test
+    void andGoesOnStandingWithThemAfterTheCallerHasMovedOn() {
+        List<Core> handed = new ArrayList<>(KeptCalls.to(LENGTH, POS).args());
+        Core.PreservedCall call = new Core.PreservedCall(KeptCalls.declared(LENGTH), handed,
+                Type.INT, POS);
+
+        handed.add(new Core.Int(0, Type.INT, POS));
+
+        assertEquals(1, call.args().size(), "the call took the arguments over");
+        assertEquals(call.declared().arity(), call.args().size());
+    }
+
+    /**
      * A value kept standing is a call of no arguments, and is held to that.
      *
      * <p>Being written with no parameters is what makes it a value, so the same statement covers it

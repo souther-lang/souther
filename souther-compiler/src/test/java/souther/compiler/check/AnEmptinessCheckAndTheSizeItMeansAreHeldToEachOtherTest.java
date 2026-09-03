@@ -3,6 +3,7 @@ package souther.compiler.check;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.DefaultStdlib;
+import souther.compiler.KeptCalls;
 import souther.compiler.semantics.OperationFact;
 import souther.compiler.semantics.OperationFacts;
 import souther.compiler.types.ValueName;
@@ -56,9 +57,9 @@ class AnEmptinessCheckAndTheSizeItMeansAreHeldToEachOtherTest {
     /** And that those two are each unary, so what the refusal above found is the shape. */
     @Test
     void andBothOfThoseTakeOneArgument() {
-        assertEquals(1, souther.compiler.KeptCalls
+        assertEquals(1, KeptCalls
                 .signature(ValueName.Stdlib.operation("String", "isEmpty")).params().size());
-        assertEquals(1, souther.compiler.KeptCalls
+        assertEquals(1, KeptCalls
                 .signature(ValueName.Stdlib.operation("List", "length")).params().size());
     }
 
@@ -79,6 +80,20 @@ class AnEmptinessCheckAndTheSizeItMeansAreHeldToEachOtherTest {
                         ValueName.Stdlib.operation("List", "length")));
 
         assertTrue(e.getMessage().contains("List.length"), e.getMessage());
+    }
+
+    /**
+     * One operation declared to mean two sizes is refused rather than answered with the last.
+     *
+     * <p>Both would be sizes it means, so neither is wrong where it is held — and what a call of the
+     * check is rewritten to would depend on the order the declarations are written in.
+     */
+    @Test
+    void anOperationDeclaredToMeanASizeTwiceIsRefused() {
+        IllegalStateException e = assertThrows(IllegalStateException.class,
+                () -> bindWith(LIST_IS_EMPTY, ValueName.Stdlib.operation("List", "length")));
+
+        assertTrue(e.getMessage().contains("List.isEmpty"), e.getMessage());
     }
 
     /** An operation the library does not declare is refused, as any fact about one is. */

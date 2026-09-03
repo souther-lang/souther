@@ -408,6 +408,11 @@ public sealed interface Core {
                          SourcePos pos) implements Core {
 
         public PreservedCall {
+            // Taken over rather than borrowed. Checking a list the caller goes on holding says what
+            // was true when the call was built, and every reader below reads the call afterwards —
+            // a pass that kept the list it handed over could put another argument in it and leave a
+            // node behind whose own statement about itself had stopped being true.
+            args = List.copyOf(args);
             if (args.size() != declared.arity()) {
                 throw new IllegalStateException("`" + declared + "` is declared to take "
                         + declared.arity() + " arguments and this call stands with " + args.size());

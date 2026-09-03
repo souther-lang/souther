@@ -24,6 +24,7 @@ import souther.compiler.types.ValueName;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -468,7 +469,7 @@ final class DischargeRules {
         private static Set<ValueName> emptinessChecks(OperationFactBinder.Binding bound) {
             Set<ValueName> named = new LinkedHashSet<>();
             bound.sizes().keySet().forEach(each -> named.add(each.operation()));
-            return java.util.Collections.unmodifiableSet(named);
+            return Collections.unmodifiableSet(named);
         }
 
         /**
@@ -834,6 +835,14 @@ final class DischargeRules {
      */
     private static boolean sameShape(Type left, Type right, Map<String, String> paired,
                                      Map<String, String> back) {
+        // A variable of an application, which no declaration holds: this compares what two
+        // declarations state. One arriving here is a caller having handed over something else, and
+        // answering "a different shape" would report that as the two operations disagreeing.
+        if (left instanceof Type.MetaVar || right instanceof Type.MetaVar) {
+            throw new IllegalStateException("a declared signature is being compared with "
+                    + Type.show(left instanceof Type.MetaVar ? left : right)
+                    + ", which belongs to an application rather than to a declaration");
+        }
         return switch (left) {
             case Type.Var l when right instanceof Type.Var r ->
                     r.name().equals(paired.computeIfAbsent(l.name(), _ -> r.name()))
@@ -852,8 +861,9 @@ final class DischargeRules {
                             && sameShape(l.result(), r.result(), paired, back);
             case Type.TupleOf l when right instanceof Type.TupleOf r ->
                     sameShapes(l.elements(), r.elements(), paired, back);
-            // A leaf stands for itself: a primitive, a declaration, a union of them. Nothing about
-            // one is a variable, so being the same shape is being the same type.
+            // Everything else a declaration can hold stands for itself: a primitive, a declaration,
+            // a union of them, and a variable that did not pair with one above. Being the same
+            // shape is being the same type.
             case Type.Leaf _ -> left.equals(right);
             default -> false;
         };
