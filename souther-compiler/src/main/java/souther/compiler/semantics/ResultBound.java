@@ -19,13 +19,17 @@ import java.math.BigDecimal;
  * at the check that holds a fact to the library's signatures. That one asks whether a fact and a
  * declaration agree; this one is about what a bound is.
  *
+ * <p>Generic in the word for an argument, as {@link ElementLineage} is: authored, the argument is
+ * named as a fact writes it; held to the library, as the declaration has it.
+ *
  * @param against  the argument the result is bounded against, or null where the bound is a constant
  *                 one
  * @param offset   added to that argument, or the constant itself where there is no argument
  * @param rel      how the result stands to it
  * @param provided what has to hold of the arguments for this to be the operation's answer
+ * @param <A>      the word for an argument of the operation
  */
-public record ResultBound(ArgumentRef against, BigDecimal offset, Rel rel, Provided provided) {
+public record ResultBound<A>(A against, BigDecimal offset, Rel rel, Provided<A> provided) {
 
     public ResultBound {
         java.util.Objects.requireNonNull(offset, "a bound stands somewhere");
@@ -48,10 +52,10 @@ public record ResultBound(ArgumentRef against, BigDecimal offset, Rel rel, Provi
      *
      * <p>Whether a call meets one is read where calls are read; this says which condition it is.
      */
-    public sealed interface Provided {
+    public sealed interface Provided<A> {
 
         /** Nothing: the bound is what the operation does, whatever it is given. */
-        record Always() implements Provided {}
+        record Always<A>() implements Provided<A> {}
 
         /**
          * An argument that reads as a constant above zero.
@@ -61,7 +65,7 @@ public record ResultBound(ArgumentRef against, BigDecimal offset, Rel rel, Provi
          * {@code floorMod(x, 100)}. Requiring the digits at the call would make a rule an author
          * cannot predict from what the value is, only from where it was written.
          */
-        record ConstantAboveZero(ArgumentRef argument) implements Provided {
+        record ConstantAboveZero<A>(A argument) implements Provided<A> {
 
             public ConstantAboveZero {
                 java.util.Objects.requireNonNull(argument, "this one names an argument");

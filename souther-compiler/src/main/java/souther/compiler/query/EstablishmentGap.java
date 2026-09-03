@@ -57,27 +57,41 @@ public sealed interface EstablishmentGap {
     }
 
     /**
-     * A budget of this compiler's ran out before any value was composed for the point.
+     * A figure of this compiler's is why no value composed for the point settles it.
      *
-     * <p>Made where the composing stopped and carried out, never worked out afterwards. What a
+     * <p><b>Not that the figure is why nothing was composed.</b> Where a search ran over a plan
+     * short of the point, raising the figure may well leave every candidate refused as before —
+     * what the figure took away is not the row but the standing of the answer, which is about less
+     * than the point had. Written the other way, a reader is told a figure caused an emptiness it
+     * may have had nothing to do with.
+     *
+     * <p>Made where the figure was reached and carried out, never worked out afterwards. What a
      * search comes back with is a word, and two of this compiler's budgets come back with the same
      * word while one of them is written wherever a walk stops for any reason at all — so a reader
      * recovering a budget from that word would be recovering one that may never have been reached.
+     * Some of the figures written here come back with no word at all.
      *
      * <p><b>Only where nothing was composed.</b> A budget that cut an offering short after a value
      * was built took nothing away from the point: the value is there, and what was lost is the rest
      * of an offer. Such a budget travels on what was built and not here, because a gap here is read
-     * as the showing having been stopped.
+     * as the point having been left open by this compiler rather than by the model.
      *
-     * <p>As many figures as the search met, because no two of them are the same piece of work.
-     * Ranked, the one a reader was told about would be whichever the walk hit first.
+     * <p>Which covers each way that happens. A figure may end the search before it had tried what
+     * it held; a figure may leave the search running over less than the point had; and a figure may
+     * leave nothing for a search to run over at all. The first comes back with the budgets' own
+     * word, the second with a word of its own, and the third with a word saying no search was made
+     * — and in every one of them what is written here is that the question is open on a figure
+     * somebody could raise.
+     *
+     * <p>As many figures as were reached, because no two of them are the same piece of work.
+     * Ranked, the one a reader was told about would be whichever was met first.
      */
     record Composition(CanonicalSelection<CompositionBudget> budgets) implements EstablishmentGap {
 
         public Composition {
             if (budgets == null || budgets.isEmpty()) {
                 throw new IllegalArgumentException(
-                        "a composing this compiler stopped says which budget stopped it");
+                        "a point this compiler left open says which figure left it open");
             }
         }
 

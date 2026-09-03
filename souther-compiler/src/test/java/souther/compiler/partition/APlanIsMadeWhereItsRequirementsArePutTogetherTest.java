@@ -91,7 +91,8 @@ class APlanIsMadeWhereItsRequirementsArePutTogetherTest {
                 "and the unrefined position is not a second name for it: " + slots);
         ConstructionPlan.Slot fixed = plan.slots().stream()
                 .filter(each -> each.at().equals(under)).findFirst().orElseThrow();
-        assertTrue(fixed.fixed(), "it is the caller's value that goes there");
+        assertInstanceOf(ConstructionPlan.Leaf.Fixed.class, fixed.leaf(),
+                "it is the caller's value that goes there");
         assertEquals("Tag", souther.compiler.types.Type.show(fixed.type()),
                 "built as the case and not as the sum");
     }

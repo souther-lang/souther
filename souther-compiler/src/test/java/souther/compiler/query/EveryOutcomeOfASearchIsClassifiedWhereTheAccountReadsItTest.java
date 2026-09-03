@@ -27,9 +27,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * where the account asks.
  *
  * <p>What an account puts to a search is one question: did anything show a row can be written here,
- * was a showing stopped by a budget of this compiler's, or is there neither. The outcomes are five
- * and the question has three answers, so the map between them is where a mistake lives — and the
- * mistake it has made before is an outcome falling to whichever arm a reader wrote last, which
+ * was a showing stopped by a budget of this compiler's, or is there neither. There are more
+ * outcomes than the question has answers, so the map between them is where a mistake lives — and
+ * the mistake it has made before is an outcome falling to whichever arm a reader wrote last, which
  * turns this compiler's own limit into the model refusing a row.
  *
  * <p><b>The outcomes are enumerated from the type and not from a list here.</b> An outcome added is
@@ -45,8 +45,8 @@ class EveryOutcomeOfASearchIsClassifiedWhereTheAccountReadsItTest {
     /** One of each outcome, by the leaf that names it. */
     private static Map<Class<?>, ItemAssessment.Attempt> oneOfEach() {
         Map<Class<?>, ItemAssessment.Attempt> out = new LinkedHashMap<>();
-        for (ItemAssessment.Attempt each : List.of(certified(), unverified(), stopped(),
-                unresolved(), unavailable())) {
+        for (ItemAssessment.Attempt each : List.of(certified(), unverified(), stopped(), limited(),
+                unplanned(), unresolved(), unavailable())) {
             out.put(each.getClass(), each);
         }
         return out;
@@ -227,6 +227,38 @@ class EveryOutcomeOfASearchIsClassifiedWhereTheAccountReadsItTest {
                 new Generator.UnresolvedCombination(List.of("p.x = 11"),
                         Generator.UnresolvedCombination.Reason.wordFor(Set.of(budget))),
                 WAY, List.of(), EstablishmentGap.Composition.of(EnumSet.of(budget)));
+    }
+
+    /**
+     * A search whose own answer was about less than the point had.
+     *
+     * <p>Written with a word no budget comes back with, which is the half of this that the one
+     * above cannot have. Given the word its figure would produce, the representative would agree
+     * with {@link ItemAssessment.Attempt.Stopped} by construction and say nothing about the case
+     * this arm exists for.
+     */
+    private static ItemAssessment.Attempt limited() {
+        return new ItemAssessment.Attempt.Limited(
+                new Generator.UnresolvedCombination(List.of("p.x = 11"),
+                        Generator.UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED),
+                WAY, List.of(), EstablishmentGap.Composition.of(
+                        EnumSet.of(CompositionBudget.DEPTH_A_CONSTRUCTION_PLAN_DESCENDS)));
+    }
+
+    /**
+     * A point no search was made for, which the account reads as prevented like any other.
+     *
+     * <p>Its word says no search happened. Given one a search comes back with, this and {@link
+     * ItemAssessment.Attempt.Limited} would be one state a reader tells apart by which fields were
+     * filled in.
+     */
+    private static ItemAssessment.Attempt unplanned() {
+        return new ItemAssessment.Attempt.Unplanned(
+                new Generator.UnresolvedCombination(List.of("p.x = 11"),
+                        Generator.UnresolvedCombination.Reason
+                                .NO_READING_OF_THE_LINE_COULD_BE_SEARCHED),
+                WAY, List.of(), EstablishmentGap.Composition.of(
+                        EnumSet.of(CompositionBudget.DEPTH_A_CONSTRUCTION_PLAN_DESCENDS)));
     }
 
     private static ItemAssessment.Attempt unresolved() {

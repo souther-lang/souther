@@ -1,9 +1,8 @@
 package souther.compiler.check;
 
 import souther.compiler.stdlib.Stdlib;
-import souther.compiler.semantics.ArgumentRef;
+import souther.compiler.semantics.BuiltFrom;
 import souther.compiler.semantics.Combinator;
-import souther.compiler.semantics.ElementLineage;
 import souther.compiler.ast.DefinitionName;
 import souther.compiler.ast.Hir;
 import souther.compiler.ast.StructuralCost;
@@ -455,9 +454,13 @@ public final class HelperInliner {
         if (!(argument instanceof Hir.Expansion expansion)) {
             return;
         }
-        ArgumentRef holds = ElementLineage.holdsTheElementsOf(expansion.callee());
-        ArgumentRef made = holds != null ? null
-                : ElementLineage.derivesItsElementsFrom(expansion.callee());
+        BuiltFrom<DeclaredArgument> built =
+                DefaultBoundOperationFacts.get().buildsItsResultFrom(expansion.callee());
+        if (built == null) {
+            return;
+        }
+        DeclaredArgument holds = built.holdsTheElementsOf();
+        DeclaredArgument made = holds != null ? null : built.derivesItsElementsFrom();
         BindingId container = boundFor(expansion, holds != null ? holds : made);
         if (container == null) {
             return;
@@ -479,11 +482,11 @@ public final class HelperInliner {
      * no function has none to skip, which is why the closure is asked for separately rather than
      * assumed.
      */
-    private static BindingId boundFor(Hir.Expansion expansion, ArgumentRef which) {
+    private static BindingId boundFor(Hir.Expansion expansion, DeclaredArgument which) {
         if (which == null) {
             return null;
         }
-        int parameter = CallArguments.positionIn(which, expansion.callee());
+        int parameter = CallArguments.positionOf(which, expansion.callee());
         Combinator handed = Combinators.of(expansion.callee());
         int at = parameter - (handed != null && handed.closureArg() < parameter ? 1 : 0);
         return at < 0 || at >= expansion.bound().size() ? null
@@ -640,17 +643,18 @@ public final class HelperInliner {
         if (rewrite == null) {
             return call;
         }
-        List<Hir.Expr> args = new ArrayList<>(call.args());
-        for (int supplied : rewrite.supplied()) {
-            // an argument the rewrite supplies, which no one wrote
-            args.add(new Hir.IntLit(supplied, call.pos(), null));
-        }
-        // The library name this reaches for is the pass's; where it stands is the callee's.
-        return Hir.Apply.synthetic(
+        // Where the supplied arguments go is the rewrite's, which is why the list is built there:
+        // this writes each of them out as the literal no one wrote, and puts none of them anywhere.
+        List<Hir.Expr> args = rewrite.arguments(call.args(),
+                constant -> new Hir.IntLit(constant, call.pos(), null));
+        // The library name this reaches for is the pass's; the application is the author's, and so
+        // is what they applied there — a report about this call quotes the sugar they wrote and not
+        // the operation it stands for, which is private to the library and takes another argument.
+        return call.replacedBy(
                 Hir.Var.respelled(rewrite.target().qualified(),
                         new ReachName.OfLibrary(rewrite.target()), call.function().pos(),
                         call.function().region()),
-                args, call.pos(), call.region());
+                args);
     }
 
     /** Inlines a recursive helper's own body, expanding the non-recursive helper calls it makes while
@@ -1100,18 +1104,6 @@ public final class HelperInliner {
         return written.merge(writing.into(), 1, Integer::sum) - 1;
     }
 
-    /** How the source wrote an expression that is a name or a chain of field reads off one, or null
-     *  where it wrote something with no spelling of its own — a call's result, a lambda. */
-    private static String spelling(Hir.Expr e) {
-        return switch (e) {
-            case Hir.Var v -> v.name();
-            case Hir.FieldAccess fa -> {
-                String target = spelling(fa.target());
-                yield target == null ? null : target + "." + fa.field();
-            }
-            default -> null;
-        };
-    }
 
     /** Rewrites every helper call in {@code e} to its inlined body, into the body this writing names.
      * Private, because there is no body to write into until a writing says which, and the writings
@@ -1122,18 +1114,17 @@ public final class HelperInliner {
             // application reads the binding, which is the shape every reader downstream already has
             // — and which says outright what the order is: the function is worked out once, before
             // any argument, and the binding is what is applied.
-            case Hir.Apply raw when !raw.appliesAName() -> {
+            case Hir.Apply raw when !raw.calleeIsAName() -> {
                 Hir.Binder f = writing.binders().binder("$fn" + next(), raw.function().pos());
-                // What the application reaches is the binding, and what a report about it quotes is
-                // what the author wrote — a field read applied (`deps.count(x)`) has a spelling, and
-                // quoting the binding would name `$fn0`, which is nowhere in the source. The two are
-                // separate slots: the binding is in the callee position, the spelling beside it.
+                // What the application reaches is the binding. What a report about it quotes is
+                // what the author wrote — a field read applied (`deps.count(x)`) has a spelling,
+                // and quoting the binding would name `$fn0`, which is nowhere in the source — and
+                // the application carries that, this being a rewrite of what it applies.
                 ValueName.Local applied = new ValueName.Local(f.name(), f.id());
                 yield inline(new Hir.LetIn(f, raw.function(), null, false, null,
-                        raw.withFunction(Hir.Var.respelled(f.name(),
+                        raw.replacedBy(Hir.Var.respelled(f.name(),
                                 new ReachName.InScope(applied), raw.function().pos(),
-                                raw.function().region()))
-                                .standingIn(spelling(raw.function())),
+                                raw.function().region())),
                         raw.pos(), raw.region()));
             }
             case Hir.Apply rawCall -> expandCall(rawCall);
@@ -1256,7 +1247,7 @@ public final class HelperInliner {
      * callee's signature is one statement and this call decides its variables once.
      */
     private Hir.Expr expandCall(Hir.Apply rawCall) {
-        if (rawCall.answered() == null && rawCall.appliesAName()) {
+        if (rawCall.answered() == null && rawCall.calleeIsAName()) {
             // The callee names nothing, which was reported where it is written. No body stands
             // behind it, no library sugar reaches for it, and no parameter list holds its arguments
             // against anything — so the call stays as it is and only its arguments are expanded.
@@ -1297,7 +1288,7 @@ public final class HelperInliner {
         // takes nothing. The value is substituted and the arguments are applied to it.
         if (helper.params().isEmpty() && !args.isEmpty()
                 && call.function() instanceof Hir.Var named) {
-            return inline(call.withFunction(valueOf(named)).withArgs(args));
+            return inline(call.replacedBy(valueOf(named), args));
         }
         if (args.size() != helper.params().size()) {
             throw wrongArity(call, helper, args.size());
@@ -1420,7 +1411,10 @@ public final class HelperInliner {
         // And where this call is the operation that hands such a lambda its elements, the two ends
         // of that fact are among the arguments: the lambda is one and the container is another. Both
         // are gathered as they are met and joined once the loop has them.
-        ArgumentRef mapsEach = ElementLineage.mapsEachElementOf(calleeOf(call));
+        BuiltFrom<DeclaredArgument> builtByCallee =
+                DefaultBoundOperationFacts.get().buildsItsResultFrom(calleeOf(call));
+        DeclaredArgument mapsEach = builtByCallee == null ? null
+                : builtByCallee.mapsEachElementOf();
         BindingId theLambda = null;
         BindingId theContainer = null;
         for (int i = 0; i < helper.params().size(); i++) {
@@ -1524,7 +1518,7 @@ public final class HelperInliner {
                     provenance.projectsEachElementOf(f.id(), walked);
                 }
                 if (mapsEach != null
-                        && i == CallArguments.positionIn(mapsEach, calleeOf(call))) {
+                        && i == CallArguments.positionOf(mapsEach, calleeOf(call))) {
                     theContainer = f.id();
                 }
             }
@@ -2028,8 +2022,17 @@ public final class HelperInliner {
                     : fa.withTarget(rename(fa.target(), renaming));
             // the callee is renamed as the expression it is, like every other subexpression. A name
             // applied is an `Hir.Var` held here, so it goes through the arm above and is substituted
-            // exactly as a read of it would be — the position cannot ask a different question.
+            // exactly as a read of it would be.
+            //
+            // What the author applied is the application's own answer and is not read off that, so
+            // it is stamped here beside it: the name travels with the copy and the place it was
+            // written at is in the callee's file, which a copy read against another one may not
+            // carry — the rule the field read above goes by.
             case Hir.Apply call -> call.with(
+                    renaming.stamps()
+                            ? call.applied().restamped(renaming.at(call.function().pos()),
+                                    renaming.over(call.function().region()))
+                            : call.applied(),
                     rename(call.function(), renaming),
                     renameList(call.args(), renaming),
                     renaming.at(call.pos()), renaming.over(call.region()));

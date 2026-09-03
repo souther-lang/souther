@@ -45,12 +45,13 @@ class OnlyABoundaryOrAProcessConstantReadsTheDefaultLibraryTest {
             "check/Combinators.java",
             "check/Preserved.java",
             "check/Reductions.java",
-            "check/DischargeRules.java");
+            // The facts about the language's operations, held to the shipped library once.
+            "check/DefaultBoundOperationFacts.java");
 
     /** What building a library must not need, because it is what building one produces. */
     private static final List<String> WHAT_THE_LOADER_MAY_NOT_READ = List.of(
             "DefaultStdlib", "Combinators", "Preserved", "Accumulations", "Reductions",
-            "DischargeRules");
+            "DischargeRules", "DefaultBoundOperationFacts", "OperationFactBinder");
 
     @Test
     void theseAreTheOnlyReadersOfTheProcessLibrary() throws IOException {

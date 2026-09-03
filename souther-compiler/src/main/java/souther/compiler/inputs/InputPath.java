@@ -1,11 +1,12 @@
 package souther.compiler.inputs;
 
 import souther.compiler.check.CallArguments;
+import souther.compiler.check.DeclaredArgument;
+import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.check.Location;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
-import souther.compiler.semantics.ArgumentRef;
-import souther.compiler.semantics.ElementLineage;
+import souther.compiler.semantics.BuiltFrom;
 import souther.compiler.types.BindingId;
 
 /**
@@ -256,8 +257,12 @@ final class InputPath {
         if (!(e instanceof Core.Call call) || !(call.fn() instanceof Core.Reached reached)) {
             return new PathResolution.NotAPosition();
         }
-        ArgumentRef holds = ElementLineage.holdsTheElementsOf(reached.denotes());
-        int argument = holds == null ? -1 : CallArguments.positionIn(holds, reached.denotes());
+        BuiltFrom<DeclaredArgument> built =
+                DefaultBoundOperationFacts.get().buildsItsResultFrom(reached.denotes());
+        DeclaredArgument holds = built == null ? null : built.holdsTheElementsOf();
+        // The call is the runnable tree's and not a kept one, so its argument count is checked
+        // here rather than by a kept call's own constructor.
+        int argument = holds == null ? -1 : CallArguments.positionOf(holds, reached.denotes());
         return argument < 0 || argument >= call.args().size() ? new PathResolution.NotAPosition()
                 : containerPath(call.args().get(argument), names);
     }

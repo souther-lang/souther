@@ -366,6 +366,10 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                             + " computes"),
             new Held("souther.compiler.semantics.OperationFacts.computesInTheCaseCarrying",
                     "the same, for an operation whose other case is stated as a comparison"),
+            new Held("souther.compiler.check.OperationFactBinder.holdNumericResult",
+                    "carries the operator that fact states its other case by across into the"
+                            + " bound fact, unchanged: what changes in the binding is the argument"
+                            + " it compares, not how"),
             new Held("souther.compiler.check.ArithmeticCheck.of",
                     "names the constants it has rules for, against the operator it was handed"),
             new Held("souther.compiler.check.BinaryElaborator.operandBeside",

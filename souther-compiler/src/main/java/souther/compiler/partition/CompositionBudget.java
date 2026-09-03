@@ -3,19 +3,36 @@ package souther.compiler.partition;
 import java.util.function.IntSupplier;
 
 /**
- * How much of a search this compiler is willing to do before it stops.
+ * A figure this compiler holds a piece of its own work to.
  *
- * <p>One member per place that stops, and the figure it stops at is here rather than at the place.
- * What a reader of a stopped search wants to know is which of these ran out, and a name written
- * beside a number somewhere else is a second declaration of the same policy — the two part the
- * first time one of them is raised.
+ * <p>What reaching one does is the member's to say and not this sentence's — one of them changes
+ * how the work is done and gives nothing up at all. So what they have in common is only that
+ * somebody wrote a bound down and that raising it is a thing a person could decide to do.
+ *
+ * <p>One member per place that reaches a figure, and the figure is here rather than at the place.
+ * What a reader wants to know is which of these was reached, and a name written beside a number
+ * somewhere else is a second declaration of the same policy — the two part the first time one of
+ * them is raised.
  *
  * <p><b>A cause and not an outcome.</b> Reaching one of these says what this compiler declined to
  * do and says nothing about the model: the value it did not build may be the easiest one in the
- * file to write by hand. What the reaching did to the answer is a separate question, and it has two
- * answers rather than one — a search that had produced nothing when it stopped leaves the point
- * unestablished, and one that had produced something leaves an offer that is some of what there was.
- * So the same member appears on both sides and is neither of them.
+ * file to write by hand. What the reaching did is a separate question, and it is not one question:
+ *
+ * <ul>
+ * <li>a search goes no further, and what it had reached is carried out with the figure;
+ * <li>another thing a search runs against goes no further — a plan short of the value's positions
+ *     leaves a search that ran to the end of less than the point had;
+ * <li>nothing is given up at all, and the work carries on by a wider way that omits none of it.
+ * </ul>
+ *
+ * <p>So a reader may not take a member for any of the three. The first two are carried and the
+ * third is not, and which a member is is written where the member is — including, for the third,
+ * why there is nothing to carry. A figure named here with no carrier and no such sentence is one
+ * somebody has not finished.
+ *
+ * <p>Nor does the first divide once and for all. A search that had produced nothing when it stopped
+ * leaves the point unestablished, and one that had produced something leaves an offer that is some
+ * of what there was — so the same member appears on both sides and is neither of them.
  *
  * <p>The figures are read through {@link #maximum()} and are not all written down. One of them is
  * how many shapes a decomposition is offered in, which is how many the walk has — read off the walk,
@@ -70,7 +87,20 @@ public enum CompositionBudget {
     /** How many levels past the one a side starts from are asked for. */
     LEVELS_A_SIDE_IS_ASKED_AT(() -> 8),
 
-    /** How often a walk re-reads the rules with the positions it has fixed. */
+    /**
+     * How often a walk re-reads the rules with the positions it has fixed.
+     *
+     * <p><b>Reaching it omits no work, which is why nothing carries it.</b> Past this the walk goes
+     * on against what the rules left before anything was fixed, which is a wider box and is sound:
+     * it offers assignments the narrowing would have skipped and skips none the narrowing would
+     * have kept. So a search that met this has still tried everything it would otherwise have
+     * tried, and the last step is deliberately outside the figure.
+     *
+     * <p>Which makes an empty channel the right answer here and not a hole. Handed to an account,
+     * it would say a point is open for a figure somebody could raise — of a search that gave up
+     * nothing. The others are named beside their carriers; this is named beside the reason it has
+     * none.
+     */
     TIMES_THE_RULES_ARE_ASKED_AGAIN(() -> 2_000),
 
     /** How many values of one position on the way to a border are tried. Its outcome is not a
@@ -81,15 +111,19 @@ public enum CompositionBudget {
     /**
      * How deep a construction plan descends.
      *
-     * <p><b>Named here and carried by nothing.</b> Reaching it does not stop a composing and does
-     * not shorten an offer: the plan comes back with a position it has no fields for, the composing
-     * goes on against that plan, and what a failure afterwards says is what any refusal says. So
-     * there is no place on the way out for this to travel, and giving it one takes a shape the plan
-     * itself does not have — a plan that is complete and a plan that was cut are one word today.
+     * <p><b>Reaching it stops no search: what it shortens is the plan.</b> The composing runs
+     * against a plan that has no positions below the figure, so the answer it comes to is its own —
+     * every candidate refused, or nothing composed — and what this adds is that the answer is about
+     * fewer positions than the value has. The two are carried side by side
+     * ({@code Attempt.Limited}), because neither follows from the other.
      *
-     * <p>Here all the same, because the inventory of what this compiler declines to do is what a
-     * reader of any of the others is entitled to, and a budget left out of it because its channel
-     * is missing is one nobody will find again. What is missing is the channel, not the name.
+     * <p>So this has no word of its own. A search that stopped comes back saying so, and a reader
+     * may read which budget from that; nothing stopped here, and asking these for a word is what
+     * refuses to answer.
+     *
+     * <p>Where the plan is short of a position the caller asked something at, there is no search at
+     * all: a row composed against such a plan is one the caller's own value is missing from, and
+     * the plan says so instead of handing one back.
      */
     DEPTH_A_CONSTRUCTION_PLAN_DESCENDS(() -> 8);
 
@@ -99,7 +133,7 @@ public enum CompositionBudget {
         this.maximum = maximum;
     }
 
-    /** The figure this stops at. */
+    /** The figure itself. What is done on reaching it is the member's to say. */
     public int maximum() {
         return maximum.getAsInt();
     }

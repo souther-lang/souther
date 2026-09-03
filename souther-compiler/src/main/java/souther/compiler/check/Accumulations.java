@@ -2,8 +2,6 @@ package souther.compiler.check;
 
 import souther.compiler.core.Core;
 import souther.compiler.semantics.Accumulation;
-import souther.compiler.semantics.ArgumentRef;
-import souther.compiler.semantics.OperationFacts;
 import souther.compiler.types.ValueName;
 
 import java.util.Set;
@@ -12,11 +10,11 @@ import java.util.Set;
  * What a call to an accumulating operation walks, for a reader holding the call.
  *
  * <p>A reading and not a table. Which operations accumulate, and what walking one comes to, is a
- * proposition about the operation and is declared with the rest of them
- * ({@link OperationFacts#accumulation}); what is here is the part that depends on having a call in
- * hand — which of its arguments holds the elements. Held as a table of its own, the same operation
- * was stated twice as soon as a second reader wanted it, which is the shape every list of
- * operations in this compiler has already been through once.
+ * proposition about the operation and is declared with the rest of them and read from the binding
+ * ({@link BoundOperationFacts#accumulates}); what is here is the part that depends on having a call
+ * in hand — the expression standing where the fact says the elements are. Held as a table of its
+ * own, the same operation was stated twice as soon as a second reader wanted it, which is the shape
+ * every list of operations in this compiler has already been through once.
  *
  * <p>The sibling of {@link Reductions}, and separate for the reason that is separate from
  * {@link Combinators}. A reduction is handed the step it repeats and this is not: {@code List.sum}
@@ -43,32 +41,28 @@ final class Accumulations {
 
     /** What {@code operation} accumulates, or null where it accumulates nothing. */
     static Accumulation of(ValueName operation) {
-        return OperationFacts.accumulation(operation);
+        return DefaultBoundOperationFacts.get().accumulation(operation);
     }
 
     /**
      * What {@code call} accumulates and over what, or null where it accumulates nothing.
      *
-     * <p>Which argument holds the elements is the fact's to name, and finding it in this call is
-     * this method's. Worked out here from the signature instead — the argument whose elements are
-     * of the type the operation answers — a signature that fits twice would have to be refused
-     * somewhere, and the declaration already says which one it walks.
+     * <p>Which argument holds the elements is the fact's to name and the binder's to place, and
+     * finding it in this call is {@link CallArguments}'. Worked out here from the signature instead
+     * — the argument whose elements are of the type the operation answers — a signature that fits
+     * twice would have to be refused somewhere, and the declaration already says which one it walks.
      */
     static Accumulating accumulating(Core.PreservedCall call) {
-        Accumulation what = of(call.operation());
-        ArgumentRef container = OperationFacts.accumulatedContainer(call.operation());
-        if (what == null || container == null) {
-            return null;
-        }
-        int at = CallArguments.positionIn(container, call.operation());
-        return at < 0 || at >= call.args().size() ? null
-                : new Accumulating(what, call.args().get(at));
+        BoundOperationFact.AccumulatesItsContainer walk =
+                DefaultBoundOperationFacts.get().accumulates(call.operation());
+        return walk == null ? null
+                : new Accumulating(walk.how(), CallArguments.of(walk.container(), call));
     }
 
     /** The operations there is a rule about, for the check that a rule answers a question its
      * operation is asked. */
     static Set<ValueName> answered() {
-        return OperationFacts.accumulates();
+        return DefaultBoundOperationFacts.get().accumulates();
     }
 
     private Accumulations() {}

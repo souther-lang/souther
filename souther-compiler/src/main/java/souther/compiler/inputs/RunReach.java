@@ -1,5 +1,6 @@
 package souther.compiler.inputs;
 
+import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.check.ReadingPolicy;
 import souther.compiler.check.RuleKey;
 import souther.compiler.check.RuleReadingSource;
@@ -12,7 +13,6 @@ import souther.compiler.numeric.Intervals;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.semantics.Accumulation;
-import souther.compiler.semantics.OperationFacts;
 import souther.compiler.types.Type;
 
 import java.math.BigDecimal;
@@ -98,7 +98,7 @@ final class RunReach {
                                    Function<TermPath, Type> typeAt, RuleReadingSource rules,
                                    ReadingPolicy policy) {
         orders.areOf(over);
-        Accumulation walk = OperationFacts.accumulation(over.operation());
+        Accumulation walk = DefaultBoundOperationFacts.get().accumulation(over.operation());
         NumericDomain.Bounds element = ofTheValuesWalked(over.source(), typeAt, rules, policy);
         Granularity answeredOn = spacingOf(orders.answered());
         Granularity observedOn = spacingOf(orders.observed());

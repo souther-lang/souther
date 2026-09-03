@@ -12,6 +12,14 @@ package souther.compiler.semantics;
  *
  * <p>Sealed, so the procedures that hold these to the library's declarations answer for a kind
  * added rather than passing over it.
+ *
+ * <p><b>The authoring vocabulary, and nothing below the binding reads it.</b> An argument is named
+ * here as {@link ArgumentRef}, a word; another operation as a {@link souther.compiler.types.ValueName},
+ * a name. Neither says the library has such an operation or such an argument. What holds these to
+ * the library ({@code check.OperationFactBinder}) answers with a value of another kind, in which
+ * every argument and every operation has been read against its declaration, and every reader of a
+ * fact reads that one. So a kind added here is a kind the binder must say what it comes to bound,
+ * which the exhaustive switch there refuses to leave unsaid.
  */
 public sealed interface OperationFact {
 
@@ -99,7 +107,7 @@ public sealed interface OperationFact {
      * <p>One fact per bound rather than a list in one: an operation with two bounds carries two
      * statements, and they are added and read one at a time.
      */
-    record BoundsItsResult(ResultBound bound) implements OperationFact {
+    record BoundsItsResult(ResultBound<ArgumentRef> bound) implements OperationFact {
 
         public BoundsItsResult {
             java.util.Objects.requireNonNull(bound, "this one states a bound");
@@ -110,7 +118,7 @@ public sealed interface OperationFact {
      * The operation builds a container out of another, and this says where its elements came from
      * and how many of them there are.
      */
-    record BuildsItsResultFrom(BuiltFrom built) implements OperationFact {
+    record BuildsItsResultFrom(BuiltFrom<ArgumentRef> built) implements OperationFact {
 
         public BuildsItsResultFrom {
             java.util.Objects.requireNonNull(built, "this one says what it was built from");
@@ -215,7 +223,7 @@ public sealed interface OperationFact {
     }
 
     /** The operation computes a number, and this says which arithmetic and where it answers it. */
-    record ComputesANumber(NumericResult result) implements OperationFact {
+    record ComputesANumber(NumericResult<ArgumentRef> result) implements OperationFact {
 
         public ComputesANumber {
             java.util.Objects.requireNonNull(result, "this one says what it computes");
@@ -233,20 +241,10 @@ public sealed interface OperationFact {
      * out does not make the others wrong, it makes a clause provable that the values can fail. So
      * they are declared as the library writes them, in the order it writes them.
      */
-    record IsDefinedByCases(Case one) implements OperationFact {
+    record IsDefinedByCases(DefinitionCase<ArgumentRef> one) implements OperationFact {
 
         public IsDefinedByCases {
             java.util.Objects.requireNonNull(one, "this one states a case");
-        }
-    }
-
-    /** One case of a piecewise definition: the argument it answers, and what the arguments stand as
-     *  for it to be reached. */
-    record Case(ArgumentRef answers, java.util.List<ArgumentsStand> given) {
-
-        public Case {
-            java.util.Objects.requireNonNull(answers, "a case answers an argument");
-            given = java.util.List.copyOf(given);
         }
     }
 
@@ -319,18 +317,6 @@ public sealed interface OperationFact {
 
         public SaysNothingOf {
             java.util.Objects.requireNonNull(subject, "a silence is about something");
-        }
-    }
-
-    /** A relation between two arguments: {@code left rel right}. What a case is reached under,
-     *  written in the arguments the operation was given and in nothing else. */
-    record ArgumentsStand(ArgumentRef left, souther.compiler.numeric.Rel rel,
-                          ArgumentRef right) {
-
-        public ArgumentsStand {
-            java.util.Objects.requireNonNull(left, "a relation has two sides");
-            java.util.Objects.requireNonNull(rel, "and stands some way");
-            java.util.Objects.requireNonNull(right, "a relation has two sides");
         }
     }
 }

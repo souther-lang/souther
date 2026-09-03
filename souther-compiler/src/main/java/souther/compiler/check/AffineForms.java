@@ -701,7 +701,7 @@ public final class AffineForms {
     private static <A, E> LinearForm<A> answered(Core call, E at, Reading<A, E> reading,
                                                  java.util.Set<BindingId> following,
                                                  Stop<A, E> stopped) {
-        LinearForm<souther.compiler.semantics.ArgumentRef> says = formSaidOf(call);
+        LinearForm<DeclaredArgument> says = formSaidOf(call);
         java.util.List<Core> args = Terms.argsOf(call);
         // The expansion's own stops, kept off the walk's. What is inside a declared form is not
         // what an author wrote: the arguments stand where they stand because the library says the
@@ -709,9 +709,10 @@ public final class AffineForms {
         // met an expression an author would change — it has met this call.
         Stop<A, E> inside = new Stop<>();
         LinearForm<A> form = LinearForm.constant(says.constant());
-        for (Map.Entry<souther.compiler.semantics.ArgumentRef, BigDecimal> each
-                : says.coefs().entrySet()) {
-            int position = CallArguments.positionIn(each.getKey(), Terms.operationOf(call));
+        for (Map.Entry<DeclaredArgument, BigDecimal> each : says.coefs().entrySet()) {
+            // The call here may be the runnable tree's and not a kept one, so its argument count
+            // is checked here rather than by a kept call's own constructor.
+            int position = CallArguments.positionOf(each.getKey(), Terms.operationOf(call));
             if (position < 0 || position >= args.size()) {
                 return stoppedAtTheCall(call, at, stopped);
             }
@@ -749,7 +750,7 @@ public final class AffineForms {
      * read in holds it another, and the fact is about the operation either way; read off one shape,
      * the same statement would be composed in one representation and left a leaf in the other.
      */
-    private static LinearForm<souther.compiler.semantics.ArgumentRef> formSaidOf(Core e) {
+    private static LinearForm<DeclaredArgument> formSaidOf(Core e) {
         souther.compiler.types.ValueName operation = Terms.operationOf(e);
         return operation == null ? null : DischargeRules.answersAFormOf(operation);
     }
