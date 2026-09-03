@@ -57,7 +57,7 @@ public sealed interface EstablishmentGap {
     }
 
     /**
-     * A budget of this compiler's ran out before any value was composed for the point.
+     * A budget of this compiler's is why no value was composed for the point.
      *
      * <p>Made where the composing stopped and carried out, never worked out afterwards. What a
      * search comes back with is a word, and two of this compiler's budgets come back with the same
@@ -67,7 +67,12 @@ public sealed interface EstablishmentGap {
      * <p><b>Only where nothing was composed.</b> A budget that cut an offering short after a value
      * was built took nothing away from the point: the value is there, and what was lost is the rest
      * of an offer. Such a budget travels on what was built and not here, because a gap here is read
-     * as the showing having been stopped.
+     * as the point having been left open by this compiler rather than by the model.
+     *
+     * <p>Which covers both ways that happens. A figure may end the search before it had tried what
+     * it held, and a figure may leave the search with less than the point had to try — the first
+     * comes back with the budgets' own word and the second with a word of its own, and either way
+     * what is written here is that the question is open on a figure somebody could raise.
      *
      * <p>As many figures as the search met, because no two of them are the same piece of work.
      * Ranked, the one a reader was told about would be whichever the walk hit first.

@@ -3179,6 +3179,10 @@ public final class Adequacy {
                     // figure ended it is the point's own to say and is said where a reader asks
                     // about the point, not in a list of what this run did not offer.
                     case ItemAssessment.Attempt.Stopped why -> unresolved.add(why.why());
+                    // And a search whose answer was about less than the point had. It came to
+                    // nothing in the same sense the two above did, and which figure made its answer
+                    // short is the point's own to say, in the same place.
+                    case ItemAssessment.Attempt.Limited why -> unresolved.add(why.why());
                     case ItemAssessment.Attempt.Unresolved why -> {
                         unresolved.add(why.why());
                         // And where the decoders were out of reach, the block is short of rows it

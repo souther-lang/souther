@@ -2064,6 +2064,15 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                     " — this compiler stopped at " + said(it.stoppedBy().budgets()) + ": "
                             + it.why().said().orElseGet(() -> whyUnresolved(it.why()))
                             + whatTheRegionLeftOut(it.unaccountedFor(), names, declaredIn);
+            // Both halves, because neither says what the other does. The word is what the search
+            // itself came to; the figure is why that word is not about the whole of the point. Said
+            // as the word alone, an author reads a proof about a value this compiler never planned
+            // for; said as the figure alone, they go looking for a search that stopped.
+            case ItemAssessment.Attempt.Limited it ->
+                    " — as far as this compiler plans, which stops at "
+                            + said(it.limitedBy().budgets()) + ": "
+                            + it.why().said().orElseGet(() -> whyUnresolved(it.why()))
+                            + whatTheRegionLeftOut(it.unaccountedFor(), names, declaredIn);
             case ItemAssessment.Attempt.Unresolved it ->
                     (it.why().reason().provesInfeasible() ? " — " : " — nothing composed one: ")
                             + it.why().said().orElseGet(() -> whyUnresolved(it.why()))

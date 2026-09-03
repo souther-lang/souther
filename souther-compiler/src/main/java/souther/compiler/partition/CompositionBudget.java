@@ -70,7 +70,20 @@ public enum CompositionBudget {
     /** How many levels past the one a side starts from are asked for. */
     LEVELS_A_SIDE_IS_ASKED_AT(() -> 8),
 
-    /** How often a walk re-reads the rules with the positions it has fixed. */
+    /**
+     * How often a walk re-reads the rules with the positions it has fixed.
+     *
+     * <p><b>Reaching it omits no work, which is why nothing carries it.</b> Past this the walk goes
+     * on against what the rules left before anything was fixed, which is a wider box and is sound:
+     * it offers assignments the narrowing would have skipped and skips none the narrowing would
+     * have kept. So a search that met this has still tried everything it would otherwise have
+     * tried, and the last step is deliberately outside the figure.
+     *
+     * <p>Which makes an empty channel the right answer here and not a hole. Handed to an account,
+     * it would say a point is open for a figure somebody could raise — of a search that gave up
+     * nothing. The others are named beside their carriers; this is named beside the reason it has
+     * none.
+     */
     TIMES_THE_RULES_ARE_ASKED_AGAIN(() -> 2_000),
 
     /** How many values of one position on the way to a border are tried. Its outcome is not a
@@ -81,15 +94,19 @@ public enum CompositionBudget {
     /**
      * How deep a construction plan descends.
      *
-     * <p><b>Named here and carried by nothing.</b> Reaching it does not stop a composing and does
-     * not shorten an offer: the plan comes back with a position it has no fields for, the composing
-     * goes on against that plan, and what a failure afterwards says is what any refusal says. So
-     * there is no place on the way out for this to travel, and giving it one takes a shape the plan
-     * itself does not have — a plan that is complete and a plan that was cut are one word today.
+     * <p><b>Reaching it stops no search: what it shortens is the plan.</b> The composing runs
+     * against a plan that has no positions below the figure, so the answer it comes to is its own —
+     * every candidate refused, or nothing composed — and what this adds is that the answer is about
+     * fewer positions than the value has. The two are carried side by side
+     * ({@code Attempt.Limited}), because neither follows from the other.
      *
-     * <p>Here all the same, because the inventory of what this compiler declines to do is what a
-     * reader of any of the others is entitled to, and a budget left out of it because its channel
-     * is missing is one nobody will find again. What is missing is the channel, not the name.
+     * <p>So this has no word of its own. A search that stopped comes back saying so, and a reader
+     * may read which budget from that; nothing stopped here, and asking these for a word is what
+     * refuses to answer.
+     *
+     * <p>Where the plan is short of a position the caller asked something at, there is no search at
+     * all: a row composed against such a plan is one the caller's own value is missing from, and
+     * the plan says so instead of handing one back.
      */
     DEPTH_A_CONSTRUCTION_PLAN_DESCENDS(() -> 8);
 

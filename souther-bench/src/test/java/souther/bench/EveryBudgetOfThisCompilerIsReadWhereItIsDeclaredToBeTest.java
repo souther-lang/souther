@@ -27,9 +27,15 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * figure spelled differently and once by a figure that is the size of a walk rather than a number
  * anybody wrote down. A name is not what makes a budget; being reached and stopping something is.
  *
- * <p>Each entry below says what that place does with the figure. A place added is a question — does
- * it hand the budget over, or does it swallow it — and the answer belongs beside the code that
- * decides, which is why the list is here and not a count.
+ * <p>Each entry below says what that place does with the figure. A place added is a question, and
+ * it has three answers rather than two: the place hands the budget over, or what it hands over is
+ * carried somewhere else, or reaching the figure omits no work at all and there is nothing to carry.
+ * The answer belongs beside the code that decides, which is why the list is here and not a count.
+ *
+ * <p><b>The third is an answer and not an excuse.</b> A figure whose channel is simply missing and
+ * one that gives nothing up look alike from here — both are read and neither travels — and the
+ * difference is the whole of whether a reader is owed something. So a place claiming it has to say
+ * why nothing is lost, and the sentence has to be one somebody could find wrong.
  *
  * <p><b>One of two sheets.</b> A figure a class copies into a field of its own is reached once,
  * where the field is set, and the walk that then stops at the field is not a reader of the figure
@@ -78,7 +84,10 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/partition/TermRealizations$Realization;",
                     "records the three a total can be short of, where each decides not to go on"),
             Map.entry("souther.compiler.partition.LevelRealizer#<clinit>()V",
-                    "the places a pair is tried at, the steps, the progression and the re-reads"),
+                    "the places a pair is tried at, the steps, the progression — and the re-reads,"
+                            + " which travel nowhere because reaching that one gives nothing up:"
+                            + " the walk carries on against the wider box, which offers every"
+                            + " assignment the narrowing would have and skips none of them"),
             Map.entry("souther.compiler.partition.LevelRealizer#ofTwo("
                             + "Lsouther/compiler/partition/Standing$OfTwoOnOneCarrier;"
                             + "Lsouther/compiler/inputs/SearchRegion;)"
@@ -121,9 +130,17 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/partition/Generator$CandidateCheck;)"
                             + "Lsouther/compiler/partition/Generator$Outcome;",
                     "the same bound over one pass of the assignments"),
-            Map.entry("souther.compiler.partition.ConstructionPlan#<clinit>()V",
-                    "how deep a plan descends, which nothing carries and which is named all the"
-                            + " same"),
+            Map.entry("souther.compiler.partition.ConstructionPlan#node("
+                            + "Lsouther/compiler/types/Type;"
+                            + "Lsouther/compiler/inputs/TermPath;"
+                            + "Lsouther/compiler/check/Symbols;I"
+                            + "Ljava/util/Set;"
+                            + "Lsouther/compiler/inputs/Requirements;"
+                            + "Ljava/util/function/ToIntBiFunction;)"
+                            + "Lsouther/compiler/partition/ConstructionPlan$NodeResult;",
+                    "stops descending where a value is still made of positions, and says which"
+                            + " figure — on the position where it stopped, or as the whole plan"
+                            + " where the caller asked for something below it"),
 
             // The readings. Each takes a figure that was handed over and says what it comes to.
             Map.entry("souther.compiler.partition.Generator$UnresolvedCombination$Reason#wordFor("
