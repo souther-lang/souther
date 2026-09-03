@@ -1379,10 +1379,10 @@ public final class Partitions {
      * @param given what stands at some of the fields, by name. A name no field has is nothing this
      *              can build, and is the caller asking for a value of another type
      */
-    private static List<FixtureTemplate> composed(TypeSymbol.AtModule record, RuleReadingSource ruleSource,
-                                                  ReadingPolicy policy,
-                                                  java.util.Set<TypeSymbol> expanding,
-                                                  Map<String, FixtureTemplate> given) {
+    static List<FixtureTemplate> composed(TypeSymbol.AtModule record, RuleReadingSource ruleSource,
+                                          ReadingPolicy policy,
+                                          java.util.Set<TypeSymbol> expanding,
+                                          Map<String, FixtureTemplate> given) {
         if (expanding.contains(record) || !(ruleSource.symbols().declaredNode(record) instanceof Hir.Data data)) {
             return List.of();
         }
@@ -1421,55 +1421,6 @@ public final class Partitions {
         }
         return ruleSource.symbols().scope().reach(record) instanceof TypeReachName.Written written
                 ? List.of(FixtureTemplate.record(written, chosen)) : List.of();
-    }
-
-    /**
-     * A value of {@code type} whose position at {@code under} holds {@code value}, or null where
-     * nothing here builds one.
-     *
-     * <p>What a caller wanting a particular number somewhere inside a value asks for. The value at
-     * the position is the caller's and everything beside it is chosen the way any value of the type
-     * is — against the rules of the record it sits in, read again once the caller's value is in
-     * them, so what is offered is a value the model may well admit rather than a shape that carries
-     * the number and breaks a rule about the field next to it.
-     *
-     * <p><b>Steps under the value and not a path.</b> A {@link TermPath} is rooted at a parameter and
-     * says where a location of a row is; what is named here is a way down from a value whose own
-     * location this does not know. Written as a path, one vocabulary would spell two things.
-     *
-     * <p>Fields, and nothing else. A step into a sequence asks for a value inside a container and how
-     * many of them there are, which is a question about the container and not about this value; a
-     * step into a case of a sum asks for a value narrowed to that case, which is composed where the
-     * narrowings are read. Both come back null, which says nothing composes one and leaves what does
-     * to whoever writes it.
-     */
-    static FixtureTemplate carrying(Type type, List<TermPath.Step> under, FixtureTemplate value,
-                                    RuleReadingSource ruleSource, ReadingPolicy policy) {
-        if (value == null) {
-            return null;
-        }
-        // The value itself, under every name the position wears. A newtype around a number is the
-        // number as it is written there, and putting the names on is the one reader that does it.
-        if (under.isEmpty()) {
-            return Witnesses.wrapped(type, value, ruleSource);
-        }
-        if (!(under.getFirst() instanceof TermPath.Step.Field(String name))) {
-            return null;
-        }
-        if (!(TypeOps.base(type, ruleSource.symbols()) instanceof Type.Ref(TypeSymbol.AtModule named))
-                || !(ruleSource.symbols().declaredNode(named) instanceof Hir.Data data)
-                || data.newtype()) {
-            return null;
-        }
-        Type at = TypeOps.fieldTypes(data, ruleSource.symbols()).get(name);
-        FixtureTemplate inner = at == null ? null
-                : carrying(at, under.subList(1, under.size()), value, ruleSource, policy);
-        if (inner == null) {
-            return null;
-        }
-        List<FixtureTemplate> whole =
-                composed(named, ruleSource, policy, java.util.Set.of(), Map.of(name, inner));
-        return whole.isEmpty() ? null : Witnesses.wrapped(type, whole.getFirst(), ruleSource);
     }
 
     /** How many of whatever counts a value the rules on it require it to hold, read where the rules

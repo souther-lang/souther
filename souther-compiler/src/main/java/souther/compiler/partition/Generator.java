@@ -4532,8 +4532,8 @@ public final class Generator {
      * <p>Null where a name the position wears is one this module cannot write, which is a value
      * that cannot be written rather than one written without the name.
      */
-    private static FixtureTemplate worn(List<TypeOps.Layer> worn, FixtureTemplate value,
-                                        RuleReadingSource ruleSource) {
+    static FixtureTemplate worn(List<TypeOps.Layer> worn, FixtureTemplate value,
+                                RuleReadingSource ruleSource) {
         if (value == null || worn.isEmpty()) {
             return value;
         }
