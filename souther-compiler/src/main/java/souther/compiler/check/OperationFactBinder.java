@@ -686,8 +686,9 @@ final class OperationFactBinder {
     }
 
     /**
-     * Holds every operation declared to answer a number taken of its argument to being read by
-     * that one representation, and then to the account fitting what the operation takes.
+     * Holds every operation the library declares to having its number read by at most one
+     * representation, and then each account of a number taken of one value to fitting what the
+     * operation takes.
      *
      * <p>Asked of the bound facts together and after every one is bound, because the first is a
      * claim about the set: an account declared beside a form is two readings whichever was written
@@ -696,25 +697,30 @@ final class OperationFactBinder {
      * readings the operation has ({@link NumericReadings}), a representation added is refused
      * against every existing one without being paired with any of them.
      *
-     * <p>The shape second, since a shape that does not fit is a fact about this account, and the
+     * <p><b>Over the library's operations, and not over the facts of one kind.</b> Two readings of
+     * one number are an invalid definition of the operation whichever two they are — a form beside
+     * an arithmetic, a walk that adds beside a form — so the population the claim is about is every
+     * operation there is, and a walk that started from the accounts of one kind would hold only
+     * the pairs that kind is half of. What is refused here is what
+     * {@link NumericReadings.Resolution.Multiple} is defined to be, before any reader can meet it.
+     *
+     * <p>The shape second, since a shape that does not fit is a fact about one account, and the
      * exclusivity is a fact about the operation whatever account was written for it.
      */
     private static void holdEachNumberToOneReading(Stdlib stdlib, BoundOperationFacts facts) {
+        for (ValueName.Stdlib.Operation operation : stdlib.entries().keySet()) {
+            NumericReadings.Resolution read = NumericReadings.resolve(stdlib, facts, operation);
+            if (read instanceof NumericReadings.Resolution.Multiple) {
+                throw new IllegalStateException("the number " + operation.qualified()
+                        + " answers is read as " + NumericReadings.describe(read)
+                        + ", and one numeric call is read by one representation — which of them a"
+                        + " report showed would be whichever reader arrived");
+            }
+        }
         for (BoundOperationFact fact : facts.all()) {
             if (!(fact instanceof BoundOperationFact.AnswersANumberTakenOfTheOneValueItIsGiven
                     taken)) {
                 continue;
-            }
-            ValueName operation = taken.operation().operation();
-            String named = theLibraryOperation(operation).qualified();
-            NumericReadings.Resolution read = NumericReadings.resolve(stdlib, facts, operation);
-            if (!(read instanceof NumericReadings.Resolution.One(
-                    NumericReading.AsATermTakenOfItsArgument(TakenAs held)))
-                    || !held.equals(taken.how())) {
-                throw new IllegalStateException("the number " + named + " answers is read as "
-                        + NumericReadings.describe(read) + ", and one numeric call is read by one"
-                        + " representation — which of them a report showed would be whichever"
-                        + " reader arrived");
             }
             // What it takes it of is the shape the account is written for — a count is taken of
             // something that holds things, a magnitude of the operation's own kind of number.
@@ -722,7 +728,8 @@ final class OperationFactBinder {
             // declaration had them.
             Type source = taken.of().stands();
             if (!taken.how().takenOf(source, taken.answers())) {
-                throw new IllegalStateException(named + " is declared to answer "
+                throw new IllegalStateException(theLibraryOperation(taken.operation().operation())
+                        .qualified() + " is declared to answer "
                         + taken.how().getClass().getSimpleName() + " of a " + Type.show(source)
                         + ", which is not what that is taken of");
             }

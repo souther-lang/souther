@@ -102,6 +102,53 @@ class OnlyTheBinderReadsTheAuthoringVocabularyTest {
         }
     }
 
+    /**
+     * The declarations are the whole of what the authoring side publishes.
+     *
+     * <p>Not read off who calls what today, since that would hold only until a lookup was added
+     * beside the list and read from inside the authoring package — where the census above does not
+     * look, because the vocabulary itself lives there. What is held is the surface: every method
+     * and field of the declarations that is not private is the one that hands the list to the
+     * binder. Non-private and not merely public, because a package-private lookup would be
+     * reachable from exactly the readers the census above cannot see.
+     */
+    @Test
+    void theDeclarationsPublishTheListAndNothingElse() {
+        Set<String> surface = new TreeSet<>();
+        for (java.lang.reflect.Method method : OperationFacts.class.getDeclaredMethods()) {
+            if (!java.lang.reflect.Modifier.isPrivate(method.getModifiers())
+                    && !method.isSynthetic()) {
+                surface.add(method.getName());
+            }
+        }
+        for (java.lang.reflect.Field field : OperationFacts.class.getDeclaredFields()) {
+            if (!java.lang.reflect.Modifier.isPrivate(field.getModifiers())
+                    && !field.isSynthetic()) {
+                surface.add(field.getName());
+            }
+        }
+        assertEquals(Set.of("declarations"), surface,
+                "the authoring side publishes the list of declarations and nothing else: a lookup"
+                        + " beside it would be a way to a fact that does not pass through the"
+                        + " binding, whoever could reach it");
+    }
+
+    /**
+     * And the bound facts are read whole by two callers and no others.
+     *
+     * <p>The binder asks what it has just bound before publishing it, and the one procedure that
+     * counts the readings of a number across every kind of fact walks them. A third reader of the
+     * list would be sorting the facts for itself, and could arrive at a second answer to a question
+     * one of the holder's queries already owns.
+     */
+    @Test
+    void onlyTheBinderAndTheReadingsWalkTheBoundFactsWhole() {
+        assertEquals(Set.of(BINDER, NumericReadings.class.getName()),
+                WhatWasCompiled.callersOf(BoundOperationFacts.class, "all"),
+                "a reader walking every bound fact is one that can classify them for itself,"
+                        + " beside the query that already does");
+    }
+
     @Test
     void onlyTheBinderReadsTheDeclarations() {
         assertEquals(Set.of(BINDER),

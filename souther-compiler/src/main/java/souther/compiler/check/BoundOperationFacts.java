@@ -53,7 +53,7 @@ import java.util.Set;
  */
 public final class BoundOperationFacts {
 
-    private final List<BoundOperationFact> all;
+    private final List<BoundOperationFact> held;
     private final Map<Class<? extends BoundOperationFact.OneAboutAnOperation>,
             Map<ValueName, BoundOperationFact.OneAboutAnOperation>> ones = new LinkedHashMap<>();
     private final Map<Class<? extends BoundOperationFact.SeveralAboutAnOperation>,
@@ -63,8 +63,8 @@ public final class BoundOperationFacts {
 
     /** Made by the binder and by nothing else: what these are is what a binding came to. */
     BoundOperationFacts(List<BoundOperationFact> bound) {
-        this.all = List.copyOf(bound);
-        for (BoundOperationFact fact : all) {
+        this.held = List.copyOf(bound);
+        for (BoundOperationFact fact : held) {
             ValueName key = fact.operation().operation();
             // No default. A family added is a family this has to say how to collect.
             switch (fact) {
@@ -86,9 +86,20 @@ public final class BoundOperationFacts {
         }
     }
 
-    /** Every bound fact, in the order the declarations were held. */
-    public List<BoundOperationFact> all() {
-        return all;
+    /**
+     * Every bound fact, in the order the declarations were held.
+     *
+     * <p>This package's and not everybody's, and read by two callers — the binder, which asks what
+     * it has just bound before publishing it, and {@link NumericReadings}, which counts the
+     * representations of a number across every kind of fact — and
+     * {@code OnlyTheBinderReadsTheAuthoringVocabularyTest} counts them. Published, this would be
+     * a way for a reader to sort the facts for itself and arrive at a second reading of what one
+     * of the queries above already answers: a reader that picked the walks out of the list and
+     * decided which of them add would own, beside {@link #takenAs}, the question of what a sum
+     * is.
+     */
+    List<BoundOperationFact> all() {
+        return held;
     }
 
     private <F extends BoundOperationFact.OneAboutAnOperation> F one(Class<F> kind,
