@@ -4,8 +4,11 @@ import souther.compiler.core.Core;
 import souther.compiler.semantics.ConstantArguments;
 import souther.compiler.types.ValueName;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
+import java.util.function.Function;
 
 /**
  * The argument a bound fact names, found in a call to the operation the fact is about.
@@ -50,8 +53,8 @@ public final class CallArguments {
      */
     public static ConstantArguments<DeclaredArgument> readAs(
             Core.PreservedCall call,
-            java.util.function.Function<Core, java.math.BigDecimal> folded) {
-        return argument -> java.util.Optional.ofNullable(folded.apply(of(argument, call)));
+            Function<Core, BigDecimal> folded) {
+        return argument -> Optional.ofNullable(folded.apply(of(argument, call)));
     }
 
     private static int positionOf(DeclaredArgument argument, Core.PreservedCall call) {

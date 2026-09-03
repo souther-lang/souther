@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.stdlib.Stdlib;
+import souther.compiler.numeric.LinearForm;
 import souther.compiler.semantics.Arithmetic;
 import souther.compiler.semantics.BuiltFrom;
 import souther.compiler.semantics.ConstantArguments;
@@ -185,75 +186,27 @@ final class DischargeRules {
 
     /** What {@code operation} answers, counted, in what its arguments are counted as — or null
      *  where it states no such form. */
-    static souther.compiler.numeric.LinearForm<DeclaredArgument> answersAFormOf(
-            ValueName operation) {
+    static LinearForm<DeclaredArgument> answersAFormOf(ValueName operation) {
         return facts().answersAFormOfItsArguments(operation);
     }
 
     /**
-     * Those of them this check can carry, by name.
+     * The declared forms, by name, for the test that holds each to a construction it discharges.
      *
-     * <p>Every declaration is about the operation and not about a reader, so the ones here are a
-     * subset of what is declared: what an operation answers is stated over the counts of its
-     * arguments, and what this check can do with such a statement is settled by whether it can name
-     * those counts. A carrier that counts has an internal coordinate this reasons over — a date's is
-     * its day — and reasoning over it does not make the value a number the model wrote.
+     * <p>Every one of them, and not a subset this check can carry. What this check can do with a
+     * form is settled by whether it can name the counts the form is written over, and that is the
+     * requirement every declared form was held to where it was bound
+     * ({@link TypeRequirement#COUNTED}, on the result and on every argument named) — so a form that
+     * is bound is a form this carries, and a second reading of the carriers here would be the
+     * binder's question asked again below the binding.
      *
-     * <p>Derived from what this side relates and not written as a list. A list is a second copy of
-     * a capability, wrong the day the capability changes; asked this way, the operations that arrive
-     * are exactly the ones an author could write a discharging program for.
+     * <p>Over the declared forms and not over everything that answers the question. A sum and a
+     * difference answer it by being the arithmetic they are, and what reads them is the grammar; a
+     * program firing one would be firing the operator.
      */
-    private static Set<ValueName> formOperationsThisCarries(Stdlib stdlib) {
-        Set<ValueName> carried = new LinkedHashSet<>();
-        // Over the declared forms and not over everything that answers the question. A sum and a
-        // difference answer it by being the arithmetic they are, and what reads them is the
-        // grammar; a program firing one would be firing the operator.
-        for (ValueName operation : facts().answersAFormOfItsArguments()) {
-            if (everyPartHasACountedCarrier(stdlib, operation)) {
-                carried.add(operation);
-            }
-        }
-        return carried;
-    }
-
-    /**
-     * Whether the result and every argument the declared form names stand on a carrier that counts.
-     *
-     * <p>Both ends, because the fact is an equation between them: what the operation answers,
-     * counted, and what it was given, counted. A form whose arguments this can carry and whose
-     * result it cannot is a form it cannot carry.
-     *
-     * <p><b>Asked of the carrier, which is the one authority for what counts.</b> A count is an
-     * internal coordinate and need not itself be a value the model calls a number: a date counts
-     * days, and reasoning over that day does not make the date an {@code Int}. Asked of whether the
-     * type is a number the model wrote, this would be a second capability beside the term reader's —
-     * and two capabilities over one arithmetic answer apart on the spelling, carrying a statement
-     * written as a shift and refusing the same statement written as the count.
-     *
-     * <p>Nothing here asks whether the parts share one count space. What a declared form does with
-     * two of them is what the declaration says: an operation answering seconds in days writes the
-     * conversion as its coefficients, and a rule requiring one space would refuse the conversions
-     * the library states. Where an expression rather than a declared form puts two counts together,
-     * keeping them apart is the expression reader's.
-     *
-     * <p>What stands at each argument the form names is the bound argument's own: the binder read
-     * it off the declaration, so nothing here goes back to the signature for it.
-     */
-    private static boolean everyPartHasACountedCarrier(Stdlib stdlib, ValueName operation) {
-        Stdlib.Signature signature =
-                stdlib.entry(OperationFactBinder.theLibraryOperation(operation)).signature();
-        if (!Carrier.countsToANumber(signature.result())) {
-            return false;
-        }
-        return answersAFormOf(operation).coefs().keySet().stream().allMatch(argument ->
-                Carrier.countsToANumber(argument.stands()));
-    }
-
-    /** Those of them the read-through table has, by name, for the test that holds each to a
-     * construction it discharges. */
-    static Set<String> formNames(Stdlib stdlib) {
+    static Set<String> formNames() {
         Set<String> names = new LinkedHashSet<>();
-        formOperationsThisCarries(stdlib).forEach(operation -> names.add(operation.toString()));
+        facts().answersAFormOfItsArguments().forEach(operation -> names.add(operation.toString()));
         return names;
     }
 

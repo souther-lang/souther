@@ -17,6 +17,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Function;
 
 /**
  * What one binding of the declarations came to: every fact about the language's operations, held to
@@ -50,6 +51,10 @@ import java.util.Set;
  * that has one, and a map written into keeps whichever arrived last. A
  * {@link BoundOperationFact.SeveralAboutAnOperation} is appended, in the order declared. Which of
  * the two a kind is was chosen where the arm was written, so nothing here has to be told.
+ *
+ * <p>Filed once, at construction, into what each query answers with. A query is asked per
+ * expression per pass, so what it hands back is the list that was filed and not a projection made
+ * for the ask.
  */
 public final class BoundOperationFacts {
 
@@ -59,7 +64,10 @@ public final class BoundOperationFacts {
     private final Map<Class<? extends BoundOperationFact.SeveralAboutAnOperation>,
             Map<ValueName, List<BoundOperationFact.SeveralAboutAnOperation>>> several =
             new LinkedHashMap<>();
-    private final Map<OperationSubject, Set<ValueName>> silences = new LinkedHashMap<>();
+    private final Map<ValueName, List<ResultBound<DeclaredArgument>>> bounds;
+    private final Map<ValueName, List<DeclaredArgument>> noSmallerThan;
+    private final Map<ValueName, List<DefinitionCase<DeclaredArgument>>> cases;
+    private final Map<OperationSubject, Set<ValueName>> silences;
 
     /** Made by the binder and by nothing else: what these are is what a binding came to. */
     BoundOperationFacts(List<BoundOperationFact> bound) {
@@ -80,10 +88,53 @@ public final class BoundOperationFacts {
                         several.computeIfAbsent(many.getClass(), _ -> new LinkedHashMap<>())
                                 .computeIfAbsent(key, _ -> new ArrayList<>()).add(many);
             }
-            if (fact instanceof BoundOperationFact.SaysNothingOf silence) {
-                silences.computeIfAbsent(silence.subject(), _ -> new LinkedHashSet<>()).add(key);
-            }
         }
+        // What each query over a family answers with, projected once from what was filed.
+        bounds = projected(BoundOperationFact.BoundsItsResult.class,
+                BoundOperationFact.BoundsItsResult::bound);
+        noSmallerThan = projected(BoundOperationFact.ResultIsNoSmallerThan.class,
+                BoundOperationFact.ResultIsNoSmallerThan::container);
+        cases = projected(BoundOperationFact.IsDefinedByCases.class,
+                BoundOperationFact.IsDefinedByCases::one);
+        silences = silences();
+    }
+
+    /** The facts of {@code kind} an operation carries, each read as {@code part}, by operation. */
+    private <F extends BoundOperationFact.SeveralAboutAnOperation, V> Map<ValueName, List<V>>
+            projected(Class<F> kind, Function<F, V> part) {
+        Map<ValueName, List<BoundOperationFact.SeveralAboutAnOperation>> byOperation =
+                several.getOrDefault(kind, Map.of());
+        Map<ValueName, List<V>> out = new LinkedHashMap<>();
+        byOperation.forEach((operation, facts) -> {
+            List<V> parts = new ArrayList<>(facts.size());
+            facts.forEach(each -> parts.add(part.apply(kind.cast(each))));
+            out.put(operation, List.copyOf(parts));
+        });
+        return Collections.unmodifiableMap(out);
+    }
+
+    /**
+     * The silences by what they are about, read off the filed facts.
+     *
+     * <p>A silence is a fact an operation carries several of — one per subject — so it is filed
+     * with that family and this is a second reading of the same list, by the subject a reader asks
+     * under. Two silences of one operation under one subject are refused here: the family admits
+     * several of a kind, and this is where what several may not be is said.
+     */
+    private Map<OperationSubject, Set<ValueName>> silences() {
+        Map<OperationSubject, Set<ValueName>> out = new LinkedHashMap<>();
+        several.getOrDefault(BoundOperationFact.SaysNothingOf.class, Map.of())
+                .forEach((operation, facts) -> facts.forEach(each -> {
+                    OperationSubject subject =
+                            ((BoundOperationFact.SaysNothingOf) each).subject();
+                    if (!out.computeIfAbsent(subject, _ -> new LinkedHashSet<>())
+                            .add(operation)) {
+                        throw new IllegalStateException(operation
+                                + " is declared to say nothing under " + subject + " twice");
+                    }
+                }));
+        out.replaceAll((_, named) -> Collections.unmodifiableSet(named));
+        return Collections.unmodifiableMap(out);
     }
 
     /**
@@ -111,27 +162,6 @@ public final class BoundOperationFacts {
 
     private Set<ValueName> ones(Class<? extends BoundOperationFact.OneAboutAnOperation> kind) {
         Map<ValueName, BoundOperationFact.OneAboutAnOperation> byOperation = ones.get(kind);
-        return byOperation == null ? Set.of() : Collections.unmodifiableSet(byOperation.keySet());
-    }
-
-    private <F extends BoundOperationFact.SeveralAboutAnOperation> List<F> several(
-            Class<F> kind, ValueName operation) {
-        Map<ValueName, List<BoundOperationFact.SeveralAboutAnOperation>> byOperation =
-                several.get(kind);
-        List<BoundOperationFact.SeveralAboutAnOperation> held =
-                byOperation == null || operation == null ? null : byOperation.get(operation);
-        if (held == null) {
-            return List.of();
-        }
-        List<F> out = new ArrayList<>(held.size());
-        held.forEach(each -> out.add(kind.cast(each)));
-        return Collections.unmodifiableList(out);
-    }
-
-    private Set<ValueName> several(
-            Class<? extends BoundOperationFact.SeveralAboutAnOperation> kind) {
-        Map<ValueName, List<BoundOperationFact.SeveralAboutAnOperation>> byOperation =
-                several.get(kind);
         return byOperation == null ? Set.of() : Collections.unmodifiableSet(byOperation.keySet());
     }
 
@@ -173,15 +203,12 @@ public final class BoundOperationFacts {
     /** What holds of the number {@code operation} answers, wherever it is called, in the order
      *  declared. */
     public List<ResultBound<DeclaredArgument>> boundsOnTheResult(ValueName operation) {
-        List<ResultBound<DeclaredArgument>> out = new ArrayList<>();
-        several(BoundOperationFact.BoundsItsResult.class, operation)
-                .forEach(each -> out.add(each.bound()));
-        return Collections.unmodifiableList(out);
+        return operation == null ? List.of() : bounds.getOrDefault(operation, List.of());
     }
 
     /** The operations something holds of the result of. */
     public Set<ValueName> boundsOnTheResult() {
-        return several(BoundOperationFact.BoundsItsResult.class);
+        return bounds.keySet();
     }
 
     /** What {@code operation} builds its result from, or null where it builds none. */
@@ -198,10 +225,7 @@ public final class BoundOperationFacts {
 
     /** The containers {@code operation}'s result is never smaller than, in the order declared. */
     public List<DeclaredArgument> resultIsNoSmallerThan(ValueName operation) {
-        List<DeclaredArgument> out = new ArrayList<>();
-        several(BoundOperationFact.ResultIsNoSmallerThan.class, operation)
-                .forEach(each -> out.add(each.container()));
-        return Collections.unmodifiableList(out);
+        return operation == null ? List.of() : noSmallerThan.getOrDefault(operation, List.of());
     }
 
     /** Where {@code operation} reads the container its predicate is about, or null where it is no
@@ -265,21 +289,17 @@ public final class BoundOperationFacts {
     /** The cases {@code operation}'s definition is written in, in the order declared, or an empty
      *  list where it answers none of the values it was given. */
     public List<DefinitionCase<DeclaredArgument>> isDefinedByCases(ValueName operation) {
-        List<DefinitionCase<DeclaredArgument>> out = new ArrayList<>();
-        several(BoundOperationFact.IsDefinedByCases.class, operation)
-                .forEach(each -> out.add(each.one()));
-        return Collections.unmodifiableList(out);
+        return operation == null ? List.of() : cases.getOrDefault(operation, List.of());
     }
 
     /** The operations that answer one of the values they were given. */
     public Set<ValueName> isDefinedByCases() {
-        return several(BoundOperationFact.IsDefinedByCases.class);
+        return cases.keySet();
     }
 
     /** The operations declared to say nothing under {@code subject}. */
     public Set<ValueName> saysNothingOf(OperationSubject subject) {
-        Set<ValueName> held = silences.get(subject);
-        return held == null ? Set.of() : Collections.unmodifiableSet(held);
+        return silences.getOrDefault(subject, Set.of());
     }
 
     /** What walking {@code operation}'s container comes to, and over which argument — or null where

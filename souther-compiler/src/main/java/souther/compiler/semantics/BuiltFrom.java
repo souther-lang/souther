@@ -1,6 +1,7 @@
 package souther.compiler.semantics;
 
 import java.util.List;
+import java.util.function.Function;
 
 /**
  * Where a construction's elements came from, and how many of them the result has.
@@ -42,7 +43,7 @@ public record BuiltFrom<A>(List<ElementLineage.OutputLineage<A>> outputs,
 
     /** The same proposition with every argument it names read as {@code word} reads it — how it
      *  crosses from the vocabulary it was authored in to the one a reader is handed. */
-    public <B> BuiltFrom<B> withArguments(java.util.function.Function<A, B> word) {
+    public <B> BuiltFrom<B> withArguments(Function<A, B> word) {
         return new BuiltFrom<>(outputs.stream()
                 .map(each -> new ElementLineage.OutputLineage<>(each.at(),
                         each.origin().withArguments(word)))

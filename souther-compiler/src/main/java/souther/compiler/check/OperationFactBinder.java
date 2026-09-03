@@ -6,6 +6,7 @@ import souther.compiler.numeric.LinearForm;
 import souther.compiler.semantics.ArgumentRef;
 import souther.compiler.semantics.ArgumentsStand;
 import souther.compiler.semantics.Arithmetic;
+import souther.compiler.semantics.BuiltFrom;
 import souther.compiler.semantics.Combinator;
 import souther.compiler.semantics.DefinitionCase;
 import souther.compiler.semantics.NumericResult;
@@ -250,8 +251,9 @@ final class OperationFactBinder {
      * for the equation to be about.
      *
      * <p>Counted rather than a number, because that is what the fact says. A date is no number and
-     * counts days; whether a check can then do anything with such a form is a different question
-     * and belongs to the check ({@code DischargeRules.formOperationsThisCarries}).
+     * counts days. And counted is what the discharge check needs of every part to carry a form —
+     * a carrier that counts has the coordinate it reasons over — so a form held here is a form
+     * that check carries, and it does not ask again.
      */
     private static LinearForm<DeclaredArgument> holdAFormOfItsArguments(
             CompleteSignature declaration, LinearForm<ArgumentRef> form) {
@@ -361,7 +363,7 @@ final class OperationFactBinder {
      * place names each of them, and each is a claim about an argument; held for the source alone,
      * a second argument named by an alternative was one nothing had read.
      */
-    private static souther.compiler.semantics.BuiltFrom<DeclaredArgument> holdBuilding(
+    private static BuiltFrom<DeclaredArgument> holdBuilding(
             CompleteSignature declaration, OperationFact.BuildsItsResultFrom builds) {
         Map<ArgumentRef, DeclaredArgument> held = new HashMap<>();
         return builds.built().withArguments(named -> held.computeIfAbsent(named,

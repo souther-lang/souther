@@ -7,6 +7,7 @@ import souther.compiler.core.GrowingFold;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.types.BindingId;
+import souther.compiler.types.ValueName;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -124,8 +125,7 @@ class ARunIsReadOnlyWhereBothHalvesAreProvedTest {
      *  building — which every operation asked here has, so a null is the projection's answer. */
     private static DeclaredArgument mapsEachElementOf(String module, String operation) {
         return DefaultBoundOperationFacts.get()
-                .buildsItsResultFrom(souther.compiler.types.ValueName.Stdlib.operation(module,
-                        operation))
+                .buildsItsResultFrom(ValueName.Stdlib.operation(module, operation))
                 .mapsEachElementOf();
     }
 

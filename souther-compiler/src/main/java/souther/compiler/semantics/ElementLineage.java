@@ -1,6 +1,7 @@
 package souther.compiler.semantics;
 
 import java.util.List;
+import java.util.function.Function;
 
 /**
  * Where an element of what an operation answers came from, said the way it runs.
@@ -125,7 +126,7 @@ public sealed interface ElementLineage<A> {
         }
 
         /** The same source with its argument read as {@code word} reads it. */
-        public <B> Source<B> withArgument(java.util.function.Function<A, B> word) {
+        public <B> Source<B> withArgument(Function<A, B> word) {
             return new Source<>(word.apply(argument), elements);
         }
     }
@@ -142,7 +143,7 @@ public sealed interface ElementLineage<A> {
      * lineage crosses from the vocabulary a fact is authored in to the one a reader is handed,
      * without the reader rebuilding the shape.
      */
-    default <B> ElementLineage<B> withArguments(java.util.function.Function<A, B> word) {
+    default <B> ElementLineage<B> withArguments(Function<A, B> word) {
         return switch (this) {
             case SameAs<A> same -> new SameAs<>(same.source().withArgument(word));
             case ClosureResult<A> made -> new ClosureResult<>(made.source().withArgument(word));

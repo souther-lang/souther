@@ -11,6 +11,7 @@ import souther.compiler.types.ValueName;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Function;
 
 /**
  * What a value carries by being the value it is, read off the operation that answered it.
@@ -54,7 +55,7 @@ final class IntrinsicNumericFacts {
      * premise is written here rather than once for the condition on the arguments and again for the
      * argument a row stands against.
      */
-    private static final java.util.function.Function<DeclaredArgument, LinearForm<FactSubject>>
+    private static final Function<DeclaredArgument, LinearForm<FactSubject>>
             NO_ARGUMENTS = _ -> null;
 
     private IntrinsicNumericFacts() {}
@@ -142,7 +143,7 @@ final class IntrinsicNumericFacts {
      * which is what a bound against a quantity this reader has no name for comes to.
      */
     private static void bounding(List<ResultBound<DeclaredArgument>> rows, FactSubject atom,
-                                 java.util.function.Function<DeclaredArgument,
+                                 Function<DeclaredArgument,
                                          LinearForm<FactSubject>> against,
                                  List<NumericConstraint> out) {
         for (ResultBound<DeclaredArgument> bound : rows) {

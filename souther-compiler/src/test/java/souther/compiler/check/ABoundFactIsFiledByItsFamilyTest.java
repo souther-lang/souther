@@ -6,6 +6,7 @@ import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.semantics.OperationFact;
 import souther.compiler.semantics.OperationFacts;
+import souther.compiler.semantics.OperationSubject;
 import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
@@ -66,6 +67,29 @@ class ABoundFactIsFiledByItsFamilyTest {
                 () -> OperationFactBinder.bindAll(DefaultStdlib.get(), gained));
 
         assertTrue(refused.getMessage().contains("List.length"), refused.getMessage());
+        assertTrue(refused.getMessage().contains("twice"), refused.getMessage());
+    }
+
+    /**
+     * A silence is a kind an operation carries several of — one per subject — and a second under
+     * one subject is refused where the silences are gathered, since the family alone would keep
+     * both and answer as if there were one.
+     */
+    @Test
+    void aSecondSilenceUnderOneSubjectIsRefused() {
+        ValueName product = ValueName.Stdlib.operation("List", "product");
+        assertTrue(DefaultBoundOperationFacts.get()
+                        .saysNothingOf(OperationSubject.READING)
+                        .contains(product),
+                "the premise: List.product is declared silent under what reads its number");
+        List<OperationFacts.Declared> gained = new ArrayList<>(OperationFacts.declarations());
+        gained.add(new OperationFacts.Declared(product, new OperationFact.SaysNothingOf(
+                OperationSubject.READING)));
+
+        IllegalStateException refused = assertThrows(IllegalStateException.class,
+                () -> OperationFactBinder.bindAll(DefaultStdlib.get(), gained));
+
+        assertTrue(refused.getMessage().contains("List.product"), refused.getMessage());
         assertTrue(refused.getMessage().contains("twice"), refused.getMessage());
     }
 

@@ -54,7 +54,7 @@ class EveryCaseALibraryDefinitionIsWrittenInBecomesAnArmTest {
                         + " that nothing was wrong");
         for (ValueName operation : DischargeRules.choosingOperations()) {
             Core.PreservedCall call = callTo(operation);
-            java.util.List<DefinitionCase<DeclaredArgument>> defined = DischargeRules.chosenBy(call);
+            List<DefinitionCase<DeclaredArgument>> defined = DischargeRules.chosenBy(call);
             Choice choice = Choice.of(call);
 
             assertNotNull(choice, operation + " is defined in cases and answers no choice");

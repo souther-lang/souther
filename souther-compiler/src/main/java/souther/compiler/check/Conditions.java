@@ -282,8 +282,8 @@ final class Conditions {
                 java.util.Map.of(sign, terms.granularityOf(call.type()));
         LinearForm<Object> answered = LinearForm.atom(sign);
         NumericDomain<Object> known = NumericDomain.<Object>top()
-                .assuming(sign, ResultRange.of(DischargeRules.boundsOn(call.operation(),
-                        ConstantArguments.none()), ConstantArguments.none()), spacing)
+                .assuming(sign, ResultRange.of(DefaultBoundOperationFacts.get()
+                        .boundsOnTheResult(call.operation()), ConstantArguments.none()), spacing)
                 .assume(answered.minus(LinearForm.constant(read.constant())), rel, spacing);
         if (known.isBottom()) {
             return null;

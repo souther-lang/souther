@@ -177,7 +177,9 @@ public sealed interface BoundOperationFact permits BoundOperationFact.OneAboutAn
     record IsDefinedByCases(DeclaredOperation operation, DefinitionCase<DeclaredArgument> one)
             implements SeveralAboutAnOperation {}
 
-    /** There is nothing to say of the operation under {@code subject}. One per subject. */
+    /** There is nothing to say of the operation under {@code subject}. As many as there are
+     *  subjects it is silent under, and one per subject — a second under one subject is refused
+     *  where the silences are gathered ({@link BoundOperationFacts}). */
     record SaysNothingOf(DeclaredOperation operation, OperationSubject subject)
             implements SeveralAboutAnOperation {}
 }

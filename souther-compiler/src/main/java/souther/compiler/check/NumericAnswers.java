@@ -168,18 +168,12 @@ public final class NumericAnswers {
      * identity through a step exactly as a sum does, and what it answers is declared: no call of it
      * answers a number, and the walk says nothing about that either way.
      */
-    static boolean mayAnswerANumber(BoundOperationFacts facts, ValueName operation,
-                                    Stdlib library) {
-        if (typeOf(operation, library) != null) {
+    static boolean mayAnswerANumber(BoundOperationFacts facts, ValueName.Stdlib.Operation named,
+                                    Stdlib.Signature signature) {
+        if (in(signature.result()) != null) {
             return true;
         }
-        if (facts.accumulation(operation) == null
-                || !(operation instanceof ValueName.Stdlib.Operation named)) {
-            return false;
-        }
-        Stdlib.Entry entry = library.entry(named);
-        return entry != null && entry.signature() != null
-                && answerIsLeftToTheCall(entry.signature().result());
+        return facts.accumulation(named) != null && answerIsLeftToTheCall(signature.result());
     }
 
     private NumericAnswers() {}
