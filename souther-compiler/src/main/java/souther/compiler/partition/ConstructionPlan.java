@@ -11,7 +11,9 @@ import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -498,7 +500,7 @@ final class ConstructionPlan {
             return givenUpAt(descent, here, building, settled.outer(), decided, required);
         }
         Map<String, Node> under = new LinkedHashMap<>();
-        Set<CompositionBudget> beyond = new java.util.LinkedHashSet<>();
+        Set<CompositionBudget> beyond = new LinkedHashSet<>();
         for (Map.Entry<String, Type> field : composed.fields().entrySet()) {
             switch (node(field.getValue(), here.then(field.getKey()), symbols, depth + 1, decided,
                     required, least)) {
@@ -721,9 +723,9 @@ final class ConstructionPlan {
 
     /** The same of several positions: asked for where any of them was, and given up at wherever
      *  any of them was. */
-    private static Under across(java.util.Collection<Node> nodes) {
+    private static Under across(Collection<Node> nodes) {
         boolean demanded = false;
-        Set<CompositionBudget> cutBy = new java.util.LinkedHashSet<>();
+        Set<CompositionBudget> cutBy = new LinkedHashSet<>();
         for (Node each : nodes) {
             Under one = under(each);
             demanded |= one.demanded();

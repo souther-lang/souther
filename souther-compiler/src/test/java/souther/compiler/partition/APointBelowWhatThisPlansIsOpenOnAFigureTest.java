@@ -140,52 +140,91 @@ class APointBelowWhatThisPlansIsOpenOnAFigureTest {
      */
     @Test
     void aSearchOverAShortPlanIsAnOutcomeOfASearchAndKeepsItsOwnWord() {
-        ItemAssessment.Attempt made = onlyLimitedOf(BOTH, "both");
+        ItemAssessment.Attempt.Limited limited = assertInstanceOf(
+                ItemAssessment.Attempt.Limited.class, onlyPreventedOf(ONLY_DEPTH, "only"));
 
-        ItemAssessment.Attempt.Limited limited =
-                assertInstanceOf(ItemAssessment.Attempt.Limited.class, made);
         assertInstanceOf(ItemAssessment.Attempt.Searched.class, limited,
                 "the search ran over the plan it was handed, so it is an outcome of one");
         assertEquals(Generator.UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED,
                 limited.why().reason(),
                 "and it says what it found rather than what a figure would have said for it");
+        assertEquals(List.of(CompositionBudget.DEPTH_A_CONSTRUCTION_PLAN_DESCENDS),
+                assertInstanceOf(EstablishmentGap.Composition.class, limited.by())
+                        .budgets().written(),
+                "and the figure beside it is the one that left the plan short, alone");
     }
 
     /**
-     * A point held back by two figures at once names both of them.
+     * A rule that reaches a position deeper than this plans, on a point that is not itself deep.
      *
-     * <p>The parameter nests past what this plans and carries a line whose edge offered less than
-     * it had, so two different things are in the way at one point: a plan short of the value's
-     * positions, and values the edge never built. Neither stands for the other and raising one
-     * leaves the other where it was, so a reader asking what would let this go further is owed both
-     * — and an outcome that names one is an author raising a figure that changes nothing.
+     * <p>The line is drawn on a plain field, so the value is planned and the search runs. What it
+     * cannot satisfy is a rule of the record's own, which names a position the plan never reached —
+     * so every row it builds is refused, and the reason it was never going to build one is that the
+     * plan stopped short. Nothing else here holds anything back.
+     *
+     * <p>Which is the shape an author meets without noticing: the rule is one line, and how deeply
+     * the record happens to nest is not something the rule says anything about.
+     */
+    private static final String ONLY_DEPTH = """
+            module example.only
+
+            data L8 = { v: Int }
+            data L7 = { down: L8 }
+            data L6 = { down: L7 }
+            data L5 = { down: L6 }
+            data L4 = { down: L5 }
+            data L3 = { down: L4 }
+            data L2 = { down: L3 }
+            data L1 = { down: L2 }
+
+            data Query = { down: L1, n: Int }
+                invariant tied = n == down.down.down.down.down.down.down.down.v
+
+            data Yes
+            data No
+            data Verdict = Yes | No
+
+            behavior only : (q: Query) -> Verdict
+            let only (q) = if q.n >= 7 then Yes else No
+            """;
+
+    /**
+     * While an offer is still holding values, the plan being short says nothing yet.
+     *
+     * <p><b>A search that was not given everything it had has exhausted nothing.</b> Raise the
+     * offer's figure and it may compose a row without the plan changing at all — so naming the
+     * plan's figure here sends an author to raise one that would change nothing, and names it
+     * beside a figure that is genuinely in the way, where the two look alike.
+     *
+     * <p>The plan is short in this model all the same, and that is what makes it worth asserting:
+     * what stays quiet is a fact the plan is carrying, not a fact nobody has.
      */
     @Test
-    void aPointTwoFiguresHeldBackNamesEachOfThem() {
-        ItemAssessment.Attempt.Limited limited = assertInstanceOf(
-                ItemAssessment.Attempt.Limited.class, onlyLimitedOf(BOTH, "both"));
+    void anOfferStillHoldingValuesLeavesThePlansFigureUnsaid() {
+        ItemAssessment.Attempt.Stopped stopped = assertInstanceOf(
+                ItemAssessment.Attempt.Stopped.class, onlyPreventedOf(BOTH, "both"),
+                "the edge offered less than it had, which is a search that never had the whole of"
+                        + " what there was to try");
 
-        assertEquals(List.of(CompositionBudget.DECOMPOSITIONS_OF_A_TOTAL_OFFERED,
-                        CompositionBudget.DEPTH_A_CONSTRUCTION_PLAN_DESCENDS),
-                assertInstanceOf(EstablishmentGap.Composition.class, limited.by())
+        assertEquals(List.of(CompositionBudget.DECOMPOSITIONS_OF_A_TOTAL_OFFERED),
+                assertInstanceOf(EstablishmentGap.Composition.class, stopped.by())
                         .budgets().written(),
-                "the plan stopped short and the edge held values back, and the point is open on"
-                        + " each of them");
+                "so the point is open on what the edge held back, and the plan's own figure waits"
+                        + " until there is nothing left to offer");
     }
 
-    /** The one search of this behavior that came back limited, which is the point both figures
-     *  bear on. */
-    private static ItemAssessment.Attempt onlyLimitedOf(String source, String behavior) {
+    /** The one search of this behavior the account reads as this compiler's own limit. */
+    private static ItemAssessment.Attempt onlyPreventedOf(String source, String behavior) {
         List<ItemAssessment.Attempt> found = new ArrayList<>();
         for (BorderAssessment border : lines(source, behavior)) {
             if (border.at(PointRole.ON) instanceof ItemAssessment.Owed owed) {
                 owed.searches().each().stream()
-                        .filter(each -> each instanceof ItemAssessment.Attempt.Limited)
+                        .filter(each -> each instanceof ItemAssessment.Attempt.Prevented)
                         .forEach(found::add);
             }
         }
         assertEquals(1, found.size(),
-                "one point of this behavior is searched over a plan short of it: " + found);
+                "one point of this behavior is open on a figure of this compiler's: " + found);
         return found.get(0);
     }
 
