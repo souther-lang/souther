@@ -78,8 +78,7 @@ class WhereAStringRuleStopsIsReadOffTheLanguageItAdmitsTest {
     @Test
     void aRuleAdmittingEverythingAboveAStringHasNoEnd() {
         Meter meter = PatternPlan.Budget.OF_AN_ORDERED_EXTENT.meter();
-        Language from = Language.everyString(meter)
-                .and(Language.before("J", meter).not(meter), meter);
+        Language from = Language.before("J", meter).not(meter);
         assertNotNull(from);
         assertTrue(from.has("J"));
         assertTrue(from.has("𐀀"), "a string written with a pair is above J");

@@ -59,9 +59,8 @@ public final class TextExtents {
             // is what is being asked for, and neither is a limit of this compiler.
             return new TextExtent.NoNamedRun();
         }
-        Language strings = Language.everyString(meter);
-        Language above = strings == null ? null : notBefore(first, strings, meter);
-        Language outside = above == null ? null : strings.and(language.not(meter), meter);
+        Language above = notBefore(first, meter);
+        Language outside = above == null ? null : language.not(meter);
         // What the language leaves out from its least string upwards. Where that is nothing, the
         // language is everything from the least upwards; where it is everything from some string
         // upwards, the language is what lies between the two.
@@ -76,7 +75,7 @@ public final class TextExtents {
         if (after == null) {
             return new TextExtent.NoNamedRun();
         }
-        Language beyond = notBefore(after, strings, meter);
+        Language beyond = notBefore(after, meter);
         if (beyond == null) {
             return new TextExtent.NotBuilt(stopped(meter));
         }
@@ -85,18 +84,10 @@ public final class TextExtents {
                 : new TextExtent.NoNamedRun();
     }
 
-    /**
-     * Every string from {@code from} upwards, or null past what {@code meter} allows.
-     *
-     * <p>Met with the strings, because what is wanted is a set two of these can be compared as. A
-     * complement holds every sequence of symbols the machine does not stop on, and some of those are
-     * sequences no string is read as — kept, two answers holding the same strings would compare
-     * unequal, and a rule that names a run would be read as naming none.
-     */
-    private static Language notBefore(String from, Language strings, Meter meter) {
+    /** Every string from {@code from} upwards, or null past what {@code meter} allows. */
+    private static Language notBefore(String from, Meter meter) {
         Language before = Language.before(from, meter);
-        Language above = before == null ? null : before.not(meter);
-        return above == null ? null : strings.and(above, meter);
+        return before == null ? null : before.not(meter);
     }
 
     /**

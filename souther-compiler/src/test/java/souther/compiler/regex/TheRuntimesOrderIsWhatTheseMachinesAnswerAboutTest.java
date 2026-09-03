@@ -144,6 +144,100 @@ class TheRuntimesOrderIsWhatTheseMachinesAnswerAboutTest {
         }
     }
 
+    /**
+     * What a language does not hold is what every string it does not hold is.
+     *
+     * <p>The complement is over the strings and not over the sequences a machine steps between:
+     * there are sequences of symbols no string is read as, and a machine's complement holds them
+     * like anything else. Read against every string of the corpus, so a complement that kept them
+     * would still answer this — what such a complement gets wrong is the next question asked of it,
+     * which is the one below.
+     */
+    @Test
+    void whatALanguageDoesNotHoldIsEveryStringItDoesNotHold() {
+        for (String pattern : List.of("JP[\\s\\S]*", "a*b", "𐀀[\\s\\S]*", "\uD800[\\s\\S]*")) {
+            Language one = of(pattern);
+            Language rest = one.not(allowing());
+            assertNotNull(rest, pattern);
+            for (String value : STRINGS) {
+                assertEquals(!one.has(value), rest.has(value),
+                        shown(value) + " against what " + pattern + " does not hold");
+            }
+        }
+    }
+
+    /**
+     * Two languages holding the same strings are one language.
+     *
+     * <p>The law a machine can pass every membership question and still break. Here are two
+     * machines that stop on exactly the same strings and differ over a sequence of symbols no
+     * string is read as — a high surrogate standing alone with a low one after it, which a matcher
+     * reads as the pair. Held apart, the two are one set said two ways: a reader comparing them is
+     * told the model states two things, and one asking whether either holds nothing is told it holds
+     * something no string is.
+     */
+    @Test
+    void twoLanguagesHoldingTheSameStringsAreOne() {
+        // The pair as one symbol, which is what a string of it is read as.
+        Language pair = languageOf(new int[] {0x10000});
+        // And the same, with a high surrogate and a low one in turn beside it — two symbols no
+        // string is read as, so the two machines stop on exactly the same strings.
+        Language andTheSequence = languageOf(new int[] {0x10000}, new int[] {0xD800, 0xDC00});
+
+        for (String value : STRINGS) {
+            assertEquals(pair.has(value), andTheSequence.has(value), shown(value));
+        }
+        assertEquals(pair, andTheSequence,
+                "two machines stopping on the same strings are one language");
+    }
+
+    /** And a machine stopping on nothing but such a sequence is a language holding nothing. */
+    @Test
+    void aMachineStoppingOnNoStringHoldsNothing() {
+        Language none = languageOf(new int[] {0xD800, 0xDC00});
+        assertTrue(none.isEmpty(),
+                "a high surrogate beside a low one is the pair, so no string is read as the two");
+        assertNull(none.least());
+    }
+
+    /** The language of exactly these sequences of symbols, put through the way in that every
+     *  language takes. */
+    private static Language languageOf(int[]... sequences) {
+        Meter meter = allowing();
+        java.util.List<java.util.List<Automaton.Step>> steps = new ArrayList<>();
+        steps.add(new ArrayList<>());
+        java.util.BitSet accepting = new java.util.BitSet();
+        for (int[] each : sequences) {
+            int at = Automaton.START;
+            for (int symbol : each) {
+                steps.add(new ArrayList<>());
+                int made = steps.size() - 1;
+                steps.get(at).add(new Automaton.Step(CodePoints.of(symbol), made));
+                at = made;
+            }
+            accepting.set(at);
+        }
+        Language made = Language.canonical(Automaton.madeOf(steps, accepting), meter);
+        assertNotNull(made);
+        return made;
+    }
+
+    /**
+     * And a language holding every string says so, however it was arrived at.
+     *
+     * <p>Not the one state every symbol stops at: the sequences no string is read as are in no
+     * language here, so the machine for every string turns those away and stops on the rest.
+     */
+    @Test
+    void aLanguageHoldingEveryStringSaysSo() {
+        assertTrue(of("[\\s\\S]*").isEverything());
+        assertTrue(Language.EVERY_STRING.isEverything());
+        Language something = of("JP[\\s\\S]*");
+        assertTrue(something.or(something.not(allowing()), allowing()).isEverything(),
+                "a language and what it leaves out are every string there is");
+        assertFalse(of("a*b").isEverything());
+    }
+
     /** What a language leaves out from its least string upwards, which is where the two readings of
      *  a pair's units part. */
     private static Language leftOver(Language language) {

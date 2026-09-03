@@ -92,6 +92,29 @@ final class Automaton {
     }
 
     /**
+     * Whether any step of this is over a high surrogate.
+     *
+     * <p>Asked to find out whether taking the sequences no string is read as out of this would
+     * change it. Such a sequence holds a high surrogate standing as a symbol of its own, so a
+     * machine no step of which is over one accepts none of them and is already the strings it holds.
+     *
+     * <p>A walk over the steps and nothing built, which is the point: what it saves is a product
+     * every language would otherwise be put through, and the patterns a model writes name no
+     * surrogate at all. What it costs where the answer is yes is one comparison.
+     */
+    boolean mayReadALoneHighSurrogate() {
+        CodePoints high = CodePoints.between(0xD800, 0xDBFF);
+        for (List<Step> out : steps) {
+            for (Step each : out) {
+                if (!each.over().and(high).isEmpty()) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
      * The machine for {@code syntax}, or null where building it would take more than
      * {@code mostStates}.
      *

@@ -327,9 +327,7 @@ public final class PatternPlan {
         // accepts its strings, and turning a machine into that one is the largest thing this does —
         // left to the reader, it would happen inside whichever question was asked first, where
         // there is no allowance and nobody counting.
-        Automaton made = built(step, meter);
-        Automaton one = made == null ? null : made.canonical(meter);
-        return one == null ? null : new Language(one);
+        return Language.canonical(built(step, meter), meter);
     }
 
     /**

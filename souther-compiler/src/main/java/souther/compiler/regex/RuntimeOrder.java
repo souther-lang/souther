@@ -150,6 +150,26 @@ final class RuntimeOrder {
     }
 
     /**
+     * The symbol sequences some string is read as, canonical and made once.
+     *
+     * <p>A constant and not a construction a caller pays for. It is three states whatever is asked
+     * of it, and what it says is a fact about how a string is read rather than anything a model
+     * wrote — charged to an allowance, every language would be a little smaller than the one before
+     * it for a reason nobody could see.
+     */
+    static final Automaton EVERY_STRING = onlyStrings();
+
+    private static Automaton onlyStrings() {
+        Meter meter = new Meter(16, 64);
+        Automaton made = everyString(meter);
+        Automaton one = made == null ? null : made.canonical(meter);
+        if (one == null) {
+            throw new IllegalStateException("the machine for every string is three states");
+        }
+        return one;
+    }
+
+    /**
      * The symbol sequences some string is read as, or null past what {@code meter} allows.
      *
      * <p>Not every sequence of symbols is one. A high surrogate followed by a low one is the pair —
@@ -199,6 +219,12 @@ final class RuntimeOrder {
      * are a set rather than one — a high surrogate is a symbol of its own and the first unit of
      * every pair, so a unit read here can leave the walk in both.
      *
+     * <p><b>Asked of a machine that stops only on strings</b>, which every {@link Language} holds
+     * ({@link Language#canonical}). So a walk that reads a high surrogate as a symbol of its own and
+     * a low one after it — two symbols no string is read as — reaches nothing it may stop at, and
+     * the least is a string the machine accepts. Asked of a machine that stops on such a sequence,
+     * this would answer with it and the language would say it holds no such string.
+     *
      * <p>Least by taking the least unit that still leads to somewhere a walk may stop, and stopping
      * at the first place it may. A shorter string is below every string it begins, so where the walk
      * may stop it has the least; and where it comes back to a set of states it has been in, it never
@@ -210,7 +236,7 @@ final class RuntimeOrder {
             return null;
         }
         StringBuilder out = new StringBuilder();
-        Set<Where> here = Set.of(new Where(Automaton.START, null, false));
+        Set<Where> here = Set.of(new Where(Automaton.START, null));
         Set<Set<Where>> been = new LinkedHashSet<>();
         while (been.add(here)) {
             if (stops(here, machine)) {
@@ -234,13 +260,8 @@ final class RuntimeOrder {
      *              symbol boundary. A high surrogate read at a boundary is both a symbol and the
      *              first unit of a pair, so both are held and the walk is in as many places as the
      *              units so far leave it
-     * @param loneHigh whether the last symbol read was a high surrogate standing alone. A string
-     *              holding one followed by a low surrogate is a string holding the pair — that is
-     *              what a matcher reads and what {@link Automaton#accepts} walks — so the two
-     *              symbols never stand beside each other and a walk that let them would answer with
-     *              a string the language does not hold
      */
-    private record Where(int state, CodePoints lows, boolean loneHigh) {}
+    private record Where(int state, CodePoints lows) {}
 
     /** Whether a walk in one of these may stop, which it may only at a symbol boundary. */
     private static boolean stops(Set<Where> here, Automaton machine) {
@@ -296,20 +317,17 @@ final class RuntimeOrder {
         for (Where each : here) {
             if (each.lows() != null) {
                 if (each.lows().has(unit)) {
-                    out.add(new Where(each.state(), null, false));
+                    out.add(new Where(each.state(), null));
                 }
                 continue;
             }
-            // A low surrogate after a high one standing alone is the pair, not two symbols, so the
-            // walk that read the high one alone has nowhere to go.
-            boolean paired = each.loneHigh() && unit >= LOW_FROM && unit <= LOW_TO;
             for (Automaton.Step step : machine.stepsFrom(each.state())) {
-                if (!paired && unit <= LAST_UNIT && step.over().has(unit)) {
-                    out.add(new Where(step.to(), null, unit >= HIGH_FROM && unit <= HIGH_TO));
+                if (unit <= LAST_UNIT && step.over().has(unit)) {
+                    out.add(new Where(step.to(), null));
                 }
                 CodePoints lows = lowsOf(step.over(), unit);
                 if (!lows.isEmpty()) {
-                    out.add(new Where(step.to(), lows, false));
+                    out.add(new Where(step.to(), lows));
                 }
             }
         }
