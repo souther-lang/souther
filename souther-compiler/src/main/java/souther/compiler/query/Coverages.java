@@ -1159,6 +1159,12 @@ final class Coverages {
             case souther.compiler.partition.Generator.BoundaryAttempt.Limited left ->
                     new ItemAssessment.Attempt.Limited(left.why(), within, left.unrepresented(),
                             EstablishmentGap.Composition.of(left.by()));
+            // And a point no search was made for at all. It names a figure like the two above and
+            // is not an outcome of a search, which is what keeps it out of what the readings of a
+            // line together establish.
+            case souther.compiler.partition.Generator.BoundaryAttempt.Unplanned left ->
+                    new ItemAssessment.Attempt.Unplanned(left.why(), within, left.unrepresented(),
+                            EstablishmentGap.Composition.of(left.by()));
         };
     }
 

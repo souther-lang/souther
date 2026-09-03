@@ -3,19 +3,32 @@ package souther.compiler.partition;
 import java.util.function.IntSupplier;
 
 /**
- * How much of a search this compiler is willing to do before it stops.
+ * How much work this compiler is willing to do before it goes no further.
  *
- * <p>One member per place that stops, and the figure it stops at is here rather than at the place.
- * What a reader of a stopped search wants to know is which of these ran out, and a name written
- * beside a number somewhere else is a second declaration of the same policy — the two part the
- * first time one of them is raised.
+ * <p>One member per place that reaches a figure, and the figure is here rather than at the place.
+ * What a reader wants to know is which of these was reached, and a name written beside a number
+ * somewhere else is a second declaration of the same policy — the two part the first time one of
+ * them is raised.
  *
  * <p><b>A cause and not an outcome.</b> Reaching one of these says what this compiler declined to
  * do and says nothing about the model: the value it did not build may be the easiest one in the
- * file to write by hand. What the reaching did to the answer is a separate question, and it has two
- * answers rather than one — a search that had produced nothing when it stopped leaves the point
- * unestablished, and one that had produced something leaves an offer that is some of what there was.
- * So the same member appears on both sides and is neither of them.
+ * file to write by hand. What the reaching did is a separate question, and it is not one question:
+ *
+ * <ul>
+ * <li>a search goes no further, and what it had reached is carried out with the figure;
+ * <li>another thing a search runs against goes no further — a plan short of the value's positions
+ *     leaves a search that ran to the end of less than the point had;
+ * <li>nothing is given up at all, and the work carries on by a wider way that omits none of it.
+ * </ul>
+ *
+ * <p>So a reader may not take a member for any of the three. The first two are carried and the
+ * third is not, and which a member is is written where the member is — including, for the third,
+ * why there is nothing to carry. A figure named here with no carrier and no such sentence is one
+ * somebody has not finished.
+ *
+ * <p>Nor does the first divide once and for all. A search that had produced nothing when it stopped
+ * leaves the point unestablished, and one that had produced something leaves an offer that is some
+ * of what there was — so the same member appears on both sides and is neither of them.
  *
  * <p>The figures are read through {@link #maximum()} and are not all written down. One of them is
  * how many shapes a decomposition is offered in, which is how many the walk has — read off the walk,
@@ -116,7 +129,7 @@ public enum CompositionBudget {
         this.maximum = maximum;
     }
 
-    /** The figure this stops at. */
+    /** The figure this goes no further than. */
     public int maximum() {
         return maximum.getAsInt();
     }

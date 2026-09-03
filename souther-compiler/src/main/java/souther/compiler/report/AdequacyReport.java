@@ -2081,6 +2081,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                             + said(it.limitedBy().budgets()) + ": "
                             + it.why().said().orElseGet(() -> whyUnresolved(it.why()))
                             + whatTheRegionLeftOut(it.unaccountedFor(), names, declaredIn);
+            // No search to report on, which is what this says instead of saying what one found. The
+            // figure is what an author would raise to get one made at all.
+            case ItemAssessment.Attempt.Unplanned it ->
+                    " — nothing was planned for it, because this compiler stops at "
+                            + said(it.limitedBy().budgets())
+                            + whatTheRegionLeftOut(it.unaccountedFor(), names, declaredIn);
             case ItemAssessment.Attempt.Unresolved it ->
                     (it.why().reason().provesInfeasible() ? " — " : " — nothing composed one: ")
                             + it.why().said().orElseGet(() -> whyUnresolved(it.why()))

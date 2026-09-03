@@ -380,7 +380,7 @@ public sealed interface ItemAssessment {
      */
     sealed interface Attempt
             permits Attempt.Certified, Attempt.Unverified, Attempt.Stopped, Attempt.Limited,
-                    Attempt.Unresolved, Attempt.Unavailable {
+                    Attempt.Unplanned, Attempt.Unresolved, Attempt.Unavailable {
 
         /**
          * What a search of the region came to, whichever way it came out.
@@ -452,21 +452,29 @@ public sealed interface ItemAssessment {
         }
 
         /**
-         * An attempt a budget of this compiler's stopped, and which budget it was.
+         * An attempt whose showing cannot establish the point, because of a figure of this
+         * compiler's.
          *
-         * <p>Across the outcomes rather than one of them, because what a budget stops depends on
-         * how far the attempt had got. Stopped before anything was composed, there is no row and
-         * the point is left with nothing; stopped after, there is a row and what is missing is the
-         * reading that would have placed it. Both are this compiler having been stopped and neither
-         * is a thing the model said, which is the one question an account puts to them.
+         * <p>Across the outcomes rather than one of them, because what a figure costs depends on
+         * how far the attempt had got. Before anything was composed, there is no row and the point
+         * is left with nothing; after, there is a row and what is missing is the reading that would
+         * have placed it; and a plan short of the value's positions leaves an answer that is about
+         * less than the point had. All of them are this compiler's own limit and none of them is
+         * anything the model said, which is the one question an account puts to them.
+         *
+         * <p><b>The one thing they share, and the reason it is said here and not further down.</b>
+         * These outcomes have different histories — one search stopped, one ran to the end of a
+         * short plan, one never ran at all — and holding them as one outcome would make the history
+         * something a reader recovers from a field. What is common is what an account needs and no
+         * more: the question is open, and open because of a figure somebody could raise.
          *
          * <p><b>Nothing here says a row cannot be written.</b> What each of these licenses is that
-         * the question is open — and open because of a figure somebody could raise, which is what
-         * tells it from a point nothing ever promised.
+         * the question is open — which is what tells it from a point nothing ever promised.
          */
-        sealed interface Prevented permits Unverified, Stopped, Limited {
+        sealed interface Prevented permits Unverified, Stopped, Limited, Unplanned {
 
-            /** Which budget of this compiler's stopped it, in the words the account reads. */
+            /** Which figure of this compiler's the point is open on, in the words the account
+             *  reads. */
             EstablishmentGap by();
         }
 
@@ -590,6 +598,46 @@ public sealed interface ItemAssessment {
         }
 
         /**
+         * No search ran: what the point asks for is under a position this compiler declined to
+         * plan.
+         *
+         * <p><b>Not {@link Searched}, which is the whole of why it is its own arm.</b> The value
+         * was never planned, so nothing walked the region and nothing came back from it — and an
+         * outcome that said a search ran would put a reading nobody looked at among the ones that
+         * were looked at. {@link Limited} is the other side of that: there the search did run, over
+         * a plan short of the point, and its own word is worth carrying.
+         *
+         * <p>Its word says no search happened rather than what one found. Given a search's word,
+         * the two arms would be told apart only by which one a reader happened to be holding, and
+         * the history would be something recovered from a field.
+         *
+         * <p>{@link Prevented} all the same, because the account's question is the same for both:
+         * the point is open, and open on a figure somebody could raise.
+         *
+         * <p>Carries the way to the point, which was walked before any of this: how the point was
+         * reached is what says what the rest is worth, and a condition the walk had no words for is
+         * still owed to a reader.
+         */
+        record Unplanned(Generator.UnresolvedCombination why,
+                         souther.compiler.partition.WayToTheBorder way,
+                         List<souther.compiler.partition.ReachabilityGap.Uncomposed> uncomposed,
+                         EstablishmentGap.Composition limitedBy)
+                implements Attempt, Prevented {
+
+            public Unplanned {
+                uncomposed = List.copyOf(uncomposed);
+                Objects.requireNonNull(why, "an attempt says what it came to in its own word");
+                Objects.requireNonNull(limitedBy, "a point nothing could be planned for says which"
+                        + " figure left it unplanned");
+            }
+
+            @Override
+            public EstablishmentGap by() {
+                return limitedBy;
+            }
+        }
+
+        /**
          * The search ran and no row came of it.
          *
          * <p>Named for what happened and not for one of the ways it happens. Every candidate being
@@ -660,27 +708,47 @@ public sealed interface ItemAssessment {
          * point answered rather than a search to account for, and for a search nobody made.
          */
         default List<souther.compiler.partition.ReachabilityGap> unaccountedFor() {
-            Searched left = switch (this) {
-                case Unresolved it -> it.why().reason().provesInfeasible() ? null : it;
+            souther.compiler.partition.WayToTheBorder way;
+            List<souther.compiler.partition.ReachabilityGap.Uncomposed> uncomposed;
+            switch (this) {
+                case Unresolved it -> {
+                    if (it.why().reason().provesInfeasible()) {
+                        return List.of();
+                    }
+                    way = it.way();
+                    uncomposed = it.uncomposed();
+                }
                 // A search a budget ended walked as far as it walked, and what it could not compose
                 // against on the way is the first thing that would explain what it came back with.
-                case Stopped it -> it;
+                case Stopped it -> {
+                    way = it.way();
+                    uncomposed = it.uncomposed();
+                }
                 // And one whose answer was about less than the point had. Its word may be a word
                 // that proves nothing is there, and here it does not: what the word is about is
                 // what the search was handed, which was short of the point — so the conditions it
                 // could not compose against are still owed to a reader.
-                case Limited it -> it;
-                case Certified _, Unverified _, Unavailable _ -> null;
-            };
-            if (left == null) {
-                return List.of();
+                case Limited it -> {
+                    way = it.way();
+                    uncomposed = it.uncomposed();
+                }
+                // And one no search was run for. The way to the point was walked all the same, and
+                // what it had no words for is the first thing that would explain the point being
+                // where it is.
+                case Unplanned it -> {
+                    way = it.way();
+                    uncomposed = it.uncomposed();
+                }
+                case Certified _, Unverified _, Unavailable _ -> {
+                    return List.of();
+                }
             }
             List<souther.compiler.partition.ReachabilityGap> out = new java.util.ArrayList<>();
             // The walk's, said as the stage it happened at. A condition it had no words for is one
             // nothing downstream ever saw.
-            left.way().declined().forEach(each ->
+            way.declined().forEach(each ->
                     out.add(new souther.compiler.partition.ReachabilityGap.Unstated(each)));
-            out.addAll(left.uncomposed());
+            out.addAll(uncomposed);
             return List.copyOf(out);
         }
     }

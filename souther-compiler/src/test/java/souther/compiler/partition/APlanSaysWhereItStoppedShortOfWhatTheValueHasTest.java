@@ -6,6 +6,8 @@ import souther.compiler.ast.Hir;
 import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
+import souther.compiler.inputs.Case;
+import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.Requirements;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.query.Bodies;
@@ -154,6 +156,29 @@ class APlanSaysWhereItStoppedShortOfWhatTheValueHasTest {
                 assertInstanceOf(ConstructionPlan.Result.Beyond.class, asked,
                         "the caller asked for a position this plan never reached, so there is no"
                                 + " plan to hand back").by(),
+                "and it says which figure put the position out of reach");
+    }
+
+    /**
+     * A narrowing stated under the figure is refused the same way.
+     *
+     * <p><b>The other half of the demand, and it has to be its own claim.</b> What a caller asks
+     * for is the paths it fixed a value at and the narrowings it stated, and a reading of either
+     * alone lets the other through: a value fixed at a field adds no requirement that the step was
+     * taken, and a narrowing states no value. Held to only the first, this would drop a caller's
+     * narrowing under the figure in silence — which is the same defect the figure had before any of
+     * this, with the other half of the demand.
+     */
+    @Test
+    void aNarrowingStatedUnderTheFigureIsRefusedRatherThanDropped() {
+        ConstructionPlan.Result asked = ConstructionPlan.of(typeOf(DEEP), TermPath.of("query"),
+                symbolsOf(DEEP), Set.of(),
+                Requirements.NONE.and(down(9), Refinement.of(new Case.Presence(true))),
+                (_, _) -> 0);
+
+        assertEquals(Set.of(CompositionBudget.DEPTH_A_CONSTRUCTION_PLAN_DESCENDS),
+                assertInstanceOf(ConstructionPlan.Result.Beyond.class, asked,
+                        "the caller stated something of a position this plan never reached").by(),
                 "and it says which figure put the position out of reach");
     }
 

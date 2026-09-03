@@ -57,7 +57,13 @@ public sealed interface EstablishmentGap {
     }
 
     /**
-     * A budget of this compiler's is why no value was composed for the point.
+     * A figure of this compiler's is why no value composed for the point settles it.
+     *
+     * <p><b>Not that the figure is why nothing was composed.</b> Where a search ran over a plan
+     * short of the point, raising the figure may well leave every candidate refused as before —
+     * what the figure took away is not the row but the standing of the answer, which is about less
+     * than the point had. Written the other way, a reader is told a figure caused an emptiness it
+     * may have had nothing to do with.
      *
      * <p>Made where the composing stopped and carried out, never worked out afterwards. What a
      * search comes back with is a word, and two of this compiler's budgets come back with the same
