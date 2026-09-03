@@ -78,34 +78,52 @@ sealed interface StringRestriction {
      *            position — which leaves every string standing there
      */
     static StringRestriction over(StringRestriction one, StringRestriction other, boolean met) {
+        // A reading that states no rule about the strings here leaves every string standing, and
+        // every string is what a choice between it and anything else leaves. So for a choice it
+        // takes the answer over and there is nothing left to not know; for a conjunction it changes
+        // nothing and the other side stands as it is.
+        if (one == null || other == null) {
+            StringRestriction had = one == null ? other : one;
+            return met ? had : new Admitting(AdmittedPlan.ANY);
+        }
         if (one instanceof NotKnown it) {
             return it;
         }
         if (other instanceof NotKnown it) {
             return it;
         }
-        AdmittedPlan here = one instanceof Admitting it ? it.plan() : AdmittedPlan.ANY;
-        AdmittedPlan there = other instanceof Admitting it ? it.plan() : AdmittedPlan.ANY;
+        AdmittedPlan here = ((Admitting) one).plan();
+        AdmittedPlan there = ((Admitting) other).plan();
         return new Admitting(met
                 ? AdmittedPlan.meeting(java.util.List.of(here, there))
                 : AdmittedPlan.joining(java.util.List.of(here, there)));
     }
 
-    /** The same over every position either of them states a rule about. */
+    /**
+     * The same over every position either of them states a rule about.
+     *
+     * <p>Every position and no shortcut for an empty side. What one reading says nothing about is
+     * every string on that side, and for a choice that absorbs whatever the other says — so a side
+     * with nothing in it is exactly where the answer changes, and taking the other side whole is
+     * the one case that must not be waved through.
+     *
+     * <p>A position stays here whichever way it came out, because the key is also what says this
+     * clause writes about the strings at it. Dropped where the answer came to every string, a rule
+     * about a position would stop being a rule about it.
+     */
     static Map<FactSubject, StringRestriction> over(Map<FactSubject, StringRestriction> these,
                                                     Map<FactSubject, StringRestriction> those,
                                                     boolean met) {
-        if (those.isEmpty()) {
-            return these;
-        }
-        if (these.isEmpty()) {
-            return those;
+        if (these.isEmpty() && those.isEmpty()) {
+            return Map.of();
         }
         Set<FactSubject> named = new LinkedHashSet<>(these.keySet());
         named.addAll(those.keySet());
         Map<FactSubject, StringRestriction> out = new LinkedHashMap<>();
         named.forEach(position ->
                 out.put(position, over(these.get(position), those.get(position), met)));
-        return Map.copyOf(out);
+        // The order the positions were read in, kept: what is written out of these reaches a
+        // report, and the iteration order of an immutable copy is salted once per run.
+        return java.util.Collections.unmodifiableMap(out);
     }
 }

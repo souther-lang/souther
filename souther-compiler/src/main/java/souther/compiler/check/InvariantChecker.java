@@ -1616,12 +1616,17 @@ public final class InvariantChecker {
         // What a part met afterwards adds is itself.
         if (shape instanceof ClauseStates.ABound stated
                 && end instanceof InvariantBound.Read.NoEnd) {
-            standing.compute(new FieldDomains.BoundaryQuestion(from, stated.line()),
-                    (question, had) -> had == null
-                            ? new FieldDomains.BoundaryStanding(
-                                    UnreadComparison.whereALineWouldFall(about.carrier() != null),
-                                    List.of(part))
-                            : had.and(part));
+            // Once per number the clause stops the values on. A comparison states one, which is
+            // what this arm is reached from; written for that one alone, a clause stating two would
+            // leave the second question with nothing standing against it.
+            stated.lines().forEach(line ->
+                    standing.compute(new FieldDomains.BoundaryQuestion(from, line),
+                            (question, had) -> had == null
+                                    ? new FieldDomains.BoundaryStanding(
+                                            UnreadComparison.whereALineWouldFall(
+                                                    about.carrier() != null),
+                                            List.of(part))
+                                    : had.and(part)));
         }
         settle(bin, from, shape, end, at, byName, raised, took, typeAt, parts, raisedByPart);
         if (end instanceof InvariantBound.Read.NoEnd) {
@@ -1716,17 +1721,21 @@ public final class InvariantChecker {
         // rule states where the values stop exactly when the strings it admits run between places
         // the order does not already hold them, which is the reading's own answer and not something
         // read back off the ends it produced.
-        NumberAt<RuleKey> run = runs.bounding();
-        if (run != null) {
-            return new ClauseStates.ABound(run, Set.copyOf(found));
-        }
         SequencedMap<RuleKey, BlockReason.RuleReadingStopped> stopped =
                 stoppedOnTheFormOf(found, read, byName);
         // And where whether it states one was not worked out, the question stands with no answer.
         // Left out, a limit of this compiler would come out as a rule that raises no such question,
         // which is what a rule read to the end and stating no bound comes out as.
         stopped.putAll(runs.undecided(byName));
-        return ClauseStates.SomethingElse.naming(found).unread(stopped);
+        // What a rule about the strings at a position came to, where this conjunct is one. Such a
+        // rule states where the values stop exactly when the strings it admits run between places
+        // the order does not already hold them, which is the reading's own answer and not something
+        // read back off the ends it produced. Every number it came to, because one clause read a
+        // branch at a time can state a line on one and leave the next standing.
+        Set<NumberAt<RuleKey>> lines = runs.bounding();
+        return lines.isEmpty()
+                ? ClauseStates.SomethingElse.naming(found).unread(stopped)
+                : new ClauseStates.ABound(lines, new LinkedHashSet<>(found), stopped);
     }
 
     /**
@@ -2176,22 +2185,22 @@ public final class InvariantChecker {
 
         static final RunsRead NOTHING = new RunsRead(Map.of());
 
-        /** The number this conjunct states the values stop on, or null where it states none. */
-        NumberAt<RuleKey> bounding() {
-            NumberAt<RuleKey> found = null;
-            for (Run each : byPosition.values()) {
+        /**
+         * The numbers this conjunct states the values stop on, in the order they were read.
+         *
+         * <p>Every one of them. One clause is read a branch at a time and the branches are joined,
+         * so what it comes to is an answer per position — and a clause whose branches all state a
+         * run at two positions states one at each. Held as one number, which of them a reader is
+         * told about would be a choice nothing here may make.
+         */
+        Set<NumberAt<RuleKey>> bounding() {
+            Set<NumberAt<RuleKey>> out = new LinkedHashSet<>();
+            byPosition.values().forEach(each -> {
                 if (each instanceof Run.Bounding it) {
-                    if (found != null && !found.equals(it.number())) {
-                        // One clause, two numbers it stops the values on. A classification says one
-                        // ({@link ClauseStates.ABound}), and which of them a reader would be told
-                        // about is nothing this may choose — so it is refused rather than picked.
-                        throw new IllegalStateException("one conjunct states where the values stop"
-                                + " on two numbers: " + found + " and " + it.number());
-                    }
-                    found = it.number();
+                    out.add(it.number());
                 }
-            }
-            return found;
+            });
+            return out;
         }
 
         /** What stopped the reading at each name it stopped at, for the classification to carry. */

@@ -282,6 +282,22 @@ public sealed interface Required {
     }
 
     /**
+     * The names whose line nothing worked out, whichever arm the clause came out as.
+     *
+     * <p>A clause that states no line anywhere carries them, and so does one that states a line on
+     * a number and left the next standing. Read off one arm alone, the second clause's open
+     * question went out as one nobody asked.
+     */
+    private static java.util.Map<RuleKey, BlockReason.RuleReadingStopped> unreadIn(
+            ClauseStates states) {
+        return switch (states) {
+            case ClauseStates.ABound it -> it.unread();
+            case ClauseStates.SomethingElse it -> it.unread();
+            case ClauseStates.ARelation _, ClauseStates.NoRestriction _ -> java.util.Map.of();
+        };
+    }
+
+    /**
      * Whether the rule raises {@code kind} at {@code at}, said of the clause as a reader found it.
      *
      * <p>One switch over the questions and no {@code default}, which is where a question added to
@@ -304,15 +320,16 @@ public sealed interface Required {
             // nothing took apart may place one at any name it writes, and which of those it is,
             // is what reading further would answer.
             case BOUNDARY -> {
-                if (bound != null) {
-                    yield new ObligationClassification.Raised(new Owed.Boundary(bound.line()));
+                // Asked at this name, because one clause can stop the values on the number at one
+                // name and leave the number at the next undecided. Answered off the clause as a
+                // whole, the second question went out as one the rule does not raise.
+                if (bound != null && bound.lineAt(at) != null) {
+                    yield new ObligationClassification.Raised(
+                            new Owed.Boundary(bound.lineAt(at)));
                 }
-                if (!(states instanceof ClauseStates.SomethingElse it)) {
-                    yield new ObligationClassification.NotRaised();
-                }
-                // Asked at this name, because the reading is answered at each of them. A name it
+                // And the reading that stopped, whichever arm the clause came out as. A name it
                 // settled is settled whatever it left beside it.
-                BlockReason.RuleReadingStopped why = it.unread().get(at);
+                BlockReason.RuleReadingStopped why = unreadIn(states).get(at);
                 yield why == null ? new ObligationClassification.NotRaised()
                         : new ObligationClassification.Undetermined(why);
             }

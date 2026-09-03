@@ -37,30 +37,73 @@ import java.util.Set;
 sealed interface ClauseStates {
 
     /**
-     * Where the values stop: a coordinate compared for order against an expression naming no
-     * coordinate of this value.
+     * The clause states where the values stop on one or more of the numbers it writes about.
+     *
+     * <p>What states it is not said here. A coordinate compared for order against an expression
+     * naming no coordinate of this value does; so does a rule admitting a run of the strings at a
+     * position, which is no comparison and has no sides. What is common is what the clause says —
+     * that the values stop somewhere on a number it names — and this is that and nothing about the
+     * shape it was written in.
      *
      * <p>Whether an end came of it is not asked here, and neither is whether the order has a value
-     * at the end. A rule states where the values stop by being written that way; what this compiler
-     * made of the number on the other side is what answers the question, not what raises it.
+     * at the end. A rule states where the values stop by stating it; what this compiler made of the
+     * number on the other side is what answers the question, not what raises it.
      *
-     * @param line  the number the end is on, which is the value at a name or a number an operation
-     *              answers of it. The operation itself, since two operations over one name are two
-     *              lines and a flag saying one was taken cannot tell them apart
+     * <p><b>The lines are a set, and a clause can state one on a number while leaving another
+     * undecided.</b> One clause is read a branch at a time and the branches are joined, so what it
+     * comes to is an answer per number — held as a single line, a clause bounding two of them had
+     * to be refused or picked between, and one bounding one number while nothing settled the next
+     * lost the second question entirely.
+     *
+     * @param lines the numbers the clause stops the values on. Each is the value at a name or a
+     *              number an operation answers of it — the operation itself, since two operations
+     *              over one name are two lines and a flag saying one was taken cannot tell them
+     *              apart
      * @param named the ones the clause is about, which is what a rule can cost. Never empty: a
      *              clause bounding a coordinate writes the name it sits at
+     * @param unread the names whose line nothing worked out, and what stopped it. A clause can
+     *              state a line on one number and leave whether it states one on another standing,
+     *              and the second is a question with no answer rather than one nobody asked
      */
-    record ABound(NumberAt<RuleKey> line, Set<RuleKey> named) implements ClauseStates {
+    record ABound(Set<NumberAt<RuleKey>> lines, Set<RuleKey> named,
+                  SequencedMap<RuleKey, BlockReason.RuleReadingStopped> unread)
+            implements ClauseStates {
 
         public ABound {
-            if (line == null) {
+            if (lines.isEmpty()) {
                 throw new IllegalArgumentException("a bound is a line on some number");
             }
             if (named.isEmpty()) {
                 throw new IllegalArgumentException("a bound is written about a name of the value");
             }
+            lines = java.util.Collections.unmodifiableSet(
+                    new java.util.LinkedHashSet<>(lines));
             named = java.util.Collections.unmodifiableSet(
                     new java.util.LinkedHashSet<>(named));
+            unread = java.util.Collections.unmodifiableSequencedMap(
+                    new java.util.LinkedHashMap<>(unread));
+            for (NumberAt<RuleKey> each : lines) {
+                if (!named.contains(each.position())) {
+                    throw new IllegalArgumentException("`" + each + "` is a line on a name this"
+                            + " clause does not write: " + named);
+                }
+            }
+        }
+
+        /** One line on one number, which is what a comparison states. */
+        ABound(NumberAt<RuleKey> line, Set<RuleKey> named) {
+            this(Set.of(line), named, new java.util.LinkedHashMap<>());
+        }
+
+        /** The line this clause stops the values on at {@code name}, or null where it states
+         *  none there. */
+        NumberAt<RuleKey> lineAt(RuleKey name) {
+            for (NumberAt<RuleKey> each : lines) {
+                if (each.position().equals(name)) {
+                    return each;
+                }
+            }
+            return null;
         }
     }
 
