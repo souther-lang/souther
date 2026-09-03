@@ -51,13 +51,19 @@ public record ObservedInputs(List<ObservedValue> inputs, Generator.Watched watch
      * and a reading that took it in would answer differently about one row depending on who asked.
      */
     public static ObservedInputs of(RowOutcome row,
-                                    SiteNumbering numbering) {
+                                    java.util.Optional<SiteNumbering> numbering) {
+        if (numbering.isEmpty()) {
+            // The module has no numbering, so there is nothing its numbers could be places of.
+            // What the row did is not something anything here can say, which is no account of a
+            // run rather than an account of one that went nowhere.
+            return new ObservedInputs(row.inputs(), new Generator.Watched.NoAccount());
+        }
         return new ObservedInputs(row.inputs(), switch (row.run().counting()) {
             // Read under the numbering asking, which is where the numbers a run left behind become
             // places. A recording made under another one is refused here rather than answered
             // about places it was never near.
             case Counting.Read(long _, RunRecord.Recorded(Observation seen)) ->
-                    new Generator.Watched.Ran(numbering.align(seen));
+                    new Generator.Watched.Ran(numbering.orElseThrow().align(seen));
             // And a row nothing watched has no account of where it went, whether that is because
             // the compile records nothing or because its counting was never read at all.
             case Counting.Read(long _, RunRecord.NoAccount _) ->
