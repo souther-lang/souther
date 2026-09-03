@@ -1975,8 +1975,16 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 // What this compiler declined to build, and which figure decided it. An author does
                 // nothing about this; what it says is that the point is open because of a policy
                 // here, which is what keeps it out of the work they are told they owe.
+                //
+                // Said without claiming a search stopped, because one of the two ways to get here
+                // is a search that ran to the end of what it was handed while the thing it was
+                // handed was short of the point. The gap holds figures and not which of the two
+                // this was, so what is written is what both of them establish: nothing was
+                // composed, and a figure of this compiler's is why. Which way it happened is said
+                // per search, where the outcome that knows is still in hand.
                 case EstablishmentGap.Composition(var budgets) ->
-                        "nothing was composed for it: this compiler stopped at " + said(budgets);
+                        "nothing was composed for it, and a figure of this compiler's is why: "
+                                + said(budgets);
             });
         }
         return String.join(", and ", out);

@@ -2538,14 +2538,19 @@ public final class Generator {
                     continue;
                 }
                 // The search answered for what it was given and what it was given was short of the
-                // point. Its word travels as the word and the figure beside it, which is what
-                // {@link BoundaryAttempt.Limited} is: run through the rewrites below, the figure
-                // would be read as a search that stopped and the word would be taken off budgets
-                // that never stopped one.
+                // point. The word stays its own — read off these budgets it would be taken from
+                // figures that stopped no search — and what the edge held back is added to them
+                // rather than replacing them: a plan that stopped short and an edge that offered
+                // less are two things a reader would have to raise, and either alone leaves the
+                // other looking like the whole of what is in the way.
                 case Outcome.Limited(UnresolvedCombination.Reason word, String said,
                                      java.util.Set<CompositionBudget> by) -> {
-                    return BoundaryAttempt.Limited.at(label,
-                            nothingStoodWhereItWasBuilt(uncertified[0], word), said, by,
+                    UnresolvedCombination.Reason itsWord =
+                            nothingStoodWhereItWasBuilt(uncertified[0], word);
+                    java.util.Set<CompositionBudget> both =
+                            java.util.EnumSet.copyOf(by);
+                    both.addAll(whatTheEdgeHeldBack(heldBack, here, itsWord));
+                    return BoundaryAttempt.Limited.at(label, itsWord, said, both,
                             where.unrepresented());
                 }
                 case Outcome.Unresolved(UnresolvedCombination.Reason word, String said) -> {
@@ -2560,20 +2565,10 @@ public final class Generator {
                 }
             }
             why = nothingStoodWhereItWasBuilt(uncertified[0], why);
-            // Where the refusal is of the values one edge offered, what that edge held back
-            // outranks it: values that were never built were not among the ones refused. Only
-            // where one edge offered them, though — a point of a form fixes several positions
-            // under one parameter, and which of their edges the refusal was about is not
-            // something this knows. Taken from whichever came first, the reason named the wrong
-            // position's search.
-            if (here.size() == 1
-                    && why == UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED) {
-                java.util.Set<CompositionBudget> held =
-                        heldBack.getOrDefault(here.keySet().iterator().next(), java.util.Set.of());
-                if (!held.isEmpty()) {
-                    stoppedBy = held;
-                    why = UnresolvedCombination.Reason.wordFor(held);
-                }
+            java.util.Set<CompositionBudget> held = whatTheEdgeHeldBack(heldBack, here, why);
+            if (!held.isEmpty()) {
+                stoppedBy = held;
+                why = UnresolvedCombination.Reason.wordFor(held);
             }
             return stoppedBy.isEmpty()
                     ? new BoundaryAttempt.Unresolved(
@@ -3712,6 +3707,28 @@ public final class Generator {
             // second account of the same emptiness. A row stands whatever the plan gave up on.
             case Outcome.Built _, Outcome.Stopped _, Outcome.Limited _ -> came;
         };
+    }
+
+    /**
+     * What the one edge under this parameter held back, where the refusal is of the values it
+     * offered.
+     *
+     * <p>Values that were never built were not among the ones refused, so what the edge held back
+     * is part of why a reader was told nothing could be written. Asked in one place, because every
+     * outcome that can come back saying every candidate was refused is owed the same reading —
+     * spelled at one of them, the others report a refusal of values that were never offered.
+     *
+     * <p>Only where one edge offered them. A point of a form fixes several positions under one
+     * parameter, and which of their edges the refusal was about is not something this knows; taken
+     * from whichever came first, the reason named the wrong position's search.
+     */
+    private static java.util.Set<CompositionBudget> whatTheEdgeHeldBack(
+            Map<TermPath, java.util.Set<CompositionBudget>> heldBack,
+            Map<TermPath, List<FixtureTemplate>> here, UnresolvedCombination.Reason why) {
+        if (here.size() != 1 || why != UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED) {
+            return java.util.Set.of();
+        }
+        return heldBack.getOrDefault(here.keySet().iterator().next(), java.util.Set.of());
     }
 
     /**
