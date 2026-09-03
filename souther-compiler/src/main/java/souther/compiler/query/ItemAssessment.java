@@ -372,11 +372,12 @@ public sealed interface ItemAssessment {
      *
      * <p><b>The outcomes, and the things that may be true of one.</b> The outcomes are what
      * happened and are exclusive, so a reader asking which of them this is asks an exhaustive
-     * switch. What may be true of one — that a row came of it, that a search ran, that a budget of
-     * this compiler's stopped it — cuts across them: a row that was built and not read back is both
-     * a row somebody may have and a showing this compiler stopped, and neither of those is the
-     * other's special case. Written as one hierarchy, one of the three had to be the spine and the
-     * others became fields or were read off the spelling of whichever arm a reader had in hand.
+     * switch. What may be true of one — that a row came of it, that a search ran, that a figure of
+     * this compiler's left the point unestablished — cuts across them: a row that was built and not
+     * read back is both a row somebody may have and a point this compiler left open, and neither of
+     * those is the other's special case. Written as one hierarchy, one of the three had to be the
+     * spine and the others became fields or were read off the spelling of whichever arm a reader
+     * had in hand.
      */
     sealed interface Attempt
             permits Attempt.Certified, Attempt.Unverified, Attempt.Stopped, Attempt.Limited,

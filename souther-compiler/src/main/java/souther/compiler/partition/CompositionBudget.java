@@ -3,7 +3,11 @@ package souther.compiler.partition;
 import java.util.function.IntSupplier;
 
 /**
- * How much work this compiler is willing to do before it goes no further.
+ * A figure this compiler holds a piece of its own work to.
+ *
+ * <p>What reaching one does is the member's to say and not this sentence's — one of them changes
+ * how the work is done and gives nothing up at all. So what they have in common is only that
+ * somebody wrote a bound down and that raising it is a thing a person could decide to do.
  *
  * <p>One member per place that reaches a figure, and the figure is here rather than at the place.
  * What a reader wants to know is which of these was reached, and a name written beside a number
@@ -129,7 +133,7 @@ public enum CompositionBudget {
         this.maximum = maximum;
     }
 
-    /** The figure this goes no further than. */
+    /** The figure itself. What is done on reaching it is the member's to say. */
     public int maximum() {
         return maximum.getAsInt();
     }
