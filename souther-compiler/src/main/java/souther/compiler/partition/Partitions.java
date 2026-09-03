@@ -1836,12 +1836,13 @@ public final class Partitions {
      */
     static List<FixtureTemplate> inReserve(Type type, RuleReadingSource ruleSource, ReadingPolicy policy,
                                            NumericDomain.Bounds within) {
-        if (!(type instanceof Type.Ref ref) || !(ruleSource.symbols().declaredNode(ref.name()) instanceof Hir.Data data)
-                || !data.newtype()) {
+        // A far edge is a rule's, and a rule is written on a name. A position wearing none carries
+        // no rule of its own, so there is no edge here to hold anything back at.
+        TypeView view = TypeView.of(type, ruleSource.symbols());
+        if (!view.isWrapped()) {
             return List.of();
         }
-        DeclaredBounds.Bounds own =
-                DeclaredBounds.of(TypeView.of(type, ruleSource.symbols()), ruleSource);
+        DeclaredBounds.Bounds own = DeclaredBounds.of(view, ruleSource);
         NumericDomain.Bounds bounds = TypeBounds.admissible(own, within);
         // The far end has to be a value the position holds. Where the range stops short of it there
         // is nothing there to hold back, and a dense order has no value beside it to hold back
@@ -1851,10 +1852,15 @@ public final class Partitions {
                 || bounds.max().at().sameAs(bounds.min().at())) {
             return List.of();
         }
-        FixtureTemplate held = standing(type, own.carrier(), bounds.max().at(), ruleSource);
+        FixtureTemplate held = WornNames.under(view.wrappers(),
+                FixtureTemplate.on(own.carrier(), bounds.max().at(),
+                        ruleSource.symbols().scope()::reach), ruleSource);
+        if (held == null) {
+            return List.of();   // a name this module cannot write leaves no value to hold back
+        }
         // Nothing already on offer: a range whose far edge is the number the base type stands for
         // would otherwise hold the same value twice, once in each tier.
-        return representativesOf(type, ruleSource, policy, within).stream()
+        return representativesOf(view, ruleSource, policy, within, java.util.Set.of()).stream()
                 .map(FixtureTemplate::text).anyMatch(held.text()::equals)
                 ? List.of() : List.of(held);
     }
