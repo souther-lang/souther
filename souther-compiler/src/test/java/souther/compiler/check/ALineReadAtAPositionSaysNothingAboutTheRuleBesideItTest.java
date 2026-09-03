@@ -190,6 +190,34 @@ class ALineReadAtAPositionSaysNothingAboutTheRuleBesideItTest {
     }
 
     /**
+     * And a branch its own clauses rule out by where the values stop counts the same way.
+     *
+     * <p>Whether anybody can be in a branch is asked of both languages, because each is short of
+     * what the other holds. Here the rule's own conjunct puts {@code n} above one and the branch
+     * asks for it below nothing, so no order admits it — and the branch that stands holds {@code s}
+     * to one string. Asked of the values alone, nothing is wrong with a branch that says nothing
+     * about values, and the restriction the rule does state is lost.
+     *
+     * <p>The pair with the branch ruled out by values above. One drop is a set with nothing in it
+     * and the other is an order with nothing between its ends, and a fold that reads one language
+     * finds only the branches that language could refuse.
+     */
+    @Test
+    void aBranchItsOwnClausesRuleOutByAnOrderCountsAlike() {
+        FieldDomains read = readingOf("""
+                module example.parcels
+
+                data Code = { n: Int, s: String }
+                    invariant r = (n < 0 || String.matches("C", s)) && n > 1
+                """, "Code");
+
+        assertEquals(List.of(new BlockReason.RuleRestrictingToAdmittedValues()),
+                reasonsAt(read, "s"),
+                () -> "no order admits the first branch, so the second holds `s` to one string: "
+                        + read.noLineAt(RuleKey.of("s")));
+    }
+
+    /**
      * A conjunct whose surviving branch is about another position does not hold this one down.
      *
      * <p>What a reading settled and what it constrained are two answers, and only the second is a

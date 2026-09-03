@@ -218,29 +218,49 @@ sealed interface StatedByClauses {
      * <p>So a branch nothing has shown impossible is kept, and the rule reads as one that leaves
      * the position wider. That is an account declining to claim what nothing established, which is
      * the direction an account has to fail in.
+     *
+     * <p><b>Both languages, and the whole of what is known, which is what a fate is asked of.</b>
+     * A branch is one nobody can be in where either language says so, and each of them is short of
+     * what the other holds: {@code (n < 0 || String.matches("C", s)) && n > 1} has a branch no order
+     * admits, and a fold that asked the values alone would find nothing wrong with it and lose what
+     * the rule states about {@code s}. That is the same drop this type's connectives are over
+     * rather than either language's, said of a rule read on its own.
      */
-    default souther.compiler.values.PlannedValues<FactSubject> alone(
+    default StatedTogether.Said alone(
             Alternatives held, souther.compiler.values.Allowance<FactSubject> by) {
         return switch (this) {
-            case Said it -> it.values();
+            case Said it -> new StatedTogether.Said(it.values(), it.ordered());
             case Choice it -> {
-                souther.compiler.values.PlannedValues<FactSubject> one = it.left().alone(held, by);
-                souther.compiler.values.PlannedValues<FactSubject> other =
-                        it.right().alone(held, by);
-                boolean hereIsEmpty = one.holdsNothingAsBuilt(by);
-                boolean thereIsEmpty = other.holdsNothingAsBuilt(by);
-                if (hereIsEmpty && thereIsEmpty) {
+                StatedTogether.Said one = it.left().alone(held, by);
+                StatedTogether.Said other = it.right().alone(held, by);
+                boolean hereIsEmpty = nobodyIsIn(one, by);
+                boolean thereIsEmpty = nobodyIsIn(other, by);
+                if (thereIsEmpty) {
                     yield one;
                 }
                 if (hereIsEmpty) {
                     yield other;
                 }
-                if (thereIsEmpty) {
-                    yield one;
-                }
-                yield held == Alternatives.APART ? one.joinApart(other) : one.join(other);
+                yield new StatedTogether.Said(
+                        held == Alternatives.APART
+                                ? one.values().joinApart(other.values())
+                                : one.values().join(other.values()),
+                        one.ordered().join(other.ordered()));
             }
         };
+    }
+
+    /**
+     * Whether something has already established that nobody can be in {@code branch}.
+     *
+     * <p>Either language, because each can hold the whole answer on its own and what one of them
+     * cannot express it leaves alone. And established rather than worked out: an order is bottom or
+     * it is not, a description of values says so or waits, and where it waits this asks what was
+     * already built for the position rather than building it.
+     */
+    private static boolean nobodyIsIn(StatedTogether.Said branch,
+                                      souther.compiler.values.Allowance<FactSubject> by) {
+        return branch.ordered().isBottom() || branch.values().holdsNothingAsBuilt(by);
     }
 
     /**
@@ -570,7 +590,7 @@ sealed interface StatedByClauses {
          */
         Account accountOf(StatedByClauses rule, Settlement made,
                           souther.compiler.values.Allowance<FactSubject> by) {
-            return new Account(narrowedBy(rule.alone(alternatives, by), by),
+            return new Account(narrowedBy(rule.alone(alternatives, by).values(), by),
                     partsOf(accounted(rule, made.outcomes()), made));
         }
 
