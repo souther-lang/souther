@@ -43,27 +43,17 @@ import souther.compiler.query.PartitionEvidence;
  * itself: a type reaching it without passing through one of the three has no sentence, and there is
  * nothing below to ask for one.
  *
+ * <p><b>Words, and nothing about where they are said.</b> Whether a reason is a fact about the run
+ * or about the behavior decides whether a surface gives it a line of its own, and it is the
+ * reason's answer ({@link MeasureReason#about()}) rather than a second column here. Held beside the
+ * words, one fact about a constant was written down in as many tables as there are readers, and the
+ * fold over the readings of one line — which needs the same fact to tell two readings saying one
+ * thing from two readings saying two — had no table to read and worked from a different question.
+ *
  * @param introduction how the sentence opens, which the family settles
- * @param said         what this state says, and what it is a fact about
+ * @param said         what this state says
  */
-record ReasonProse(Introduction introduction, Clause said) {
-
-    /** What a reason is a fact about. */
-    enum Scope {
-
-        /**
-         * The run, and not the behavior the measure is of.
-         *
-         * <p>What a build asked for is an input to the whole run, so a line saying it under each
-         * behavior says one fact as many times as the module has behaviors. A surface printing a
-         * whole line per measure leaves the line out; one writing a clause into a line that is
-         * there for another reason says it, because there the reason is what that line is short of.
-         */
-        RUN,
-
-        /** This behavior, so the measure it is of says it. */
-        BEHAVIOR
-    }
+record ReasonProse(Introduction introduction, String said) {
 
     /** How a sentence opens, which is the whole of what the family says to a reader. */
     enum Introduction {
@@ -77,19 +67,6 @@ record ReasonProse(Introduction introduction, Clause said) {
             this.word = word;
         }
     }
-
-    /**
-     * What one state says, without the opening.
-     *
-     * <p>Both halves at once. What a state says and what it is a fact about are decided as one
-     * thing, so a state added here cannot be given a sentence and left without a place to say it.
-     * Asked as a second question about the reason — a table of clauses here and a reader deciding
-     * placement elsewhere — the two are two books, and a state reaches the second missing from it.
-     *
-     * @param words what a person is told
-     * @param scope what it is a fact about
-     */
-    record Clause(String words, Scope scope) {}
 
     /**
      * What the report says about this reason, and what it is about.
@@ -127,98 +104,93 @@ record ReasonProse(Introduction introduction, Clause said) {
      * whose whole subject is one measure.
      */
     String clause() {
-        return said.words();
+        return said;
     }
 
-    /** What this reason is a fact about, which decides whether a line of its own is printed. */
-    Scope scope() {
-        return said.scope();
-    }
-
-    private static Clause nothingToBeAbout(NotApplicableReason reason) {
+    private static String nothingToBeAbout(NotApplicableReason reason) {
         return switch (reason) {
             case Adequacy.BranchEvidence.NoArms it -> switch (it) {
-                case NO_BODY -> behavior("this behavior has no body");
-                case NO_ARM_OBLIGATIONS -> behavior("this body owes no arm");
+                case NO_BODY -> "this behavior has no body";
+                case NO_ARM_OBLIGATIONS -> "this body owes no arm";
             };
             case Adequacy.SignatureEvidence.NotASum it -> switch (it) {
-                case NOT_A_SUM -> behavior("this behavior's output is not a sum");
+                case NOT_A_SUM -> "this behavior's output is not a sum";
             };
             // Said of the rules and not of their absence, here and at the partition below. A
             // behavior whose only rule about a pair of positions relates them has rules — printed a
             // line above, by name — and they divide no position and draw no line; a sentence saying
             // the model has none would read as contradicting the rule beside it.
             case BoundaryDerivation.NoRuleDrawsALine _ ->
-                    behavior("the rules of this behavior draw no line");
+                    "the rules of this behavior draw no line";
             case BoundaryDerivation.NoSubject it -> switch (it) {
-                case NO_SUBJECT -> behavior("this behavior is measured at its stages");
+                case NO_SUBJECT -> "this behavior is measured at its stages";
             };
             case InputCaseEvidence.NotASum it -> switch (it) {
-                case NOT_A_SUM -> behavior("this position is one data rather than a sum");
+                case NOT_A_SUM -> "this position is one data rather than a sum";
             };
             case NoFeasibleInput _ ->
-                    behavior("the rules reaching this behavior's input leave it no value");
+                    "the rules reaching this behavior's input leave it no value";
             case OutputCaseEvidence.NotASum it -> switch (it) {
-                case NOT_A_SUM -> behavior("what this behavior answers with is not a sum");
+                case NOT_A_SUM -> "what this behavior answers with is not a sum";
             };
             case PartitionDerivation.NoSubject it -> switch (it) {
-                case NO_SUBJECT -> behavior("this behavior is measured at its stages");
+                case NO_SUBJECT -> "this behavior is measured at its stages";
             };
             case PartitionDerivation.NothingIsDivided _ ->
-                    behavior("the rules of this behavior divide no position");
+                    "the rules of this behavior divide no position";
         };
     }
 
-    private static Clause neverMade(NotMeasuredReason reason) {
+    private static String neverMade(NotMeasuredReason reason) {
         return switch (reason) {
             case Adequacy.BranchEvidence.NotAsked it -> switch (it) {
-                case NOT_ASKED -> run("the build did not ask for the arms");
-                case NO_ROWS -> behavior("no row names this behavior");
+                case NOT_ASKED -> "the build did not ask for the arms";
+                case NO_ROWS -> "no row names this behavior";
             };
             case Adequacy.RowReading.NotAsked it -> switch (it) {
-                case ROWS_NOT_ASKED -> run("this build does not read rows");
+                case ROWS_NOT_ASKED -> "this build does not read rows";
             };
             case Adequacy.SignatureEvidence.NoRows it -> switch (it) {
-                case NO_ROWS -> behavior("no row names this behavior");
+                case NO_ROWS -> "no row names this behavior";
             };
             case InputCaseEvidence.NoRows it -> switch (it) {
-                case NO_ROWS -> behavior("no row names this behavior");
+                case NO_ROWS -> "no row names this behavior";
             };
             case ItemAssessment.Coverage.NotAsked it -> switch (it) {
-                case NOT_ASKED -> run("nothing was asked for");
-                case ARMS_NOT_ASKED -> run("the arms were not asked for");
-                case NO_ROWS -> behavior("no row names this behavior");
+                case NOT_ASKED -> "nothing was asked for";
+                case ARMS_NOT_ASKED -> "the arms were not asked for";
+                case NO_ROWS -> "no row names this behavior";
             };
             case NothingWasAsked it -> switch (it) {
-                case NOT_ASKED -> run("nothing was asked for");
+                case NOT_ASKED -> "nothing was asked for";
             };
             case OutputCaseEvidence.NoRows it -> switch (it) {
-                case NO_ROWS -> behavior("no row names this behavior");
+                case NO_ROWS -> "no row names this behavior";
             };
             case PartitionEvidence.AxisCoverage.NoRows it -> switch (it) {
-                case NO_ROWS -> behavior("no row names this behavior");
+                case NO_ROWS -> "no row names this behavior";
             };
             case PartitionEvidence.PairSpace.NoRows it -> switch (it) {
-                case NO_ROWS -> behavior("no row names this behavior");
+                case NO_ROWS -> "no row names this behavior";
             };
         };
     }
 
-    private static Clause couldNotBeFinished(FailureReason reason) {
+    private static String couldNotBeFinished(FailureReason reason) {
         return switch (reason) {
             // The model says this behavior writes a body. What it owes is unknown rather than
             // nothing, which is the difference the line saying this exists to show.
             case Adequacy.BranchEvidence.Unelaborated it -> switch (it) {
-                case BODIES_NOT_ELABORATED -> behavior("this module's bodies were not elaborated");
+                case BODIES_NOT_ELABORATED -> "this module's bodies were not elaborated";
             };
             case Adequacy.BranchEvidence.Unreadable it -> switch (it) {
-                case UNREADABLE -> behavior("the arms could not be read");
+                case UNREADABLE -> "the arms could not be read";
             };
             case Adequacy.RowReading.Unavailable it -> switch (it) {
-                case ROWS_UNAVAILABLE -> behavior("nothing came back from the rows");
+                case ROWS_UNAVAILABLE -> "nothing came back from the rows";
             };
             case BoundaryDerivation.TheReadingDidNotRunOut it -> switch (it) {
-                case THE_READING_DID_NOT_RUN_OUT -> behavior("no line was derived at any position");
+                case THE_READING_DID_NOT_RUN_OUT -> "no line was derived at any position";
             };
             // The two halves of one boundary, and an author acts on them in different places. A
             // behavior whose boundary was not derived has a name in its own declaration that
@@ -227,26 +199,16 @@ record ReasonProse(Introduction introduction, Clause said) {
             // resolved to nothing is reported where it was written, on the line the author edits.
             case BoundaryForMeasurement.NotDerived it -> switch (it) {
                 case BEHAVIOR_BOUNDARY_NOT_DERIVED ->
-                        behavior("this behavior's signature could not be read");
-                case BEHAVIOR_INPUT_NOT_READ -> behavior("what this behavior takes was not read");
+                        "this behavior's signature could not be read";
+                case BEHAVIOR_INPUT_NOT_READ -> "what this behavior takes was not read";
             };
             case ItemAssessment.Coverage.CouldNotAsk it -> switch (it) {
-                case ARMS_UNREADABLE -> behavior("the arms could not be measured");
+                case ARMS_UNREADABLE -> "the arms could not be measured";
             };
             case PartitionDerivation.TheReadingDidNotRunOut it -> switch (it) {
                 case THE_READING_DID_NOT_RUN_OUT ->
-                        behavior("no partition axis was derived at any position");
+                        "no partition axis was derived at any position";
             };
         };
-    }
-
-    /** A fact about the behavior the measure is of, so the measure says it. */
-    private static Clause behavior(String words) {
-        return new Clause(words, Scope.BEHAVIOR);
-    }
-
-    /** A fact about the run, so a line per behavior would say it once per behavior. */
-    private static Clause run(String words) {
-        return new Clause(words, Scope.RUN);
     }
 }

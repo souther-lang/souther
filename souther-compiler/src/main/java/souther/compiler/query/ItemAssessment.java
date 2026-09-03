@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.observe.MeasureReason;
 import souther.compiler.partition.Criterion;
 import souther.compiler.partition.Generator;
 import souther.compiler.partition.NotOwedReason;
@@ -311,6 +312,27 @@ public sealed interface ItemAssessment {
             NO_ROWS;
 
             /**
+             * What each of these is a fact about.
+             *
+             * <p>Which of them a line says is settled by the level the build asked for and by
+             * whether a fork or an invariant drew the line, and the first of those is one value for
+             * the whole run. So the two settings say the same thing at every reading of every line
+             * they reach, and only the third is something one behavior can say and the next one
+             * not.
+             *
+             * <p><b>Not what {@link #mayHideARow()} answers, and the two are not read off each
+             * other.</b> They agree over these three constants and part over {@link CouldNotAsk},
+             * which is a fact about the behavior that may well be hiding a row.
+             */
+            @Override
+            public MeasureReason.About about() {
+                return switch (this) {
+                    case NOT_ASKED, ARMS_NOT_ASKED -> MeasureReason.About.THE_RUN;
+                    case NO_ROWS -> MeasureReason.About.THE_BEHAVIOR;
+                };
+            }
+
+            /**
              * Whether a row at the point could be sitting behind this and not have been seen.
              *
              * <p>Asked of the reason and not of the state around it. Three of these are one
@@ -330,6 +352,13 @@ public sealed interface ItemAssessment {
             /** The rows ran without instrumentation, so no row can be shown to have reached the
              *  comparison. Never a reason for an invariant's line. */
             ARMS_UNREADABLE;
+
+            /** This behavior's rows, which ran and were not recorded. Another behavior of the same
+             *  run can have been read to the end, so this is nothing the run says. */
+            @Override
+            public MeasureReason.About about() {
+                return MeasureReason.About.THE_BEHAVIOR;
+            }
 
             /** Whether a row at the point could be sitting behind this, as {@link NotAsked} answers
              *  it. The rows ran, so one of them may have reached the comparison unrecorded. */

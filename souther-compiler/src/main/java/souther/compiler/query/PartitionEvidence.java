@@ -9,6 +9,7 @@ import souther.compiler.inputs.FilingCoordinate;
 import souther.compiler.inputs.InputQuestion;
 import souther.compiler.inputs.StandingQuestion;
 import souther.compiler.observe.Incompleteness;
+import souther.compiler.observe.MeasureReason;
 import souther.compiler.partition.ReportedReason;
 import souther.compiler.partition.UndividedPosition;
 
@@ -512,7 +513,12 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
         /** Why the combinations have no numbers. */
         public enum NoRows implements NotMeasuredReason {
             /** No row names this behavior, so nothing sits anywhere. */
-            NO_ROWS
+            NO_ROWS;
+
+            @Override
+            public MeasureReason.About about() {
+                return MeasureReason.About.THE_BEHAVIOR;
+            }
         }
 
         public static final PairSpace NONE =
@@ -665,7 +671,12 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
         public enum NoRows implements NotMeasuredReason {
             /** No row names this behavior. An absence of evidence is not a set of gaps, so the
              *  classes nothing sits in are not classes nothing reaches. */
-            NO_ROWS
+            NO_ROWS;
+
+            @Override
+            public MeasureReason.About about() {
+                return MeasureReason.About.THE_BEHAVIOR;
+            }
         }
 
         /** Which classes there are is a fact about the model, and no row has to exist for it to be

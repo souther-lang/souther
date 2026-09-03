@@ -282,8 +282,13 @@ public sealed interface ObligationDisposition {
             // whether a row is owed here is the model's answer, and no row naming the behavior is a
             // setting of this build (issue #1249). What is known about a row being writable there
             // is said beside that rather than instead of it.
+            // The reason as a surface that says one says it. What the point is open on is written
+            // into a sentence and into one opening, and both have room for one reason — so the
+            // account asks for one here rather than each of them choosing from what the readings
+            // gave.
             case ObligationCoverage.NotMeasured it -> Undecided.about(alsoWritability(
-                    new Uncertainty.WhetherARowIsThere.NothingWasRead(it.why()), knowledge));
+                    new Uncertainty.WhetherARowIsThere.NothingWasRead(it.why().asOne()),
+                    knowledge));
         };
     }
 

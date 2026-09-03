@@ -2019,10 +2019,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * short of whatever the reason is about.
      */
     private static void sayWhy(StringBuilder out, String measure, MeasureReason reason) {
-        ReasonProse why = ReasonProse.of(reason);
-        if (why.scope() == ReasonProse.Scope.BEHAVIOR) {
+        if (reason.about() == MeasureReason.About.THE_BEHAVIOR) {
             out.append(String.format("    %s%s%n",
-                    DisplayColumns.padRight(measure, 12), why.sentence()));
+                    DisplayColumns.padRight(measure, 12), ReasonProse.of(reason).sentence()));
         }
     }
 
@@ -2276,8 +2275,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
     /** What an obligation's coverage was left short by, where a reason says. A coverage that came
      *  to an answer has none, and the note beside the item is what this fills in. */
     private static String whyNoBoundaryItem(ObligationCoverage coverage) {
-        MeasureReason why = coverage.why();
-        return why == null ? "" : ReasonProse.of(why).clause();
+        return coverage.theReasonAsOne().map(why -> ReasonProse.of(why).clause()).orElse("");
     }
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
@@ -3566,9 +3564,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         }
         ObligationCoverage coverage = owed.coverage();
         of.put("status", wire(ReportMeasurement.statusOf(coverage)));
-        if (coverage.why() != null) {
-            of.put("reason", word(coverage.why()));
-        }
+        // One word, which is what a boundary item promises. What the readings gave is a set, and
+        // asking for it as one is where an account with no room in the document says so.
+        coverage.theReasonAsOne().ifPresent(why -> of.put("reason", word(why)));
         weakening(of, coverage.weakening());
         if (coverage.hasAnswer()) {
             of.put("hit", coverage.hasRowWitness());

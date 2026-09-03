@@ -126,7 +126,8 @@ class ALimitOfThisCompilerDoesNotTakeAnObligationOutOfTheCountTest {
                         new ObligationDisposition.Uncertainty
                                 .WhetherARowCanBeWritten.NothingShowedIt())),
                 ObligationDisposition.of(
-                        new ObligationCoverage.NotMeasured(ItemAssessment.Coverage.NotAsked.NO_ROWS),
+                        new ObligationCoverage.NotMeasured(
+                        UnaskedReasons.of(ItemAssessment.Coverage.NotAsked.NO_ROWS)),
                         new WritabilityKnowledge.NoEvidence()),
                 "nothing was read and nothing promises a row, both are open about it, and each"
                         + " says which of the two left it so");
@@ -203,7 +204,8 @@ class ALimitOfThisCompilerDoesNotTakeAnObligationOutOfTheCountTest {
                 new ObligationCoverage.Undecided(WeakeningSet.of(
                         new Weakening.BorderValueUnreadable(null,
                                 ReadingGap.of(Incompleteness.Code.VALUE_TRUNCATED)))),
-                new ObligationCoverage.NotMeasured(ItemAssessment.Coverage.NotAsked.NO_ROWS));
+                new ObligationCoverage.NotMeasured(
+                        UnaskedReasons.of(ItemAssessment.Coverage.NotAsked.NO_ROWS)));
     }
 
     private static List<WritabilityKnowledge> everyKnowledge() {

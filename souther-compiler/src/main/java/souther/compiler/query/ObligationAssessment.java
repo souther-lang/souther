@@ -51,8 +51,11 @@ public record ObligationAssessment(Criterion criterion, ObligationCoverage cover
     public boolean worthSearching() {
         return switch (coverage) {
             case ObligationCoverage.Missed _ -> true;
-            case ObligationCoverage.NotMeasured it ->
-                    it.why() == ItemAssessment.Coverage.NotAsked.NO_ROWS;
+            // Asked of the reasons rather than of one constant. A point nothing was read against is
+            // work to hand to an author where nothing that was not read could be hiding a row
+            // there — which is what "no row names this behavior" means and what a reason added
+            // beside it would have to say for itself.
+            case ObligationCoverage.NotMeasured it -> !it.why().mayHideARow();
             case ObligationCoverage.Witnessed _, ObligationCoverage.Undecided _ -> false;
         };
     }

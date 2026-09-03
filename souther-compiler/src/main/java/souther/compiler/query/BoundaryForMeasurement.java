@@ -3,6 +3,7 @@ package souther.compiler.query;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.Sig;
 import souther.compiler.inputs.InputDomain;
+import souther.compiler.observe.MeasureReason;
 
 import java.util.Map;
 import java.util.Objects;
@@ -76,6 +77,13 @@ public sealed interface BoundaryForMeasurement {
          * refuses the reading of.
          */
         BEHAVIOR_INPUT_NOT_READ;
+
+        /** Both are read off one behavior's own declaration and its own input, so two behaviors of
+         *  one run can say different ones. */
+        @Override
+        public MeasureReason.About about() {
+            return MeasureReason.About.THE_BEHAVIOR;
+        }
 
         /**
          * What a measure short of this went without, as the fact that made it so.
