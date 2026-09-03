@@ -119,9 +119,8 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
         // position where they found it: the quantity is empty, the line falls outside it, or the
         // number is over a run. This one holds the position to the values it admits, and everything
         // else is refused at construction — so what a reader acts on is that the value written here
-        // is one of them. Read as one of the three, such a position came back as one no rule says
-        // anything about; read as a division, it came back as one the model divides into a class its
-        // declaration refuses to build.
+        // is one of them. Read as one of the three, such a position goes out with no rule saying
+        // anything about it.
         //
         // Neither measure is short. The rule was read to the end and there is no class away from
         // what it admits for a row to be owed at, so there is nothing to ask an author for.

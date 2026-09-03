@@ -237,10 +237,11 @@ public record UndividedPosition(TermPath at, Why why) {
          * out are no class of it. What a reader acts on is that the value written here is one the
          * rule admits.
          *
-         * <p>A position carrying only such a rule is not one the model divides no way. It was
-         * reported as one, and every reader downstream took the silence for a conclusion; then it
-         * was reported as a division this measure has no representation for, which said the model
-         * divides a position its declaration says cannot hold the other side.
+         * <p>A position carrying only such a rule is not one the model divides no way, and neither
+         * is it one divided into something this measure has no representation for. Said as the
+         * first, the position goes out with nothing to act on and a reader takes the silence for a
+         * conclusion; said as the second, a reader is told the model divides a position its
+         * declaration refuses to build the other side of.
          *
          * <p>Nothing here about whether the position is divided. A rule may restrict and divide at
          * once, and what a position divides into is said where the classes are.

@@ -619,17 +619,16 @@ public sealed interface BlockReason {
      * about a rule whose admitted values are not a run of the order, and it is why there is no
      * class away from them to cover (ADR-0090).
      *
-     * <p><b>Not a division, which is what it used to be said as.</b> That a rule tells the values
-     * it admits from the rest is a fact about those values, and whether the position is divided is
-     * a different question answered by what the rule is written in. Under an invariant the other
-     * side is no class of the position, so a sentence saying the model divides the position into
-     * values this measure draws no line between told a reader the opposite of what the declaration
+     * <p><b>Not a division.</b> That a rule tells the values it admits from the rest is a fact
+     * about those values, and whether the position is divided is a different question, answered by
+     * what the rule is written in. Under an invariant the other side is no class of the position, so
+     * a reader told the model divides the position here is told the opposite of what the declaration
      * says.
      *
-     * <p><b>And it says nothing about whether the position is divided.</b> A rule may restrict and
-     * divide at once — {@code invariant value == "A" || value == "B"} admits two values and every
-     * other string is no class of the position — so the classes are read where they are read
-     * ({@link Distinctions#ofValues}) and this stays a statement about what may stand here.
+     * <p><b>And it says nothing either way about whether the position is divided.</b> A rule may
+     * restrict and divide at once — {@code invariant value == "A" || value == "B"} admits two values
+     * and every other string is no class of the position — so the classes are read where they are
+     * read ({@link Distinctions#ofValues}) and this stays a statement about what may stand here.
      *
      * <p>Nor a limit of the reading. What a rule leaves a position is worked out by the reading
      * that turns clauses into sets, and one it could not work out is not one of these: a set left

@@ -29,10 +29,17 @@ import java.util.List;
  *
  * <p><b>One clause, one reading, handed on.</b> What a clause states is worked out once, by the
  * entry point its tree has, and comes back as a {@link Reading} that holds what became of it — the
- * strings, or what stopped the reading short of them. Everything asked afterwards takes that value
- * ({@link #divides}), so no caller goes back to the clause to establish a second time what it
- * already has. Answering "was it read" from a re-read would be one question with two derivations,
- * and the day either the fold or the parser learns a form is the day they part.
+ * strings, or what stopped the reading short of them. A caller takes that value rather than going
+ * back to the clause to establish a second time what it already has: asking twice is one question
+ * with two derivations, and the day either the fold or the parser learns a form is the day they
+ * part.
+ *
+ * <p><b>And what it says about a position is nobody's answer here.</b> The strings are a fact about
+ * a language. Whether the position those strings stand at is restricted, divided, or left where it
+ * was found turns on what the rule is written in, and it is settled by the reading that holds every
+ * rule reaching the position — so this hands over the strings and stops. Answered here, the same
+ * language would mean one thing under an invariant, whose other side is refused at construction, and
+ * another under a behavior, where both sides stand.
  *
  * <p>{@code String.isEmpty} is not here, and is not missing. It is written in the library as
  * {@code String.length(s) == 0} and arrives as that comparison, which is a question about a number
