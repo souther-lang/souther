@@ -216,6 +216,29 @@ sealed interface StatedByClauses {
         };
     }
 
+    /**
+     * What this rule's own clauses leave, with its choices settled by nothing outside it.
+     *
+     * <p>The rule alone, which is what a reader asking what <em>this</em> rule did to a position
+     * has to be given. A fate is the whole declaration's to say, so a branch of this rule that
+     * nobody can be in is one a neighbouring rule ruled out — and a reading that took the fates
+     * would hand this rule its neighbour's narrowing: in {@code value == 5 || value /= 5} beside
+     * {@code value == 7}, the first branch is dead and what is left of a rule that states nothing
+     * is a rule that holds the position away from five.
+     *
+     * <p>Its own connectives, and the same ones the clauses were read with, so this is the reading
+     * projected rather than a second one. Free of any allowance: joining two descriptions is
+     * arithmetic over what is written down, and a machine is made where an answer is resolved.
+     */
+    default souther.compiler.values.PlannedValues<FactSubject> alone(Alternatives held) {
+        return switch (this) {
+            case Said it -> it.values();
+            case Choice it -> held == Alternatives.APART
+                    ? it.left().alone(held).joinApart(it.right().alone(held))
+                    : it.left().alone(held).join(it.right().alone(held));
+        };
+    }
+
     /** The reading of one value's positions, made once and used over however many clauses reach it.
      *  Built per clause, this walk paid for a pair of readers at every clause of every value. */
     static Reading readingOf(Terms terms, Denotations at, Map<FactSubject, Type> byName,
@@ -526,8 +549,38 @@ sealed interface StatedByClauses {
          * read, so nothing here builds a machine and nothing here can be widened by a constraint a
          * neighbouring rule stated: no neighbouring rule is in the tree.
          */
-        Map<Core, ReadByClauses.OfAPart> accountOf(StatedByClauses rule, Settlement made) {
-            Said said = accounted(rule, made.outcomes());
+        Account accountOf(StatedByClauses rule, Settlement made) {
+            return new Account(narrowedBy(rule.alone(alternatives), made.made().unbuilt()),
+                    partsOf(accounted(rule, made.outcomes()), made));
+        }
+
+        /**
+         * The positions the rule itself leaves holding less than every value.
+         *
+         * <p>Off the rule alone ({@link #alone}) and not off the account beside it, because the
+         * account takes the fates of its choices from the whole declaration and a fate is a
+         * neighbouring rule's work. Free: what a position holds is a description the reading
+         * already has, and being narrowed is that description being one shape rather than another.
+         *
+         * <p>A position whose answer was not built is not one of these — this reading cannot say
+         * what it narrowed there — and neither is one the rule leaves nothing at, which is a fact
+         * about emptiness and is said where emptiness is.
+         */
+        private Set<FactSubject> narrowedBy(
+                souther.compiler.values.PlannedValues<FactSubject> mine,
+                Set<FactSubject> unbuilt) {
+            Set<FactSubject> out = new java.util.LinkedHashSet<>();
+            for (FactSubject each : mine.adoptedAt()) {
+                if (!unbuilt.contains(each)
+                        && !(mine.at(each)
+                                instanceof souther.compiler.values.AdmittedPlan.Nothing)) {
+                    out.add(each);
+                }
+            }
+            return out;
+        }
+
+        private Map<Core, ReadByClauses.OfAPart> partsOf(Said said, Settlement made) {
             Set<FactSubject> unbuilt = made.made().unbuilt();
             // And what could not be built is given up on here too. What a leaf said it adopted was
             // said before any machine was made, so a position whose answer the whole reading did
@@ -770,19 +823,19 @@ sealed interface StatedByClauses {
             }
             Settlement made = reader.settle(whole, by);
             Map<Core, ReadByClauses.OfAPart> said = new java.util.IdentityHashMap<>();
+            Map<K, ReadByClauses.OfARule> clauses = new java.util.LinkedHashMap<>();
             Adoption<FactSubject> byValues = Adoption.nothing();
             Adoption<FactSubject> byOrder = Adoption.nothing();
             for (Map.Entry<K, StatedByClauses> each : trees.entrySet()) {
-                Map<Core, ReadByClauses.OfAPart> mine = reader.accountOf(each.getValue(), made);
-                said.putAll(mine);
-                ReadByClauses.OfAPart clause = mine.get(byClause.get(each.getKey()));
+                Account mine = reader.accountOf(each.getValue(), made);
+                said.putAll(mine.parts());
+                ReadByClauses.OfAPart clause = mine.parts().get(byClause.get(each.getKey()));
+                clauses.put(each.getKey(), new ReadByClauses.OfARule(mine.narrowed(), clause));
                 byValues = byValues.both(clause.byValues());
                 byOrder = byOrder.both(clause.byOrder());
             }
             ReadByClauses read = new ReadByClauses(made.made().values(), made.ordered(),
                     byValues, byOrder, said);
-            Map<K, ReadByClauses.OfAPart> clauses = new java.util.LinkedHashMap<>();
-            byClause.forEach((key, clause) -> clauses.put(key, said.get(clause)));
             Map<K, java.util.List<Map.Entry<Core, ReadByClauses.OfAPart>>> parts =
                     new java.util.LinkedHashMap<>();
             byPart.forEach((key, these) -> {
@@ -806,6 +859,14 @@ sealed interface StatedByClauses {
      * <p>The second and third are looked up in the first. Reading them any number of times spends
      * nothing, because the work was done once and what is here is what it came to.
      */
-    record Answered<K>(ReadByClauses whole, Map<K, ReadByClauses.OfAPart> perClause,
+    record Answered<K>(ReadByClauses whole, Map<K, ReadByClauses.OfARule> perClause,
                        Map<K, java.util.List<Map.Entry<Core, ReadByClauses.OfAPart>>> perPart) {}
+
+    /**
+     * What one rule's own tree came to: what it leaves narrowed, and what each of its parts took in.
+     *
+     * <p>Both from one walk of the rule. Asked apart, the tree would be answered over twice and the
+     * two answers agree only for as long as nobody changes one of them.
+     */
+    record Account(Set<FactSubject> narrowed, Map<Core, ReadByClauses.OfAPart> parts) {}
 }

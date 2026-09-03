@@ -176,6 +176,43 @@ class ARuleThatStatesNothingIsNotOneThatRestrictsThePositionTest {
                         + " position to some: " + reasonsOf(LEAVES_NOTHING));
     }
 
+    /** A rule that states nothing, standing beside one that holds the same position down. */
+    private static final String NOTHING_BESIDE_A_NARROWING = """
+            module probe
+
+            data Ok
+
+            data T = { value: Int }
+                invariant tautology = value == 5 || value /= 5
+                invariant narrows = value == 7
+
+            behavior read : (t: T) -> Ok
+            let read (t) = Ok
+            """;
+
+    /**
+     * A rule is answered for by what it did, and never by what the rule beside it did.
+     *
+     * <p>What the declaration leaves at a position is met from every rule that reached it, so a
+     * reading that took it for one rule's answer hands that rule its neighbour's narrowing. Here
+     * the first rule states nothing — every value satisfies one side or the other — and the second
+     * holds the position to a single value; read off the declaration, the first is reported as
+     * holding the position to what it admits, and an author is sent to a rule that admits
+     * everything.
+     *
+     * <p>The fates of its choices are the neighbour's work too, which is what makes the pair
+     * necessary rather than the tautology on its own. Nothing rules out {@code value == 5} until
+     * {@code value == 7} stands beside it, and a reading that answered over the rule's tree with
+     * those fates applied would find one branch dead and the other holding the position away from
+     * five — a narrowing assembled out of a rule that states none.
+     */
+    @Test
+    void aRuleIsNotHandedTheNarrowingItsNeighbourDid() {
+        assertEquals(List.of(), reasonsOf(NOTHING_BESIDE_A_NARROWING),
+                "one rule states nothing and the other draws a line, so neither holds the position"
+                        + " to what it admits");
+    }
+
     /**
      * And the format is a reading that finished, which is the half that moved.
      *

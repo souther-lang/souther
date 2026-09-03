@@ -745,6 +745,7 @@ public final class InvariantChecker {
             souther.compiler.values.Allowance<FactSubject> allowed =
                     souther.compiler.values.Allowance.ofAdmittedValues();
             Map<RuleRef, Map<Core, ReadByClauses.OfAPart>> adoptedBy = new LinkedHashMap<>();
+            Map<RuleRef, ReadByClauses.OfARule> narrowedBy = new LinkedHashMap<>();
             // One reader for this value's positions, used over however many clauses reach it, and
             // the one that decides the choices in what they came to.
             StatedByClauses.Reading reader = StatedByClauses
@@ -775,8 +776,9 @@ public final class InvariantChecker {
             Map<FactSubject, Integer> unspent = leftOf(allowed, positions.keySet());
             AdmissibleValues<FactSubject> values = answered.whole().values();
             answered.perClause().forEach((each, one) -> {
-                one.adopted().forEach(position -> took.record(each.from(), position));
-                took.stoppedBy(each.from(), one.aboutARule());
+                narrowedBy.put(each.from(), one);
+                one.account().adopted().forEach(position -> took.record(each.from(), position));
+                took.stoppedBy(each.from(), one.account().aboutARule());
             });
             answered.perPart().forEach((each, parts) -> {
                 Map<Core, ReadByClauses.OfAPart> out = adoptedBy
@@ -811,7 +813,7 @@ public final class InvariantChecker {
             // And which of the clauses place an edge, asked once the positions have names to be
             // recognised by.
             Reading reading = c.directsIn(written, at, atoms, keys, held, typeAt, took,
-                    new PartsRead(readBy, adoptedBy), reach.withoutParts(), values);
+                    new PartsRead(readBy, adoptedBy, narrowedBy), reach.withoutParts(), values);
             ConstraintState<FactSubject> constraints = k.constraints()
                     .takingValuesRead(values, allowed)
                     .taking(answered.whole().ordered());
@@ -1152,9 +1154,14 @@ public final class InvariantChecker {
      *                account itself and not one projection of it: what a part adopted and what it
      *                put a constraint on are two questions, and a walk handed the first alone
      *                answers the second by reading a set that holds more than it
+     * @param byRule  what each rule's own tree came to, which is the only thing that answers what
+     *                that rule did to a position. The declaration's answer is met from every rule
+     *                reaching the position, so a reader taking it for one rule's would lend a rule
+     *                that narrows nothing whatever its neighbours narrowed
      */
     record PartsRead(Map<RuleRef, Map<Core, PartRead>> read,
-                     Map<RuleRef, Map<Core, ReadByClauses.OfAPart>> account) {
+                     Map<RuleRef, Map<Core, ReadByClauses.OfAPart>> account,
+                     Map<RuleRef, ReadByClauses.OfARule> byRule) {
 
         /** What the reading that builds the bounds made of {@code part} of {@code rule}, or null
          *  where it read no such part — which is not the same as having read it and made nothing of
@@ -1173,6 +1180,11 @@ public final class InvariantChecker {
         Set<FactSubject> adoptedIn(RuleRef rule, Core part) {
             ReadByClauses.OfAPart said = accountIn(rule, part);
             return said == null ? null : said.adopted();
+        }
+
+        /** What {@code rule}'s own tree left, or null where no reading answered over it. */
+        ReadByClauses.OfARule ruleIn(RuleRef rule) {
+            return byRule.get(rule);
         }
     }
 
@@ -1473,7 +1485,7 @@ public final class InvariantChecker {
         if (withoutParts.excludes(from, clause)) {
             return;
         }
-        restricting(clause, from, part, byName, values, parts, noLines);
+        restricting(clause, from, part, byName, parts, values, noLines);
         if (!(clause instanceof Core.Binary bin)) {
             // Nothing but a binary is written as a comparison, so there is no reading of one for
             // the classification to be handed.
@@ -1923,13 +1935,21 @@ public final class InvariantChecker {
      * turns out to be finite, and a congruence read one day all arrive without a word of this
      * changing. Read a second time here, this walk would be deciding for itself what a rule means
      * about a position, which is the one thing that has to have a single owner.
+     *
+     * <p><b>And every question is asked at the scope of what is filed.</b> What is written down
+     * names one rule and one of its conjuncts, so what the conjunct contributed is asked of that
+     * conjunct and what the rule left is asked of that rule's own tree. Taken from the declaration's
+     * answer, which is met from every rule reaching the position, {@code invariant value == 7}
+     * beside a rule that says nothing lends the second its narrowing — and the reason goes out
+     * against the one rule that holds the position to nothing.
      */
     private void restricting(Core clause, RuleRef.Invariant from, int part,
-                             Map<FactSubject, Coordinate> byName,
-                             AdmissibleValues<FactSubject> values, PartsRead parts,
+                             Map<FactSubject, Coordinate> byName, PartsRead parts,
+                             AdmissibleValues<FactSubject> together,
                              List<FieldDomains.NoLine> noLines) {
         ReadByClauses.OfAPart account = parts.accountIn(from, clause);
-        if (account == null) {
+        ReadByClauses.OfARule rule = parts.ruleIn(from);
+        if (account == null || rule == null) {
             return;
         }
         for (Map.Entry<FactSubject, Coordinate> each : byName.entrySet()) {
@@ -1941,23 +1961,19 @@ public final class InvariantChecker {
             if (!account.restricts(position) || account.bounds(position)) {
                 continue;
             }
-            // And what the rules together left there, which is what says whether the position is
-            // restricted at all. Asked of the whole and not of this part: in
-            // `value == "A" || value /= "A"` each side names values and the rule holds the position
-            // to none of them, so a reason read off one part alone would name a rule that restricts
-            // nothing.
-            //
-            // Only where the reading can promise the width it reports. A set left wide because
-            // something went unread is this compiler falling short, and published from here it
-            // would be a limit going out as a fact about the model.
-            if (!values.speaksFor(position)) {
+            // And what the rule came to once its conjuncts are put together, which is what says
+            // whether it holds the position down at all: in `value == 5 || value /= 5` each side
+            // names values and the rule leaves the position exactly as wide as it was.
+            if (!rule.narrows(position)) {
                 continue;
             }
-            ValueSet left = values.at(position);
-            // Everything, so nothing was said. Nothing, so the rules leave the position no value at
-            // all — which is a fact about the values and is said where emptiness is, rather than as
-            // a restriction to a set with nothing in it.
-            if (left.isAny() || left.isEmpty()) {
+            // And what the values come to once they are built, which is the one thing the rule's
+            // own reading cannot say: a pattern is named there and not made, so a format that
+            // accepts every string and one that accepts some read alike until a machine exists.
+            // Made once, for the position, out of every rule that reached it — so this is asked of
+            // the declaration's answer and is asked only to refuse.
+            ValueSet left = together.at(position);
+            if (!together.speaksFor(position) || left.isAny() || left.isEmpty()) {
                 continue;
             }
             FieldDomains.NoLine said = new FieldDomains.NoLine(each.getValue().at(), from, clause,

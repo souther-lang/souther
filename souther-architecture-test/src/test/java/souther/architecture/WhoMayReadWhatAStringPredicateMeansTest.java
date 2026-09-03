@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.lang.classfile.ClassFile;
+import java.lang.classfile.constantpool.ClassEntry;
 import java.lang.classfile.constantpool.MemberRefEntry;
 import java.lang.classfile.constantpool.PoolEntry;
 import java.nio.file.Files;
@@ -40,6 +41,15 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * two — a class named for anything at all, holding what the language came to — arrives here as a
  * row. A walk over spellings would find the words a reader chose and not the edge it built.
  *
+ * <p><b>Every way a class reaches the table, and not only the calls.</b> Naming a member of it is
+ * one way; naming the type is another, and that is what {@code instanceof}, {@code checkcast} and
+ * {@code new} put in a constant pool. A classifier asking only which answer it was handed calls
+ * nothing and reads the table all the same — the exact shape this exists to refuse, and the one a
+ * walk over member references passes over.
+ *
+ * <p>And each row says what it names, so a reader is licensed for the question it asks rather than
+ * for the class it happens to sit in.
+ *
  * <p>Its own tests are not read. A test builds a reading to look at it and publishes nothing, and a
  * list that moved whenever one was written is a list nobody keeps up.
  */
@@ -62,14 +72,40 @@ class WhoMayReadWhatAStringPredicateMeansTest {
      * into a row rather than an answer about the position. A format proposes a value the same way a
      * minimum does, and which of them the whole of the rules admits is settled elsewhere.
      *
+     * <p>{@code Partitions} is licensed for the reading it takes and for nothing else, which is
+     * what keeps the two apart: {@code statedByWritten} answers what a rule accepts as written, and
+     * a witness is what that is for. The reading the analysis takes is the other entry point, and a
+     * row saying {@code Partitions} names it would be a second reader of what a rule means about a
+     * position.
+     *
      * <p>A row for a class in {@code inputs}, {@code partition} or {@code report} is the edge this
      * exists to refuse: those name what a position came to, and a rule's meaning reaching them
      * except through the values it left is a second answer to a question that has an owner. So is a
      * row for {@code InvariantChecker}, which is where the edge was.
      */
+    private static final String READS = "souther/compiler/check/AdmissibleReading -> " + OWNER;
+
+    private static final String WITNESS = "souther/compiler/partition/Partitions -> " + OWNER;
+
     private static final List<String> READING_ONE = List.of(
-            "souther/compiler/check/AdmissibleReading",
-            "souther/compiler/partition/Partitions");
+            READS,
+            READS + "#statedByChecked(Lsouther/compiler/core/Core;"
+                    + "Lsouther/compiler/check/Symbols;)L" + OWNER + "$Stated;",
+            READS + "$Reading",
+            READS + "$Reading$Accepting",
+            READS + "$Reading$Accepting#accepts()Lsouther/compiler/regex/PatternSyntax;",
+            READS + "$Reading$PatternNotRead",
+            READS + "$Reading$PatternNotRead#why()Lsouther/compiler/regex/PatternRead$Unsupported;",
+            READS + "$Reading$WrittenArgumentNotKnown",
+            READS + "$Stated",
+            READS + "$Stated#reading()L" + OWNER + "$Reading;",
+            READS + "$Stated#subject()Lsouther/compiler/core/Core;",
+            WITNESS,
+            WITNESS + "#statedByWritten(Lsouther/compiler/ast/Hir$Expr;"
+                    + "Lsouther/compiler/check/Symbols;)L" + OWNER + "$Reading;",
+            WITNESS + "$Reading",
+            WITNESS + "$Reading$Accepting",
+            WITNESS + "$Reading$Accepting#accepts()Lsouther/compiler/regex/PatternSyntax;");
 
     @Test
     void everyClassThatReadsOneIsWrittenDownWithWhatItReadsItFor() {
@@ -101,7 +137,8 @@ class WhoMayReadWhatAStringPredicateMeansTest {
                         + " passes over a module answers about the rest while saying it answers"
                         + " about all of them");
         assertTrue(modulesRead() > 1,
-                "the classes this reads are in more than the one module that declares the table");
+                "this walk goes over more than one module's classes, so a reader of the table"
+                        + " written outside the one that declares it is one it would find");
     }
 
     /**
@@ -113,12 +150,13 @@ class WhoMayReadWhatAStringPredicateMeansTest {
      */
     @Test
     void andTheWalkSeesAReaderThatIsThere() {
-        assertTrue(readingOne().contains("souther/compiler/check/AdmissibleReading"),
+        assertTrue(readingOne().stream()
+                        .anyMatch(each -> each.startsWith("souther/compiler/check/AdmissibleReading")),
                 "the reading that turns a predicate into the strings it admits reads the table, so a"
                         + " walk that cannot find it is finding nothing at all");
     }
 
-    /** Every class whose constant pool names a member of the table, or of one of its answers. */
+    /** Every class whose constant pool reaches the table, with what it names of it. */
     private static Set<String> readingOne() {
         Set<String> found = new TreeSet<>();
         for (Path module : REPOSITORY.modules()) {
@@ -132,14 +170,33 @@ class WhoMayReadWhatAStringPredicateMeansTest {
                     continue;
                 }
                 for (PoolEntry entry : constantPoolOf(each)) {
-                    if (entry instanceof MemberRefEntry member
-                            && names(member.owner().name().stringValue())) {
-                        found.add(reader);
+                    String named = reached(entry);
+                    if (named != null) {
+                        found.add(reader + " -> " + named);
                     }
                 }
             }
         }
         return found;
+    }
+
+    /**
+     * What one constant reaches of the table, or null where it reaches none of it.
+     *
+     * <p>A member by the whole of what it is, and a type by its name. The two are different ways of
+     * reaching the same table and a reader is licensed for whichever it uses, so they are one
+     * vocabulary of rows rather than two lists that could disagree about who reads what.
+     */
+    private static String reached(PoolEntry entry) {
+        if (entry instanceof MemberRefEntry member
+                && names(member.owner().name().stringValue())) {
+            return member.owner().name().stringValue() + "#" + member.name().stringValue()
+                    + member.type().stringValue();
+        }
+        if (entry instanceof ClassEntry type && names(type.name().stringValue())) {
+            return type.name().stringValue();
+        }
+        return null;
     }
 
     /** Whether a member's owner is the table or one of the answers it declares. */

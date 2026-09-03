@@ -161,24 +161,37 @@ class ALineReadAtAPositionSaysNothingAboutTheRuleBesideItTest {
     }
 
     /**
-     * And a rule whose text this could not work out restricts nothing it can name.
+     * A conjunct whose surviving branch is about another position does not hold this one down.
      *
-     * <p>The written argument of the format above is a position and not a literal, so which strings
-     * it admits was never worked out and the position is left at every value. A reading that filed
-     * a restriction anyway would be saying the model holds a position down on the strength of a
-     * rule it did not read.
+     * <p>What a reading settled and what it constrained are two answers, and only the second is a
+     * rule binding a value. No string is both {@code "A"} and {@code "B"}, so the branch asking for
+     * both is one nothing satisfies — and a dead branch settles every position it named by imposing
+     * nothing on it, which the account records as settled rather than as read. What is left of that
+     * conjunct is a rule about {@code b}, and taken for a constraint on {@code a} it is filed as
+     * holding {@code a} to what it admits: an author is sent to a clause about another field, and
+     * to a branch that is not there.
+     *
+     * <p>The pair of fields is what makes the difference visible. Where the surviving branch names
+     * the same position, the account reads it there anyway and the two answers agree; the one that
+     * is settled and not read is a position only the dead branch spoke of.
+     *
+     * <p>Asked of the reading and not of a report. Two rules with no line at one position come out
+     * as one finding, so a report shows one entry whichever answer the account gave.
      */
     @Test
-    void andOneWhoseValuesWereNeverWorkedOutRestrictsNothing() {
+    void aConjunctSettledByADeadBranchIsNotOneThatRestricts() {
         FieldDomains read = readingOf("""
                 module example.parcels
 
-                data Parcel = { label: String, length: Int }
-                    invariant String.matches(label, "[A-Z]+")
-                    invariant length /= 5
-                """, "Parcel");
+                data Code = { a: String, b: Int }
+                    invariant r = ((String.matches("A", a) && String.matches("B", a)) || b == 1)
+                        && String.matches("T[0-9]{3}", a)
+                """, "Code");
 
-        assertEquals(List.of(), read.noLineAt(RuleKey.of("label")));
+        assertEquals(List.of(new BlockReason.RuleRestrictingToAdmittedValues()),
+                reasonsAt(read, "a"),
+                () -> "the format holds `a` to what it admits and the conjunct beside it does not: "
+                        + read.noLineAt(RuleKey.of("a")));
     }
 
     /**

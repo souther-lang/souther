@@ -174,6 +174,22 @@ record Adoption<A>(Set<A> read, Set<A> settled, Set<A> missed, boolean dropped) 
                 && !missed.contains(position);
     }
 
+    /**
+     * Whether this reading put a constraint on {@code position} that binds.
+     *
+     * <p>{@link #read} and nothing else of the three: a position a dead alternative settled is one
+     * this imposes nothing on, which is an answer and not a constraint. And {@link #missed} taken
+     * off it, because that is what the field is open to — an alternative nothing could read is one
+     * a value can satisfy instead, so what was said of the position beside it binds nothing.
+     *
+     * <p>Here rather than at a caller, so that the subtraction is made wherever the question is
+     * asked. Spelled at one reader, {@code value /= 5 || f(value)} with {@code f} unread answers
+     * that the clause holds the position away from five.
+     */
+    boolean constrains(A position) {
+        return read.contains(position) && !missed.contains(position);
+    }
+
     /** The positions any part of the clause was about. */
     Set<A> mentions() {
         return union(union(read, settled), missed);
