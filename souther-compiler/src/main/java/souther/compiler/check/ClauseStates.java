@@ -66,7 +66,7 @@ sealed interface ClauseStates {
      *              and the second is a question with no answer rather than one nobody asked
      */
     record ABound(Set<NumberAt<RuleKey>> lines, Set<RuleKey> named,
-                  SequencedMap<RuleKey, BlockReason.RuleReadingStopped> unread)
+                  SequencedMap<RuleKey, List<BlockReason.RuleReadingStopped>> unread)
             implements ClauseStates {
 
         public ABound {
@@ -166,7 +166,7 @@ sealed interface ClauseStates {
      *              would lose it to a name beside it that was not
      */
     record SomethingElse(Set<RuleKey> named,
-                         SequencedMap<RuleKey, BlockReason.RuleReadingStopped> unread)
+                         SequencedMap<RuleKey, List<BlockReason.RuleReadingStopped>> unread)
             implements ClauseStates {
 
         public SomethingElse {
@@ -183,8 +183,10 @@ sealed interface ClauseStates {
                     new java.util.LinkedHashMap<>());
         }
 
-        /** The same, told which names the reading of the form left a line undecided at. */
-        SomethingElse unread(SequencedMap<RuleKey, BlockReason.RuleReadingStopped> why) {
+        /** The same, told which names the reading of the form left a line undecided at, and what
+         *  stopped it at each — every reason, since one clause read a branch at a time can be
+         *  stopped by one thing in one branch and another in the next. */
+        SomethingElse unread(SequencedMap<RuleKey, List<BlockReason.RuleReadingStopped>> why) {
             return why.isEmpty() ? this : new SomethingElse(named, why);
         }
     }

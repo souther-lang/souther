@@ -1717,16 +1717,16 @@ public final class InvariantChecker {
         })) {
             return new ClauseStates.ARelation();
         }
-        // What a rule about the strings at a position came to, where this conjunct is one. Such a
-        // rule states where the values stop exactly when the strings it admits run between places
-        // the order does not already hold them, which is the reading's own answer and not something
-        // read back off the ends it produced.
-        SequencedMap<RuleKey, BlockReason.RuleReadingStopped> stopped =
+        SequencedMap<RuleKey, List<BlockReason.RuleReadingStopped>> stopped =
                 stoppedOnTheFormOf(found, read, byName);
         // And where whether it states one was not worked out, the question stands with no answer.
         // Left out, a limit of this compiler would come out as a rule that raises no such question,
         // which is what a rule read to the end and stating no bound comes out as.
-        stopped.putAll(runs.undecided(byName));
+        //
+        // Both readings' reasons at a name either of them stopped at, since either is a thing that
+        // would have to change: written over the other, whichever ran second would be the only one
+        // an author was sent to.
+        runs.undecided(byName).forEach((name, why) -> stopped.merge(name, why, InvariantChecker::alsoSaying));
         // What a rule about the strings at a position came to, where this conjunct is one. Such a
         // rule states where the values stop exactly when the strings it admits run between places
         // the order does not already hold them, which is the reading's own answer and not something
@@ -1754,9 +1754,9 @@ public final class InvariantChecker {
      * classification is given in, and taking one would put the answer inside the thing it is an
      * answer about.
      */
-    private SequencedMap<RuleKey, BlockReason.RuleReadingStopped> stoppedOnTheFormOf(
+    private SequencedMap<RuleKey, List<BlockReason.RuleReadingStopped>> stoppedOnTheFormOf(
             List<RuleKey> found, CanonicalForm read, Map<FactSubject, Coordinate> byName) {
-        SequencedMap<RuleKey, BlockReason.RuleReadingStopped> out = new LinkedHashMap<>();
+        SequencedMap<RuleKey, List<BlockReason.RuleReadingStopped>> out = new LinkedHashMap<>();
         // Only a rule that orders the values. An equality singles one out and puts no end anywhere,
         // which is what it states and not what a reading of it managed — so however little of the
         // form was read, there is no line for anything to be undecided about.
@@ -1771,7 +1771,7 @@ public final class InvariantChecker {
         // rather than said once of the clause.
         BlockReason.RuleReadingStopped why = UnreadComparison.notAboutOwnValues(
                 placesIn(stopped.stoppedAt(), stopped.under(), byName).origin());
-        found.forEach(each -> out.put(each, why));
+        found.forEach(each -> out.put(each, List.of(why)));
         return out;
     }
 
@@ -2016,10 +2016,14 @@ public final class InvariantChecker {
             // established about that. What is written down is what stopped it: said as a rule read
             // to the end without a line, a limit of this compiler would be published as a fact
             // about the model.
-            BlockReason.RuleReadingStopped stopped = runs.stoppedAt(position);
-            if (stopped != null) {
-                add(noLines, new FieldDomains.NoLine(each.getValue().at(), from, clause, part,
-                        stopped));
+            // One finding per reason. A clause read a branch at a time can be stopped by one thing
+            // in one branch and another in the next, and those send an author to two different
+            // places; the first of them standing for the rest would make which one they are sent to
+            // turn on which branch was written first.
+            List<BlockReason.RuleReadingStopped> stopped = runs.stoppedAt(position);
+            if (!stopped.isEmpty()) {
+                stopped.forEach(why -> add(noLines,
+                        new FieldDomains.NoLine(each.getValue().at(), from, clause, part, why)));
                 continue;
             }
             // And what the rule itself came to once its own choices are decided and its own
@@ -2033,6 +2037,15 @@ public final class InvariantChecker {
                     part, new BlockReason.RuleRestrictingToAdmittedValues());
             add(noLines, said);
         }
+    }
+
+    /** Both lists, the second's after the first's, each reason once. */
+    private static List<BlockReason.RuleReadingStopped> alsoSaying(
+            List<BlockReason.RuleReadingStopped> these,
+            List<BlockReason.RuleReadingStopped> those) {
+        List<BlockReason.RuleReadingStopped> out = new ArrayList<>(these);
+        those.stream().filter(each -> !out.contains(each)).forEach(out::add);
+        return List.copyOf(out);
     }
 
     /** One finding per rule and reason, however many readers arrive at it. */
@@ -2211,16 +2224,13 @@ public final class InvariantChecker {
         }
 
         /** What stopped the reading at each name it stopped at, for the classification to carry. */
-        SequencedMap<RuleKey, BlockReason.RuleReadingStopped> undecided(
+        SequencedMap<RuleKey, List<BlockReason.RuleReadingStopped>> undecided(
                 Map<FactSubject, Coordinate> byName) {
-            SequencedMap<RuleKey, BlockReason.RuleReadingStopped> out = new LinkedHashMap<>();
+            SequencedMap<RuleKey, List<BlockReason.RuleReadingStopped>> out = new LinkedHashMap<>();
             byPosition.forEach((position, run) -> {
                 Coordinate found = byName.get(position);
                 if (run instanceof Run.Undecided it && found != null) {
-                    // The first of them, which is the one the clause writes first. This door holds
-                    // one reason per name; the rest are kept where they were established, so that
-                    // the day it holds more they are there to be said.
-                    out.put(found.path(), it.why().get(0));
+                    out.put(found.path(), it.why());
                 }
             });
             return out;
@@ -2232,8 +2242,8 @@ public final class InvariantChecker {
         }
 
         /** What stopped the reading at {@code position}, or null where nothing did. */
-        BlockReason.RuleReadingStopped stoppedAt(FactSubject position) {
-            return byPosition.get(position) instanceof Run.Undecided it ? it.why().get(0) : null;
+        List<BlockReason.RuleReadingStopped> stoppedAt(FactSubject position) {
+            return byPosition.get(position) instanceof Run.Undecided it ? it.why() : List.of();
         }
     }
 

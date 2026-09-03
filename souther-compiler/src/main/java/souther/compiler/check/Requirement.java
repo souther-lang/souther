@@ -59,16 +59,24 @@ public sealed interface Requirement {
      *
      * @param at  where the classification stopped, in the vocabulary of the value being read
      * @param why what this compiler could not do there, which is what would have to change before
-     *            the rule could be classified
+     *            the rule could be classified. Every one of them, in the order the clause writes
+     *            them: one clause read a branch at a time can be stopped by one thing in one branch
+     *            and another in the next, and those go out under different words — so which of them
+     *            a reader is shown may not turn on which branch was written first
      */
-    record BoundaryUndetermined(RuleKey at, BlockReason.RuleReadingStopped why)
+    record BoundaryUndetermined(RuleKey at, java.util.List<BlockReason.RuleReadingStopped> why)
             implements Requirement {
 
         public BoundaryUndetermined {
-            if (at == null || why == null) {
+            if (at == null || why.isEmpty()) {
                 throw new IllegalArgumentException("a classification that did not come out"
                         + " stopped somewhere, for a reason");
             }
+            why = java.util.List.copyOf(why);
+        }
+
+        BoundaryUndetermined(RuleKey at, BlockReason.RuleReadingStopped one) {
+            this(at, java.util.List.of(one));
         }
     }
 }

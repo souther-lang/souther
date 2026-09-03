@@ -1633,8 +1633,13 @@ public final class InputDomain {
                                                      RulesWithNoLine.Gathered found) {
         List<StandingQuestion> out = new ArrayList<>();
         for (PlacedRules.RuleUnclassifiedAt each : placed.unclassified(path)) {
-            found.asked(StandingQuestion.BoundaryUndetermined.of(each.rule(), each.cited(),
-                    FilingCoordinate.at(path), each.at().why()));
+            // One question per thing that stopped it. A published question carries one reason, and
+            // a classification can have been stopped by more than one — a clause read a branch at a
+            // time is stopped by whatever stopped each branch — so they are asked as the several
+            // questions they are rather than one of them standing for the rest.
+            each.at().why().forEach(why ->
+                    found.asked(StandingQuestion.BoundaryUndetermined.of(each.rule(), each.cited(),
+                            FilingCoordinate.at(path), why)));
         }
         for (souther.compiler.check.RuleAccounting.Unanswered each : placed.unanswered(path)) {
             out.add(StandingQuestion.Exact.of(each.rule(), each.cited(),

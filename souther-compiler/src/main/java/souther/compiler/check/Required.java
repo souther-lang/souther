@@ -289,7 +289,8 @@ public sealed interface Required {
      * a number and left the next standing. Read off one arm alone, the second clause's open
      * question went out as one nobody asked.
      */
-    private static Map<RuleKey, BlockReason.RuleReadingStopped> unreadIn(ClauseStates states) {
+    private static Map<RuleKey, java.util.List<BlockReason.RuleReadingStopped>> unreadIn(
+            ClauseStates states) {
         return switch (states) {
             case ClauseStates.ABound it -> it.unread();
             case ClauseStates.SomethingElse it -> it.unread();
@@ -329,7 +330,7 @@ public sealed interface Required {
                 }
                 // And the reading that stopped, whichever arm the clause came out as. A name it
                 // settled is settled whatever it left beside it.
-                BlockReason.RuleReadingStopped why = unreadIn(states).get(at);
+                java.util.List<BlockReason.RuleReadingStopped> why = unreadIn(states).get(at);
                 yield why == null ? new ObligationClassification.NotRaised()
                         : new ObligationClassification.Undetermined(why);
             }
