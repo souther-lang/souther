@@ -69,7 +69,9 @@ public final class BoundOperationFacts {
     private final Map<ValueName, List<DefinitionCase<DeclaredArgument>>> cases;
     private final Map<OperationSubject, Set<ValueName>> silences;
 
-    /** Made by the binder and by nothing else: what these are is what a binding came to. */
+    /** Made by the binder and by nothing else: what these are is what a binding came to, and a
+     *  set of facts gathered anywhere else would say so of facts nothing bound. Counted from the
+     *  class files, as the arms' own constructors are. */
     BoundOperationFacts(List<BoundOperationFact> bound) {
         this.held = List.copyOf(bound);
         for (BoundOperationFact fact : held) {

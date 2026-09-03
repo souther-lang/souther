@@ -432,7 +432,6 @@ final class DischargeRules {
     static boolean isQuantifier(ValueName operation) {
         return facts().statesItsPredicateOfEveryElement(operation);
     }
-
     /**
      * The rewrite an emptiness check stands for, or null where {@code operation} is not one.
      *

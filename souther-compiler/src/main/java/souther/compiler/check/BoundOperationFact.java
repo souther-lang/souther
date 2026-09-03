@@ -43,8 +43,18 @@ import java.util.Set;
  * is a kind an operation states as many of as it states: two bounds are two facts. The family is
  * chosen where the arm is written, so a kind added cannot leave whether it may repeat to whichever
  * collector happens to receive it.
+ *
+ * <p><b>Made by the binder and by nothing else.</b> One of these says a fact was held to the
+ * library, and that is true of a value only where the holding made it: an arm a reader wrote for
+ * itself would say the same thing about a fact nothing checked. So this package's, and the
+ * constructor of every arm is called by {@link OperationFactBinder} alone — counted from the class
+ * files ({@code OnlyTheBinderReadsTheAuthoringVocabularyTest}) rather than trusted to a modifier,
+ * since a name this package can reach is a name this package can call. The same is held of what
+ * the arguments are made of ({@link DeclaredArgument}) and of what the arms are gathered into
+ * ({@link BoundOperationFacts}), so the three steps from an authored fact to a fact a reader holds
+ * are each taken in one place.
  */
-public sealed interface BoundOperationFact permits BoundOperationFact.OneAboutAnOperation,
+sealed interface BoundOperationFact permits BoundOperationFact.OneAboutAnOperation,
         BoundOperationFact.SeveralAboutAnOperation {
 
     /** The operation this is about, read against its declaration. */

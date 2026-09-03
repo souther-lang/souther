@@ -36,11 +36,15 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * answer that agrees with the binder's for exactly as long as nobody changes either.
  *
  * <p>So the boundary is counted from what javac made of the module, on both sides. Above it, the
- * authoring vocabulary is named by its own package and by the binder and by nothing else; the
- * declarations are read by the binder alone; a bound argument is minted by the binder alone. Below
- * it, no arm of a bound fact carries an authored name or word, and the readers of what an operation
- * hands its closure are each written down with what they want it for — since a reader that wanted
- * it to find a fact's argument would be the binder's question asked again.
+ * authoring vocabulary is named by its own package and by the binder and by nothing else, and the
+ * declarations are read by the binder alone. Across it, each of the three steps from an authored
+ * fact to a fact a reader holds is taken by the binder alone: a bound argument, a bound fact, and
+ * the gathering of them are each minted nowhere else — since a bound fact a reader wrote for itself
+ * would say a fact was held to the library where nothing held it, and would read no authoring
+ * vocabulary for the census above to see. Below it, no arm of a bound fact carries an authored name
+ * or word, and the readers of what an operation hands its closure are each written down with what
+ * they want it for — since a reader that wanted it to find a fact's argument would be the binder's
+ * question asked again.
  *
  * <p>Each set is compared whole rather than counted. A count lets one name be dropped and another
  * added and says nothing about it, which is exactly the edit this is here to catch.
@@ -173,6 +177,60 @@ class OnlyTheBinderReadsTheAuthoringVocabularyTest {
                 "nothing mints a bound argument, so the rule about who may is about nothing");
     }
 
+    /** Every concrete arm of a bound fact, through both families. */
+    private static List<Class<?>> boundArms() {
+        List<Class<?>> arms = new ArrayList<>();
+        for (Class<?> family : BoundOperationFact.class.getPermittedSubclasses()) {
+            arms.addAll(List.of(family.getPermittedSubclasses()));
+        }
+        assertFalse(arms.isEmpty(), "there are arms for this to be about");
+        return arms;
+    }
+
+    /**
+     * Every arm of a bound fact is made by the binder and by nothing else.
+     *
+     * <p>A bound fact says a fact was held to the library, which is true of a value only where the
+     * holding made it. An arm a reader wrote for itself — one naming no argument needs nothing but
+     * an operation to be written — would say the same thing about a fact nothing checked, and no
+     * census of who reads the authoring vocabulary would see it, since it reads none. So who calls
+     * each arm's constructor is counted, arm by arm, and the answer is the binder.
+     */
+    @Test
+    void onlyTheBinderMintsABoundFact() {
+        Map<String, Set<String>> minted = new TreeMap<>();
+        for (Class<?> arm : boundArms()) {
+            Set<String> minting = WhatWasCompiled.callersOf(arm, "<init>");
+            if (!minting.equals(Set.of(BINDER))) {
+                minted.put(arm.getSimpleName(), minting);
+            }
+        }
+        assertEquals(Map.of(), minted,
+                "a bound fact made anywhere but the binder says a fact was held to the library"
+                        + " where nothing held it");
+    }
+
+    /** And the binder makes every one of them, so the rule above is about every arm. */
+    @Test
+    void andTheBinderMintsEveryArm() {
+        Set<String> unmade = new TreeSet<>();
+        for (Class<?> arm : boundArms()) {
+            if (WhatWasCompiled.callersOf(arm, "<init>").isEmpty()) {
+                unmade.add(arm.getSimpleName());
+            }
+        }
+        assertEquals(Set.of(), unmade,
+                "an arm nothing makes is one the rule about who may make it is about nothing");
+    }
+
+    /** And the facts are gathered by the binder alone: a set gathered anywhere else would say
+     *  every fact in it was bound. */
+    @Test
+    void onlyTheBinderGathersTheBoundFacts() {
+        assertEquals(Set.of(BINDER), WhatWasCompiled.callersOf(BoundOperationFacts.class, "<init>"),
+                "the bound facts are what a binding came to, and are gathered where it ran");
+    }
+
     /**
      * Every arm of a bound fact is in one of the two families, and no arm carries an authored name
      * or word.
@@ -188,13 +246,8 @@ class OnlyTheBinderReadsTheAuthoringVocabularyTest {
                         BoundOperationFact.SeveralAboutAnOperation.class),
                 Set.of(BoundOperationFact.class.getPermittedSubclasses()),
                 "a bound fact is one of two families, and an arm is in one of them");
-        List<Class<?>> arms = new ArrayList<>();
-        for (Class<?> family : BoundOperationFact.class.getPermittedSubclasses()) {
-            arms.addAll(List.of(family.getPermittedSubclasses()));
-        }
-        assertFalse(arms.isEmpty(), "there are arms for this to be about");
         Map<String, String> unbound = new TreeMap<>();
-        for (Class<?> arm : arms) {
+        for (Class<?> arm : boundArms()) {
             assertTrue(arm.isRecord(), arm + " is a bound fact and is not a record");
             for (RecordComponent component : arm.getRecordComponents()) {
                 String type = component.getGenericType().getTypeName();
