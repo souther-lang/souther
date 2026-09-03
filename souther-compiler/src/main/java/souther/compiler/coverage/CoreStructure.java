@@ -3,7 +3,11 @@ package souther.compiler.coverage;
 import souther.compiler.core.Core;
 
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.function.IntFunction;
 
 /**
@@ -173,11 +177,19 @@ public final class CoreStructure {
 
         private final List<Child> children;
 
-        private final List<Edge> taken = new ArrayList<>();
+        /** The same children, by slot. One edge apiece, so a slot is looked up rather than
+         *  searched for: a list literal has as many slots as it has elements, and a scan per
+         *  step down is a walk quadratic in the width of the node it is walking. */
+        private final Map<Edge, Child> bySlot;
+
+        private final Set<Edge> taken = new HashSet<>();
 
         private Children(Core of, List<Child> children) {
             this.of = of;
             this.children = children;
+            Map<Edge, Child> bySlot = new HashMap<>();
+            children.forEach(child -> bySlot.put(child.edge(), child));
+            this.bySlot = bySlot;
         }
 
         /** The children of {@code e}, to be taken a slot at a time. */
@@ -194,26 +206,23 @@ public final class CoreStructure {
          * the right — and it is the one nothing else here would notice.
          */
         Core take(Edge edge, Core expected) {
-            for (Child child : children) {
-                if (!child.edge().equals(edge)) {
-                    continue;
-                }
-                if (taken.contains(edge)) {
-                    throw new IllegalStateException("the " + edge + " of a "
-                            + of.getClass().getSimpleName() + " at " + of.pos()
-                            + " was taken twice");
-                }
-                if (child.node() != expected) {
-                    throw new IllegalStateException("the " + edge + " of a "
-                            + of.getClass().getSimpleName() + " at " + of.pos()
-                            + " holds something other than what the walk reached for");
-                }
-                taken.add(edge);
-                return child.node();
+            Child child = bySlot.get(edge);
+            if (child == null) {
+                throw new IllegalStateException("a " + of.getClass().getSimpleName() + " at "
+                        + of.pos() + " has no " + edge + "; its slots are "
+                        + children.stream().map(Child::edge).toList());
             }
-            throw new IllegalStateException("a " + of.getClass().getSimpleName() + " at " + of.pos()
-                    + " has no " + edge + "; its slots are "
-                    + children.stream().map(Child::edge).toList());
+            if (!taken.add(edge)) {
+                throw new IllegalStateException("the " + edge + " of a "
+                        + of.getClass().getSimpleName() + " at " + of.pos()
+                        + " was taken twice");
+            }
+            if (child.node() != expected) {
+                throw new IllegalStateException("the " + edge + " of a "
+                        + of.getClass().getSimpleName() + " at " + of.pos()
+                        + " holds something other than what the walk reached for");
+            }
+            return child.node();
         }
 
         /**
