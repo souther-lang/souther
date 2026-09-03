@@ -98,10 +98,8 @@ class AComparisonSaysWhichWayItCameOutTest {
                 .findFirst()
                 .orElseThrow(() -> new AssertionError(
                         "the row that answered both comparisons reached the second one"));
-        assertFalse(early.taken().contains(second.at()),
-                "which the row that short-circuited never reached");
         assertFalse(early.comparisons().contains(new ComparisonOutcome(second.at(), true)),
-                "so it did not come out one way");
+                "the row that short-circuited did not have it come out one way");
         assertFalse(early.comparisons().contains(new ComparisonOutcome(second.at(), false)),
                 "nor the other");
     }
@@ -127,24 +125,32 @@ class AComparisonSaysWhichWayItCameOutTest {
     }
 
     /**
-     * A comparison recorded as having come out a way is a comparison recorded as reached.
+     * A comparison's number is recorded among the comparisons and nowhere else.
      *
-     * <p>Held by how the recording is written rather than by the emitter keeping to it: one call
-     * records both. So a run that has the first without the second is one nothing produces, and
-     * whoever reads the sites and whoever reads the ways out are reading one run.
+     * <p>What a run leaves behind is a family apiece. There is no second place a comparison could
+     * be written as reached — its having come out a way is that — so nothing has to keep two
+     * records of one comparison in step, and no reader has to work out which family a number
+     * belongs to after the numbering has already said.
      */
     @Test
-    void awayOutImpliesItsComparisonWasReached() {
+    void aComparisonIsRecordedAmongTheComparisonsAndNotAmongTheArms() {
         Compilation compilation = compiled();
-        Behavior submit = new Behavior(probed(compilation),
-                checkedPlanOf(compilation).identity());
+        CoverageSites.Plan plan = checkedPlanOf(compilation);
+        Behavior submit = new Behavior(probed(compilation), plan.identity());
+        Set<Integer> comparisons = plan.sites().stream()
+                .filter(CoverageSites.ComparisonSite.class::isInstance)
+                .map(site -> ((CoverageSites.ComparisonSite) site).index().raw())
+                .collect(java.util.stream.Collectors.toSet());
+        assertFalse(comparisons.isEmpty(), "the model under test writes comparisons");
 
         for (long cost : new long[] {-1L, 50L, 500L}) {
             Observation seen = submit.observing(cost);
-            for (ComparisonOutcome each : seen.comparisons()) {
-                assertTrue(seen.taken().contains(each.at()),
-                        "a way out of " + each.at() + " was recorded, so it was reached");
+            for (int arm : seen.arms()) {
+                assertFalse(comparisons.contains(arm),
+                        "no comparison of this plan is recorded as an arm: " + arm);
             }
+            assertFalse(seen.comparisons().isEmpty(),
+                    "and every one of these rows evaluated a comparison");
         }
     }
 

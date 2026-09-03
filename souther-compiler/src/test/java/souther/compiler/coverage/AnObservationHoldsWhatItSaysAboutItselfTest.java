@@ -8,58 +8,57 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * What a record of a run may say, held where the record is made rather than where it is written.
+ * A number a run holds is one the numbering issued to the family it is recorded under.
  *
- * <p>The one producer today records a comparison being reached and the way it came out in a single
- * call, so nothing it makes can break this. That is how the producer is written and producers get
- * rewritten; what every reader of a run is entitled to is that the two agree, because a claim about
- * a place is certified against exactly that.
+ * <p>The two families take their numbers from one counter, so nothing in a number says which of
+ * them it was written for. What says it is which call wrote it down — and the recording keeps them
+ * apart, so the answer is the record's own rather than something a reader works out afterwards by
+ * asking the numbering about a set holding both.
  *
- * <p>Both directions, because either half alone is a value a reader is answered wrongly from. A way
- * out of a place the run says it never reached certifies a claim about somewhere it was not; a
- * place the run reached that no way out is recorded for reads as a comparison nothing evaluated,
- * which is what a row that short-circuited past it looks like.
+ * <p>Held where the recording is made rather than where it is read. A number written into the wrong
+ * family is the emitter having lit a place it was not at, and a reader meeting it later has a run
+ * saying something no run could say: an arm no arm was ever emitted for, or a comparison that never
+ * came out any way at all.
+ *
+ * <p>What is <em>not</em> held here, said rather than left to be looked for: nothing relates the two
+ * sets. A comparison is recorded by the way it came out and by nothing else, so there is no second
+ * record of it to agree with — which is what makes each of them mean something on its own.
  */
 class AnObservationHoldsWhatItSaysAboutItselfTest {
 
-    /** A comparison at 0 and an arm at 1, so a number of each family is in play and the numbering
-     *  can be asked which is which. */
+    /** A comparison at 0 and an arm at 1, so each family has a number the other does not. */
     private static final SiteNumbering NUMBERING =
             Numberings.of(Numberings.Family.COMPARISON, Numberings.Family.ARM);
 
     private static final NumberingIdentity UNDER = NUMBERING.identity();
 
     @Test
-    void awayOutOfAComparisonMeansTheComparisonWasReached() {
-        ComparisonOutcome held = new ComparisonOutcome(0, true);
-
-        assertThrows(IllegalArgumentException.class,
-                () -> new Observation(UNDER, Set.of(), Set.of(held)),
-                "a run that saw a comparison come out one way reached it");
-        assertTrue(new Observation(UNDER, Set.of(0), Set.of(held)).comparisons().contains(held),
-                "and one that holds both says so");
-    }
-
-    /**
-     * And a comparison reached is one that came out some way.
-     *
-     * <p>The same call records both, so a run holding the number and no way out of it is one
-     * nothing produces. Left unheld, such a run reads as a comparison that was never evaluated —
-     * the answer a row which short-circuited past it gives — and the two would be one.
-     */
-    @Test
-    void aComparisonReachedMeansAWayOutOfItWasRecorded() {
+    void aComparisonsNumberIsNotAnArmARunPassed() {
         IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
                 () -> new Observation(UNDER, Set.of(0), Set.of()));
 
-        assertTrue(refused.getMessage().contains("come out some way"), refused.getMessage());
+        assertTrue(refused.getMessage().contains("recorded as an arm"), refused.getMessage());
     }
 
-    /** And an arm reached is just an arm reached: what a fork's arm has is no way out to record. */
     @Test
-    void anArmReachedIsNotHeldToHavingComeOutAnyWay() {
-        assertTrue(new Observation(UNDER, Set.of(1), Set.of()).taken().contains(1),
-                "which is what says the rule above is about the comparisons");
+    void anArmsNumberIsNoComparisonARunEvaluated() {
+        IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
+                () -> new Observation(UNDER, Set.of(),
+                        Set.of(new ComparisonOutcome(1, true))));
+
+        assertTrue(refused.getMessage().contains("recorded as a comparison"),
+                refused.getMessage());
+    }
+
+    /** And each family holds its own, which is what says the refusals above are about the family
+     *  and not about holding anything at all. */
+    @Test
+    void andEachFamilyHoldsItsOwn() {
+        Observation seen = new Observation(UNDER, Set.of(1),
+                Set.of(new ComparisonOutcome(0, true)));
+
+        assertTrue(seen.arms().contains(1));
+        assertTrue(seen.comparisons().contains(new ComparisonOutcome(0, true)));
     }
 
     /**
@@ -71,7 +70,7 @@ class AnObservationHoldsWhatItSaysAboutItselfTest {
      */
     @Test
     void bothWaysOutOfOneComparisonAreARunThatCameBackToIt() {
-        Observation seen = new Observation(UNDER, Set.of(0),
+        Observation seen = new Observation(UNDER, Set.of(),
                 Set.of(new ComparisonOutcome(0, true), new ComparisonOutcome(0, false)));
 
         assertTrue(seen.comparisons().contains(new ComparisonOutcome(0, true)));

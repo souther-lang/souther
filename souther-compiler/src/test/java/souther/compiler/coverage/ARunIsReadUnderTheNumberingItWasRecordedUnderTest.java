@@ -43,7 +43,9 @@ class ARunIsReadUnderTheNumberingItWasRecordedUnderTest {
 
     @Test
     void aRecordingOfAnotherNumberingIsRefusedRatherThanAnswered() {
-        Observation seen = new Observation(elsewhere().identity(), Set.of(0, 1),
+        // A run of the other numbering, recorded at its own places: its arm is 1 and its
+        // comparisons are 0 and 2, which is exactly what this numbering has the other way round.
+        Observation seen = new Observation(elsewhere().identity(), Set.of(1),
                 Set.of(new ComparisonOutcome(0, true)));
 
         IllegalArgumentException refused =
@@ -64,7 +66,7 @@ class ARunIsReadUnderTheNumberingItWasRecordedUnderTest {
      */
     @Test
     void aPlaceOfAnotherNumberingIsRefusedByARunThatWasRead() {
-        AlignedObservation read = here().align(new Observation(here().identity(), Set.of(0, 1),
+        AlignedObservation read = here().align(new Observation(here().identity(), Set.of(0, 2),
                 Set.of(new ComparisonOutcome(1, true))));
 
         assertThrows(IllegalArgumentException.class, () -> read.lit(elsewhere().arm(1)),
@@ -74,6 +76,7 @@ class ARunIsReadUnderTheNumberingItWasRecordedUnderTest {
                 "and neither is a comparison of one");
         assertThrows(IllegalArgumentException.class, () -> read.reached(elsewhere().comparison(2)),
                 "however the question is put");
+        assertTrue(read.lit(here().arm(0)), "while a place of its own is answered");
     }
 
     /**
@@ -86,7 +89,7 @@ class ARunIsReadUnderTheNumberingItWasRecordedUnderTest {
      */
     @Test
     void aRecordingIsReadUnderANumberingDerivedASecondTime() {
-        Observation seen = new Observation(here().identity(), Set.of(0, 1, 2),
+        Observation seen = new Observation(here().identity(), Set.of(0, 2),
                 Set.of(new ComparisonOutcome(1, false)));
 
         AlignedObservation read = here().align(seen);

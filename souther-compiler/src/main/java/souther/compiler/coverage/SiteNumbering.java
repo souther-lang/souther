@@ -92,18 +92,14 @@ public final class SiteNumbering {
                     + " is being read under " + identity
                     + "; a number means a place under the numbering that handed it out");
         }
+        // A family apiece, each read back as what the recording says it is. Nothing here picks the
+        // arms out of a set holding both: which family a number was issued to is this numbering's
+        // answer, and a number recorded as one family and issued to the other is refused by the
+        // reading itself rather than passed over.
         Set<ArmProbe> arms = new LinkedHashSet<>();
-        for (int raw : seen.taken()) {
-            // Which family the number was issued to is the numbering's answer, and a comparison's
-            // number is not an arm. Both are here, and what tells them apart is what was said when
-            // each was handed out.
-            if (at(raw) instanceof SiteAddress.Arm) {
-                arms.add(arm(raw));
-            }
+        for (int raw : seen.arms()) {
+            arms.add(arm(raw));
         }
-        // And the ways out, read the same way. Both halves or neither: a comparison passed through
-        // as the number it was recorded as would leave a reader asking about places by a number
-        // again, one family below the crossing this is.
         Set<SeenComparison> ways = new LinkedHashSet<>();
         for (ComparisonOutcome way : seen.comparisons()) {
             ways.add(new SeenComparison(comparison(way.at()), way.held()));

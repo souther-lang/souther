@@ -119,6 +119,13 @@ class ProbedBytecodeTest {
         Set<Integer> between = new LinkedHashSet<>(negative);
         between.addAll(cheap);
         between.addAll(dear);
+        // Both families, because the sites are both and a run records each in its own. Counted
+        // over the arms alone this would be short by every comparison the plan numbered, and
+        // counted over one set holding both it would be the number this whole numbering exists to
+        // stop a reader working out for itself.
+        for (long cost : new long[] {-1L, 50L, 500L}) {
+            submit.comparisonsFor(cost).forEach(way -> between.add(way.at()));
+        }
         assertEquals(plan.sites().size(), between.size(),
                 "between them the three rows reach every site the plan numbered");
     }
@@ -135,7 +142,7 @@ class ProbedBytecodeTest {
             Probe.begin(under);
             submit.apply(50L);
             Set<Integer> there = elsewhere.submit(() -> submit.armsFor(500L)).get();
-            Set<Integer> here = Probe.snapshot().taken();
+            Set<Integer> here = Probe.snapshot().arms();
             Probe.end();
 
             assertNotEquals(here, there);
@@ -168,7 +175,7 @@ class ProbedBytecodeTest {
         // And the hits landed nowhere: a recording begun now is a recording of what happens now.
         Probe.begin(under);
         try {
-            assertEquals(Set.of(), Probe.snapshot().taken());
+            assertEquals(Set.of(), Probe.snapshot().arms());
         } finally {
             Probe.end();
         }
@@ -292,11 +299,22 @@ class ProbedBytecodeTest {
             }
         }
 
+        /** The ways out of the comparisons this run evaluated. */
+        Set<ComparisonOutcome> comparisonsFor(long cost) {
+            Probe.begin(under);
+            try {
+                apply(cost);
+                return Probe.snapshot().comparisons();
+            } finally {
+                Probe.end();
+            }
+        }
+
         Set<Integer> armsFor(long cost) {
             Probe.begin(under);
             try {
                 apply(cost);
-                return Probe.snapshot().taken();
+                return Probe.snapshot().arms();
             } finally {
                 Probe.end();
             }

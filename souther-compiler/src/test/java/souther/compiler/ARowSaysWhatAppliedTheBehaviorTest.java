@@ -155,7 +155,7 @@ class ARowSaysWhatAppliedTheBehaviorTest {
         assertTrue(counted.steps() >= 0, "the count is this compile's own reading");
         RunRecord.Recorded recorded = assertInstanceOf(RunRecord.Recorded.class, counted.recorded(),
                 "this compile emitted what records where a row goes, so a run of one was recorded");
-        assertFalse(recorded.seen().taken().isEmpty(),
+        assertFalse(recorded.seen().arms().isEmpty(),
                 "and so are the arms it went through, this compile having emitted what counts them");
     }
 
