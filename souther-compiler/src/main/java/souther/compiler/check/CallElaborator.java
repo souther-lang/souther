@@ -185,8 +185,11 @@ public final class CallElaborator {
         // declared elsewhere, and it is the only one that carries a binding into the emitted tree
         if (callee != null && callee.denotes() instanceof ValueName.Local local
                 && env.typeOf(local.id()) instanceof Type.FnOf) {
+            // The binding's own name, as every other read of one is built with. What the author
+            // applied is the application's answer and not this read's: where a lowering bound what
+            // was applied, the two are a field read and the name it was bound to.
             return new Core.Apply(
-                    new Core.Read(call.written(), local.id(), env.typeOf(local.id()), call.pos()),
+                    new Core.Read(local.name(), local.id(), env.typeOf(local.id()), call.pos()),
                     ca.cores(), result, call.pos());
         }
         // Typing the call above refuses what is not a name outright, so what is left here names a
@@ -642,8 +645,13 @@ public final class CallElaborator {
         // arguments — f(x) (spec §fn-declaration). A newtype construction 金額(500) never
         // reaches here — NewtypeDesugar has lowered it to a NewData literal.
         // a function value in force, or a recursive helper's signature: which of the two
-        // is the denotation's to say, and only one of them is bound here
-        if (env.of(callee.denotes(), call.written()) instanceof Type.FnOf fn) {
+        // is the denotation's to say, and only one of them is bound here.
+        //
+        // Looked up by what the callee reaches. The signatures are keyed by the reference a call is
+        // left standing on, and what a report quotes is the name the author applied — which a
+        // rewrite of the callee leaves alone, so a lookup on that finds the sugar and not the
+        // operation it stands for.
+        if (env.of(callee.denotes(), callee.reaches()) instanceof Type.FnOf fn) {
             if (args.size() != fn.params().size()) {
                 throw CompileException.of(Diagnostic
                                 .at(call.appliedAt())
@@ -702,7 +710,7 @@ public final class CallElaborator {
             Elaborator.optionCaseWritten(call.written(), call.pos());
             CompileException bareLibraryName = StdlibNames.writtenBare(
                     ctx.symbols().library().names(), call.written(), call.written(),
-                    call.name().region());
+                    call.applied().reportedAt());
             if (bareLibraryName != null) {
                 throw bareLibraryName;
             }

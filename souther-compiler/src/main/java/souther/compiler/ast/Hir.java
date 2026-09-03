@@ -2053,6 +2053,79 @@ public interface Hir {
     }
 
     /**
+     * What an application applies, as a report says it: the name the author applied, and the
+     * characters they applied it over.
+     *
+     * <p>Settled where the application is read and carried from there. A lowering replaces what is
+     * in the callee position — a field read is bound to a name of its own before it is applied, a
+     * sugared library name becomes the operation it stands for, a helper of another module is
+     * written qualified — and a reader that asked the callee what the author applied would be told
+     * whatever the last pass put there. So no reader asks it: the answer is read off the source
+     * once, and every rewrite of the application hands it on.
+     *
+     * <p>Both halves, because they are two answers and the second cannot be worked out from the
+     * first. A name the author parenthesized is written over five characters and applied over
+     * seven, and a report about what is applied underlines the seven. The pair is what the reading
+     * already holds, so keeping it is keeping what was read rather than working anything out.
+     *
+     * <p>{@code name} is null where what the author applied is not a name: the result of a call, a
+     * lambda, a conditional. That is one of the three states this has, the others being a name the
+     * author wrote ({@link WrittenName#authored()}) and one a pass reached for, and none of them is
+     * an empty spelling.
+     *
+     * <p>{@code at} is never null. An application stands somewhere — where a source wrote it, or
+     * where the pass composing it put it — and a report about what it applies points there. There
+     * is no application with nowhere to point at what it applies.
+     */
+    record AppliedCallee(WrittenName name, Region at) {
+
+        public AppliedCallee {
+            Objects.requireNonNull(at, "an application is applied somewhere, and a report about"
+                    + " what it applies points there");
+        }
+
+        /** Whether what the author applied is a name — which is not whether a name is what stands
+         *  in the callee position now, a lowering having been free to put a binding of its own
+         *  there. */
+        public boolean isAName() {
+            return name != null;
+        }
+
+        /** The name as a report quotes it, or the empty spelling where what is applied is not a
+         *  name. */
+        public String quoted() {
+            return name == null ? "" : name.canonical();
+        }
+
+        /**
+         * Where a report about the name this applies points: the occurrence of the name, or the
+         * characters applied where the author applied no name.
+         *
+         * <p>The choice between two answers already held. A report about what is applied has
+         * somewhere to point either way, and where there is no name the place is the expression
+         * that stood in the callee position — which is what the author applied, being not a name.
+         */
+        public Region reportedAt() {
+            return name == null ? at : name.reportedAt();
+        }
+
+        /**
+         * The same applied callee in a file this copy is not read against — the name it was, written
+         * nowhere here, applied over {@code over} and complained about at {@code at}.
+         *
+         * <p>What the author applied travels with the copy; where they wrote it does not. A body
+         * spliced in from a source this compile cannot show carries no coordinate of that source, so
+         * the occurrence goes and the places are the ones the copy stands at — the same answer a
+         * field read taken off a copied value gives, and for the same reason.
+         */
+        public AppliedCallee restamped(SourcePos at, Region over) {
+            return new AppliedCallee(name == null ? null
+                    : WrittenName.synthetic(name.canonical(), at),
+                    over != null ? over : Region.point(at));
+        }
+    }
+
+    /**
      * A function applied to arguments. {@code function} is the thing being applied, and it is an
      * expression like any other: what is applied is what it answers, not how the application was
      * written.
@@ -2061,7 +2134,7 @@ public interface Hir {
      * carries what it denotes — a helper, a library function, an injected behavior, a function-typed
      * binding, or the type a newtype construction wraps — answered once during resolution.
      */
-    record Apply(Expr function, List<Expr> args, ConstructionOrigin origin, String appliedAs,
+    record Apply(Expr function, List<Expr> args, ConstructionOrigin origin, AppliedCallee applied,
                  SourcePos pos, Region region) implements Expr {
 
         /**
@@ -2069,26 +2142,47 @@ public interface Hir {
          * application is made from a source that writes one.
          *
          * <p>Where it came from is the body's own, because a source spells an application in the
-         * body it is written in. What a lowering replaced the written name with, where it stands
-         * and what it covers are the surface node's, which is what this is the reading of.
+         * body it is written in. What the author applied is {@code applied}, read off the surface
+         * callee by the reading that has it: which name a chain of field reads spells is a question
+         * about the source, and the answer is settled once here rather than worked out again from
+         * whatever the passes leave in the callee position.
          */
-        public static Apply read(Ast.Apply surface, Expr function, List<Expr> args) {
-            return new Apply(function, args, Origins.Own.IT_IS, surface.appliedAs(), surface.pos(),
+        public static Apply read(Ast.Apply surface, AppliedCallee applied, Expr function,
+                                 List<Expr> args) {
+            return new Apply(function, args, Origins.Own.IT_IS, applied, surface.pos(),
                     surface.region());
         }
 
         /**
          * An application a pass composed, standing where it puts it — a call that stands for a name
-         * used as a value, a library operation a rewrite reached for.
+         * used as a value, a library operation a fixture reached for.
          *
          * <p>Nobody's reading, so it says what it is in its name. Where it came from is the body it
-         * is written into: a pass composing an application is writing one there, and a pass moving
-         * an application that was already written carries what it was handed instead
-         * ({@link #with}, {@link #withArgs}, {@link #withFunction}).
+         * is written into: a pass composing an application is writing one there, and a pass
+         * rewriting one that was already written carries what it was handed instead
+         * ({@link #replacedBy}, {@link #with}, {@link #withArgs}).
+         *
+         * <p>What the author applied is whatever the callee already answers, and no more than that.
+         * A synthetic application may apply a name occurrence somebody wrote — {@code etaExpand}
+         * composes the block a bare {@code List.map} stands for, and the application is this pass's
+         * while the occurrence is the author's — so the two are not one question and this settles
+         * only the first. Where the callee is a name, its own is taken; where it is not, there is no
+         * name to answer with and nothing is invented. A chain of field reads is not read back into
+         * a name here either: which of those spells one is the source reading's answer, and a pass
+         * holding a resolved expression is not reading a source.
          */
         public static Apply synthetic(Expr function, List<Expr> args, SourcePos pos,
                                       Region region) {
-            return new Apply(function, args, Origins.Own.IT_IS, null, pos, region);
+            return new Apply(function, args, Origins.Own.IT_IS, appliedCallee(function, pos), pos,
+                    region);
+        }
+
+        /** What {@code function} answers as the applied callee, anchored at {@code where} it stands
+         *  when the callee is written nowhere at all. */
+        private static AppliedCallee appliedCallee(Expr function, SourcePos where) {
+            Region at = function.reportedAt();
+            return new AppliedCallee(function instanceof Var v ? v.written() : null,
+                    at != null ? at : Region.point(where));
         }
 
         /**
@@ -2126,55 +2220,43 @@ public interface Hir {
                     + " reaches, and the spelling would be resolved again wherever this is read";
         }
 
-        /** Whether what this applies is a name. A reader that wants the name itself matches on
-         * {@link #function()}, which is where it is. */
-        public boolean appliesAName() {
+        /**
+         * Whether a name is what stands in the callee position now.
+         *
+         * <p>Not whether the author applied one, which is {@link AppliedCallee#isAName()}. The two
+         * differ wherever a lowering has been: {@code deps.count(x)} binds the field read to a name
+         * of its own and applies the binding, so a name is what is applied here and a field read is
+         * what the author applied. A reader wanting the name itself matches on {@link #function()},
+         * which is where it is.
+         */
+        public boolean calleeIsAName() {
             return function instanceof Var;
         }
 
         /**
          * The name this applies as the source writes it, or the empty spelling where what it
-         * applies is not a name. What a report quotes and underlines.
+         * applies is not a name. What a report quotes.
          *
          * <p><b>Never a lookup key.</b> An import lets a library name be written without its
          * qualifier, so a table keyed by a declaration's name misses on the spelling — silently,
          * because a miss is what a table keyed by names does with one it has not got. Every
-         * question of the form "which declaration is this" asks {@link #reaches()}.
-         *
-         * <p>{@link #appliedAs} answers where a lowering replaced what was written with a binding
-         * it introduced: applying something other than a name binds it first, and the binding is
-         * named nothing an author could have typed. The two are separate for that reason — this
-         * one is read by reports and nothing else.
+         * question of the form "which declaration is this" asks {@link #answered()}.
          */
         public String written() {
-            return name().canonical();
+            return applied.quoted();
         }
 
         /**
-         * The name this applies, with the occurrence of it a report underlines.
+         * Where a report about what this applies points: the characters the author applied it over.
          *
-         * <p>Where a lowering replaced what was written with a binding it introduced
-         * ({@link #appliedAs}), that binding is written nowhere: the characters at {@link #pos()}
-         * spell whatever the author applied, which is no longer this.
-         */
-        public WrittenName name() {
-            if (appliedAs != null) {
-                return WrittenName.synthetic(appliedAs, pos);
-            }
-            return function instanceof Var v ? v.written() : WrittenName.synthetic("", pos);
-        }
-
-        /**
-         * Where a report about what this applies points: the characters the callee was written over.
-         *
-         * <p>Not {@link #name()}'s. The name is what a report quotes, and where a lowering replaced
-         * what was written with a binding it introduced ({@link #appliedAs}) that name is written
-         * nowhere — while the characters the binding stands for are still there, being whatever the
-         * author applied. Asking the callee gets those; asking the name gets a point at best.
+         * <p>Read off {@link #applied} and not off the callee. A lowering is free to replace what is
+         * in the callee position — with a binding it introduced, with the operation a sugared name
+         * stands for, with a helper's qualified spelling — and the characters those stand for are
+         * still whatever the author wrote. Asking the callee gets the answer only until a pass has
+         * been through.
          */
         public Region appliedAt() {
-            Region written = function.reportedAt();
-            return written != null ? written : name().reportedAt();
+            return applied.at();
         }
 
         /**
@@ -2201,40 +2283,54 @@ public interface Hir {
          * where its constructions would otherwise stand, and it is what has to say where it came
          * from. */
         public Apply carriedByValue() {
-            return new Apply(function, args, Origins.carriedByValue(origin), appliedAs, pos, region);
+            return new Apply(function, args, Origins.carriedByValue(origin), applied, pos, region);
         }
 
         /** The same application over rewritten arguments — a pass that touches only the arguments
-         *  says so here rather than listing the slots it is not changing, which is how
-         *  {@link #appliedAs} would be dropped by a rewrite that has no opinion about it. */
+         *  says so here rather than listing the slots it is not changing, which is how what the
+         *  author applied would be dropped by a rewrite that has no opinion about it. */
         public Apply withArgs(List<Expr> args) {
-            return new Apply(function, args, origin, appliedAs, pos, region);
-        }
-
-        /** The same application of another spelling of what it applies — a pass that rewrites the
-         *  callee and nothing else, which is how where the construction came from would be dropped
-         *  by a rewrite that has no opinion about it. */
-        public Apply withFunction(Expr function) {
-            return new Apply(function, args, origin, appliedAs, pos, region);
-        }
-
-        /** The same application rewritten and stamped where the copy of it stands — what a pass
-         *  that copies a body into another one writes. What it does not name it carries, which is
-         *  where the construction came from and what stands in for the written name. */
-        public Apply with(Expr function, List<Expr> args, SourcePos pos, Region region) {
-            return new Apply(function, args, origin, appliedAs, pos, region);
+            return new Apply(function, args, origin, applied, pos, region);
         }
 
         /**
-         * The same application, saying that {@code appliedAs} is what a lowering replaced the
-         * written name with.
+         * The same application, of something else — the one rewrite that puts another thing in the
+         * callee position of an application a source already wrote.
          *
-         * <p>Said here rather than by writing the application again, because the pass that
-         * introduces one is replacing what was applied with a binding it made: what it has an
-         * opinion about is the callee and this, and the rest of the application is the author's.
+         * <p>What is applied is the pass's; where the application stands, where it came from and
+         * what the author applied there are not. A sugared library name becomes the operation it
+         * stands for, a field read applied is bound to a name of its own and the binding applied,
+         * a helper of another module is written qualified — each replaces what is applied and none
+         * of them replaces what was written over those characters.
+         *
+         * <p>Taking no place to stand is what makes it that rewrite rather than {@link #with}. A
+         * replacement stands where the thing it replaces stood, so a caller choosing somewhere for
+         * it would be choosing whether this is a replacement at all.
          */
-        public Apply standingIn(String appliedAs) {
-            return new Apply(function, args, origin, appliedAs, pos, region);
+        public Apply replacedBy(Expr function) {
+            return replacedBy(function, args);
+        }
+
+        /** The same application, of something else and over rewritten arguments — the rewrite above,
+         *  where what is supplied to the new callee is not what was supplied to the old one. */
+        public Apply replacedBy(Expr function, List<Expr> args) {
+            return new Apply(function, args, origin, applied, pos, region);
+        }
+
+        /**
+         * The same application rewritten and stamped where the copy of it stands — what a pass that
+         * copies a body into another one writes. Where the construction came from it carries.
+         *
+         * <p>What the author applied it takes, because a copy is where that answer stops being one
+         * place. The name travels: a call the copy holds applies what it applied wherever the copy
+         * is read. Where they wrote it does not, and a copy read against another file carrying a
+         * coordinate of the first is a report pointing at a line its reader is not looking at.
+         * Which of the two this copy is, the pass making it knows and this does not
+         * ({@link AppliedCallee#restamped}).
+         */
+        public Apply with(AppliedCallee applied, Expr function, List<Expr> args, SourcePos pos,
+                          Region region) {
+            return new Apply(function, args, origin, applied, pos, region);
         }
 
         /** Whether a value this body named is what carried the construction this stands for in —
@@ -2275,7 +2371,7 @@ public interface Hir {
             case Neg x -> new Neg(x.operand(), x.pos(), region);
             case FieldAccess x -> new FieldAccess(x.target(), x.name(), x.pos(), region);
             case Binary x -> new Binary(x.op(), x.left(), x.right(), x.origin(), x.pos(), region);
-            case Apply x -> new Apply(x.function(), x.args(), x.origin(), x.appliedAs(), x.pos(),
+            case Apply x -> new Apply(x.function(), x.args(), x.origin(), x.applied(), x.pos(),
                     region);
             case If x -> new If(x.cond(), x.then(), x.els(), x.origin(), x.pos(), region);
             case IfConstructed x ->
@@ -2339,7 +2435,7 @@ public interface Hir {
                 Expr function = atExpr.apply(a.function());
                 List<Expr> args = each(a.args(), atExpr);
                 yield function == a.function() && args == a.args() ? a
-                        : new Apply(function, args, a.origin(), a.appliedAs(), a.pos(), a.region());
+                        : new Apply(function, args, a.origin(), a.applied(), a.pos(), a.region());
             }
             case If iff -> {
                 Expr cond = atExpr.apply(iff.cond());

@@ -1183,72 +1183,12 @@ public interface Ast {
      * carries what it denotes — a helper, a library function, an injected behavior, a function-typed
      * binding, or the type a newtype construction wraps — answered once during resolution.
      */
-    record Apply(Expr function, List<Expr> args, String appliedAs, SourcePos pos, Region region)
-            implements Expr {
-
-        /** Applying whatever {@code function} is, with nothing standing in for what the source
-         * wrote — every application but one a lowering rewrote. */
-        public Apply(Expr function, List<Expr> args, SourcePos pos, Region region) {
-            this(function, args, null, pos, region);
-        }
-
-
-        /** Whether what this applies is a name. A reader that wants the name itself matches on
-         * {@link #function()}, which is where it is. */
-        public boolean appliesAName() {
-            return function instanceof Var;
-        }
-
-        /**
-         * The name this applies as the source writes it, or the empty spelling where what it
-         * applies is not a name. What a report quotes and underlines.
-         *
-         * <p><b>Never a lookup key.</b> An import lets a library name be written without its
-         * qualifier, so a table keyed by a declaration's name misses on the spelling — silently,
-         * because a miss is what a table keyed by names does with one it has not got. Every
-         * question of the form "which declaration is this" asks {@link #reaches()}.
-         *
-         * <p>{@link #appliedAs} answers where a lowering replaced what was written with a binding
-         * it introduced: applying something other than a name binds it first, and the binding is
-         * named nothing an author could have typed. The two are separate for that reason — this
-         * one is read by reports and nothing else.
-         */
-        public String written() {
-            return name().canonical();
-        }
-
-        /**
-         * The name this applies, with the occurrence of it a report underlines.
-         *
-         * <p>Where a lowering replaced what was written with a binding it introduced
-         * ({@link #appliedAs}), that binding is written nowhere: the characters at {@link #pos()}
-         * spell whatever the author applied, which is no longer this.
-         */
-        public WrittenName name() {
-            if (appliedAs != null) {
-                return WrittenName.synthetic(appliedAs, pos);
-            }
-            return function instanceof Var v ? v.written() : WrittenName.synthetic("", pos);
-        }
-
-        /**
-         * Where a report about what this applies points: the characters the callee was written over.
-         *
-         * <p>Not {@link #name()}'s. The name is what a report quotes, and where a lowering replaced
-         * what was written with a binding it introduced ({@link #appliedAs}) that name is written
-         * nowhere — while the characters the binding stands for are still there, being whatever the
-         * author applied. Asking the callee gets those; asking the name gets a point at best.
-         */
-        public Region appliedAt() {
-            Region written = function.reportedAt();
-            return written != null ? written : name().reportedAt();
-        }
+    record Apply(Expr function, List<Expr> args, SourcePos pos, Region region) implements Expr {
 
         /** The same application over rewritten arguments — a pass that touches only the arguments
-         *  says so here rather than listing the slots it is not changing, which is how
-         *  {@link #appliedAs} would be dropped by a rewrite that has no opinion about it. */
+         *  says so here rather than listing the slots it is not changing. */
         public Apply withArgs(List<Expr> args) {
-            return new Apply(function, args, appliedAs, pos, region);
+            return new Apply(function, args, pos, region);
         }
     }
 
@@ -1285,7 +1225,7 @@ public interface Ast {
             case Neg x -> new Neg(x.operand(), x.pos(), region);
             case FieldAccess x -> new FieldAccess(x.target(), x.name(), x.pos(), region);
             case Binary x -> new Binary(x.op(), x.left(), x.right(), x.origin(), x.pos(), region);
-            case Apply x -> new Apply(x.function(), x.args(), x.appliedAs(), x.pos(), region);
+            case Apply x -> new Apply(x.function(), x.args(), x.pos(), region);
             case If x -> new If(x.cond(), x.then(), x.els(), x.origin(), x.pos(), region);
             case IfConstructed x ->
                     new IfConstructed(x.construct(), x.binder(), x.then(), x.els(), x.origin(), x.pos(),

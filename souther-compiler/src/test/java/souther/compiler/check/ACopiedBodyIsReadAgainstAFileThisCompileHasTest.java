@@ -8,6 +8,8 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.Compiler;
 import souther.compiler.ast.Hir;
+import souther.compiler.ast.WrittenName;
+import souther.compiler.diag.Region;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.diag.SourceProvenance;
@@ -169,11 +171,40 @@ class ACopiedBodyIsReadAgainstAFileThisCompileHasTest {
         return out;
     }
 
+    /**
+     * Every coordinate {@code e} holds, and not only the one it stands at.
+     *
+     * <p>A node holds places besides its own: the occurrence of a name it applies, the stretch that
+     * name was applied over. Each of them is read by a report, so each of them is one of the
+     * coordinates this is about — and a walk that took the node's own would be answering about a
+     * projection of the tree while the claim is about the tree.
+     */
     private static void walk(Hir.Expr e, List<SourcePos> out) {
         if (e.pos() != null) {
             out.add(e.pos());
         }
+        if (e instanceof Hir.Apply call) {
+            placesIn(call.applied().name(), out);
+            starts(call.applied().at(), out);
+        }
         Hir.forEachChild(e, c -> walk(c, out));
+    }
+
+    /** Where {@code name} is written, or where a complaint about one nobody wrote belongs. */
+    private static void placesIn(WrittenName name, List<SourcePos> out) {
+        if (name == null) {
+            return;
+        }
+        name.segments().forEach(segment -> starts(segment, out));
+        if (name.anchor() != null) {
+            out.add(name.anchor());
+        }
+    }
+
+    private static void starts(Region region, List<SourcePos> out) {
+        if (region != null && region.start() != null) {
+            out.add(region.start());
+        }
     }
 
     private static List<SourcePos> positionsIn(Core e) {
