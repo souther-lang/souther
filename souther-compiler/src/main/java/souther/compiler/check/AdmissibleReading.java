@@ -65,6 +65,15 @@ final class AdmissibleReading implements ClauseReading<PlannedValues<FactSubject
      * are two places in a declaration, and what each of them is about is asked of the one in hand.
      */
     private final Map<Core, StringPredicates.Stated> asStated = new IdentityHashMap<>();
+    /**
+     * What each node's whole subtree states about the strings, worked out once for the node.
+     *
+     * <p>The walk that reads a clause asks this of every node it passes, and each answer is the
+     * answer of everything under it — so a clause of any depth would be walked once per node
+     * without this, which is the reading paying for the shape of the tree rather than for what is
+     * written in it.
+     */
+    private final Map<Core, StringRestriction.Found> stringRules = new IdentityHashMap<>();
 
     private AdmissibleReading(Terms terms, Denotations at, Map<FactSubject, Type> byName,
                               Symbols symbols, Alternatives alternatives, Allowance<FactSubject> allowed) {
@@ -298,20 +307,29 @@ final class AdmissibleReading implements ClauseReading<PlannedValues<FactSubject
      * the conjunct states such a rule about — a denial and a choice inside it are still the
      * conjunct's.
      */
-    Set<FactSubject> stringSubjectsIn(Core e) {
-        Set<FactSubject> found = new LinkedHashSet<>();
-        gatherStringSubjects(e, found);
+    StringRestriction.Found stringRulesIn(Core e) {
+        StringRestriction.Found had = stringRules.get(e);
+        if (had != null) {
+            return had;
+        }
+        Set<FactSubject> read = new LinkedHashSet<>();
+        Set<FactSubject> notRead = new LinkedHashSet<>();
+        gatherStringRules(e, read, notRead);
+        read.removeAll(notRead);
+        StringRestriction.Found found = new StringRestriction.Found(read, notRead);
+        stringRules.put(e, found);
         return found;
     }
 
-    private void gatherStringSubjects(Core e, Set<FactSubject> found) {
+    private void gatherStringRules(Core e, Set<FactSubject> read, Set<FactSubject> notRead) {
         StringPredicates.Stated stated = statedIn(e);
         FactSubject position = stated == null ? null : positionIn(stated.subject());
         if (position != null) {
-            found.add(position);
+            (stated.reading() instanceof StringPredicates.Reading.Accepting ? read : notRead)
+                    .add(position);
             return;   // what a predicate is about is the call's, and nothing under it is another
         }
-        Core.forEachChild(e, child -> gatherStringSubjects(child, found));
+        Core.forEachChild(e, child -> gatherStringRules(child, read, notRead));
     }
 
     /**

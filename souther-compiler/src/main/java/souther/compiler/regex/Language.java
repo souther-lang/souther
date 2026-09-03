@@ -61,18 +61,30 @@ public final class Language {
      * that and take them out for itself — which is the reading of one thing in two places this file
      * exists to stop.
      *
-     * <p>Skipped where it can change nothing. Such a sequence holds a high surrogate standing as a
-     * symbol of its own, so a machine no step of which is over one already accepts none of them —
-     * which is every pattern a model writes.
+     * <p>Skipped where it can change nothing, which is asked of the one machine and not of the
+     * steps it is written with. A canonical machine is complete, so every one of them has a step
+     * over a high surrogate and having one says nothing; what says something is whether such a step
+     * leads anywhere a walk that then reads a low surrogate may stop. A pattern naming no surrogate
+     * leads to the state nothing stops at, and nothing is built for it.
+     *
+     * <p>Which is why the one machine is made first and made again only where the answer is yes.
+     * Asked of what came in, the walk would have to follow the steps that cost no symbol, and what
+     * it is looking for is two symbols in turn.
      */
     static Language canonical(Automaton made, Meter meter) {
         if (made == null) {
             return null;
         }
-        Automaton held = made.mayReadALoneHighSurrogate()
-                ? made.and(RuntimeOrder.EVERY_STRING, meter) : made;
-        Automaton one = held == null ? null : held.canonical(meter);
-        return one == null ? null : new Language(one);
+        Automaton one = made.canonical(meter);
+        if (one == null) {
+            return null;
+        }
+        if (!one.mayStopHavingReadALoneSurrogatePair()) {
+            return new Language(one);
+        }
+        Automaton held = one.and(RuntimeOrder.READS_ONLY_STRINGS, meter);
+        Automaton settled = held == null ? null : held.canonical(meter);
+        return settled == null ? null : new Language(settled);
     }
 
     /** Whether the whole of {@code value} is in it. A walk over the value, which builds nothing. */
@@ -99,6 +111,19 @@ public final class Language {
 
     /** Every string there is, which is what a rule saying nothing leaves. */
     public static final Language EVERY_STRING = new Language(RuntimeOrder.EVERY_STRING);
+
+    /**
+     * The strings {@code words} and no others, or null past what {@code meter} allows.
+     *
+     * <p>For a caller holding values a rule wrote out rather than a pattern. What they are is a set
+     * of strings like any other, and a reader asking where a rule's values stop has one question
+     * whichever way the rule named them — handed only the patterns, it would have to ask the values
+     * written out something else, and the two answers would be about the same strings.
+     */
+    public static Language ofWords(java.util.Collection<String> words, Meter meter) {
+        Automaton made = Automaton.ofWords(words, meter);
+        return made == null ? null : canonical(made, meter);
+    }
 
     /**
      * The least string it holds, or null where it holds none and where the ones it holds have no

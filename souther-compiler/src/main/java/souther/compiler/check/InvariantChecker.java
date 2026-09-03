@@ -22,6 +22,8 @@ import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
+import souther.compiler.regex.Meter;
+import souther.compiler.values.AdmittedPlan;
 import souther.compiler.values.TextExtent;
 import souther.compiler.values.TextExtents;
 
@@ -243,6 +245,14 @@ public final class InvariantChecker {
     private final Predicates predicates;
     /** Whether an evaluation can answer, which is what decides that a continuation is reached. */
     private final PathCompletion completion;
+    /**
+     * Where the strings each plan admits stop, worked out once per plan.
+     *
+     * <p>A declaration is read again for every conjunct whose contribution to an end has to be
+     * worked out by asking what the rules leave without it, and each of those readings meets the
+     * same plans. What a plan admits does not turn on which reading is asking.
+     */
+    private final Map<AdmittedPlan, TextExtent> extents = new LinkedHashMap<>();
     private final List<CompileException> errors = new ArrayList<>();
     private final List<Diagnostic> warnings = new ArrayList<>();
 
@@ -482,8 +492,8 @@ public final class InvariantChecker {
          *  every position, since nothing here knows which of them the rules were about. */
         static Seeded nothingRead() {
             return new Seeded(ConstraintState.<FactSubject>top(), Map.of(), Map.of(), Map.of(),
-                    new Reading(List.of(), List.of(), List.of(), List.of(), Map.of(), Map.of(),
-                            Map.of(), Map.of()),
+                    new Reading(List.of(), List.of(), List.of(), List.of(), List.of(), Map.of(),
+                            Map.of(), Map.of(), Map.of()),
                     new ReadingEvidence(),
                     false, Map.of(RuleKey.THE_VALUE,
                             Set.of(new RulesMissed.ReadingFellOver())),
@@ -1303,6 +1313,7 @@ public final class InvariantChecker {
     record Reading(List<Direct> directs, List<FieldDomains.NoLine> noLines,
                    List<FieldDomains.WithoutAnEnd> withoutAnEnd,
                    List<FieldDomains.AboutOneCoordinate> aboutOneCoordinate,
+                   List<FieldDomains.AboutOneCoordinate> aboutTheStrings,
                    Map<RuleKey, List<TypeSymbol.AtModule>> narrowers,
                    Map<RuleRef, Required> raised,
                    Map<RuleRef, Map<Core, Required>> raisedByPart,
@@ -1334,6 +1345,12 @@ public final class InvariantChecker {
         List<FieldDomains.NoLine> noLines = new ArrayList<>();
         List<FieldDomains.WithoutAnEnd> withoutAnEnd = new ArrayList<>();
         List<FieldDomains.AboutOneCoordinate> aboutOneCoordinate = new ArrayList<>();
+        // Beside them and not among them. Both say which number a conjunct is written about; only
+        // the first are candidates for working out which conjuncts account for where the values
+        // stop, and a candidate that placed no end turns that working out on for the whole number.
+        // A conjunct that states a run states its own ends, so it needs no such attribution — and
+        // put among them it would set every other conjunct about the number to be read again.
+        List<FieldDomains.AboutOneCoordinate> aboutTheStrings = new ArrayList<>();
         Map<RuleKey, List<TypeSymbol.AtModule>> narrowers = new LinkedHashMap<>();
         Map<RuleRef, Required> raised = new LinkedHashMap<>();
         Map<RuleRef, Map<Core, Required>> raisedByPart = new LinkedHashMap<>();
@@ -1341,12 +1358,12 @@ public final class InvariantChecker {
                 new LinkedHashMap<>();
         stated.forEach(each ->
                 direct(each.clause(), each.from(), new int[1], at, byName, out, noLines,
-                        withoutAnEnd, aboutOneCoordinate, narrowers, raised,
+                        withoutAnEnd, aboutOneCoordinate, aboutTheStrings, narrowers, raised,
                         took, typeAt, parts, raisedByPart, standing, withoutParts));
         // Insertion order, kept: `Map.copyOf` iterates in an order salted once per JVM run, and
         // what a report prints for a position is these in the order the declaration writes them.
         return new Reading(List.copyOf(out), List.copyOf(noLines), List.copyOf(withoutAnEnd),
-                List.copyOf(aboutOneCoordinate),
+                List.copyOf(aboutOneCoordinate), List.copyOf(aboutTheStrings),
                 Map.copyOf(narrowers),
                 Collections.unmodifiableMap(new LinkedHashMap<>(raised)),
                 Collections.unmodifiableMap(new LinkedHashMap<>(raisedByPart)),
@@ -1447,6 +1464,7 @@ public final class InvariantChecker {
                         List<FieldDomains.NoLine> noLines,
                         List<FieldDomains.WithoutAnEnd> withoutAnEnd,
                         List<FieldDomains.AboutOneCoordinate> naming,
+                        List<FieldDomains.AboutOneCoordinate> namingTheStrings,
                         Map<RuleKey, List<TypeSymbol.AtModule>> narrowers,
                         Map<RuleRef, Required> raised, ReadingEvidence took,
                         Map<RuleKey, Type> typeAt,
@@ -1463,9 +1481,11 @@ public final class InvariantChecker {
             // its conjuncts alike, which is what lets a line drawn here be recognised as the line
             // the declaration's own reading drew (issue #1062).
             direct(and.left(), from, conjunct, at, byName, out, noLines, withoutAnEnd, naming,
-                    narrowers, raised, took, typeAt, parts, raisedByPart, standing, withoutParts);
+                    namingTheStrings, narrowers, raised, took, typeAt, parts, raisedByPart,
+                    standing, withoutParts);
             direct(and.right(), from, conjunct, at, byName, out, noLines, withoutAnEnd, naming,
-                    narrowers, raised, took, typeAt, parts, raisedByPart, standing, withoutParts);
+                    namingTheStrings, narrowers, raised, took, typeAt, parts, raisedByPart,
+                    standing, withoutParts);
             return;
         }
         // Which conjunct of the clause this is, taken here so that every one of them is numbered —
@@ -1491,7 +1511,7 @@ public final class InvariantChecker {
         // Before the reading below, which needs to know: a conjunct that stated where the values
         // stop has a line, and is not one an author is owed a sentence about for having drawn none.
         restricting(clause, from, part, byName, parts, noLines,
-                runsOf(clause, from, part, byName, parts, naming, out));
+                runsOf(clause, from, part, byName, parts, namingTheStrings, out));
         if (!(clause instanceof Core.Binary bin)) {
             // Nothing but a binary is written as a comparison, so there is no reading of one for
             // the classification to be handed.
@@ -1951,7 +1971,7 @@ public final class InvariantChecker {
      */
     private void restricting(Core clause, RuleRef.Invariant from, int part,
                              Map<FactSubject, Coordinate> byName, PartsRead parts,
-                             List<FieldDomains.NoLine> noLines, Set<FactSubject> bounded) {
+                             List<FieldDomains.NoLine> noLines, RunsRead runs) {
         ReadByClauses.OfAPart account = parts.accountIn(from, clause);
         ReadByClauses.OfARule rule = parts.ruleIn(from);
         if (account == null || rule == null) {
@@ -1967,7 +1987,16 @@ public final class InvariantChecker {
             // end has a line — from the ordering it wrote, or from the run of the strings it
             // admits, which are the two ways a conjunct states where the values stop.
             if (!account.restricts(position) || account.bounds(position)
-                    || bounded.contains(position)) {
+                    || runs.bounded().contains(position)) {
+                continue;
+            }
+            // And where the reading of the run ran out of what it may build, nothing was
+            // established about where the values stop. What is written down is that it stopped:
+            // said as a rule read to the end without a line, a limit of this compiler would be
+            // published as a fact about the model.
+            if (runs.stopped().containsKey(position)) {
+                add(noLines, new FieldDomains.NoLine(each.getValue().at(), from, clause, part,
+                        new BlockReason.PatternTooCostly()));
                 continue;
             }
             // And what the rule itself came to once its own choices are decided and its own
@@ -1979,9 +2008,14 @@ public final class InvariantChecker {
             }
             FieldDomains.NoLine said = new FieldDomains.NoLine(each.getValue().at(), from, clause,
                     part, new BlockReason.RuleRestrictingToAdmittedValues());
-            if (!noLines.contains(said)) {
-                noLines.add(said);
-            }
+            add(noLines, said);
+        }
+    }
+
+    /** One finding per rule and reason, however many readers arrive at it. */
+    private static void add(List<FieldDomains.NoLine> noLines, FieldDomains.NoLine said) {
+        if (!noLines.contains(said)) {
+            noLines.add(said);
         }
     }
 
@@ -2011,15 +2045,16 @@ public final class InvariantChecker {
      * characters they hold; a rule about the length is a rule about a whole number and is read
      * where whole numbers are.
      */
-    private Set<FactSubject> runsOf(Core clause, RuleRef.Invariant from, int part,
+    private RunsRead runsOf(Core clause, RuleRef.Invariant from, int part,
                         Map<FactSubject, Coordinate> byName, PartsRead parts,
                         List<FieldDomains.AboutOneCoordinate> naming, List<Direct> out) {
         ReadByClauses.OfAPart account = parts.accountIn(from, clause);
         if (account == null) {
-            return Set.of();
+            return RunsRead.NOTHING;
         }
         Set<FactSubject> bounded = new LinkedHashSet<>();
-        account.aboutStrings().forEach((position, plan) -> {
+        Map<FactSubject, Meter.Stopped> stopped = new LinkedHashMap<>();
+        account.aboutStrings().forEach((position, stated) -> {
             Coordinate found = byName.get(position);
             if (found == null) {
                 return;
@@ -2029,21 +2064,82 @@ public final class InvariantChecker {
             // is about neither that count nor whichever of the two this map happens to hold.
             NumberAt<RuleKey> value = NumberAt.valueOf(found.path());
             naming.add(new FieldDomains.AboutOneCoordinate(value, from, clause, part));
+            // And the strings only where the rule was read to them. What a rule this could not read
+            // admits is not every string; it is not known, and a run read off what the reading left
+            // would be a run of a set the rule does not have.
+            if (!(stated instanceof StringRestriction.Admitting admitting)) {
+                return;
+            }
+            placed(admitting.plan(), value, from, clause, part, position, bounded, stopped, out);
+        });
+        return new RunsRead(bounded, stopped);
+    }
+
+    /**
+     * One position's ends, where the rule's strings are a run that holds it.
+     *
+     * <p>Three answers of the reading and three things to do. A run holds the values between two
+     * places, and each of those the order does not already hold is an end this conjunct placed. A
+     * language that is not one run leaves the position where it was. And a reading that ran out of
+     * what it may build has established nothing, so what is written down is that it stopped —
+     * folded into the second, a limit of this compiler would be published as a rule that draws no
+     * line, which is a sentence about the model.
+     *
+     * <p>A run holding the position where the order already holds it is not one it bounds. Every
+     * string is at or above the string of nothing, so a rule leaving the values from there upwards
+     * with no end above them has said where none of them stop — and it is a run all the same, which
+     * is why what is asked of it is which of its ends the rule placed.
+     */
+    private void placed(AdmittedPlan plan, NumberAt<RuleKey> value, RuleRef.Invariant from,
+                        Core clause, int part, FactSubject position,
+                        Set<FactSubject> bounded, Map<FactSubject, Meter.Stopped> stopped,
+                        List<Direct> out) {
+        switch (extentOf(plan)) {
             // A run holding one string is the rule naming a value rather than bounding a range, and
-            // a value it names is a distinction of the position rather than an edge on it. What
-            // such a rule leaves is what the reading of the values says it leaves.
-            if (TextExtents.of(plan) instanceof TextExtent.One run && !run.holdsOneValue()) {
-                bounded.add(position);
-                out.add(new Direct(value, from,
-                        new InvariantBound(true, Endpoint.inclusive(run.first())), clause, part));
+            // a value it names is a distinction of the position rather than an edge on it.
+            case TextExtent.One run when run.holdsOneValue() -> { }
+            case TextExtent.One run -> {
+                if (run.holdsFromAbove()) {
+                    bounded.add(position);
+                    out.add(new Direct(value, from,
+                            new InvariantBound(true, Endpoint.inclusive(run.first())),
+                            clause, part));
+                }
                 if (run.after() != null) {
+                    bounded.add(position);
                     out.add(new Direct(value, from,
                             new InvariantBound(false, Endpoint.exclusive(run.after())),
                             clause, part));
                 }
             }
-        });
-        return bounded;
+            case TextExtent.NoNamedRun _ -> { }
+            case TextExtent.NotBuilt it -> stopped.put(position, it.stopped());
+        }
+    }
+
+    /**
+     * Where the strings {@code plan} admits stop, worked out once for the plan.
+     *
+     * <p>The same plan comes back as often as the declaration is read, and it is read again for
+     * every conjunct whose contribution to an end is worked out by asking what the rules leave
+     * without it. What a plan admits does not turn on which of those readings is asking, so it is
+     * answered once — the allowance each answer is made under is the same, which is what makes the
+     * second asking the same question rather than a cheaper one.
+     */
+    private TextExtent extentOf(AdmittedPlan plan) {
+        return extents.computeIfAbsent(plan, TextExtents::of);
+    }
+
+    /**
+     * What the runs of one conjunct's strings came to, per position.
+     *
+     * <p>Two answers and not one. A position this conjunct bounds has a line and is not one an
+     * author is owed a word about for having drawn none; a position where the reading ran out has
+     * neither, and saying so is not the same as saying the rule draws no line.
+     */
+    record RunsRead(Set<FactSubject> bounded, Map<FactSubject, Meter.Stopped> stopped) {
+
+        static final RunsRead NOTHING = new RunsRead(Set.of(), Map.of());
     }
 
     /**

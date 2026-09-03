@@ -92,26 +92,66 @@ final class Automaton {
     }
 
     /**
-     * Whether any step of this is over a high surrogate.
+     * Whether a walk over this may stop having read a high surrogate and a low one in turn.
      *
-     * <p>Asked to find out whether taking the sequences no string is read as out of this would
-     * change it. Such a sequence holds a high surrogate standing as a symbol of its own, so a
-     * machine no step of which is over one accepts none of them and is already the strings it holds.
+     * <p>That pair of symbols is the one thing no string is read as, so a machine that stops on no
+     * sequence holding them already accepts nothing but strings and taking them out would change
+     * nothing.
      *
-     * <p>A walk over the steps and nothing built, which is the point: what it saves is a product
-     * every language would otherwise be put through, and the patterns a model writes name no
-     * surrogate at all. What it costs where the answer is yes is one comparison.
+     * <p><b>Whether it stops, and not whether it has a step.</b> A canonical machine is complete —
+     * every symbol leads somewhere from every state — so every one of them has a step over a high
+     * surrogate and asking that says only that the machine is complete. Where such a step leads is
+     * the question: a pattern naming no surrogate leads to the state nothing stops at, and the
+     * sequence is refused there as it always was.
+     *
+     * <p>A walk over the states and nothing built. What it saves is a product every language would
+     * otherwise be put through.
      */
-    boolean mayReadALoneHighSurrogate() {
+    boolean mayStopHavingReadALoneSurrogatePair() {
         CodePoints high = CodePoints.between(0xD800, 0xDBFF);
-        for (List<Step> out : steps) {
-            for (Step each : out) {
-                if (!each.over().and(high).isEmpty()) {
-                    return true;
+        CodePoints low = CodePoints.between(0xDC00, 0xDFFF);
+        boolean[] reaches = reaching();
+        for (int at = 0; at < steps.size(); at++) {
+            for (Step first : steps.get(at)) {
+                if (first.over().and(high).isEmpty()) {
+                    continue;
+                }
+                for (Step second : steps.get(first.to())) {
+                    if (!second.over().and(low).isEmpty() && reaches[second.to()]) {
+                        return true;
+                    }
                 }
             }
         }
         return false;
+    }
+
+    /** For each state, whether a walk from it may still reach one it stops at. */
+    private boolean[] reaching() {
+        List<List<Integer>> back = new ArrayList<>();
+        for (int at = 0; at < steps.size(); at++) {
+            back.add(new ArrayList<>());
+        }
+        for (int at = 0; at < steps.size(); at++) {
+            for (Step each : steps.get(at)) {
+                back.get(each.to()).add(at);
+            }
+        }
+        boolean[] out = new boolean[steps.size()];
+        List<Integer> waiting = new ArrayList<>();
+        for (int at = accepting.nextSetBit(0); at >= 0; at = accepting.nextSetBit(at + 1)) {
+            out[at] = true;
+            waiting.add(at);
+        }
+        for (int at = 0; at < waiting.size(); at++) {
+            for (int from : back.get(waiting.get(at))) {
+                if (!out[from]) {
+                    out[from] = true;
+                    waiting.add(from);
+                }
+            }
+        }
+        return out;
     }
 
     /**

@@ -61,6 +61,18 @@ public sealed interface TextExtent {
         public boolean holdsOneValue() {
             return after != null && after.equals(first.justAbove());
         }
+
+        /**
+         * Whether the rule holds the values above where the strings begin.
+         *
+         * <p>Every string is at or above the string of nothing, so a run beginning there is held
+         * below by the order and not by the rule. A line drawn at it would be the carrier's own end
+         * written down as something an author placed, and a row owed at it would be owed to a rule
+         * that does not stop the values anywhere.
+         */
+        public boolean holdsFromAbove() {
+            return !first.at().isEmpty();
+        }
     }
 
     /**

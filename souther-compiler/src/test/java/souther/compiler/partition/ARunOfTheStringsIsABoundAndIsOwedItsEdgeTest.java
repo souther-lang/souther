@@ -134,6 +134,98 @@ class ARunOfTheStringsIsABoundAndIsOwedItsEdgeTest {
         assertFalse(report.contains("(invariant One #1):"), report);
     }
 
+    /**
+     * A reading that ran out of what it may build says so, and is not read as a rule that draws no
+     * line.
+     *
+     * <p>The two read alike at the position and are opposite claims. One is about the strings a rule
+     * admits — every one of them was worked out and they are not one stretch of the order — and the
+     * other is about this compiler, which established nothing. An author shown the first would be
+     * told their rule holds the position to what it admits and stops it nowhere, of a rule whose
+     * geometry nobody read.
+     *
+     * <p>The pattern is one this compiler reads and the machine for what it admits is one it makes;
+     * what runs out is the further machine the run needs, which is the product of that one with the
+     * strings above where it begins.
+     */
+    @Test
+    void areadingThatRanOutSaysSoRatherThanThatTheRuleDrawsNoLine() {
+        String report = report("""
+                module costly
+
+                data Long = String invariant String.matches("[0-9]{300}", value)
+
+                data Ok = { size: Int }
+
+                behavior onLong : (v: Long) -> Ok
+                    constructs Ok
+                let onLong (v) = Ok { size = String.length(v.value) }
+                """);
+
+        assertTrue(report.contains("invariant Long #1"), "the rule is named:\n" + report);
+        assertFalse(report.contains("it restricts this position to the values it admits"),
+                "a limit of this compiler is not a rule read to the end without a line:\n" + report);
+    }
+
+    /**
+     * An end two readings both saw is one line owed to one conjunct.
+     *
+     * <p>A newtype's own comparisons are read off the clauses as they are written and again as the
+     * ends its conjuncts state, since the second is where a rule stating no comparison puts one. So
+     * the same end arrives twice, and what tells whether that costs anything is the rule it is owed
+     * to: two names at one place would be two rows for one line an author wrote once.
+     */
+    @Test
+    void anEndTwoReadingsBothSawIsOwedToOneRule() {
+        String report = report("""
+                module twice
+
+                data Held = String invariant value >= "m"
+
+                data Ok = { size: Int }
+
+                behavior onHeld : (v: Held) -> Ok
+                    constructs Ok
+                let onHeld (v) = Ok { size = String.length(v.value) }
+                """);
+
+        assertEquals(1, report.lines()
+                        .filter(each -> each.contains("point value = m")).count(),
+                "one line, owed once:\n" + report);
+    }
+
+    /**
+     * A rule whose text this could not work out draws no line, and is not read as one admitting
+     * every string.
+     *
+     * <p>What the reading left where it worked nothing out is every value — which is what a
+     * position nothing was read about holds, and the run of every string begins where the strings
+     * begin. Read off what was left, such a rule would arrive here as one that admits every string,
+     * and what it draws would be settled by a set nobody established.
+     *
+     * <p>The pattern is written out of a name this module holds, so what stops the reading is the
+     * text and not the pattern: the call is a rule about {@code value} either way, and only the
+     * strings are missing.
+     */
+    @Test
+    void aRuleWhoseTextWasNotWorkedOutDrawsNoLine() {
+        String report = report("""
+                module unread
+
+                data Code = String invariant String.matches(pattern(), value)
+
+                data Ok = { size: Int }
+
+                behavior pattern : () -> String
+                behavior onCode : (v: Code) -> Ok
+                    constructs Ok
+                let onCode (v) = Ok { size = String.length(v.value) }
+                """);
+
+        assertFalse(report.contains("point v = "), "no edge is owed for it:\n" + report);
+        assertFalse(report.contains("point value = "), report);
+    }
+
     /** What {@code behavior} is asked for, as the report writes it against the behavior's own
      *  positions. */
     private static String owed(String report, String behavior) {

@@ -44,29 +44,73 @@ public final class TextExtents {
      * <p>Its own allowance per plan, spent whole here: a caller with several rules pays for each of
      * them on its own, so that one expensive rule does not take the line another rule drew.
      *
-     * <p><b>Only what a language admits has a run.</b> A plan that comes to values written out, or
-     * to every value, or to none, is answered {@link TextExtent.NoNamedRun} — which is what those
-     * are: a position the rules divide into named values is divided rather than bounded, and one
-     * they leave every string is bounded nowhere. It is not that this could not answer.
+     * <p>What a run is and what a caller should do about it are two questions, and only the first is
+     * answered here. A run holding one string and a run holding every string are runs; whether
+     * either is a boundary somebody is owed a row at is read off the run by whoever draws lines.
      */
     public static TextExtent of(AdmittedPlan plan) {
         Meter meter = PatternPlan.Budget.OF_AN_ORDERED_EXTENT.meter();
+        Language admitted = admitted(plan, meter);
+        return admitted == null
+                ? new TextExtent.NotBuilt(stopped(meter)) : of(admitted, meter);
+    }
+
+    /**
+     * The strings {@code plan} admits, or null past what {@code meter} allows.
+     *
+     * <p>Every set of values a rule about a string can leave is a set of strings, so every one of
+     * them is a language: the ones a pattern named, the ones written out, everything but the ones
+     * written out, all of them, and none. Which of those a plan came to is how the answer is held
+     * and not what the rule said — so the question below is asked of a language whichever it was,
+     * and the shape a set happens to be written in decides nothing.
+     *
+     * <p>Which is what keeps the run out of that decision. Read off the shape, a rule naming one
+     * string would have no geometry while a pattern accepting that same string had one, and where
+     * the values stop would turn on how the answer got written down.
+     */
+    private static Language admitted(AdmittedPlan plan, Meter meter) {
         return switch (new Realizer(meter).of(plan)) {
-            case Realization.Exact it -> it.set() instanceof ValueSet.Matching matching
-                    ? of(matching.language(), meter) : new TextExtent.NoNamedRun();
-            case Realization.OverTheMachineLimit _ ->
-                    new TextExtent.NotBuilt(Meter.Stopped.ONE_MACHINE);
-            case Realization.OverTheAnswerLimit _ ->
-                    new TextExtent.NotBuilt(Meter.Stopped.THE_ANSWER);
+            case Realization.Exact it -> languageOf(it.set(), meter);
+            case Realization.OverTheMachineLimit _, Realization.OverTheAnswerLimit _ -> null;
         };
+    }
+
+    /** The same for a set already worked out. */
+    private static Language languageOf(ValueSet set, Meter meter) {
+        return switch (set) {
+            case ValueSet.Matching it -> it.language();
+            case ValueSet.Finite it -> Language.ofWords(texts(it.values()), meter);
+            case ValueSet.Cofinite it ->
+                    Language.EVERY_STRING.without(texts(it.excluded()), meter);
+        };
+    }
+
+    /**
+     * The strings among {@code values}.
+     *
+     * <p>All of them or this compiler has gone wrong. A set stands at one position and a position
+     * holds values of its type, so a set reaching here beside a rule about a string holds strings —
+     * one holding anything else belongs to no position at all ({@link ValueSet}), which is nothing a
+     * model can write.
+     */
+    private static java.util.List<String> texts(java.util.Set<Value> values) {
+        java.util.List<String> out = new java.util.ArrayList<>();
+        for (Value each : values) {
+            if (!(each instanceof Value.Text text)) {
+                throw new IllegalStateException(
+                        "a rule about the strings at a position left " + each + " standing there");
+            }
+            out.add(text.value());
+        }
+        return out;
     }
 
     /**
      * Where {@code language} begins and ends, or why it names no run.
      *
-     * <p>For a caller holding the language already, which is what a test does.
+     * <p>For a caller holding the language already, which is what a reader here does.
      */
-    public static TextExtent of(Language language) {
+    static TextExtent of(Language language) {
         return of(language, PatternPlan.Budget.OF_AN_ORDERED_EXTENT.meter());
     }
 

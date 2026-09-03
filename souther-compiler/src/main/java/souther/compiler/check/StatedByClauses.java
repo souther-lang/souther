@@ -67,32 +67,34 @@ sealed interface StatedByClauses {
 
         /** The same, remembering that it is what {@code e} came to. */
         @Override
-        public StatedByClauses from(Core e, Set<FactSubject> aboutStrings) {
+        public StatedByClauses from(Core e, StringRestriction.Found aboutStrings) {
             Map<Core, Part> out = new java.util.IdentityHashMap<>(parts);
             out.put(e, new Part(byValues, byOrder, values.standing(), strings(aboutStrings)));
             return new Said(values, ordered, byValues, byOrder, out);
         }
 
         /**
-         * What this part plans to admit at each position it states a rule about the strings of.
+         * What this part states about the strings at each position it states a rule about.
          *
-         * <p>The plan and not the set. Which strings a rule leaves is a machine somebody has to pay
-         * for, and what wants it here is a reader working out where the values stop — so what is
-         * kept is the description, and whether it is ever built is settled under that reader's own
-         * allowance. Held as the set, every rule about a string would be a machine made while the
-         * clause was read, for a question nobody may go on to ask.
+         * <p>What the reading came to and not what it left. A rule whose text nothing worked out
+         * leaves the position every value, which is what a position nothing was read about holds —
+         * so the plan alone cannot tell a rule this could not read from one that admits every
+         * string, and only the first of those has nothing to say about where the values stop.
          *
-         * <p>Per branch, because this is the branch's own reading. A part inside a choice is read
-         * once in each branch and the two admit different things; taken from outside, a branch
-         * nobody can be in would lend its plan to the one that stands.
+         * <p>Per branch, because the plan is the branch's own reading. A part inside a choice is
+         * read once in each branch and the two admit different things; taken from outside, a branch
+         * nobody can be in would lend its plan to the one that stands. Which of the rules were read
+         * is the clause's and is the same in both.
          */
-        private Map<FactSubject, AdmittedPlan> strings(
-                Set<FactSubject> aboutStrings) {
+        private Map<FactSubject, StringRestriction> strings(StringRestriction.Found aboutStrings) {
             if (aboutStrings.isEmpty()) {
                 return Map.of();
             }
-            Map<FactSubject, AdmittedPlan> out = new LinkedHashMap<>();
-            aboutStrings.forEach(position -> out.put(position, values.at(position)));
+            Map<FactSubject, StringRestriction> out = new LinkedHashMap<>();
+            aboutStrings.read().forEach(position ->
+                    out.put(position, new StringRestriction.Admitting(values.at(position))));
+            aboutStrings.notRead().forEach(position ->
+                    out.put(position, new StringRestriction.NotKnown()));
             return Map.copyOf(out);
         }
     }
@@ -110,17 +112,15 @@ sealed interface StatedByClauses {
      * finally admits is not among them — that is the whole value's answer and belongs to the whole.
      *
      * @param standing what this part's reading recorded about positions it was short of
-     * @param aboutStrings the positions this part states a rule about the strings of, each with
-     *                     what the part plans to admit there. Both halves, because they answer two
-     *                     questions and one of them has an answer where the other has none: which
-     *                     of a position's numbers a rule is written about is settled by the call,
-     *                     and it is settled whether or not this could work out the text written in
-     *                     it. Kept as the position alone, a reader working out where the values
-     *                     stop would go back to the clause for the rest
+     * @param aboutStrings what this part states about the strings at each position it states a rule
+     *                     about. The position is here whether or not the rule was read, because
+     *                     which of a position's numbers a rule is written about is settled by the
+     *                     call; what the rule leaves is the other half, and a rule this could not
+     *                     read has none
      */
     record Part(Adoption<FactSubject> byValues, Adoption<FactSubject> byOrder,
                 Map<FactSubject, java.util.List<souther.compiler.values.UnreadReason>> standing,
-                Map<FactSubject, AdmittedPlan> aboutStrings) {
+                Map<FactSubject, StringRestriction> aboutStrings) {
 
         /** The same part, in a branch nobody can be in — see {@link Adoption#inADeadBranch}. */
         Part inADeadBranch() {
@@ -167,21 +167,48 @@ sealed interface StatedByClauses {
         /**
          * What the same part of two branches states about the strings at a position.
          *
-         * <p>Either branch's, which is what a choice leaves: a position one of them wrote a string
-         * rule about is one the clause writes a string rule about, and what stands there is what
-         * one branch admits or what the other does. So the plans join, and a position only one
-         * branch spoke about is left every string by the branch that did not.
+         * <p>Either branch's, which is what a choice leaves: what stands there is what one branch
+         * admits or what the other does, so the plans join and not knowing one of them is not
+         * knowing the pair. A position only one branch states a rule about is left every string by
+         * the branch that does not, so it joins with that — read as the one branch's, a choice
+         * would bound a position where only one of its branches bounds it.
          */
-        private Map<FactSubject, AdmittedPlan> eitherAboutStrings(
-                Part other) {
+        private Map<FactSubject, StringRestriction> eitherAboutStrings(Part other) {
             if (aboutStrings.equals(other.aboutStrings())) {
                 return aboutStrings;
             }
-            Map<FactSubject, AdmittedPlan> out =
-                    new LinkedHashMap<>(aboutStrings);
-            other.aboutStrings().forEach((position, plan) -> out.merge(position, plan,
-                    (here, there) -> AdmittedPlan.joining(List.of(here, there))));
+            Map<FactSubject, StringRestriction> out = new LinkedHashMap<>();
+            for (FactSubject position : bothNaming(other)) {
+                out.put(position,
+                        joined(aboutStrings.get(position), other.aboutStrings().get(position)));
+            }
             return Map.copyOf(out);
+        }
+
+        /** Every position either of them states a rule about the strings of. */
+        private java.util.Set<FactSubject> bothNaming(Part other) {
+            java.util.Set<FactSubject> out = new LinkedHashSet<>(aboutStrings.keySet());
+            out.addAll(other.aboutStrings().keySet());
+            return out;
+        }
+
+        /**
+         * What one position comes to across the two, either side missing being every string.
+         *
+         * <p>A branch that states no rule about the strings at a position leaves every string
+         * standing there, which is what the plans are joined with — so the join is what either
+         * branch admits, and a branch that says nothing does not lend the other its bound.
+         */
+        private static StringRestriction joined(StringRestriction one, StringRestriction other) {
+            if (one instanceof StringRestriction.NotKnown
+                    || other instanceof StringRestriction.NotKnown) {
+                return new StringRestriction.NotKnown();
+            }
+            AdmittedPlan here = one instanceof StringRestriction.Admitting it
+                    ? it.plan() : AdmittedPlan.ANY;
+            AdmittedPlan there = other instanceof StringRestriction.Admitting it
+                    ? it.plan() : AdmittedPlan.ANY;
+            return new StringRestriction.Admitting(AdmittedPlan.joining(List.of(here, there)));
         }
 
         /** The positions a rule of this copy reached and did not merely settle: what it
@@ -222,7 +249,7 @@ sealed interface StatedByClauses {
 
         /** Into both branches, since which of them survives is not known yet. */
         @Override
-        public StatedByClauses from(Core e, Set<FactSubject> aboutStrings) {
+        public StatedByClauses from(Core e, StringRestriction.Found aboutStrings) {
             return new Choice(id, left.from(e, aboutStrings), right.from(e, aboutStrings));
         }
     }
@@ -256,11 +283,12 @@ sealed interface StatedByClauses {
      * whose branch turns out dead is a part nothing transformed, and the account it gives is the one
      * it gave before anybody knew.
      *
-     * @param aboutStrings the positions {@code e} states a rule about the strings of, which is a
-     *                     fact about the clause and the same in every branch. What each branch
-     *                     admits at one of them is the branch's own and is read there
+     * @param aboutStrings what {@code e} states a rule about the strings of, and which of those
+     *                     rules were read, which is a fact about the clause and the same in every
+     *                     branch. What each branch admits at one of them is the branch's own and is
+     *                     read there
      */
-    StatedByClauses from(Core e, Set<FactSubject> aboutStrings);
+    StatedByClauses from(Core e, StringRestriction.Found aboutStrings);
 
     /**
      * What this rule's own clauses leave, with its choices decided by its own clauses and by
@@ -455,7 +483,7 @@ sealed interface StatedByClauses {
          */
         @Override
         public StatedByClauses from(Core e, StatedByClauses out) {
-            return out.from(e, values.stringSubjectsIn(e));
+            return out.from(e, values.stringRulesIn(e));
         }
 
         /**

@@ -2,7 +2,6 @@ package souther.compiler.check;
 
 import souther.compiler.numeric.OrderedIntervals;
 import souther.compiler.values.AdmissibleValues;
-import souther.compiler.values.AdmittedPlan;
 
 import java.util.LinkedHashSet;
 import java.util.Set;
@@ -71,17 +70,17 @@ record ReadByClauses(AdmissibleValues<FactSubject> values, OrderedIntervals<Fact
      * never needed to find out.
      *
      * @param aboutARule what a rule of this part is answerable for, per position
-     * @param aboutStrings the positions this part states a rule about the strings of, each with
-     *                     what the part plans to admit there. Beside the adoptions and not among
-     *                     them: what a part took a position in at is what the readings settled, and
-     *                     this is what the clause states — a rule whose written text nothing worked
-     *                     out is still a rule about the position it names, and a reader deciding
-     *                     which of the position's numbers it is measured at wants exactly that
+     * @param aboutStrings what this part states about the strings at each position it states a rule
+     *                     about. Beside the adoptions and not among them: what a part took a
+     *                     position in at is what the readings settled, and this is what the clause
+     *                     states — a rule whose written text nothing worked out is still a rule
+     *                     about the position it names, and a reader deciding which of the position's
+     *                     numbers it is measured at wants exactly that
      */
     record OfAPart(Adoption<FactSubject> byValues, Adoption<FactSubject> byOrder,
                    java.util.Map<FactSubject,
                            java.util.List<souther.compiler.values.UnreadReason>> aboutARule,
-                   java.util.Map<FactSubject, AdmittedPlan> aboutStrings) {
+                   java.util.Map<FactSubject, StringRestriction> aboutStrings) {
 
         /** The positions some reading took the whole of this part in at. */
         java.util.Set<FactSubject> adopted() {

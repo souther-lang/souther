@@ -157,12 +157,31 @@ final class RuntimeOrder {
      * wrote — charged to an allowance, every language would be a little smaller than the one before
      * it for a reason nobody could see.
      */
-    static final Automaton EVERY_STRING = onlyStrings();
+    static final Automaton EVERY_STRING = canonicalOnlyStrings();
+
+    /**
+     * The same machine as it is written, which is what a product is taken against.
+     *
+     * <p>Two states and not the canonical three. A machine is not required to be complete, so the
+     * state a walk goes to when it is already refused need not be there — and a product is charged
+     * for the states it will make, so leaving it out is a third off every restriction.
+     */
+    static final Automaton READS_ONLY_STRINGS = onlyStrings();
 
     private static Automaton onlyStrings() {
+        Automaton made = everyString(new Meter(16, 64));
+        if (made == null) {
+            throw new IllegalStateException("the machine that reads only strings is two states");
+        }
+        return made;
+    }
+
+    private static Automaton canonicalOnlyStrings() {
+        // Its own, and not the constant beside it. A constant made out of another is made after it
+        // whatever a reader expects of the order they are written in, and one made first reads
+        // nothing where the other will be.
         Meter meter = new Meter(16, 64);
-        Automaton made = everyString(meter);
-        Automaton one = made == null ? null : made.canonical(meter);
+        Automaton one = onlyStrings().canonical(meter);
         if (one == null) {
             throw new IllegalStateException("the machine for every string is three states");
         }
