@@ -45,7 +45,7 @@ final class ValueClasses {
         Recognition is = Recognition.Under.of(worn,
                 new Recognition.AtAValue(value,
                         placeOf(value, view.declared(), ruleSource.symbols())));
-        FixtureTemplate stands = Witnesses.wrapped(view.declared(), bare, ruleSource);
+        FixtureTemplate stands = WornNames.under(view.wrappers(), bare, ruleSource);
         return (stands == null
                 // A name the position wears that nothing here writes. The class is the position's
                 // either way and a row already sitting in it still covers it; what is absent is the

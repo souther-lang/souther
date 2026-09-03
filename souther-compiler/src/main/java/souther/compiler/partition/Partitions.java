@@ -977,7 +977,7 @@ public final class Partitions {
     /** A count written at a position, wearing every name that position declares. */
     private static FixtureTemplate standing(Type type, Carrier carrier, Place at,
             RuleReadingSource ruleSource) {
-        return Witnesses.wrapped(type,
+        return WornNames.under(TypeView.of(type, ruleSource.symbols()).wrappers(),
                 FixtureTemplate.on(carrier, at, ruleSource.symbols().scope()::reach), ruleSource);
     }
 
@@ -1544,9 +1544,14 @@ public final class Partitions {
         // Under every name the position wears, because a floor read off the record says how much the
         // value holds and not what it is written as: a field of a newtype over a list takes a list
         // inside that newtype's own name.
+        TypeView view = TypeView.of(type, ruleSource.symbols());
         for (FixtureTemplate bare : Witnesses.holding(TypeOps.base(type, ruleSource.symbols()),
                 leastHeld(type, ruleSource, held), ruleSource, policy, expanding)) {
-            candidates.add(Witnesses.wrapped(type, bare, ruleSource));
+            // A name this module cannot write leaves no value to write, and no candidate.
+            FixtureTemplate written = WornNames.under(view.wrappers(), bare, ruleSource);
+            if (written != null) {
+                candidates.add(written);
+            }
         }
         candidates.addAll(representativesOf(type, ruleSource, policy, within, expanding));
         Map<String, FixtureTemplate> once = new LinkedHashMap<>();

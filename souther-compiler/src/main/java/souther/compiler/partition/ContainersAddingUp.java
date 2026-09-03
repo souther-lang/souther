@@ -364,7 +364,8 @@ final class ContainersAddingUp {
             }
             values.add(one);
         }
-        return Witnesses.wrapped(container, FixtureTemplate.collection(values), ruleSource);
+        return WornNames.under(TypeView.of(container, ruleSource.symbols()).wrappers(),
+                FixtureTemplate.collection(values), ruleSource);
     }
 
     /**

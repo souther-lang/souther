@@ -54,6 +54,28 @@ sealed interface WornNames {
         return new Spelled(names);
     }
 
+    /**
+     * {@code value} under {@code worn}, or null where one of those names cannot be written here.
+     *
+     * <p>Null takes the whole value with it: the name goes on the value as it is written, and a
+     * value written without one is of a type the position does not declare. What comes back is
+     * {@code value} itself where the position wears no name, so that nothing is written round
+     * nothing.
+     *
+     * <p>The names are the reading's. Nothing here works out which names a value wears — that is
+     * what reading the position came to — and the putting-back-on is
+     * {@link RepresentativeSource#under}'s, so a value never wears a name that was spelled anywhere
+     * but here.
+     */
+    static FixtureTemplate under(List<TypeOps.Layer> worn, FixtureTemplate value,
+                                 RuleReadingSource ruleSource) {
+        if (value == null || worn.isEmpty()) {
+            return value;
+        }
+        return of(worn, ruleSource) instanceof Spelled spelled
+                ? RepresentativeSource.under(spelled.names(), value) : null;
+    }
+
     /** Why nothing here can write a value of {@code name}: no spelling reaches it. */
     static String noSpellingFor(TypeSymbol name) {
         return name instanceof TypeSymbol.AtModule at

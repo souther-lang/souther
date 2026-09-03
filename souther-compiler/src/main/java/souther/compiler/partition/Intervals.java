@@ -4,6 +4,7 @@ import souther.compiler.check.ReadingPolicy;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.TypeOps;
+import souther.compiler.check.TypeView;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Quantities;
 import souther.compiler.inputs.TermOrders;
@@ -273,7 +274,8 @@ final class Intervals {
         // how to build for rather than one that falls to whichever branch it was not named in.
         switch (of) {
             case NumericTerm.ValueOf _ -> {
-                FixtureTemplate standing = Witnesses.wrapped(type,
+                FixtureTemplate standing = WornNames.under(
+                        TypeView.of(type, ruleSource.symbols()).wrappers(),
                         FixtureTemplate.on(carrier, inside, ruleSource.symbols().scope()::reach),
                         ruleSource);
                 return standing == null ? List.of() : List.of(standing);
@@ -284,11 +286,12 @@ final class Intervals {
         if (size < 0) {
             return List.of();
         }
+        TypeView view = TypeView.of(type, ruleSource.symbols());
         List<FixtureTemplate> out = new ArrayList<>();
         for (FixtureTemplate each
                 : Witnesses.ofSize(TypeOps.base(type, ruleSource.symbols()), size, ruleSource,
                         policy, Set.of()).values()) {
-            out.add(Witnesses.wrapped(type, each, ruleSource));
+            out.add(WornNames.under(view.wrappers(), each, ruleSource));
         }
         return List.copyOf(out);
     }

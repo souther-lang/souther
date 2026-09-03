@@ -1,14 +1,13 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.ReadingPolicy;
-import souther.compiler.ast.Hir;
 import souther.compiler.check.Carrier;
 import souther.compiler.numeric.Place;
 import souther.compiler.check.RuleReadingSource;
-import souther.compiler.check.TypeOps;
+import souther.compiler.check.Shape;
+import souther.compiler.check.TypeView;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
-import souther.compiler.types.TypeReachName;
 
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -441,37 +440,20 @@ final class Witnesses {
      * not to offer — which is what the values a type divides into are for, above.
      */
     private static FixtureTemplate varied(Type type, int index, RuleReadingSource ruleSource) {
-        Type carrier = TypeOps.base(type, ruleSource.symbols());
-        if (carrier == Type.STRING) {
-            return wrapped(type, FixtureTemplate.string(
-                    "x".repeat(Math.max(1, Partitions.leastHeld(type, ruleSource)) + index)), ruleSource);
+        TypeView view = TypeView.of(type, ruleSource.symbols());
+        if (view.shape() instanceof Shape.Scalar scalar && scalar.prim() == Type.Prim.STRING) {
+            return WornNames.under(view.wrappers(), FixtureTemplate.string(
+                    "x".repeat(Math.max(1, Partitions.leastHeld(type, ruleSource)) + index)),
+                    ruleSource);
         }
         Place at = Partitions.numberInside(type, ruleSource, index);
         if (at == null) {
             return null;
         }
-        return wrapped(type, FixtureTemplate.on(
-                carrier == Type.DECIMAL ? Carrier.DENSE : Carrier.WHOLE, at, ruleSource.symbols().scope()::reach), ruleSource);
-    }
-
-    /**
-     * The value under every name the position wears, which is how it is written where the position
-     * declares a newtype rather than what the newtype carries.
-     *
-     * <p>Null where {@code bare} is, and where a name the position wears is one this module cannot
-     * write: a value goes under the names as it is written, so a name there is nothing here reaches
-     * leaves no way of writing the value at all.
-     */
-    static FixtureTemplate wrapped(Type type, FixtureTemplate bare, RuleReadingSource ruleSource) {
-        if (bare == null || !(type instanceof Type.Ref ref)
-                || !(ruleSource.symbols().declaredNode(ref.name()) instanceof Hir.Data data) || !data.newtype()) {
-            return bare;
-        }
-        TypeSymbol name = ref.name();
-        FixtureTemplate inner =
-                wrapped(TypeOps.newtypeInner(name, ruleSource.symbols()), bare, ruleSource);
-        return inner != null && ruleSource.symbols().scope().reach(name) instanceof TypeReachName.Written written
-                ? FixtureTemplate.newtype(written, inner) : null;
+        Carrier carrier = view.shape() instanceof Shape.Scalar scalar
+                && scalar.prim() == Type.Prim.DECIMAL ? Carrier.DENSE : Carrier.WHOLE;
+        return WornNames.under(view.wrappers(), FixtureTemplate.on(
+                carrier, at, ruleSource.symbols().scope()::reach), ruleSource);
     }
 
     private Witnesses() {}
