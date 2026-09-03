@@ -640,11 +640,10 @@ public final class HelperInliner {
         if (rewrite == null) {
             return call;
         }
-        List<Hir.Expr> args = new ArrayList<>(call.args());
-        for (int supplied : rewrite.supplied()) {
-            // an argument the rewrite supplies, which no one wrote
-            args.add(new Hir.IntLit(supplied, call.pos(), null));
-        }
+        // Where the supplied arguments go is the rewrite's, which is why the list is built there:
+        // this writes each of them out as the literal no one wrote, and puts none of them anywhere.
+        List<Hir.Expr> args = rewrite.arguments(call.args(),
+                constant -> new Hir.IntLit(constant, call.pos(), null));
         // The library name this reaches for is the pass's; the application is the author's, and so
         // is what they applied there — a report about this call quotes the sugar they wrote and not
         // the operation it stands for, which is private to the library and takes another argument.

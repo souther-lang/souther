@@ -85,8 +85,8 @@ class TheCallGraphReadsASugarFromTheLibraryThatDeclaresItTest {
             Set<String> reached = callsIn(callTo(sugar, rewrite.keptArgs()));
 
             assertEquals(Set.of(rewrite.target().qualified()), reached,
-                    sugar + " is " + rewrite.target().qualified() + " with "
-                            + rewrite.supplied().size() + " argument(s) supplied");
+                    sugar + " is " + rewrite.target().qualified()
+                            + " with the rest of its arguments supplied");
         });
     }
 

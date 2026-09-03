@@ -19,6 +19,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.IntFunction;
 
 /**
  * What the standard library declares: every operation's declaration and resolved signature, which
@@ -79,12 +80,62 @@ public final class Stdlib {
      * cannot be read without the rest of it, which is the ambient dependency this value exists to
      * end.
      *
-     * <p>A sugar supplies constants and nothing else, which is why {@code supplied} holds numbers;
-     * one that had to supply anything else could not be written down as this and would say so.
+     * <p>A sugar supplies constants and nothing else, which is why what it supplies is numbers; one
+     * that had to supply anything else could not be written down as this and would say so.
+     *
+     * <p>The constants are not handed out. Where they go is what this says and not something a
+     * caller works out from them: the arguments the author wrote keep the places they were written
+     * in and the supplied ones follow, which is what makes the numbering in a report about the call
+     * the author's own. Given the list, a caller could put them anywhere and every reader of a
+     * position — the report, the combinator's block argument, the reduction's seed — would be
+     * reading a different call from the one the author wrote. A sugar that has to supply an
+     * argument somewhere else cannot be written down as this, and the day one is wanted this is
+     * where it is said, beside what the numbering then means.
      */
-    public record Rewrite(ValueName.Stdlib.Operation target, List<Integer> supplied, int keptArgs) {
-        public Rewrite {
-            supplied = List.copyOf(supplied);
+    public static final class Rewrite {
+
+        private final ValueName.Stdlib.Operation target;
+        private final List<Integer> supplied;
+        private final int keptArgs;
+
+        Rewrite(ValueName.Stdlib.Operation target, List<Integer> supplied, int keptArgs) {
+            this.target = target;
+            this.supplied = List.copyOf(supplied);
+            this.keptArgs = keptArgs;
+        }
+
+        /** The operation the sugared name becomes. */
+        public ValueName.Stdlib.Operation target() {
+            return target;
+        }
+
+        /** How many of the target's arguments a call of the sugar writes — the prefix, so that an
+         *  argument the author counts to is the one the target takes at that position. */
+        public int keptArgs() {
+            return keptArgs;
+        }
+
+        /**
+         * The arguments of the call this rewrites to: the {@code written} ones where they were
+         * written, then the ones this supplies, each made by {@code supplying} from the constant it
+         * is.
+         *
+         * <p>Generic in what an argument is because two callers want two things of it. The pass
+         * writing the rewrite out wants expressions; a reader working out what a position of the
+         * target a written argument lands on wants the position. Both are this same placing, and
+         * a second statement of it is a second answer to where a supplied argument goes.
+         */
+        public <T> List<T> arguments(List<T> written, IntFunction<T> supplying) {
+            if (written.size() != keptArgs) {
+                throw new IllegalArgumentException("`" + target.qualified() + "` is written with "
+                        + keptArgs + " argument(s) where it is sugar, and this was given "
+                        + written.size());
+            }
+            List<T> all = new ArrayList<>(written);
+            for (int constant : supplied) {
+                all.add(supplying.apply(constant));
+            }
+            return List.copyOf(all);
         }
     }
 
