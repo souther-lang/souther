@@ -55,6 +55,43 @@ final class Automaton {
     }
 
     /**
+     * A machine written out state by state, for a builder in this package that has one to write.
+     *
+     * <p>Beside {@link #of} and not instead of it. That one is handed a pattern and works out the
+     * states; a builder here holds a machine whose states follow from something that is not a
+     * pattern — where a string sits against another on the runtime's order, which no pattern says —
+     * and has nothing to be read from. Both end in the same three tables, which is what keeps a
+     * machine made this way answerable to everything below.
+     *
+     * <p>No free steps: a builder writing its own states writes what each one leads to, so a step
+     * costing no symbol is a state it did not need. One that wants them builds through {@link #of}.
+     */
+    static Automaton madeOf(List<List<Step>> steps, BitSet accepting) {
+        List<int[]> free = new ArrayList<>();
+        for (int at = 0; at < steps.size(); at++) {
+            free.add(new int[0]);
+        }
+        return new Automaton(steps, free, accepting);
+    }
+
+    /**
+     * The steps out of one state, for a reader in this package walking a canonical machine.
+     *
+     * <p>Only ever asked of one that is canonical, where a walk is the whole of what there is to do:
+     * the machine is deterministic and complete, so every symbol leads somewhere and where it leads
+     * is a fact about the symbol. Asked of a machine that is not, a reader would be walking one of
+     * the ways the pattern happened to be written.
+     */
+    List<Step> stepsFrom(int state) {
+        return steps.get(state);
+    }
+
+    /** Whether a walk may stop at {@code state}. */
+    boolean stopsAt(int state) {
+        return accepting.get(state);
+    }
+
+    /**
      * The machine for {@code syntax}, or null where building it would take more than
      * {@code mostStates}.
      *

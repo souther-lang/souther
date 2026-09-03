@@ -63,6 +63,39 @@ public final class Language {
         return machine.accepts(value);
     }
 
+    /**
+     * Every string that comes before {@code than} on the strings' own order, or null past what
+     * {@code meter} allows.
+     *
+     * <p>The order the runtime makes and a model's {@code <} is, which is not the order the symbols
+     * of a machine are in — so this is built rather than read off an alphabet, and where it is built
+     * is {@link RuntimeOrder}. Metered like every other way to a language: what a caller is told
+     * past the allowance is that this was not made.
+     *
+     * <p>Here rather than in the layer that reasons about where a language stops, because a language
+     * is what this returns and a machine is what makes one. What such a caller does with it — meet
+     * it, take it away, ask whether two of them are one — is what a language already answers.
+     */
+    public static Language before(String than, Meter meter) {
+        return canonical(RuntimeOrder.before(than, meter), meter);
+    }
+
+    /**
+     * The least string it holds, or null where it holds none and where the ones it holds have no
+     * least among them.
+     *
+     * <p>Free, like everything else asked of one of these: read off the canonical machine, and
+     * nothing is built. The two nulls are one answer here because neither is a string — a caller
+     * telling them apart asks {@link #isEmpty}, which is free as well.
+     *
+     * <p>Not {@link #some}. That one answers with the shortest, which is a different string: a
+     * language of two-letter words holds no shorter one, and which of them comes first is what this
+     * is about.
+     */
+    public String least() {
+        return RuntimeOrder.leastOf(machine);
+    }
+
     /** The strings both hold, or null where making them ran past what {@code meter} allows. */
     public Language and(Language other, Meter meter) {
         return canonical(machine.and(other.machine, meter), meter);
