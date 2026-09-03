@@ -1,8 +1,6 @@
 package souther.compiler.check;
 
-import souther.compiler.semantics.ArgumentRef;
 import souther.compiler.semantics.ConstantArguments;
-import souther.compiler.semantics.OperationFact;
 import souther.compiler.semantics.ResultBound;
 import souther.compiler.semantics.SizeAgainstItsSource;
 import souther.compiler.core.Core;
@@ -51,12 +49,12 @@ final class IntrinsicNumericFacts {
 
     /**
      * A call whose arguments none of its operation's rows name, which is what a measure is: it is
-     * given a container, and a bound may only name an argument that is a number
-     * ({@link DischargeRules#holdBound}). So the rows read under this are all of them, and the one
+     * given a container, and a bound may only name an argument that is a number, which
+     * {@link OperationFactBinder} holds. So the rows read under this are all of them, and the one
      * premise is written here rather than once for the condition on the arguments and again for the
      * argument a row stands against.
      */
-    private static final java.util.function.Function<ArgumentRef, LinearForm<FactSubject>>
+    private static final java.util.function.Function<DeclaredArgument, LinearForm<FactSubject>>
             NO_ARGUMENTS = _ -> null;
 
     private IntrinsicNumericFacts() {}
@@ -77,7 +75,7 @@ final class IntrinsicNumericFacts {
         // nought. Read off the operation's rows and not written here: it is the same proposition as
         // `Int.abs(x) >= 0`, and a copy of it here was the half of it a partition could not reach
         // (#1016).
-        bounding(DischargeRules.boundsOn(size, ConstantArguments.NONE), atom, NO_ARGUMENTS, out);
+        bounding(DischargeRules.boundsOn(size, ConstantArguments.none()), atom, NO_ARGUMENTS, out);
         // A construction's result is no smaller than each source the rule names for it. A rule may
         // name more than one — `a ++ b` is as long as either half — so this is a loop where the
         // building below is one answer.
@@ -143,11 +141,11 @@ final class IntrinsicNumericFacts {
      * <p>{@code against} answers the argument a row names. A row it cannot answer states nothing,
      * which is what a bound against a quantity this reader has no name for comes to.
      */
-    private static void bounding(List<ResultBound> rows, FactSubject atom,
-                                 java.util.function.Function<ArgumentRef,
+    private static void bounding(List<ResultBound<DeclaredArgument>> rows, FactSubject atom,
+                                 java.util.function.Function<DeclaredArgument,
                                          LinearForm<FactSubject>> against,
                                  List<NumericConstraint> out) {
-        for (ResultBound bound : rows) {
+        for (ResultBound<DeclaredArgument> bound : rows) {
             LinearForm<FactSubject> stands = bound.against() == null
                     ? LinearForm.constant(bound.offset())
                     : addTo(against.apply(bound.against()), bound.offset());
@@ -179,8 +177,8 @@ final class IntrinsicNumericFacts {
                 instanceof Core.PreservedCall moved)) {
             return;
         }
-        OperationFact.ShiftsBy shift = DischargeRules.shiftBy(moved);
-        if (shift == null || !shift.measure().equals(call.operation())
+        BoundOperationFact.ShiftsBy shift = DischargeRules.shiftBy(moved);
+        if (shift == null || !shift.measure().operation().equals(call.operation())
                 || !sameValue(CallArguments.of(shift.of(), moved), call.args().get(0), at, terms)) {
             return;
         }

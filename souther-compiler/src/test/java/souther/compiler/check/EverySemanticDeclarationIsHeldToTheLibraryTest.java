@@ -36,13 +36,16 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class EverySemanticDeclarationIsHeldToTheLibraryTest {
 
-    /** Everything the language declares is visited, and the visiting is over the declarations. */
+    /** Everything the language declares is bound, one bound fact per declaration and in the order
+     *  declared, and the binding is over the declarations. */
     @Test
     void theBindingIsOverTheDeclarations() {
-        assertEquals(OperationFacts.declarations(),
+        assertEquals(OperationFacts.declarations().stream()
+                        .map(OperationFacts.Declared::operation).toList(),
                 OperationFactBinder.bindAll(DefaultStdlib.get(), OperationFacts.declarations())
-                        .visited(),
-                "what the binding visited is what is declared");
+                        .all().stream().map(each -> each.operation().operation()).toList(),
+                "what the binding bound is what is declared, about the operations it is declared"
+                        + " of");
         assertTrue(!OperationFacts.declarations().isEmpty(),
                 "and there is something declared for that to mean anything");
     }
@@ -120,8 +123,8 @@ class EverySemanticDeclarationIsHeldToTheLibraryTest {
                 new ArrayList<>(OperationFacts.declarations());
         gained.add(new OperationFacts.Declared(
                 ValueName.Stdlib.operation("List", "get"),
-                new OperationFact.BoundsItsResult(new ResultBound(null, BigDecimal.ZERO,
-                        Rel.GE, new ResultBound.Provided.Always()))));
+                new OperationFact.BoundsItsResult(new ResultBound<>(null, BigDecimal.ZERO,
+                        Rel.GE, new ResultBound.Provided.Always<>()))));
 
         IllegalStateException refused = assertThrows(IllegalStateException.class,
                 () -> OperationFactBinder.bindAll(DefaultStdlib.get(), gained),

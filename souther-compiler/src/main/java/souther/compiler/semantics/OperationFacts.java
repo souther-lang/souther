@@ -6,23 +6,24 @@ import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 
 /**
- * What is true of the language's own operations.
+ * What is true of the language's own operations, as somebody wrote it down.
  *
- * <p>The declarations are the list, and everything else here is read off it. An index is derived
- * rather than declared beside the list, so a fact cannot exist without being among the
- * declarations — which is what the procedures that validate these enumerate, and what a fact added
- * later is therefore part of without anyone remembering to add it anywhere.
+ * <p>The declarations are the list, and the list is the whole of what this publishes. A fact is
+ * written here in the authoring vocabulary — a name for the operation, a word for an argument —
+ * and nothing here says the library has such an operation or such an argument. Holding every one
+ * of these to the library's own declarations reads signatures, which is the frontend's; it happens
+ * once over the whole list ({@code check.OperationFactBinder}), and what comes out of that walk is
+ * a value of another kind, in which every name has been read against its declaration
+ * ({@code check.BoundOperationFacts}). Every reader of a fact reads that one.
  *
- * <p><b>Looking one up is a lookup and nothing else.</b> Holding these to the library's own
- * declarations reads signatures, which is the frontend's; it happens once over the whole list
- * ({@code check.OperationFactBinder}) rather than on the first ask for each fact. Bound the second
- * way, a fact nothing asked for was a fact nothing checked, and the completeness of the checking
- * depended on which consumers there happened to be.
+ * <p><b>No lookup here, by design.</b> An index keyed by operation and read off this list would be
+ * a way to a fact that does not pass through the binding, and a reader that took it would be
+ * holding the authored word and putting the binder's question a second time — with an answer that
+ * agrees with the binder's for exactly as long as nobody changes either. So this list is read by
+ * one caller, and a reader that wants a fact asks what the binding made of it.
  */
 public final class OperationFacts {
 
@@ -221,18 +222,18 @@ public final class OperationFacts {
             // Every value in the answer came from the map it was given: the one under the key is
             // what the closure made of it, and every other is the value that was there. Read as a
             // closure result alone, what is true of one value would be said of all of them.
-            about("Map", "updateIfPresent", new OperationFact.BuildsItsResultFrom(new BuiltFrom(
-                    new ElementLineage.OneOf(List.of(
-                            new ElementLineage.SameAs(new ElementLineage.Source(CONTAINER, 1)),
-                            new ElementLineage.ClosureResult(
-                                    new ElementLineage.Source(CONTAINER, 1)))),
+            about("Map", "updateIfPresent", new OperationFact.BuildsItsResultFrom(new BuiltFrom<>(
+                    new ElementLineage.OneOf<>(List.of(
+                            new ElementLineage.SameAs<>(new ElementLineage.Source<>(CONTAINER, 1)),
+                            new ElementLineage.ClosureResult<>(
+                                    new ElementLineage.Source<>(CONTAINER, 1)))),
                     SizeAgainstItsSource.SAME))),
             // Inside what the closure answered, which is an optional here and a list in a
             // `flatMap`. One lineage for the two, told apart by what the closure's own signature
             // says it answers with.
-            about("List", "filterMap", new OperationFact.BuildsItsResultFrom(new BuiltFrom(
-                    new ElementLineage.InsideClosureResult(
-                            new ElementLineage.Source(CONTAINER, 1)), SizeAgainstItsSource.AT_MOST))),
+            about("List", "filterMap", new OperationFact.BuildsItsResultFrom(new BuiltFrom<>(
+                    new ElementLineage.InsideClosureResult<>(
+                            new ElementLineage.Source<>(CONTAINER, 1)), SizeAgainstItsSource.AT_MOST))),
             about("Set", "map", maps(CONTAINER, SizeAgainstItsSource.AT_MOST)),
 
             // The containers a construction's result is never smaller than. A union answers one of
@@ -505,26 +506,30 @@ public final class OperationFacts {
     }
 
     private static OperationFact computes(Arithmetic arithmetic) {
-        return new OperationFact.ComputesANumber(new NumericResult(
+        return new OperationFact.ComputesANumber(new NumericResult<>(
                 new NumericResult.Answered.Directly(), arithmetic, null));
     }
 
     /** The condition every division comes back as {@code DivisionByZero} under. */
     private static OperationFact computesInTheCaseCarrying(Type carried, Arithmetic arithmetic) {
-        return new OperationFact.ComputesANumber(new NumericResult(
+        return new OperationFact.ComputesANumber(new NumericResult<>(
                 new NumericResult.Answered.InTheCaseCarrying(carried), arithmetic,
-                new NumericResult.TheOtherCaseWhen(at(1), BinOp.EQ, 0)));
+                new NumericResult.TheOtherCaseWhen<>(at(1), BinOp.EQ, 0)));
     }
 
+    @SafeVarargs
     private static OperationFact answers(ArgumentRef argument,
-                                         OperationFact.ArgumentsStand... given) {
-        return new OperationFact.IsDefinedByCases(
-                new OperationFact.Case(argument, List.of(given)));
+                                         ArgumentsStand<ArgumentRef>... given) {
+        List<ArgumentsStand<ArgumentRef>> reached = new ArrayList<>(given.length);
+        for (ArgumentsStand<ArgumentRef> stands : given) {
+            reached.add(stands);
+        }
+        return new OperationFact.IsDefinedByCases(new DefinitionCase<>(argument, reached));
     }
 
-    private static OperationFact.ArgumentsStand stands(ArgumentRef left, Rel rel,
-                                                       ArgumentRef right) {
-        return new OperationFact.ArgumentsStand(left, rel, right);
+    private static ArgumentsStand<ArgumentRef> stands(ArgumentRef left, Rel rel,
+                                                      ArgumentRef right) {
+        return new ArgumentsStand<>(left, rel, right);
     }
 
     private static OperationFact noSmallerThan(ArgumentRef container) {
@@ -554,14 +559,14 @@ public final class OperationFacts {
 
     /** The answer holds the very elements {@code source} held. */
     private static OperationFact keeps(ArgumentRef source, SizeAgainstItsSource size) {
-        return new OperationFact.BuildsItsResultFrom(new BuiltFrom(
-                new ElementLineage.SameAs(new ElementLineage.Source(source, 1)), size));
+        return new OperationFact.BuildsItsResultFrom(new BuiltFrom<>(
+                new ElementLineage.SameAs<>(new ElementLineage.Source<>(source, 1)), size));
     }
 
     /** The answer holds what a closure made of each of {@code source}'s elements. */
     private static OperationFact maps(ArgumentRef source, SizeAgainstItsSource size) {
-        return new OperationFact.BuildsItsResultFrom(new BuiltFrom(
-                new ElementLineage.ClosureResult(new ElementLineage.Source(source, 1)), size));
+        return new OperationFact.BuildsItsResultFrom(new BuiltFrom<>(
+                new ElementLineage.ClosureResult<>(new ElementLineage.Source<>(source, 1)), size));
     }
 
     /** {@code times} of what one argument is counted as. */
@@ -577,25 +582,26 @@ public final class OperationFacts {
     }
 
     private static OperationFact bounded(Rel rel, long n) {
-        return bounded(rel, null, n, new ResultBound.Provided.Always());
+        return bounded(rel, null, n, always());
     }
 
-    private static OperationFact bounded(Rel rel, long n, ResultBound.Provided provided) {
+    private static OperationFact bounded(Rel rel, long n,
+                                         ResultBound.Provided<ArgumentRef> provided) {
         return bounded(rel, null, n, provided);
     }
 
     private static OperationFact bounded(Rel rel, ArgumentRef against, long offset,
-                                         ResultBound.Provided provided) {
+                                         ResultBound.Provided<ArgumentRef> provided) {
         return new OperationFact.BoundsItsResult(
-                new ResultBound(against, java.math.BigDecimal.valueOf(offset), rel, provided));
+                new ResultBound<>(against, java.math.BigDecimal.valueOf(offset), rel, provided));
     }
 
-    private static ResultBound.Provided always() {
-        return new ResultBound.Provided.Always();
+    private static ResultBound.Provided<ArgumentRef> always() {
+        return new ResultBound.Provided.Always<>();
     }
 
-    private static ResultBound.Provided aboveZero(ArgumentRef argument) {
-        return new ResultBound.Provided.ConstantAboveZero(argument);
+    private static ResultBound.Provided<ArgumentRef> aboveZero(ArgumentRef argument) {
+        return new ResultBound.Provided.ConstantAboveZero<>(argument);
     }
 
     private static OperationFact shifts(String module, String measure, ArgumentRef of,
@@ -604,363 +610,15 @@ public final class OperationFacts {
                 java.math.BigDecimal.valueOf(per));
     }
 
-    /** Every fact declared, for whatever holds them to the library's declarations. */
+    /**
+     * Every fact declared, for what holds them to the library's declarations.
+     *
+     * <p>The one thing this publishes, and read by one caller ({@code check.OperationFactBinder}).
+     * A second reader of this list would be a reader of the authoring vocabulary below the
+     * binding, which is what {@code OnlyTheBinderReadsTheAuthoringVocabularyTest} counts.
+     */
     public static List<Declared> declarations() {
         return DECLARED;
-    }
-
-    /** What {@code operation} answers, counted, in what its arguments are counted as — or null
-     *  where it states no such form. */
-    public static souther.compiler.numeric.LinearForm<ArgumentRef>
-            answersAFormOfItsArguments(ValueName operation) {
-        return Index.ANSWERS_A_FORM.get(operation);
-    }
-
-    /** The operations declared to answer a form of their arguments. */
-    public static java.util.Set<ValueName> answersAFormOfItsArguments() {
-        return Index.ANSWERS_A_FORM.keySet();
-    }
-
-    /** Which of {@code operation}'s two arguments a positive answer names as the greater, or null
-     *  where the sign of what it answers is not their order. */
-    public static PositiveOrder statesTheOrderOfItsArguments(ValueName operation) {
-        return Index.ORDERS.get(operation);
-    }
-
-    /** The operations whose answer states the order of their arguments. */
-    public static java.util.Set<ValueName> statesTheOrderOfItsArguments() {
-        return Index.ORDERS.keySet();
-    }
-
-    /** How {@code operation} moves the value it is given, or null where it moves none. */
-    public static OperationFact.ShiftsBy shiftsBy(ValueName operation) {
-        return Index.SHIFTS.get(operation);
-    }
-
-    /** The operations that move a value by an amount. */
-    public static java.util.Set<ValueName> shiftsBy() {
-        return Index.SHIFTS.keySet();
-    }
-
-    /** What holds of the number {@code operation} answers, wherever it is called. */
-    public static List<ResultBound> boundsOnTheResult(ValueName operation) {
-        return Index.BOUNDS.getOrDefault(operation, List.of());
-    }
-
-    /** The operations something holds of the result of. */
-    public static java.util.Set<ValueName> boundsOnTheResult() {
-        return Index.BOUNDS.keySet();
-    }
-
-    /** What {@code operation} builds its result from, or null where it builds none. */
-    public static BuiltFrom buildsItsResultFrom(ValueName operation) {
-        return Index.BUILDINGS.get(operation);
-    }
-
-    /** The operations that build a container out of another. */
-    public static java.util.Set<ValueName> buildsItsResultFrom() {
-        return Index.BUILDINGS.keySet();
-    }
-
-    /** The containers {@code operation}'s result is never smaller than, in the order they are
-     *  declared. */
-    public static List<ArgumentRef> resultIsNoSmallerThan(ValueName operation) {
-        return Index.NO_SMALLER_THAN.getOrDefault(operation, List.of());
-    }
-
-    /** Where {@code operation} reads the container its predicate is about, or null where it is no
-     *  such predicate. */
-    public static OperationFact.ReadsItsContainer readsItsContainer(ValueName operation) {
-        return Index.READS.get(operation);
-    }
-
-    /** The operations that are predicates over what a container holds. */
-    public static java.util.Set<ValueName> readsItsContainer() {
-        return Index.READS.keySet();
-    }
-
-    /** Where {@code operation}'s predicate is stated over a projection, or null where it is stated
-     *  over the element itself. */
-    public static ArgumentRef isStatedOverAProjection(ValueName operation) {
-        return Index.PROJECTIONS.get(operation);
-    }
-
-    /** The operations whose predicate is stated over a projection. */
-    public static java.util.Set<ValueName> isStatedOverAProjection() {
-        return Index.PROJECTIONS.keySet();
-    }
-
-    /** Whether {@code operation} states its predicate of every element. */
-    public static boolean statesItsPredicateOfEveryElement(ValueName operation) {
-        return Index.QUANTIFIERS.contains(operation);
-    }
-
-    /** The operations that do. */
-    public static java.util.Set<ValueName> statesItsPredicateOfEveryElement() {
-        return Index.QUANTIFIERS;
-    }
-
-    /* No index for what an emptiness check means. What a reader does with that fact is write a
-     * call of the size where a call of the check stands, and the two declarations have to admit
-     * that — so the fact is answered only once it has been held to them, and reading it from here
-     * would be reading it before anything asked. The fact is still declared below with the rest and
-     * reaches its reader through the binding. */
-
-    /** What {@code operation} computes and where it answers it, or null where it computes no
-     *  arithmetic of its own. */
-    public static NumericResult computesANumber(ValueName operation) {
-        return operation == null ? null : Index.ARITHMETIC.get(operation);
-    }
-
-    /** The operations that compute arithmetic of their own. */
-    public static java.util.Set<ValueName> computesANumber() {
-        return Index.ARITHMETIC.keySet();
-    }
-
-    /** The cases {@code operation}'s definition is written in, in the order they are declared, or
-     *  an empty list where it answers none of the values it was given. */
-    public static List<OperationFact.Case> isDefinedByCases(ValueName operation) {
-        return Index.CASES.getOrDefault(operation, List.of());
-    }
-
-    /** The operations that answer one of the values they were given. */
-    public static java.util.Set<ValueName> isDefinedByCases() {
-        return Index.CASES.keySet();
-    }
-
-    /** The operations declared to say nothing under {@code subject}. */
-    public static java.util.Set<ValueName> saysNothingOf(OperationSubject subject) {
-        return Index.SILENCES.getOrDefault(subject, java.util.Set.of());
-    }
-
-    /** What walking {@code operation}'s container comes to, or null where it accumulates nothing —
-     *  including where the name is no operation of the library. */
-    public static Accumulation accumulation(ValueName operation) {
-        OperationFact.AccumulatesItsContainer stated = Index.ACCUMULATES.get(operation);
-        return stated == null ? null : stated.how();
-    }
-
-    /** Which argument {@code operation} accumulates, or null where it accumulates nothing. */
-    public static ArgumentRef accumulatedContainer(ValueName operation) {
-        OperationFact.AccumulatesItsContainer stated = Index.ACCUMULATES.get(operation);
-        return stated == null ? null : stated.container();
-    }
-
-    /** The operations that answer what a container holds accumulated. */
-    public static java.util.Set<ValueName> accumulates() {
-        return Index.ACCUMULATES.keySet();
-    }
-
-    /**
-     * What {@code operation} takes of the one value it is given, or null where the number it
-     * answers is not taken of one value.
-     *
-     * <p>Declared, or read off the walk where the operation is one. An accumulation over one
-     * container already says what the answer is — start from this, carry that — so an arm declared
-     * beside it would be the same sentence in a second vocabulary, and the two would be free to
-     * disagree about what a sum is. What is read here is that statement put as a way of taking a
-     * number.
-     *
-     * <p>Only the walk that adds. A join carries an identity and a step as much as a sum does and
-     * answers a string; a product carries them and answers a number this measure has no reading
-     * for. What is derived is one account and not the family, so the reading a term gets is one
-     * something here can carry out — and a walk of another kind arriving is a walk nothing here
-     * claims to read.
-     *
-     * <p>Nothing here about how many arguments the operation takes. A number taken of the one value
-     * an operation is given is taken of one, and that is held where every taking is held to its
-     * declaration — so a walk that adds over a container beside other arguments stops the
-     * compilation rather than arriving as a term about whichever argument was written first.
-     */
-    public static TakenAs takenAs(ValueName operation) {
-        TakenAs declared = Index.TAKEN_AS.get(operation);
-        return declared != null ? declared : theSumItAccumulates(operation);
-    }
-
-    /** The sum arm where {@code operation} is a walk that adds up what it holds, or null. */
-    private static TakenAs theSumItAccumulates(ValueName operation) {
-        Accumulation walk = accumulation(operation);
-        return walk != null
-                && walk.identity() == Accumulation.Identity.ZERO
-                && walk.combine() == Accumulation.Combine.ADD
-                ? new TakenAs.TheSumOfWhatItHolds() : null;
-    }
-
-    /**
-     * The operations that answer a number taken of the one value they are given.
-     *
-     * <p>The ones {@link #takenAs} answers for, which is not the same as the ones an account is
-     * declared of: a walk that adds up a container is read as one and its account is that walk.
-     * Answered off the declarations alone, this set and the accessor beside it would disagree about
-     * an operation, and every reader of the set — what a question is asked of, what a check
-     * enumerates — would be missing whichever operations the accessor derives.
-     */
-    public static java.util.Set<ValueName> answersANumberTakenOfItsArgument() {
-        java.util.Set<ValueName> out = new java.util.LinkedHashSet<>(Index.TAKEN_AS.keySet());
-        Index.ACCUMULATES.keySet().forEach(operation -> {
-            if (takenAs(operation) != null) {
-                out.add(operation);
-            }
-        });
-        return java.util.Set.copyOf(out);
-    }
-
-    /**
-     * The operations that count what they are given, which is the narrower vocabulary a size is
-     * asked for under.
-     *
-     * <p>Read off the arm rather than declared beside it. Being a size is being taken as how many
-     * the value holds, so a second list would be the same statement written twice and would drift
-     * the way the two lists of measures this package was made out of did.
-     */
-    public static java.util.Set<ValueName> countsWhatItIsGiven() {
-        java.util.Set<ValueName> out = new java.util.LinkedHashSet<>();
-        Index.TAKEN_AS.forEach((operation, how) -> {
-            if (how instanceof TakenAs.HowManyItHolds) {
-                out.add(operation);
-            }
-        });
-        return java.util.Set.copyOf(out);
-    }
-
-    /** Whether every number {@code operation} could answer is one some value it could be given
-     *  answers. */
-    public static boolean everyAnswerItCanGiveHasASourceValue(ValueName operation) {
-        return Index.EVERY_ANSWER_HAS_A_SOURCE.contains(operation);
-    }
-
-    /** The indexes, read off the declarations on the first ask. */
-    private static final class Index {
-
-        private static final Map<ValueName,
-                souther.compiler.numeric.LinearForm<ArgumentRef>> ANSWERS_A_FORM =
-                index(OperationFact.AnswersAFormOfItsArguments.class,
-                        OperationFact.AnswersAFormOfItsArguments::form);
-
-        private static final Map<ValueName, PositiveOrder> ORDERS =
-                index(OperationFact.StatesTheOrderOfItsArguments.class,
-                        OperationFact.StatesTheOrderOfItsArguments::order);
-
-        private static final Map<ValueName, OperationFact.ShiftsBy> SHIFTS =
-                index(OperationFact.ShiftsBy.class, java.util.function.Function.identity());
-
-        private static final Map<ValueName, BuiltFrom> BUILDINGS =
-                index(OperationFact.BuildsItsResultFrom.class,
-                        OperationFact.BuildsItsResultFrom::built);
-
-        private static final Map<ValueName, OperationFact.ReadsItsContainer> READS =
-                index(OperationFact.ReadsItsContainer.class,
-                        java.util.function.Function.identity());
-
-        private static final Map<ValueName, ArgumentRef> PROJECTIONS =
-                index(OperationFact.IsStatedOverAProjection.class,
-                        OperationFact.IsStatedOverAProjection::projection);
-
-        private static final java.util.Set<ValueName> QUANTIFIERS =
-                stating(OperationFact.StatesItsPredicateOfEveryElement.class);
-
-        private static final Map<ValueName, TakenAs> TAKEN_AS =
-                index(OperationFact.AnswersANumberTakenOfTheOneValueItIsGiven.class,
-                        OperationFact.AnswersANumberTakenOfTheOneValueItIsGiven::how);
-
-        private static final Map<ValueName, OperationFact.AccumulatesItsContainer> ACCUMULATES =
-                index(OperationFact.AccumulatesItsContainer.class, each -> each);
-
-        private static final java.util.Set<ValueName> EVERY_ANSWER_HAS_A_SOURCE =
-                stating(OperationFact.EveryAnswerItCanGiveHasASourceValue.class);
-
-        /** The silences, by what they are about. */
-        private static final Map<OperationSubject, java.util.Set<ValueName>> SILENCES = silences();
-
-        private static Map<OperationSubject, java.util.Set<ValueName>> silences() {
-            Map<OperationSubject, java.util.Set<ValueName>> out = new LinkedHashMap<>();
-            for (Declared each : DECLARED) {
-                if (each.fact() instanceof OperationFact.SaysNothingOf said) {
-                    out.computeIfAbsent(said.subject(), subject -> new java.util.LinkedHashSet<>())
-                            .add(each.operation());
-                }
-            }
-            out.replaceAll((subject, held) -> java.util.Set.copyOf(held));
-            return Map.copyOf(out);
-        }
-
-        private static final Map<ValueName, NumericResult> ARITHMETIC =
-                index(OperationFact.ComputesANumber.class, OperationFact.ComputesANumber::result);
-
-        /** In the order they are declared, which is the order the library writes them: what holds
-         *  in every case holds of the result, and that is a claim about the run of them. */
-        private static final Map<ValueName, List<OperationFact.Case>> CASES = cases();
-
-        private static Map<ValueName, List<OperationFact.Case>> cases() {
-            Map<ValueName, List<OperationFact.Case>> out = new LinkedHashMap<>();
-            for (Declared each : DECLARED) {
-                if (each.fact() instanceof OperationFact.IsDefinedByCases defined) {
-                    out.computeIfAbsent(each.operation(), operation -> new ArrayList<>())
-                            .add(defined.one());
-                }
-            }
-            out.replaceAll((operation, held) -> List.copyOf(held));
-            return Map.copyOf(out);
-        }
-
-        /** Gathered rather than indexed one to one: an operation is no smaller than as many
-         *  containers as it names, and each is a fact of its own. */
-        private static final Map<ValueName, List<ArgumentRef>> NO_SMALLER_THAN = noSmallerThan();
-
-        private static Map<ValueName, List<ArgumentRef>> noSmallerThan() {
-            Map<ValueName, List<ArgumentRef>> out = new LinkedHashMap<>();
-            for (Declared each : DECLARED) {
-                if (each.fact() instanceof OperationFact.ResultIsNoSmallerThan bounded) {
-                    out.computeIfAbsent(each.operation(), operation -> new ArrayList<>())
-                            .add(bounded.container());
-                }
-            }
-            out.replaceAll((operation, held) -> List.copyOf(held));
-            return Map.copyOf(out);
-        }
-
-        /** Gathered rather than indexed one to one: an operation states as many bounds as it
-         *  states, and each is a fact of its own. */
-        private static final Map<ValueName, List<ResultBound>> BOUNDS = bounds();
-
-        private static Map<ValueName, List<ResultBound>> bounds() {
-            Map<ValueName, List<ResultBound>> out = new LinkedHashMap<>();
-            for (Declared each : DECLARED) {
-                if (each.fact() instanceof OperationFact.BoundsItsResult bounded) {
-                    out.computeIfAbsent(each.operation(), operation -> new ArrayList<>())
-                            .add(bounded.bound());
-                }
-            }
-            out.replaceAll((operation, held) -> List.copyOf(held));
-            return Map.copyOf(out);
-        }
-
-        /** The operations that carry a fact of {@code kind}, for a fact that says nothing beside
-         *  being declared at all. */
-        private static java.util.Set<ValueName> stating(Class<? extends OperationFact> kind) {
-            java.util.Set<ValueName> out = new java.util.LinkedHashSet<>();
-            for (Declared each : DECLARED) {
-                if (kind.isInstance(each.fact())) {
-                    out.add(each.operation());
-                }
-            }
-            return java.util.Set.copyOf(out);
-        }
-
-        private static <F extends OperationFact, V> Map<ValueName, V> index(
-                Class<F> kind, java.util.function.Function<F, V> read) {
-            Map<ValueName, V> out = new LinkedHashMap<>();
-            for (Declared each : DECLARED) {
-                if (kind.isInstance(each.fact())) {
-                    V value = read.apply(kind.cast(each.fact()));
-                    if (out.put(each.operation(), value) != null) {
-                        throw new IllegalStateException(each.operation()
-                                + " is declared to " + kind.getSimpleName() + " twice");
-                    }
-                }
-            }
-            return Map.copyOf(out);
-        }
     }
 
     private OperationFacts() {}

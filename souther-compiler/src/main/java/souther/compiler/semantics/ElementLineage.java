@@ -30,79 +30,16 @@ import java.util.List;
  * {@code Set.map} have one lineage — the closure's answer on an element of the source — and
  * different counts, because two elements of a set may map onto one. Folded together, the count would
  * decide the provenance.
+ *
+ * <p><b>Generic in the word for an argument</b>, as {@link souther.compiler.numeric.LinearForm} is.
+ * A lineage names the argument its elements come from, and what that name is depends on which side
+ * of the binding it stands: authored, it is an {@link ArgumentRef}, the word a fact is written in;
+ * held to the library, it is the declaration's own argument. The structure between the two is one
+ * structure, so it is written once and the word is a parameter.
+ *
+ * @param <A> the word for an argument of the operation
  */
-public sealed interface ElementLineage {
-
-    /**
-     * The argument an operation's answer holds the elements of, or null where its elements are not
-     * the argument's own.
-     *
-     * <p>The one thing a reader walking backwards from a value needs, and the only part of a lineage
-     * that can be walked that way as it stands: where the elements are the same values, an element
-     * of the answer is an element of the argument. Where the answer holds what a closure made, the
-     * element came from somewhere and is not it, and this says nothing rather than saying where.
-     *
-     * <p>Asked here and not of the reader that happens to hold the table today. What an operation
-     * does to the values it is given is declared once and read by whoever has a use for it; a caller
-     * reaching through the invariant-discharge check for it would depend on that check to learn what
-     * the library says.
-     */
-    static ArgumentRef holdsTheElementsOf(souther.compiler.types.ValueName operation) {
-        BuiltFrom built = OperationFacts.buildsItsResultFrom(operation);
-        return built != null && built.outputs().size() == 1
-                && built.lineage() instanceof SameAs same
-                && same.source().elements() == 1
-                ? same.source().argument() : null;
-    }
-
-    /**
-     * The argument each of whose elements {@code operation} answers exactly one closure result of,
-     * or null where it answers no such run.
-     *
-     * <p>The two halves together and neither alone. What the closure answered is the lineage
-     * ({@link ClosureResult}), and that there is one answer per element is the count
-     * ({@link SizeAgainstItsSource#SAME}) — two statements about one operation, kept apart because
-     * they are different algebras and asked together here because a correspondence needs both.
-     * {@code Set.map} has the first and not the second: two elements may answer one, so what its
-     * result holds is a subset of what the closure made rather than one per element.
-     *
-     * <p>Read off the declarations and not off {@link BuiltFrom#shape}. The four words are a lossy
-     * reading of the pair — {@code List.filterMap} and {@code Set.map} share one — and a
-     * correspondence rested on them would be true of operations that do not have it.
-     *
-     * <p><b>What this licenses is a correspondence and not an order.</b> As many answers as
-     * elements, each of them the closure's on one of them; which came first is not stated by either
-     * half and is not claimed here.
-     */
-    public static ArgumentRef mapsEachElementOf(souther.compiler.types.ValueName operation) {
-        BuiltFrom built = OperationFacts.buildsItsResultFrom(operation);
-        if (built == null || built.outputs().size() != 1
-                || built.size() != SizeAgainstItsSource.SAME) {
-            return null;
-        }
-        ElementLineage lineage = built.lineage();
-        return lineage instanceof ClosureResult && lineage.source().elements() == 1
-                ? lineage.source().argument() : null;
-    }
-
-    /**
-     * The argument an operation's answer holds elements <em>made from</em>, or null where its
-     * elements are not made from an argument's.
-     *
-     * <p>Beside {@link #holdsTheElementsOf} and licensing less. That one says a reader that reached
-     * an element of the answer has reached an element of the argument; this says only that the value
-     * came from there. What a rule about it means for the position it came from is a question about
-     * the closure that made it, and knowing where it came from does not answer it.
-     */
-    static ArgumentRef derivesItsElementsFrom(souther.compiler.types.ValueName operation) {
-        BuiltFrom built = OperationFacts.buildsItsResultFrom(operation);
-        if (built == null || built.outputs().size() != 1) {
-            return null;
-        }
-        ElementLineage lineage = built.lineage();
-        return (lineage instanceof ClosureResult || lineage instanceof InsideClosureResult)
-                && lineage.source().elements() == 1 ? lineage.source().argument() : null;
-    }
+public sealed interface ElementLineage<A> {
 
     /**
      * Where in what an operation answers the elements this is about stand.
@@ -164,7 +101,7 @@ public sealed interface ElementLineage {
     }
 
     /** One run of elements in what an operation answers, and where they came from. */
-    record OutputLineage(ResultPath at, ElementLineage origin) {}
+    record OutputLineage<A>(ResultPath at, ElementLineage<A> origin) {}
 
     /**
      * How far inside an argument the elements come from.
@@ -177,19 +114,44 @@ public sealed interface ElementLineage {
      *                 their own and are not this, so a lineage into either wants a path here rather
      *                 than a larger number
      */
-    record Source(ArgumentRef argument, int elements) {
+    record Source<A>(A argument, int elements) {
 
         public Source {
+            java.util.Objects.requireNonNull(argument, "a lineage names the argument it is from");
             if (elements < 1) {
                 throw new IllegalArgumentException(
                         "a lineage is about the elements of something: " + elements);
             }
         }
+
+        /** The same source with its argument read as {@code word} reads it. */
+        public <B> Source<B> withArgument(java.util.function.Function<A, B> word) {
+            return new Source<>(word.apply(argument), elements);
+        }
     }
 
     /** Where the elements this is about come from, or null where they come from more than one
      *  place. */
-    Source source();
+    Source<A> source();
+
+    /**
+     * The same lineage with every argument it names read as {@code word} reads it.
+     *
+     * <p>Structure and nothing else: which arguments there are, and where each stands in the
+     * lineage, are what this keeps, and what an argument becomes is the caller's. This is how a
+     * lineage crosses from the vocabulary a fact is authored in to the one a reader is handed,
+     * without the reader rebuilding the shape.
+     */
+    default <B> ElementLineage<B> withArguments(java.util.function.Function<A, B> word) {
+        return switch (this) {
+            case SameAs<A> same -> new SameAs<>(same.source().withArgument(word));
+            case ClosureResult<A> made -> new ClosureResult<>(made.source().withArgument(word));
+            case InsideClosureResult<A> inside ->
+                    new InsideClosureResult<>(inside.source().withArgument(word));
+            case OneOf<A> one -> new OneOf<>(one.alternatives().stream()
+                    .map(each -> each.withArguments(word)).toList());
+        };
+    }
 
     /**
      * The value at the output position is the value at the source position.
@@ -204,10 +166,10 @@ public sealed interface ElementLineage {
      * <p>The one lineage a rule about the output can be pushed back through as it stands, since
      * there is nothing between the two values to push it through.
      */
-    record SameAs(Source source) implements ElementLineage {
+    record SameAs<A>(Source<A> source) implements ElementLineage<A> {
 
         @Override
-        public Source source() {
+        public Source<A> source() {
             return source;
         }
     }
@@ -223,13 +185,13 @@ public sealed interface ElementLineage {
      * many elements as the source — {@code Set.map} answers no more, since two elements may map onto
      * one — and nothing about the order they come in. A reader wanting a correspondence between the
      * two runs asks for this together with {@link SizeAgainstItsSource#SAME}
-     * ({@link #mapsEachElementOf}), and a reader wanting the order asks for something nobody
-     * declares yet.
+     * ({@link BuiltFrom#mapsEachElementOf}), and a reader wanting the order asks for something
+     * nobody declares yet.
      */
-    record ClosureResult(Source source) implements ElementLineage {
+    record ClosureResult<A>(Source<A> source) implements ElementLineage<A> {
 
         @Override
-        public Source source() {
+        public Source<A> source() {
             return source;
         }
     }
@@ -241,10 +203,10 @@ public sealed interface ElementLineage {
      * closure answers an optional. One case for both: what differs is the shape the closure answers
      * with, which its own signature already says.
      */
-    record InsideClosureResult(Source source) implements ElementLineage {
+    record InsideClosureResult<A>(Source<A> source) implements ElementLineage<A> {
 
         @Override
-        public Source source() {
+        public Source<A> source() {
             return source;
         }
     }
@@ -262,7 +224,7 @@ public sealed interface ElementLineage {
      * either that argument's own value or what the closure made of it. Read as one alternative, it
      * would say of every value what is true of one of them.
      */
-    record OneOf(List<ElementLineage> alternatives) implements ElementLineage {
+    record OneOf<A>(List<ElementLineage<A>> alternatives) implements ElementLineage<A> {
 
         public OneOf {
             alternatives = List.copyOf(alternatives);
@@ -281,9 +243,9 @@ public sealed interface ElementLineage {
          * about {@code List.append} from being read as a rule about its first argument.
          */
         @Override
-        public Source source() {
-            Source common = alternatives.get(0).source();
-            for (ElementLineage alternative : alternatives) {
+        public Source<A> source() {
+            Source<A> common = alternatives.get(0).source();
+            for (ElementLineage<A> alternative : alternatives) {
                 if (common == null || !common.equals(alternative.source())) {
                     return null;
                 }

@@ -3,9 +3,9 @@ package souther.compiler.semantics;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.NumericDomain;
-import souther.compiler.types.ValueName;
 
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -15,9 +15,9 @@ import java.util.Optional;
  * of rows relating that result to the arguments and to constants, under conditions on the arguments;
  * a range holds two ends and nothing else. So a row this cannot put on an end is left out, and what
  * comes back is where the result is known to run and not everything that is known about it. A reader
- * wanting the relations reads the rows ({@code OperationFacts.boundsOnTheResult}) — that is what the
- * discharge does, which is why a row bounding {@code Int.floorMod(x, k)} by {@code k} is not lost by
- * anyone: it is lost here, where a range has no name for {@code k}, and read there, where it has.
+ * wanting the relations reads the rows — that is what the discharge does, which is why a row
+ * bounding {@code Int.floorMod(x, k)} by {@code k} is not lost by anyone: it is lost here, where a
+ * range has no name for {@code k}, and read there, where it has.
  *
  * <p>Leaving a row out is always the wider answer. Every row narrows, so a range that dropped one
  * holds every value the whole list holds and possibly more — this can be read where a fact was never
@@ -25,22 +25,29 @@ import java.util.Optional;
  *
  * <p>Which rows come out therefore depends on what the reader can say about the arguments, and that
  * is the parameter. A reader holding a call answers them all; one holding only the operation answers
- * {@link ConstantArguments#NONE} and gets the rows that name nothing, which for an operation the
- * language gives no number is every row it has ({@code check.DischargeRules.holdBound} is what makes
- * that so).
+ * {@link ConstantArguments#none()} and gets the rows that name nothing, which for an operation the
+ * language gives no number is every row it has ({@code check.OperationFactBinder} holds a bound to
+ * naming only an argument that is a number, which is what makes that so).
+ *
+ * <p><b>Handed the rows, and looking nothing up.</b> Whose rows they are, and whether they have
+ * been held to the library, is the caller's to know; what this does is read the ones it is given.
+ * Given a name and left to find the rows itself, this would be a second place the rows are looked
+ * for, and the one place a reader could reach them without whatever holds them having run.
  */
 public final class ResultRange {
 
     /**
-     * Where {@code operation}'s result runs, under what {@code arguments} can say.
+     * Where a result runs, under what {@code arguments} can say, given the {@code rows} declared of
+     * it.
      *
      * <p>Every end, so two rows about one side leave the tighter of them: the rows are one statement
      * about one number, and reading them one at a time would answer with whichever was written
      * last.
      */
-    public static NumericDomain.Bounds of(ValueName operation, ConstantArguments arguments) {
+    public static <A> NumericDomain.Bounds of(List<ResultBound<A>> rows,
+                                              ConstantArguments<A> arguments) {
         NumericDomain.Bounds runs = NumericDomain.Bounds.OPEN;
-        for (ResultBound row : OperationFacts.boundsOnTheResult(operation)) {
+        for (ResultBound<A> row : rows) {
             if (!arguments.satisfy(row.provided())) {
                 continue;
             }
@@ -54,7 +61,8 @@ public final class ResultRange {
 
     /** The end one row puts on the result, or null where this reader cannot say where that end
      *  stands. */
-    private static NumericDomain.Bounds endOf(ResultBound row, ConstantArguments arguments) {
+    private static <A> NumericDomain.Bounds endOf(ResultBound<A> row,
+                                                  ConstantArguments<A> arguments) {
         Count at = standsAt(row, arguments);
         if (at == null) {
             return null;
@@ -74,7 +82,7 @@ public final class ResultRange {
     }
 
     /** The count the row's end is at, or null where the argument it is against says nothing here. */
-    private static Count standsAt(ResultBound row, ConstantArguments arguments) {
+    private static <A> Count standsAt(ResultBound<A> row, ConstantArguments<A> arguments) {
         if (row.against() == null) {
             return Count.of(row.offset());
         }

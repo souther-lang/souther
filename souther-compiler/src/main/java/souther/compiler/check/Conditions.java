@@ -1,6 +1,5 @@
 package souther.compiler.check;
 
-import souther.compiler.semantics.PositiveOrder;
 import souther.compiler.core.Core;
 import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.NumericDomain;
@@ -233,7 +232,7 @@ final class Conditions {
         if (!(side instanceof Core.PreservedCall call) || call.args().size() != 2) {
             return null;
         }
-        PositiveOrder positive =
+        BoundOperationFact.StatesTheOrderOfItsArguments positive =
                 DischargeRules.orderStatedBy(call.operation());
         if (positive == null
                 || terms.bodyKey(call.args().get(0), at) == null
@@ -283,7 +282,8 @@ final class Conditions {
                 java.util.Map.of(sign, terms.granularityOf(call.type()));
         LinearForm<Object> answered = LinearForm.atom(sign);
         NumericDomain<Object> known = NumericDomain.<Object>top()
-                .assuming(sign, ResultRange.of(call.operation(), ConstantArguments.NONE), spacing)
+                .assuming(sign, ResultRange.of(DischargeRules.boundsOn(call.operation(),
+                        ConstantArguments.none()), ConstantArguments.none()), spacing)
                 .assume(answered.minus(LinearForm.constant(read.constant())), rel, spacing);
         if (known.isBottom()) {
             return null;
@@ -308,8 +308,8 @@ final class Conditions {
      */
     static Core asSizeComparison(Core e) {
         if (e instanceof Core.PreservedCall call
-                && DischargeRules.sizeMeantBy(call.declared())
-                        instanceof BoundOperationFact.MeansTheSameAsSizeOfNought means) {
+                && DischargeRules.sizeMeantBy(call.operation())
+                        instanceof BoundOperationFact.MeansTheSameAsASizeOfNought means) {
             Core size = new Core.PreservedCall(means.size(), call.args(), Type.INT, call.pos());
             return new Core.Binary(BinOp.EQ, size, new Core.Int(0, Type.INT, call.pos()),
                     CoverageOrigin.unwritten(), Type.BOOL, call.pos());

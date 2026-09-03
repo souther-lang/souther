@@ -4,7 +4,6 @@ import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.NumericDomain;
-import souther.compiler.semantics.ArgumentRef;
 import souther.compiler.semantics.ConstantArguments;
 import souther.compiler.semantics.ResultBound;
 import souther.compiler.semantics.ResultRange;
@@ -31,9 +30,15 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class WhatAnOperationAnswersIsBoundedBeforeAnythingAsksTest {
 
+    private static NumericDomain.Bounds asked(ValueName operation,
+                                              ConstantArguments<DeclaredArgument> arguments) {
+        return ResultRange.of(DefaultBoundOperationFacts.get().boundsOnTheResult(operation),
+                arguments);
+    }
+
     private static NumericDomain.Bounds asked(String module, String operation,
-                                              ConstantArguments arguments) {
-        return ResultRange.of(ValueName.Stdlib.operation(module, operation), arguments);
+                                              ConstantArguments<DeclaredArgument> arguments) {
+        return asked(ValueName.Stdlib.operation(module, operation), arguments);
     }
 
     private static NumericDomain.Bounds atLeast(long count) {
@@ -43,8 +48,8 @@ class WhatAnOperationAnswersIsBoundedBeforeAnythingAsksTest {
     /** The half that was declared, asked with nothing standing at the call. */
     @Test
     void anAbsoluteValueIsNotNegativeWithNothingToAsk() {
-        assertEquals(atLeast(0), asked("Int", "abs", ConstantArguments.NONE));
-        assertEquals(atLeast(0), asked("Decimal", "abs", ConstantArguments.NONE));
+        assertEquals(atLeast(0), asked("Int", "abs", ConstantArguments.none()));
+        assertEquals(atLeast(0), asked("Decimal", "abs", ConstantArguments.none()));
     }
 
     /** The half that was written into the term, asked the same way. Four operations and one
@@ -52,7 +57,7 @@ class WhatAnOperationAnswersIsBoundedBeforeAnythingAsksTest {
     @Test
     void everyMeasureAnswersACountThatIsNotNegative() {
         for (ValueName measure : NumericMeasures.calls()) {
-            assertEquals(atLeast(0), ResultRange.of(measure, ConstantArguments.NONE),
+            assertEquals(atLeast(0), asked(measure, ConstantArguments.none()),
                     measure + " counts what it is given, and there is no negative number of them");
         }
     }
@@ -69,7 +74,7 @@ class WhatAnOperationAnswersIsBoundedBeforeAnythingAsksTest {
     @Test
     void aBoundAgainstAnArgumentIsThereWhenTheArgumentIs() {
         assertEquals(NumericDomain.Bounds.OPEN,
-                asked("Int", "floorMod", ConstantArguments.NONE),
+                asked("Int", "floorMod", ConstantArguments.none()),
                 "nothing is known of the divisor, so neither end of the remainder is");
         assertEquals(new NumericDomain.Bounds(Endpoint.inclusive(Count.of(0)),
                         Endpoint.exclusive(Count.of(100))),
@@ -89,7 +94,7 @@ class WhatAnOperationAnswersIsBoundedBeforeAnythingAsksTest {
     @Test
     void aBoundHoldingAlwaysIsStillDroppedWhereItsArgumentCannotBeNamed() {
         assertEquals(NumericDomain.Bounds.OPEN,
-                asked("Decimal", "toInt", ConstantArguments.NONE),
+                asked("Decimal", "toInt", ConstantArguments.none()),
                 "what it rounds is not known here, so neither end of what it rounds to is");
         assertEquals(new NumericDomain.Bounds(Endpoint.exclusive(Count.of(2)),
                         Endpoint.exclusive(Count.of(4))),
@@ -97,9 +102,10 @@ class WhatAnOperationAnswersIsBoundedBeforeAnythingAsksTest {
                 "rounding a three lands within one of it, and reaches neither end");
     }
 
-    /** A reader that knows one argument's value and nothing else. */
-    private static ConstantArguments constantAt(int position, long value) {
-        return argument -> argument.equals(new ArgumentRef.At(position))
+    /** A reader that knows one argument's value and nothing else. The argument is the bound one,
+     *  so what is matched is the position the binder settled. */
+    private static ConstantArguments<DeclaredArgument> constantAt(int position, long value) {
+        return argument -> argument.position() == position
                 ? Optional.of(BigDecimal.valueOf(value)) : Optional.empty();
     }
 
@@ -111,8 +117,8 @@ class WhatAnOperationAnswersIsBoundedBeforeAnythingAsksTest {
     @Test
     void aBoundCannotBeWrittenAsADisequality() {
         IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
-                () -> new ResultBound(null, BigDecimal.ZERO, Rel.NE,
-                        new ResultBound.Provided.Always()));
+                () -> new ResultBound<>(null, BigDecimal.ZERO, Rel.NE,
+                        new ResultBound.Provided.Always<>()));
         assertTrue(refused.getMessage().contains("NE"), refused.getMessage());
     }
 }

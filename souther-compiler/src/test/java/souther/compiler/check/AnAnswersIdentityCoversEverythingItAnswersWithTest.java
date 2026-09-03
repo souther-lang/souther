@@ -57,7 +57,13 @@ class AnAnswersIdentityCoversEverythingItAnswersWithTest {
             "the hash is of the shape and the parts, and is compared first as a way of saying no",
             "souther.compiler.check.CheckSurface.operandMethods",
             "keyed on operand identity, over the very nodes the tree hands out — it says nothing"
-                    + " the tree and the definitions built from it do not already say");
+                    + " the tree and the definitions built from it do not already say",
+            "souther.compiler.check.DeclaredArgument.stands",
+            "the type at a position is a fact the library settled about that position and not a"
+                    + " second thing to tell two arguments apart by: two readings of one declaration"
+                    + " that disagreed about it would be a binding that has come apart, not two"
+                    + " arguments — the same reason a declared operation's arity is outside its"
+                    + " identity");
 
     @Test
     void everyHandWrittenIdentityReadsEveryFieldItsStateHolds() throws IOException {

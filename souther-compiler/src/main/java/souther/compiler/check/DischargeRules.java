@@ -1,34 +1,24 @@
 package souther.compiler.check;
 
-import souther.compiler.DefaultStdlib;
 import souther.compiler.stdlib.Stdlib;
-import souther.compiler.semantics.ArgumentRef;
 import souther.compiler.semantics.Arithmetic;
 import souther.compiler.semantics.BuiltFrom;
 import souther.compiler.semantics.ConstantArguments;
+import souther.compiler.semantics.DefinitionCase;
 import souther.compiler.semantics.ElementLineage;
 import souther.compiler.semantics.ElementShape;
 import souther.compiler.semantics.NumericResult;
-import souther.compiler.semantics.OperationFact;
-import souther.compiler.semantics.OperationFacts;
-import souther.compiler.semantics.PositiveOrder;
 import souther.compiler.semantics.ResultBound;
 import souther.compiler.semantics.SizeAgainstItsSource;
 import souther.compiler.types.BinOp;
-import souther.compiler.core.CompleteSignature;
 import souther.compiler.core.Core;
-import souther.compiler.core.DeclaredOperation;
 import souther.compiler.types.Type;
-import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
 
@@ -38,15 +28,16 @@ import java.util.function.Function;
  * (spec §invariant-discharge-guarantees).
  *
  * <p>What the operations are is not here. That is declared where nothing reads it
- * ({@link OperationFacts}); what is here is this check's reading of it — the shape a rule is read
- * at a call, and what the check concludes from one. A fact about an operation held in a procedure
- * that reads it is a fact its second reader has to be given by that procedure, which is the
- * arrangement the declarations were moved out of.
+ * ({@link souther.compiler.semantics.OperationFacts}), held to the library once
+ * ({@link OperationFactBinder}), and read from what that binding made
+ * ({@link BoundOperationFacts}); what is here is this check's reading of it — the shape a rule is
+ * read at a call, and what the check concludes from one. A fact about an operation held in a
+ * procedure that reads it is a fact its second reader has to be given by that procedure, which is
+ * the arrangement the declarations were moved out of.
  *
- * <p>What each declaration is held to is here too, since holding one reads the library's own
- * signatures and asks what this check makes of a type. Every declaration is walked before any call
- * is read ({@link OperationFactBinder}), so a fact nothing here looks up is one this has held all
- * the same.
+ * <p>Everything below asks the bound facts and interprets nothing of its own: which argument a fact
+ * names is a position the binder settled, and the one step left — from a position to the expression
+ * standing there in a call — is {@link CallArguments}'.
  */
 final class DischargeRules {
 
@@ -57,26 +48,16 @@ final class DischargeRules {
         return ValueName.Stdlib.operation(alias, name);
     }
 
-    /** The argument the signature already says the elements come from, where the operation takes a
-     * closure at all — so a rule about such an operation writes no position of its own. */
-    private static final ArgumentRef CONTAINER = new ArgumentRef.TheContainer();
-
-    /** The closure itself, for a rule stated over what the closure answers. */
-    private static final ArgumentRef CLOSURE = new ArgumentRef.TheClosure();
-
-    /** The argument at {@code position}, for an operation whose signature does not say which one it
-     * is: one that takes no closure, or one given two containers. */
-    private static ArgumentRef at(int position) {
-        return new ArgumentRef.At(position);
+    /** The facts about the language's operations, held to the library this compiler ships. */
+    private static BoundOperationFacts facts() {
+        return DefaultBoundOperationFacts.get();
     }
 
     /** The container {@code call} built its result from, and what the building kept of it. */
     record Source(Core container, ElementShape shape, SizeAgainstItsSource size) {}
 
-
-
     /** Where a predicate reads its container at a call, and how far its statement travels. */
-    record Carrying(Core.PreservedCall stated, ArgumentRef at, Set<ElementShape> through) {
+    record Carrying(Core.PreservedCall stated, DeclaredArgument at, Set<ElementShape> through) {
 
         Core container() {
             return CallArguments.of(at, stated);
@@ -92,9 +73,8 @@ final class DischargeRules {
         }
     }
 
-
     /** The projection a predicate at a call is stated over, as the block it answers with. */
-    record Projection(Core.PreservedCall stated, ArgumentRef at, Core.Block projection) {
+    record Projection(Core.PreservedCall stated, DeclaredArgument at, Core.Block projection) {
 
         /** The call this was read for, stated over {@code value} instead. */
         Core.PreservedCall over(Core value) {
@@ -102,19 +82,17 @@ final class DischargeRules {
         }
     }
 
-
-
     /** Denial, which the analysis representation keeps as the call it is. */
     static final ValueName NOT = op("Bool", "not");
 
     /** The operations each table has a rule for. What is asked of them is {@link Question}'s to
      * settle; these are so it can hold a rule to being one an operation is asked for. */
     static Set<ValueName> builtOperations() {
-        return Bound.buildsItsResultFrom();
+        return facts().buildsItsResultFrom();
     }
 
     static Set<ValueName> carryingOperations() {
-        return OperationFacts.readsItsContainer();
+        return facts().readsItsContainer();
     }
 
     /**
@@ -129,8 +107,8 @@ final class DischargeRules {
      */
     static Set<String> constructionKinds(Stdlib stdlib) {
         Set<String> kinds = new LinkedHashSet<>();
-        Bound.buildsItsResultFrom().forEach(operation -> {
-            BuiltFrom built = Bound.buildsItsResultFrom(operation);
+        facts().buildsItsResultFrom().forEach(operation -> {
+            BuiltFrom<DeclaredArgument> built = facts().buildsItsResultFrom(operation);
             Stdlib.Entry entry = operation instanceof ValueName.Stdlib.Operation library
                     ? stdlib.entry(library) : null;
             String kind = entry == null ? null : kindOf(entry.signature().result());
@@ -153,15 +131,15 @@ final class DischargeRules {
     }
 
     static Set<ValueName> emptinessChecks() {
-        return Bound.meansTheSameAsASizeOfNought();
+        return facts().meansTheSameAsASizeOfNought();
     }
 
     static Set<ValueName> quantifiers() {
-        return Bound.statesItsPredicateOfEveryElement();
+        return facts().statesItsPredicateOfEveryElement();
     }
 
     static Set<ValueName> projections() {
-        return Bound.isStatedOverAProjection();
+        return facts().isStatedOverAProjection();
     }
 
     static Set<ValueName> sizeCalls() {
@@ -169,21 +147,21 @@ final class DischargeRules {
     }
 
     static Set<ValueName> numericResultOperations() {
-        return Bound.computesANumber();
+        return facts().computesANumber();
     }
 
     static Set<ValueName> orderings() {
-        return Bound.statesTheOrder();
+        return facts().statesTheOrderOfItsArguments();
     }
 
     /**
      * The operations that answer, counted, some arithmetic over what they were given.
      *
      * <p>Two sources and one question. Most of them say so by declaring the form
-     * ({@link OperationFacts#answersAFormOfItsArguments}); a sum and a difference say it by being
-     * the arithmetic they are. Declaring the form for those as well would be the same statement
-     * twice, and leaving them out of the question altogether would be worse: the silence beside it
-     * says there is nothing true here, and of {@code Int.add} that is false.
+     * ({@link BoundOperationFacts#answersAFormOfItsArguments}); a sum and a difference say it by
+     * being the arithmetic they are. Declaring the form for those as well would be the same
+     * statement twice, and leaving them out of the question altogether would be worse: the silence
+     * beside it says there is nothing true here, and of {@code Int.add} that is false.
      *
      * <p>Which of them are is {@link #operator} and not a reading of its own. What that answers is
      * what a call to such an operation is read as where it stands ({@link Terms#asOperator}), so
@@ -195,8 +173,8 @@ final class DischargeRules {
      * multiplies each is the other.
      */
     static Set<ValueName> formOperations() {
-        Set<ValueName> answered = new LinkedHashSet<>(Bound.answersAFormOfItsArguments());
-        for (ValueName operation : Bound.computesANumber()) {
+        Set<ValueName> answered = new LinkedHashSet<>(facts().answersAFormOfItsArguments());
+        for (ValueName operation : facts().computesANumber()) {
             BinOp written = operator(operation);
             if (written == BinOp.ADD || written == BinOp.SUB) {
                 answered.add(operation);
@@ -207,9 +185,9 @@ final class DischargeRules {
 
     /** What {@code operation} answers, counted, in what its arguments are counted as — or null
      *  where it states no such form. */
-    static souther.compiler.numeric.LinearForm<ArgumentRef> answersAFormOf(
+    static souther.compiler.numeric.LinearForm<DeclaredArgument> answersAFormOf(
             ValueName operation) {
-        return Bound.answersAFormOfItsArguments(operation);
+        return facts().answersAFormOfItsArguments(operation);
     }
 
     /**
@@ -230,7 +208,7 @@ final class DischargeRules {
         // Over the declared forms and not over everything that answers the question. A sum and a
         // difference answer it by being the arithmetic they are, and what reads them is the
         // grammar; a program firing one would be firing the operator.
-        for (ValueName operation : Bound.answersAFormOfItsArguments()) {
+        for (ValueName operation : facts().answersAFormOfItsArguments()) {
             if (everyPartHasACountedCarrier(stdlib, operation)) {
                 carried.add(operation);
             }
@@ -258,19 +236,17 @@ final class DischargeRules {
      * the library states. Where an expression rather than a declared form puts two counts together,
      * keeping them apart is the expression reader's.
      *
-     * <p>The library has the operation and the argument is one it takes, both of which
-     * {@link OperationFactBinder} held before any of this was asked. What is left to decide is what
-     * stands there.
+     * <p>What stands at each argument the form names is the bound argument's own: the binder read
+     * it off the declaration, so nothing here goes back to the signature for it.
      */
     private static boolean everyPartHasACountedCarrier(Stdlib stdlib, ValueName operation) {
-        Stdlib.Signature signature = stdlib.entry(theLibraryOperation(operation)).signature();
+        Stdlib.Signature signature =
+                stdlib.entry(OperationFactBinder.theLibraryOperation(operation)).signature();
         if (!Carrier.countsToANumber(signature.result())) {
             return false;
         }
-        List<Type> params = signature.params();
         return answersAFormOf(operation).coefs().keySet().stream().allMatch(argument ->
-                Carrier.countsToANumber(
-                        params.get(CallArguments.positionIn(argument, operation))));
+                Carrier.countsToANumber(argument.stands()));
     }
 
     /** Those of them the read-through table has, by name, for the test that holds each to a
@@ -281,12 +257,20 @@ final class DischargeRules {
         return names;
     }
 
+    /** Those of them the building table has, by name, for the test that holds each to a construction
+     * it discharges. */
+    static Set<String> builtNames() {
+        Set<String> names = new LinkedHashSet<>();
+        builtOperations().forEach(operation -> names.add(operation.toString()));
+        return names;
+    }
+
     static Set<ValueName> boundedOperations() {
-        return Bound.boundsOnTheResult();
+        return facts().boundsOnTheResult();
     }
 
     static Set<ValueName> choosingOperations() {
-        return Bound.isDefinedByCases();
+        return facts().isDefinedByCases();
     }
 
     /** Those of them the choosing table has, by name, for the test that holds each case to a
@@ -298,7 +282,7 @@ final class DischargeRules {
     }
 
     static Set<ValueName> shiftingOperations() {
-        return Bound.shiftsBy();
+        return facts().shiftsBy();
     }
 
     /** Those of them the shifting table has, by name, for the test that holds each to a construction
@@ -311,21 +295,26 @@ final class DischargeRules {
 
     /** What {@code e} states through a measure, or null where it is not a shift this has a rule
      * about. */
-    static OperationFact.ShiftsBy shiftBy(Core e) {
-        return e instanceof Core.PreservedCall call ? Bound.shiftsBy(call.operation()) : null;
+    static BoundOperationFact.ShiftsBy shiftBy(Core e) {
+        return e instanceof Core.PreservedCall call ? facts().shiftsBy(call.operation()) : null;
     }
 
     /** Whether {@code operation} counts what two values stand apart by — the other side of the row a
      * shift is written in, read off that row rather than listed again. A measure named in a second
      * place is a measure the day somebody adds a shift and updates one of them. */
     static boolean isAMeasure(ValueName operation) {
-        return Bound.measures().contains(operation);
+        for (ValueName shift : facts().shiftsBy()) {
+            if (facts().shiftsBy(shift).measure().operation().equals(operation)) {
+                return true;
+            }
+        }
+        return false;
     }
 
-    /** The cases {@code e} is defined in, or null where it is not a call to an operation that
-     * answers one of the values it was given. */
-    static List<OperationFact.Case> chosenBy(Core e) {
-        return e instanceof Core.PreservedCall call ? Bound.isDefinedByCases(call.operation())
+    /** The cases {@code e} is defined in, or an empty list where it is not a call to an operation
+     * that answers one of the values it was given. */
+    static List<DefinitionCase<DeclaredArgument>> chosenBy(Core e) {
+        return e instanceof Core.PreservedCall call ? facts().isDefinedByCases(call.operation())
                 : List.of();
     }
 
@@ -339,8 +328,8 @@ final class DischargeRules {
      */
     static List<String> boundedRows() {
         List<String> rows = new ArrayList<>();
-        for (ValueName operation : Bound.boundsOnTheResult()) {
-            Bound.boundsOnTheResult(operation).forEach(bound -> rows.add(operation.toString()));
+        for (ValueName operation : facts().boundsOnTheResult()) {
+            facts().boundsOnTheResult(operation).forEach(bound -> rows.add(operation.toString()));
         }
         return rows;
     }
@@ -353,8 +342,8 @@ final class DischargeRules {
      *                 caller because what a value is read as is the reading's answer and not a
      *                 property of the syntax at the call.
      */
-    static List<ResultBound> boundsOn(Core.PreservedCall call,
-                                      Function<Core, BigDecimal> constant) {
+    static List<ResultBound<DeclaredArgument>> boundsOn(Core.PreservedCall call,
+                                                        Function<Core, BigDecimal> constant) {
         return boundsOn(call.operation(), CallArguments.readAs(call, constant));
     }
 
@@ -362,714 +351,21 @@ final class DischargeRules {
      * The same, for a reader holding the operation and not a call to it: the rows whose condition is
      * met by what {@code constants} can say about the arguments.
      *
-     * <p>{@link ConstantArguments#NONE} therefore leaves the rows an operation states whatever it is
-     * given, which for an operation the language hands no number is every row it has — a bound may
-     * only name an argument that is a number ({@link #holdBound}), so there is no other kind for
-     * such an operation to have.
+     * <p>{@link ConstantArguments#none()} therefore leaves the rows an operation states whatever it
+     * is given, which for an operation the language hands no number is every row it has — a bound
+     * may only name an argument that is a number, which the binder holds, so there is no other kind
+     * for such an operation to have.
      */
-    static List<ResultBound> boundsOn(ValueName operation, ConstantArguments constants) {
-        List<ResultBound> rows = Bound.boundsOnTheResult(operation);
-        List<ResultBound> holding = new ArrayList<>(rows.size());
-        for (ResultBound row : rows) {
+    static List<ResultBound<DeclaredArgument>> boundsOn(
+            ValueName operation, ConstantArguments<DeclaredArgument> constants) {
+        List<ResultBound<DeclaredArgument>> rows = facts().boundsOnTheResult(operation);
+        List<ResultBound<DeclaredArgument>> holding = new ArrayList<>(rows.size());
+        for (ResultBound<DeclaredArgument> row : rows) {
             if (constants.satisfy(row.provided())) {
                 holding.add(row);
             }
         }
         return holding;
-    }
-
-    /** Those of them the building table has, by name, for the test that holds each to a construction
-     * it discharges. */
-    static Set<String> builtNames() {
-        Set<String> names = new LinkedHashSet<>();
-        builtOperations().forEach(operation -> names.add(operation.toString()));
-        return names;
-    }
-
-    /**
-     * The tables, held to the declarations they were written for.
-     *
-     * <p>A row names an argument of an operation, and what an operation's arguments are is the
-     * library's to say. Where the two disagree there is nothing to be done at a call — the rule is
-     * about an argument that is not there, or is not the kind of thing the rule is about — so it is
-     * said here, once, before any call is read, rather than met as a missing answer at whichever
-     * reader arrives first.
-     *
-     * <p>Every row of every table, not the row a call happens to reach: a rule that disagrees with a
-     * declaration is wrong whether or not a program calls it, and finding out when one does is the
-     * same silence deferred.
-     *
-     * <p>A numeric rule names no part of what an operation hands a closure, since such an operation
-     * hands none, so it is bound with no derived position for a written one to be held against.
-     *
-     * <p>Read on the first ask and not before, as {@link Combinators} and {@link Preserved} are: what
-     * this requires of the library is required of a check that reads these rules, and a checker that
-     * reads none must not be held to it.
-     */
-    private static final class Bound {
-
-        private static Set<ValueName> buildsItsResultFrom() {
-            return OperationFacts.buildsItsResultFrom();
-        }
-
-        private static BuiltFrom buildsItsResultFrom(ValueName operation) {
-            return OperationFacts.buildsItsResultFrom(operation);
-        }
-        private static OperationFact.ReadsItsContainer readsItsContainer(
-                ValueName operation) {
-            return OperationFacts.readsItsContainer(operation);
-        }
-
-        private static ArgumentRef isStatedOverAProjection(ValueName operation) {
-            return OperationFacts.isStatedOverAProjection(operation);
-        }
-
-        private static Set<ValueName> isStatedOverAProjection() {
-            return OperationFacts.isStatedOverAProjection();
-        }
-
-        private static List<ArgumentRef> resultIsNoSmallerThan(ValueName operation) {
-            return OperationFacts.resultIsNoSmallerThan(operation);
-        }
-
-        private static boolean statesItsPredicateOfEveryElement(ValueName operation) {
-            return OperationFacts
-                    .statesItsPredicateOfEveryElement(operation);
-        }
-
-        private static Set<ValueName> statesItsPredicateOfEveryElement() {
-            return OperationFacts.statesItsPredicateOfEveryElement();
-        }
-
-        /* Read off what the binding produced rather than out of the authoring index beside it.
-         * This one fact is carried by a value the binding made, so the answer a reader gets is the
-         * answer that was held — not the same lookup done again, which agrees with it only for as
-         * long as nobody changes either. */
-        private static BoundOperationFact.MeansTheSameAsSizeOfNought meansTheSameAsASizeOfNought(
-                DeclaredOperation operation) {
-            return operation == null ? null : SEMANTICS.sizes().get(operation);
-        }
-
-        private static Set<ValueName> meansTheSameAsASizeOfNought() {
-            return EMPTINESS_CHECKS;
-        }
-        /** What the declarations came to, held to the library. The list is walked whole, so a fact
-         *  nothing here looks up is one this has held all the same. */
-        private static final OperationFactBinder.Binding SEMANTICS =
-                OperationFactBinder.bindAll(DefaultStdlib.get());
-        /* Holding the declarations to the library is a pure function of it, so this holder is the
-         * only thing here that reaches for the process's own — {@link DefaultStdlib} says who may
-         * and why the loader may not. */
-
-        /* The bound emptiness checks under the names a census asks by. Built once, here and after
-         * the binding it reads: a set worked out at each ask is one more place the bound facts are
-         * taken apart, and would be taken apart the same way every time. */
-        private static final Set<ValueName> EMPTINESS_CHECKS = emptinessChecks(SEMANTICS);
-
-        private static Set<ValueName> emptinessChecks(OperationFactBinder.Binding bound) {
-            Set<ValueName> named = new LinkedHashSet<>();
-            bound.sizes().keySet().forEach(each -> named.add(each.operation()));
-            return Collections.unmodifiableSet(named);
-        }
-
-        /**
-         * What the language declares an operation answers.
-         *
-         * <p>Here rather than at the call site so that asking runs the binding above, which is what
-         * the rest of this holder does for the tables beside it. The answer itself is the
-         * declaration's; what asking through here adds is that it has been held to the library
-         * first.
-         */
-        private static souther.compiler.numeric.LinearForm<ArgumentRef>
-                answersAFormOfItsArguments(ValueName operation) {
-            return OperationFacts.answersAFormOfItsArguments(operation);
-        }
-
-        /** The operations declared to answer a form of their arguments, for the checks that hold
-         *  each of them to firing. */
-        private static Set<ValueName> answersAFormOfItsArguments() {
-            return OperationFacts.answersAFormOfItsArguments();
-        }
-
-        private static Set<ValueName> statesTheOrder() {
-            return OperationFacts.statesTheOrderOfItsArguments();
-        }
-
-        private static PositiveOrder statesTheOrder(
-                ValueName operation) {
-            return OperationFacts
-                    .statesTheOrderOfItsArguments(operation);
-        }
-
-        private static Set<ValueName> shiftsBy() {
-            return OperationFacts.shiftsBy();
-        }
-
-        private static OperationFact.ShiftsBy shiftsBy(
-                ValueName operation) {
-            return OperationFacts.shiftsBy(operation);
-        }
-
-        /** The measures the shifts are stated through, read off those rather than listed again. A
-         *  measure named in a second place is a measure the day somebody adds a shift and updates
-         *  one of them. */
-        private static Set<ValueName> measures() {
-            Set<ValueName> out = new LinkedHashSet<>();
-            shiftsBy().forEach(operation -> out.add(shiftsBy(operation).measure()));
-            return out;
-        }
-
-        private static Set<ValueName> boundsOnTheResult() {
-            return OperationFacts.boundsOnTheResult();
-        }
-
-        private static List<ResultBound> boundsOnTheResult(
-                ValueName operation) {
-            return OperationFacts.boundsOnTheResult(operation);
-        }
-        private static Set<ValueName> isDefinedByCases() {
-            return OperationFacts.isDefinedByCases();
-        }
-
-        private static List<OperationFact.Case> isDefinedByCases(
-                ValueName operation) {
-            return OperationFacts.isDefinedByCases(operation);
-        }
-
-        private static Set<ValueName> computesANumber() {
-            return OperationFacts.computesANumber();
-        }
-
-        private static NumericResult computesANumber(
-                ValueName operation) {
-            return OperationFacts.computesANumber(operation);
-        }
-    }
-
-    /**
-     * As {@link #holdToTheDeclaration}, for the arithmetic an operation computes: it takes as many
-     * arguments as the row hands over, and it answers its number where the row says it does.
-     *
-     * <p>The result position is the half a signature can disagree with silently. A row saying the
-     * number arrives in the case carrying {@code Int} is read at an arm, and an arm that never
-     * matches is an arm that reports nothing — so a union that gained a case, or lost the one the
-     * row names, would leave the operation with a meaning no program reaches and no diagnostic
-     * anywhere. Held here, before any call is read.
-     */
-    static void holdNumericResult(Stdlib stdlib, ValueName operation, NumericResult rule) {
-        Stdlib.Signature signature = holdTheOperationToTheLibrary(stdlib, operation).signature();
-        Type answers = NumericAnswers.in(signature.result());
-        List<Arithmetic.Reads> reads = rule.computes().reads();
-        if (signature.params().size() != reads.size()) {
-            throw new IllegalStateException(operation + " takes " + signature.params().size()
-                    + " argument(s), and the arithmetic written for it reads " + reads.size());
-        }
-        for (int i = 0; i < reads.size(); i++) {
-            if (!heldBy(stdlib, reads.get(i), signature.params().get(i), answers)) {
-                throw new IllegalStateException("argument " + (i + 1) + " of " + operation
-                        + " is " + Type.show(signature.params().get(i))
-                        + ", which the arithmetic written for it reads as " + reads.get(i));
-            }
-        }
-        switch (rule.at()) {
-            case NumericResult.Answered.Directly ignored ->
-                    holdTheResultToTheDeclaration(stdlib, operation, TypeRequirement.NUMBER,
-                            "where the arithmetic it computes is answered");
-            case NumericResult.Answered.InTheCaseCarrying(Type carried) -> {
-                if (!(signature.result() instanceof Type.Union(Set<TypeSymbol> members))) {
-                    throw new IllegalStateException(operation + " answers "
-                            + Type.show(signature.result())
-                            + ", which has no case for the number it computes to arrive in");
-                }
-                if (!carried.equals(answers)) {
-                    throw new IllegalStateException(operation + " answers no case carrying "
-                            + Type.show(carried));
-                }
-                if (rule.unless() == null) {
-                    throw new IllegalStateException(operation + " answers its number as one case"
-                            + " of a union, so when the other case comes back is what that case"
-                            + " means and is not written down");
-                }
-                // The condition names no case, so it says what every case that is not the
-                // number's says — which is one statement only where there is one such case. A
-                // union that gained a third would have an arm establishing a condition it was
-                // not taken under, which is a wrong fact rather than a missing one, and nothing
-                // downstream could tell: an arm is read the same way whichever case it names.
-                // Where a second failure is wanted, the condition is what has to name its case.
-                if (members.size() != 2) {
-                    throw new IllegalStateException(operation + " answers "
-                            + members.size() + " cases, and when it answers no number is"
-                            + " written as one condition — which says what one other case"
-                            + " means and cannot say what several do");
-                }
-            }
-        }
-        if (rule.unless() != null) {
-            holdToTheDeclaration(stdlib, operation, rule.unless().argument(), null,
-                    TypeRequirement.NUMBER, "the argument a failure is decided by");
-        }
-    }
-
-    /**
-     * As {@link #holdToTheDeclaration}, for a rule stating a shift through a measure: the amount is
-     * a number, the value shifted is of the type the measure counts, and the measure counts two of
-     * what the operation answers. A rule pairing an operation with a measure of something else
-     * would state a relation between two values that have none.
-     */
-    static void holdShift(Stdlib stdlib, ValueName operation, OperationFact.ShiftsBy
-            shift) {
-        holdToTheDeclaration(stdlib, operation, shift.amount(), null, TypeRequirement.NUMBER,
-                "the amount a shift moves by");
-        Stdlib.Entry counts = stdlib.entry(shift.measure());
-        if (counts == null) {
-            throw new IllegalStateException("the rule about " + operation + " counts through "
-                    + shift.measure().qualified() + ", which the library does not declare");
-        }
-        Stdlib.Entry shifted = holdTheOperationToTheLibrary(stdlib, operation);
-        List<Type> counted = counts.signature().params();
-        if (counted.size() != 2 || !NumericAnswers.isANumber(counts.signature().result())
-                || !counted.get(0).equals(shifted.signature().result())
-                || !counted.get(1).equals(shifted.signature().result())) {
-            throw new IllegalStateException(shift.measure().qualified()
-                    + " does not count two of what " + operation + " answers apart as a number");
-        }
-        Type moved = holdToTheDeclaration(stdlib, operation, shift.of(), null,
-                TypeRequirement.ANY, "the value a shift moves from");
-        // Not a requirement on the type, which is why it is stated here rather than passed as one.
-        // What this asks is that two positions of one signature stand at the same type, and nothing
-        // about a type on its own answers that — a requirement able to say it would be one carrying
-        // the signature it was written for.
-        if (!moved.equals(shifted.signature().result())) {
-            throw new IllegalStateException("the value " + ((ValueName.Stdlib) operation).qualified()
-                    + " shifts is " + Type.show(moved) + " and what it answers is "
-                    + Type.show(shifted.signature().result())
-                    + ", so what it moves is not what the measure counts");
-        }
-    }
-
-    /** As {@link #holdToTheDeclaration}, for the arguments a case names: the one it answers, and
-     * the two sides of each condition it is reached under. */
-    static void holdCase(Stdlib stdlib, ValueName operation, OperationFact.Case one) {
-        holdTheResultToTheDeclaration(stdlib, operation, TypeRequirement.NUMBER,
-                "what a case of the definition answers");
-        List<ArgumentRef> named = new ArrayList<>();
-        named.add(one.answers());
-        one.given().forEach(stands -> {
-            named.add(stands.left());
-            named.add(stands.right());
-        });
-        named.forEach(each -> holdToTheDeclaration(stdlib, operation, each, null,
-                TypeRequirement.NUMBER, "an argument a case of the definition names"));
-    }
-
-    /** As {@link #holdToTheDeclaration}, for the arguments a bound names: the one the result is
-     * bounded against, and the one a condition on the rule reads. Each is a separate claim about a
-     * separate argument. */
-    static void holdBound(Stdlib stdlib, ValueName operation, ResultBound bound) {
-        holdTheResultToTheDeclaration(stdlib, operation, TypeRequirement.NUMBER,
-                "what a bound on the result holds of");
-        List<ArgumentRef> named = new ArrayList<>();
-        if (bound.against() != null) {
-            named.add(bound.against());
-        }
-        if (bound.provided()
-                instanceof ResultBound.Provided.ConstantAboveZero
-                constant) {
-            named.add(constant.argument());
-        }
-        named.forEach(one -> holdToTheDeclaration(stdlib, operation, one, null,
-                TypeRequirement.NUMBER, "an argument a bound on the result names"));
-    }
-
-    /**
-     * Whether the argument declared {@code at} is what the row says that position reads, for an
-     * operation answering {@code answered}.
-     *
-     * <p>Here and not on {@link Arithmetic.Reads}, which says what a position is and stops there.
-     * Holding one of those to a declaration is a question about the library, and this is the reader
-     * that has the library — the same reader that holds the operation's arity and its result to it.
-     *
-     * <p>Two of them are answered from the row itself: the number the operation answers is the one
-     * its result carries, and a scale is a count. The third is answered from a declaration, because
-     * there is nothing about a rounding policy that a type says of itself — and reading it off a
-     * name written here would be a second answer to which type it is, which is what ADR-0087 ends.
-     */
-    private static boolean heldBy(Stdlib stdlib, Arithmetic.Reads reads, Type at, Type answered) {
-        return switch (reads) {
-            case THE_NUMBER_IT_ANSWERS -> at.equals(answered);
-            case A_SCALE -> at == Type.Prim.INT;
-            case A_ROUNDING_MODE -> at.equals(theRoundingPolicyTheLibraryDeclares(stdlib));
-        };
-    }
-
-    /** Which library operation the rounding policy is read off, and where in its arguments. */
-    private static final ValueName.Stdlib ROUNDING_POLICY_ANCHOR =
-            ValueName.Stdlib.operation("Decimal", "round");
-
-    /** {@code round(scale, mode, d)} — the second of them. */
-    private static final int ROUNDING_POLICY_ARGUMENT = 1;
-
-    /**
-     * The type the library declares for a rounding policy, taken from the operation that declares
-     * one and read as whatever that operation declares there.
-     *
-     * <p>Whatever it declares there, and never a type this checks against. A rule that said the
-     * anchor's argument must be {@code RoundingMode} would be the spelling back again, one operation
-     * further along. What is held is that two declarations agree: {@code Decimal.divide} takes at
-     * its policy position the type {@code Decimal.round} takes at its own, and either of them
-     * drifting alone fails this. Both moving to a new policy type together passes, and should —
-     * that is the library being redesigned rather than the table and the library disagreeing.
-     *
-     * <p>The anchor is a choice and is written down as one. What it is not is a second definition
-     * of which type the policy is: the library's declaration remains the only one.
-     *
-     * @throws IllegalStateException where the anchor no longer declares the argument it is read off
-     */
-    private static Type theRoundingPolicyTheLibraryDeclares(Stdlib stdlib) {
-        List<Type> params = holdTheOperationToTheLibrary(stdlib, ROUNDING_POLICY_ANCHOR)
-                .signature().params();
-        if (params.size() <= ROUNDING_POLICY_ARGUMENT) {
-            throw new IllegalStateException(ROUNDING_POLICY_ANCHOR.qualified() + " takes "
-                    + params.size() + " argument(s), and the rounding policy every arithmetic over"
-                    + " one is held to is read off argument " + (ROUNDING_POLICY_ARGUMENT + 1)
-                    + " of it");
-        }
-        return params.get(ROUNDING_POLICY_ARGUMENT);
-    }
-
-    /** The library operation {@code operation} names. Every fact is declared of one, so the name
-     *  says which library and which operation rather than a spelling a reader would have to take
-     *  apart — and a reader that has held a name to the library holds this rather than narrowing the
-     *  name a second time.
-     *
-     *  @throws IllegalStateException where the name is no library operation. */
-    static ValueName.Stdlib.Operation theLibraryOperation(ValueName operation) {
-        if (!(operation instanceof ValueName.Stdlib.Operation library)) {
-            throw new IllegalStateException("a fact is declared of " + operation
-                    + ", which is not a library operation");
-        }
-        return library;
-    }
-
-    /**
-     * The library's declaration of {@code operation}, or a build that does not start.
-     *
-     * <p>What every fact owes, whatever else it says. A fact is a proposition about an operation,
-     * so an operation the library does not have is a fact about nothing — and that is true of a
-     * fact naming no argument as much as of one that names three.
-     *
-     * <p>Its own step rather than the first half of {@link #holdToTheDeclaration}, because there it
-     * was reached only by a fact that had an argument to check. A fact naming none went through an
-     * arm with nothing in it and was never held to anything, so which declarations were bound
-     * depended on which kinds of fact happened to name an argument. A kind added later would have
-     * lost the same way, silently, on the day its arm was written empty.
-     */
-    static Stdlib.Entry holdTheOperationToTheLibrary(Stdlib stdlib, ValueName operation) {
-        ValueName.Stdlib.Operation library = theLibraryOperation(operation);
-        Stdlib.Entry entry = stdlib.entry(library);
-        if (entry == null) {
-            throw new IllegalStateException("a fact is declared of " + library.qualified()
-                    + ", which the library does not declare");
-        }
-        return entry;
-    }
-
-    /**
-     * Holds an emptiness check and the size it is said to mean to each other's declarations, and
-     * answers with the two as the library declares them.
-     *
-     * <p>What a reader does with this fact is write the second call where the first stands, keeping
-     * the arguments. So what has to hold is that the arguments the first takes are the ones the
-     * second takes, and that the two answer the kinds of thing the rewrite turns into each other: a
-     * truth on one side, a number to compare against nought on the other. Two operations of one
-     * argument each is not enough — a check on strings and a length of lists agree on how many
-     * arguments they take and on nothing else.
-     *
-     * <p>Asked here, where both declarations are in hand, and not by the reader doing the rewriting.
-     * That reader has a call and a name, which is enough to put the same question a second way and
-     * not enough to answer it.
-     */
-    static BoundOperationFact.MeansTheSameAsSizeOfNought holdSizeEquivalence(
-            Stdlib stdlib, ValueName operation, ValueName size) {
-        CompleteSignature asks = declaredSignature(stdlib, operation);
-        CompleteSignature counts = declaredSignature(stdlib, size);
-        if (asks.params().size() != 1 || asks.result() != Type.BOOL) {
-            throw new IllegalStateException(theLibraryOperation(operation).qualified()
-                    + " is declared to say whether one container is empty, and it takes "
-                    + asks.params().size() + " argument(s) and answers "
-                    + Type.show(asks.result()));
-        }
-        if (counts.params().size() != 1 || counts.result() != Type.INT) {
-            throw new IllegalStateException(theLibraryOperation(size).qualified()
-                    + " is named as the size " + theLibraryOperation(operation).qualified()
-                    + " means, and it takes " + counts.params().size()
-                    + " argument(s) and answers " + Type.show(counts.result()));
-        }
-        if (!sameShape(asks.params().get(0), counts.params().get(0),
-                new HashMap<>(), new HashMap<>())) {
-            throw new IllegalStateException(theLibraryOperation(operation).qualified() + " asks of "
-                    + Type.show(asks.params().get(0)) + " and "
-                    + theLibraryOperation(size).qualified() + " counts "
-                    + Type.show(counts.params().get(0))
-                    + ", so a call of the first is no call of the second");
-        }
-        return new BoundOperationFact.MeansTheSameAsSizeOfNought(asks.declaring(),
-                counts.declaring());
-    }
-
-    /** The library's declaration of {@code operation}, read whole. */
-    private static CompleteSignature declaredSignature(Stdlib stdlib, ValueName operation) {
-        Stdlib.Entry entry = holdTheOperationToTheLibrary(stdlib, operation);
-        return CompleteSignature.ofDeclaration(operation, entry.signature().params(),
-                entry.signature().result());
-    }
-
-    /**
-     * Whether the two are the same shape, telling type variables apart only by where they stand.
-     *
-     * <p>{@code List<'a>} and {@code List<'b>} are one shape and {@code List<'a>} and
-     * {@code List<Int>} are not, which is what a rewrite between two declarations needs and what
-     * unifying them does not answer: those two unify, by deciding that {@code 'a} is {@code Int},
-     * and a rewrite is not free to decide anything. The pairing is carried both ways so that two
-     * variables on one side cannot both stand for one on the other.
-     */
-    private static boolean sameShape(Type left, Type right, Map<String, String> paired,
-                                     Map<String, String> back) {
-        // A variable of an application, which no declaration holds: this compares what two
-        // declarations state. One arriving here is a caller having handed over something else, and
-        // answering "a different shape" would report that as the two operations disagreeing.
-        if (left instanceof Type.MetaVar || right instanceof Type.MetaVar) {
-            throw new IllegalStateException("a declared signature is being compared with "
-                    + Type.show(left instanceof Type.MetaVar ? left : right)
-                    + ", which belongs to an application rather than to a declaration");
-        }
-        return switch (left) {
-            case Type.Var l when right instanceof Type.Var r ->
-                    r.name().equals(paired.computeIfAbsent(l.name(), _ -> r.name()))
-                            && l.name().equals(back.computeIfAbsent(r.name(), _ -> l.name()));
-            case Type.ListOf l when right instanceof Type.ListOf r ->
-                    sameShape(l.element(), r.element(), paired, back);
-            case Type.SetOf l when right instanceof Type.SetOf r ->
-                    sameShape(l.element(), r.element(), paired, back);
-            case Type.OptionOf l when right instanceof Type.OptionOf r ->
-                    sameShape(l.element(), r.element(), paired, back);
-            case Type.MapOf l when right instanceof Type.MapOf r ->
-                    sameShape(l.key(), r.key(), paired, back)
-                            && sameShape(l.value(), r.value(), paired, back);
-            case Type.FnOf l when right instanceof Type.FnOf r ->
-                    sameShapes(l.params(), r.params(), paired, back)
-                            && sameShape(l.result(), r.result(), paired, back);
-            case Type.TupleOf l when right instanceof Type.TupleOf r ->
-                    sameShapes(l.elements(), r.elements(), paired, back);
-            // Everything else a declaration can hold stands for itself: a primitive, a declaration,
-            // a union of them, and a variable that did not pair with one above. Being the same
-            // shape is being the same type.
-            case Type.Leaf _ -> left.equals(right);
-            default -> false;
-        };
-    }
-
-    private static boolean sameShapes(List<Type> left, List<Type> right, Map<String, String> paired,
-                                      Map<String, String> back) {
-        if (left.size() != right.size()) {
-            return false;
-        }
-        for (int i = 0; i < left.size(); i++) {
-            if (!sameShape(left.get(i), right.get(i), paired, back)) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    /**
-     * The library's declaration of {@code operation}, once what it answers is what a fact about its
-     * result is about.
-     *
-     * <p>Beside {@link #holdToTheDeclaration} and for the half it cannot reach. That one names an
-     * argument, so a fact whose proposition mentions the result had nothing to say it with, and
-     * each kind that needed the result said it its own way or not at all: {@code BoundsItsResult}
-     * and {@code IsDefinedByCases} are stated of a number and were held only of their arguments.
-     * Improvising a check per kind defaults to omitting it, which is how a fact naming no argument
-     * once went through an empty arm ({@link #holdTheOperationToTheLibrary}).
-     *
-     * <p>Which requirement is the caller's, since what a fact says of the result is the fact's. A
-     * form is about a count and a bound about a number, and the difference between those two is a
-     * difference between the propositions and not between two ways of holding one. Which it may
-     * choose from is not the caller's ({@link TypeRequirement}).
-     */
-    static void holdTheResultToTheDeclaration(Stdlib stdlib, ValueName operation,
-            TypeRequirement required, String role) {
-        Type result = holdTheOperationToTheLibrary(stdlib, operation).signature().result();
-        if (result == null || !required.admits(result)) {
-            throw new IllegalStateException("what " + ((ValueName.Stdlib) operation).qualified()
-                    + " answers is " + (result == null ? "left to its body" : Type.show(result))
-                    + ", not " + required + "; it is named as " + role);
-        }
-    }
-
-    /**
-     * Holds a declared account of what an operation takes of the one value it is given.
-     *
-     * <p>Two different things, and they are kept apart. Three of these hold the declaration and the
-     * signature to each other: the operation takes exactly one value, since what such a term is read
-     * off is one location and a term names one path; it answers a number, since a boundary is drawn
-     * on one; and what it takes it of is the shape the account is written for — a count is taken of
-     * something that holds things, a magnitude of the operation's own kind of number. None of the
-     * three is checked anywhere else, and each is about this fact and this declaration.
-     *
-     * <p>The one that is not about this fact at all is that the number the operation answers is read
-     * by one representation. That is a property of the operation and holds whichever of the accounts
-     * was declared last. Asked as "is there already a form, an arithmetic, a body", it is one
-     * condition per representation there is, so a fourth has to be named in each of them and in
-     * whatever the next such procedure turns out to be. Asked as how many readings the operation has
-     * ({@link NumericReadings}), a representation added is refused against every existing one
-     * without being paired with any of them.
-     *
-     * <p>Counted over the declarations being held and not over a table read from elsewhere, so the
-     * answer does not depend on the order the facts were declared in or on whether they have
-     * reached a table yet. What is required is that the count comes to one and that the one is this
-     * account — a term found beside a form fails the same way whether the term or the form was
-     * written first.
-     *
-     * <p>Held here rather than trusted at the reader. The reader applies the account to whatever
-     * observation stands at the path, so an account declared of an operation it is not the shape of
-     * is a row read as a number nobody named, with nothing about it looking like a failure (#1027).
-     * Refused where the declaration is written, that reading cannot be reached.
-     */
-    static void holdTakenOf(Stdlib stdlib, List<OperationFacts.Declared> declared,
-            ValueName operation, souther.compiler.semantics.TakenAs how) {
-        Stdlib.Entry entry = holdTheOperationToTheLibrary(stdlib, operation);
-        Stdlib.Signature signature = entry.signature();
-        String named = ((ValueName.Stdlib) operation).qualified();
-        if (signature.params().size() != 1) {
-            throw new IllegalStateException(named + " takes " + signature.params().size()
-                    + " arguments, and a number taken of the one value an operation is given is"
-                    + " taken of one");
-        }
-        // A number and not a number at one case of a union. A term names one path and stands for
-        // what the operation answered there, and what an operation answering `Int | NotANumber`
-        // answers at that path is the union — which case it is in is a question this account has no
-        // room for. Narrower than the range of whatever asks for such an account, and deliberately:
-        // what may be declared and what is asked about are two ranges.
-        holdTheResultToTheDeclaration(stdlib, operation, TypeRequirement.NUMBER,
-                "what a term of its answer is about");
-        // Before the shape below, because it is the operation that is being asked about and not
-        // this fact. An account that does not fit the operation is still an account of a number
-        // some other representation may already read, and asked the other way round the exclusivity
-        // would be reachable only through arms that happen to fit.
-        NumericReadings.Resolution read = NumericReadings.resolve(stdlib, declared, operation);
-        if (!(read instanceof NumericReadings.Resolution.One(
-                NumericReading.AsATermTakenOfItsArgument(souther.compiler.semantics.TakenAs held)))
-                || !held.equals(how)) {
-            throw new IllegalStateException("the number " + named + " answers is read as "
-                    + NumericReadings.describe(read) + ", and one numeric call is read by one"
-                    + " representation — which of them a report showed would be whichever reader"
-                    + " arrived");
-        }
-        Type source = signature.params().get(0);
-        Type answered = signature.result();
-        if (!how.takenOf(source, answered)) {
-            throw new IllegalStateException(named + " is declared to answer "
-                    + how.getClass().getSimpleName() + " of a " + Type.show(source)
-                    + ", which is not what that is taken of");
-        }
-    }
-
-    /**
-     * Holds a declared form to the library: what it answers counts, and so does every argument it
-     * is written over.
-     *
-     * <p>Both ends, because the fact is an equation between them —
-     * {@code count(result) = Σ cᵢ·count(argᵢ) + k}. Held of the arguments alone it was half a
-     * statement: {@code List.take(n, xs)} declared to answer the number of its first argument
-     * passed, that argument being an {@code Int}, while what it answers is a list and has no count
-     * for the equation to be about.
-     *
-     * <p>Counted rather than a number, because that is what the fact says. A date is no number and
-     * counts days; whether this check can then do anything with such a form is a different question
-     * and belongs to the check ({@link #formOperationsThisCarries}).
-     */
-    static void holdAFormOfItsArguments(Stdlib stdlib, ValueName operation,
-            souther.compiler.numeric.LinearForm<ArgumentRef> form) {
-        holdTheResultToTheDeclaration(stdlib, operation, TypeRequirement.COUNTED,
-                "what a form of its arguments is about");
-        for (ArgumentRef argument : form.coefs().keySet()) {
-            holdToTheDeclaration(stdlib, operation, argument, null, TypeRequirement.COUNTED,
-                    "an argument the result is a form of");
-        }
-    }
-
-    /**
-     * Holds one rule to the operation it is about: the operation is one the library declares, the
-     * argument it names is one that declaration has, and what stands there is what the rule
-     * requires. A rule naming a part of something the signature says the operation does not hand is
-     * caught by {@link ArgumentRef}; one that writes a position the signature already answers is
-     * caught here, since two answers to one question are what come apart later.
-     *
-     * <p>Asked per rule so that whatever holds a whole declaration source can walk it and hold each
-     * of them, rather than reaching for a table of its own. Holding a table at a time was two
-     * wrappers over this, and neither was reached: what walks the declarations walks them one rule
-     * at a time, so an entry point taking a map of them said there was a way of binding that
-     * nothing binds.
-     *
-     * <p>Answers what stands at the position it held. A caller with something to state that a
-     * requirement cannot — that two positions of one signature stand at one type — then says it
-     * without reading the position over again, and two readings of where an argument is are two
-     * answers to it.
-     */
-    static Type holdToTheDeclaration(Stdlib stdlib, ValueName operation, ArgumentRef at,
-                                     ArgumentRef derived, TypeRequirement required, String role) {
-        Stdlib.Entry entry = holdTheOperationToTheLibrary(stdlib, operation);
-        ValueName.Stdlib library = (ValueName.Stdlib) operation;
-        List<Type> params = entry.signature().params();
-        int position = CallArguments.positionIn(at, operation);
-        if (position < 0 || position >= params.size()) {
-            throw new IllegalStateException(library.qualified() + " takes " + params.size()
-                    + " argument(s), and the rule about " + role + " reads argument "
-                    + (position + 1));
-        }
-        Type stands = params.get(position);
-        if (!required.admits(stands)) {
-            throw new IllegalStateException("argument " + (position + 1) + " of "
-                    + library.qualified() + " is " + Type.show(stands) + ", not " + required
-                    + "; it is named as " + role);
-        }
-        if (at instanceof ArgumentRef.At && derived != null && Combinators.of(operation) != null
-                && CallArguments.positionIn(derived, operation) == position) {
-            throw new IllegalStateException("the rule about " + role + " for "
-                    + library.qualified()
-                    + " writes the argument its signature already answers — say which part it is"
-                    + " rather than where, so the two cannot come apart");
-        }
-        return stands;
-    }
-
-    /**
-     * Holds an accumulation to the library: the argument it names holds elements, and they are of
-     * the type the operation answers.
-     *
-     * <p>Both halves, because an accumulation carries what it has so far in the answer's own type.
-     * A step over what it has and an element is written over two values of one type, so an argument
-     * whose elements are something else is one this walk could not be over, and the identity it
-     * starts from would be a value of a type nothing here names.
-     *
-     * <p>Which argument is named rather than searched for. A signature says of as many arguments as
-     * fit that they could be the one, and an operation given two containers of what it answers has
-     * a signature admitting two walks; the fact says which, and this says whether the signature
-     * bears it out.
-     */
-    static void holdAccumulation(Stdlib stdlib, ValueName operation, ArgumentRef container) {
-        Type stands = holdToTheDeclaration(stdlib, operation, container, null,
-                TypeRequirement.CONTAINER, "the container it accumulates");
-        Type answers = holdTheOperationToTheLibrary(stdlib, operation).signature().result();
-        Type element = Type.elementOfAContainer(stands);
-        if (!element.equals(answers)) {
-            throw new IllegalStateException(((ValueName.Stdlib) operation).qualified()
-                    + " is declared to accumulate a container of " + Type.show(element)
-                    + " and answers " + Type.show(answers)
-                    + ", and a walk carries what it has so far in the type it answers");
-        }
     }
 
     /**
@@ -1100,7 +396,7 @@ final class DischargeRules {
      * there: without one container there is nothing to ask the question of.
      */
     static Kept keptFrom(Core.PreservedCall call) {
-        BuiltFrom built = Bound.buildsItsResultFrom(call.operation());
+        BuiltFrom<DeclaredArgument> built = facts().buildsItsResultFrom(call.operation());
         if (built == null || built.outputs().size() != 1 || built.lineage().source() == null) {
             return null;
         }
@@ -1108,12 +404,12 @@ final class DischargeRules {
     }
 
     /** A construction's source container and the lineage of the elements it answers. */
-    record Kept(Core container, ElementLineage lineage) {}
+    record Kept(Core container, ElementLineage<DeclaredArgument> lineage) {}
 
     /** The container {@code call} built its result from, or null where the check has no rule about
      * what the operation keeps. */
     static Source builtFrom(Core.PreservedCall call) {
-        BuiltFrom built = Bound.buildsItsResultFrom(call.operation());
+        BuiltFrom<DeclaredArgument> built = facts().buildsItsResultFrom(call.operation());
         return built == null ? null
                 : new Source(CallArguments.of(built.from(), call), built.shape(), built.size());
     }
@@ -1134,12 +430,9 @@ final class DischargeRules {
         if (!(e instanceof Core.PreservedCall call)) {
             return List.of();
         }
-        List<ArgumentRef> reads = Bound.resultIsNoSmallerThan(call.operation());
-        if (reads == null) {
-            return List.of();
-        }
+        List<DeclaredArgument> reads = facts().resultIsNoSmallerThan(call.operation());
         List<Core> containers = new ArrayList<>(reads.size());
-        for (ArgumentRef one : reads) {
+        for (DeclaredArgument one : reads) {
             containers.add(CallArguments.of(one, call));
         }
         return containers;
@@ -1148,15 +441,14 @@ final class DischargeRules {
     /** Where {@code call} reads the container it states its predicate of, or null where it is not a
      * predicate this carries anywhere. */
     static Carrying carried(Core.PreservedCall call) {
-        OperationFact.ReadsItsContainer carried =
-                Bound.readsItsContainer(call.operation());
+        BoundOperationFact.ReadsItsContainer carried = facts().readsItsContainer(call.operation());
         return carried == null ? null : new Carrying(call, carried.container(), carried.through());
     }
 
     /** The projection {@code call}'s predicate is stated over, or null where it is stated over the
      * element itself — or where what stands in that argument is not a block this can read. */
     static Projection projectionOf(Core.PreservedCall call, Denotations at) {
-        ArgumentRef reads = Bound.isStatedOverAProjection(call.operation());
+        DeclaredArgument reads = facts().isStatedOverAProjection(call.operation());
         if (reads == null) {
             return null;
         }
@@ -1181,39 +473,36 @@ final class DischargeRules {
      * answered a number without counting anything was left out of it silently (#1027).
      */
     static boolean answersANumberTakenOfItsArgument(ValueName operation) {
-        return OperationFacts.takenAs(operation) != null;
+        return facts().takenAs(operation) != null;
     }
 
     static boolean isQuantifier(ValueName operation) {
-        return Bound.statesItsPredicateOfEveryElement(operation);
+        return facts().statesItsPredicateOfEveryElement(operation);
     }
 
     /**
      * The rewrite an emptiness check stands for, or null where {@code operation} is not one.
      *
-     * <p>Asked with the operation as it was read against its declaration, and answered with the
-     * size operation read against its own. A reader with this has what it takes to write the second
-     * call where the first stands and nothing left to check: that the two take the same argument,
-     * and that a size is what one compares against nought, was settled where both declarations were
-     * in hand ({@link #holdSizeEquivalence}).
+     * <p>Answered with both operations read against their declarations. A reader with this has
+     * what it takes to write the second call where the first stands and nothing left to check: that
+     * the two take the same argument, and that a size is what one compares against nought, was
+     * settled where both declarations were in hand.
      */
-    static BoundOperationFact.MeansTheSameAsSizeOfNought sizeMeantBy(DeclaredOperation operation) {
-        return Bound.meansTheSameAsASizeOfNought(operation);
+    static BoundOperationFact.MeansTheSameAsASizeOfNought sizeMeantBy(ValueName operation) {
+        return facts().meansTheSameAsASizeOfNought(operation);
     }
 
     /** What {@code operation} computes and where it answers it, or null where the table says
      * nothing of it. */
-    static NumericResult numericResult(ValueName operation) {
-        // An expression that calls nothing is asked this, and answering it is what says so. The
-        // tables are immutable maps, which refuse a null key rather than answering for it, and a
-        // reader that guarded the call itself would be one guard per reader.
-        return Bound.computesANumber(operation);
+    static NumericResult<DeclaredArgument> numericResult(ValueName operation) {
+        // An expression that calls nothing is asked this, and answering it is what says so.
+        return facts().computesANumber(operation);
     }
 
     /** The operator {@code operation} is, where it answers one directly and the language writes it
      * as an operator too — else null. What a call to it is read as where it stands. */
     static BinOp operator(ValueName operation) {
-        NumericResult result = numericResult(operation);
+        NumericResult<DeclaredArgument> result = numericResult(operation);
         return result != null
                 && result.at() instanceof NumericResult.Answered.Directly
                 && result.computes()
@@ -1221,10 +510,10 @@ final class DischargeRules {
                 ? written.op() : null;
     }
 
-    /** Which argument a positive answer from {@code operation} names as the greater, or null where
-     * its sign is not an order. */
-    static PositiveOrder orderStatedBy(ValueName operation) {
-        return Bound.statesTheOrder(operation);
+    /** Which argument a positive answer from {@code operation} names as the greater, and which as
+     * the lesser — or null where its sign is not an order. */
+    static BoundOperationFact.StatesTheOrderOfItsArguments orderStatedBy(ValueName operation) {
+        return facts().statesTheOrderOfItsArguments(operation);
     }
 
     /** Whether {@code operation} answers the order of its two arguments as a sign. */

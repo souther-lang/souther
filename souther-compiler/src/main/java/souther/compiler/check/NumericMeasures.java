@@ -1,6 +1,5 @@
 package souther.compiler.check;
 
-import souther.compiler.semantics.OperationFacts;
 import souther.compiler.core.Core;
 import souther.compiler.types.ReachName;
 import souther.compiler.types.Type;
@@ -25,7 +24,8 @@ import java.util.Set;
  * what this class was made for the first time it happened.
  *
  * <p>Which they are is declared with the rest of what is true of the language's operations
- * ({@link OperationFacts}) and read from there. This once held the list
+ * ({@link souther.compiler.semantics.OperationFacts}) and read from what binds those to the
+ * library ({@link BoundOperationFacts}). This once held the list
  * itself, which is what made it the first fact promoted out of a check when a second reader wanted
  * it — two lists of the same operations disagreed, and a rule discharged in one place was reported
  * in the other as a rule the model does not state.
@@ -49,7 +49,7 @@ public final class NumericMeasures {
 
     /** Every operation that counts what it is given, which is the narrow set. */
     public static Set<ValueName> calls() {
-        return OperationFacts.countsWhatItIsGiven();
+        return DefaultBoundOperationFacts.get().countsWhatItIsGiven();
     }
 
     /** Whether {@code operation} counts what it is given. Not whether it answers a number taken of
@@ -92,7 +92,7 @@ public final class NumericMeasures {
         // `s`, and a reading that asked the narrower question drew a line on the second and none on
         // the first — with nothing said about the guard it passed over (#1027).
         return operation instanceof ValueName.Stdlib named
-                && OperationFacts.takenAs(named) != null
+                && DefaultBoundOperationFacts.get().takenAs(named) != null
                 && args.size() == 1
                 ? new Measured(named, args.get(0)) : null;
     }

@@ -90,7 +90,7 @@ class WhatReadsADeclarationIntoASignatureIsWrittenDownTest {
                     "a declaration that states what it takes and what it answers"),
             new Licence("souther.compiler.core.CompleteSignature.ofSettledValue",
                     "a value: no parameters, and what its own check settled it as"),
-            new Licence("souther.compiler.check.DischargeRules.declaredSignature",
+            new Licence("souther.compiler.check.OperationFactBinder.declaredSignature",
                     "reads a library declaration where a fact about that operation is held to it"),
             new Licence("souther.compiler.check.Preserved.signatureOf",
                     "hands on the one the library was read into, for an operation this"
@@ -108,7 +108,7 @@ class WhatReadsADeclarationIntoASignatureIsWrittenDownTest {
     private static final List<Licence> MAY_ASSEMBLE = List.of(
             new Licence("souther.compiler.check.Preserved.lambda$readTheLibrary$0",
                     "reads the library's own declarations, which state both halves"),
-            new Licence("souther.compiler.check.DischargeRules.declaredSignature",
+            new Licence("souther.compiler.check.OperationFactBinder.declaredSignature",
                     "the same declarations, read where a fact about an operation is held to them"),
             new Licence("souther.compiler.check.HelperTyping.checkHelpers",
                     "a value of this module, written with no parameters and just checked for what"

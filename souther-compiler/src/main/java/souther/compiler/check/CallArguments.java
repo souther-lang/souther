@@ -1,8 +1,6 @@
 package souther.compiler.check;
 
 import souther.compiler.core.Core;
-import souther.compiler.semantics.ArgumentRef;
-import souther.compiler.semantics.Combinator;
 import souther.compiler.semantics.ConstantArguments;
 import souther.compiler.types.ValueName;
 
@@ -10,55 +8,39 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * The argument a fact about an operation names, found in a call to it.
+ * The argument a bound fact names, found in a call to the operation the fact is about.
  *
- * <p>Between the word and the call. What {@link ArgumentRef#TheContainer} and
- * {@link ArgumentRef#TheClosure} are positions of is read off the library's own declaration
- * ({@link Combinators}), and a fact that had to reach for that to say which argument it is about
- * would be a fact written where name resolution can be seen — which is the arrangement the
- * declarations were moved out of.
+ * <p>Between the fact and the call. A {@link DeclaredArgument} already carries its position — the
+ * binder settled it against the declaration — so nothing here interprets a word or reads a
+ * signature; what is here is the one step from "argument three of {@code List.take}" to the
+ * expression standing there in this call.
  *
- * <p>So this is not a reader reinterpreting the cases. It is the one that has both halves: the word
- * a fact wrote, and the environment it takes to read that word. The same division
- * {@link AffineForms.Reading} already makes.
- *
- * <p>Nothing outside this asks for the number. A caller is answered with the argument.
+ * <p><b>The call has to be a call of the declaration the argument is of.</b> A position is a number,
+ * and a number is right in a call of any operation that takes enough arguments — so an argument of
+ * {@code List.filter} handed a call of {@code List.map} would answer with whatever stands third in
+ * the map, with nothing looking wrong. The argument knows what it is an argument of and the call
+ * knows what it calls, and the two are held to each other here, at the one place a position is
+ * applied.
  */
 public final class CallArguments {
 
-    /** The argument {@code call} passes where {@code ref} names. */
-    public static Core of(ArgumentRef ref, Core.PreservedCall call) {
-        return call.args().get(positionIn(ref, call.operation()));
+    /** The argument {@code call} passes where {@code argument} stands. */
+    public static Core of(DeclaredArgument argument, Core.PreservedCall call) {
+        return call.args().get(positionOf(argument, call));
     }
 
     /** {@code call} with that argument replaced by {@code value}. */
-    public static Core.PreservedCall replacedIn(ArgumentRef ref, Core.PreservedCall call,
-                                                Core value) {
+    public static Core.PreservedCall replacedIn(DeclaredArgument argument,
+                                                Core.PreservedCall call, Core value) {
         List<Core> args = new ArrayList<>(call.args());
-        args.set(positionIn(ref, call.operation()), value);
+        args.set(positionOf(argument, call), value);
         return new Core.PreservedCall(call.declared(), args, call.type(), call.pos());
-    }
-
-    /**
-     * Which parameter of {@code operation} {@code ref} names.
-     *
-     * <p>A written position is itself. The two that are named by the part they play are the
-     * library's to say, and an operation whose signature hands its closure nothing a container
-     * holds has neither — a fact naming one of them there is a fact about an argument that is not
-     * there, and it is said rather than answered with a number that would be wrong.
-     */
-    public static int positionIn(ArgumentRef ref, ValueName operation) {
-        return switch (ref) {
-            case ArgumentRef.At at -> at.position();
-            case ArgumentRef.TheContainer _ -> handing(operation, "the container").containerArg();
-            case ArgumentRef.TheClosure _ -> handing(operation, "the closure").closureArg();
-        };
     }
 
     /**
      * What {@code call}'s arguments read as, for a fact that names one of them.
      *
-     * <p>Between the word and the call, as everything here is: the fact names an argument and this
+     * <p>Between the fact and the call, as everything here is: the fact names an argument and this
      * finds it, and what the value there reads as is the caller's answer — a name given a constant
      * is that constant — so the reading is handed in rather than taken off the syntax at the call.
      *
@@ -66,20 +48,33 @@ public final class CallArguments {
      * one question asked by two readers ({@link ConstantArguments#satisfy}), and answering it here
      * as well would be the second place it is read.
      */
-    public static ConstantArguments readAs(Core.PreservedCall call,
-                                           java.util.function.Function<Core,
-                                                   java.math.BigDecimal> folded) {
+    public static ConstantArguments<DeclaredArgument> readAs(
+            Core.PreservedCall call,
+            java.util.function.Function<Core, java.math.BigDecimal> folded) {
         return argument -> java.util.Optional.ofNullable(folded.apply(of(argument, call)));
     }
 
-    private static Combinator handing(ValueName operation, String part) {
-        Combinator handed = Combinators.of(operation);
-        if (handed == null) {
-            throw new IllegalStateException("a rule about " + operation + " names " + part
-                    + " of what it hands its closure, and its signature says it hands one nothing"
-                    + " a container holds");
+    private static int positionOf(DeclaredArgument argument, Core.PreservedCall call) {
+        return positionOf(argument, call.declared().operation());
+    }
+
+    /**
+     * Where {@code argument} stands among the arguments of a call of {@code operation}.
+     *
+     * <p>For a reader holding a call the language resolved but did not keep standing — the
+     * runnable tree's call, or an expansion the inliner is reading — which has the operation's
+     * name and its arguments and no {@link Core.PreservedCall}. The one thing a kept call answers
+     * for that such a call does not is that its argument count is the declaration's, so what a
+     * caller here does with the position is index its own argument list; what is held here, as
+     * for a kept call, is that the argument is an argument of this operation.
+     */
+    public static int positionOf(DeclaredArgument argument, ValueName operation) {
+        if (!argument.of().operation().equals(operation)) {
+            throw new IllegalStateException("argument " + (argument.position() + 1) + " of `"
+                    + argument.of() + "` was asked for in a call of `" + operation
+                    + "`, which is another declaration");
         }
-        return handed;
+        return argument.position();
     }
 
     private CallArguments() {}

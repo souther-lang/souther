@@ -1,10 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.numeric.LinearForm;
-import souther.compiler.semantics.ArgumentRef;
 import souther.compiler.semantics.NumericResult;
-import souther.compiler.semantics.OperationFact;
-import souther.compiler.semantics.OperationFacts;
 import souther.compiler.semantics.TakenAs;
 import souther.compiler.stdlib.Stdlib;
 import souther.compiler.types.ValueName;
@@ -28,7 +25,7 @@ import java.util.List;
  *   <li>{@link Resolution.None} is valid globally; a question may make it invalid within its range.
  *       Most of the library answers numbers nothing reads, and that is ordinary. Where a check
  *       needs a reading, it is that check's range that says so and its silence
- *       ({@code OperationFact.SaysNothingOf}) that is the other answer.
+ *       ({@code BoundOperationFact.SaysNothingOf}) that is the other answer.
  * </ul>
  *
  * <p>The third is the one worth keeping. Made to answer {@code One} wherever a number is answered,
@@ -39,11 +36,16 @@ import java.util.List;
  * range moved.
  *
  * <p><b>Counted, and not asked one representation at a time.</b> Written as a condition per
- * representation inside whatever holds a declaration ({@link DischargeRules#holdTakenOf}), a
- * representation added is one every existing representation has to be told about, and the pair
- * nobody writes down is the pair that goes unchecked. Counted here, an account added is one arm on
- * {@link NumericReading} and one line here, and every pair it makes with an existing arm is refused
- * without being named.
+ * representation inside whatever holds a declaration, a representation added is one every existing
+ * representation has to be told about, and the pair nobody writes down is the pair that goes
+ * unchecked. Counted here, an account added is one arm on {@link NumericReading} and one line here,
+ * and every pair it makes with an existing arm is refused without being named.
+ *
+ * <p><b>Over the bound facts.</b> What is counted is what the binding made, so the readings an
+ * operation has are read off the same values every other reader holds. The binder asks this of the
+ * facts it has just bound, before it publishes them ({@code OperationFactBinder}), and a question
+ * about the range asks it of the published ones ({@link Question}); both are the one procedure over
+ * one vocabulary.
  */
 final class NumericReadings {
 
@@ -75,20 +77,18 @@ final class NumericReadings {
     }
 
     /**
-     * The representations that read the number {@code operation} answers, counted, over the
-     * declarations in {@code declared}.
+     * The representations that read the number {@code operation} answers, counted, over the bound
+     * facts in {@code facts}.
      *
-     * <p>Over a source that is handed in and not over the table the process happens to hold. What
-     * holds the declarations to the library is given its source for the same reason
-     * ({@code OperationFactBinder#bindAll}): a fact reaches it before it reaches any table, so a
-     * check reading the table instead would be blind to exactly the declaration being held. It
-     * would also be asking that table to finish building while it was being built.
+     * <p>Over facts that are handed in and not over the ones the process happens to hold, for the
+     * reason the binder is given its source: the binder asks this of facts it has not yet
+     * published, and a reader of the process's own would be asking that holder to finish building
+     * while it was being built.
      *
      * @throws IllegalStateException where the library declares no such operation
      */
-    static Resolution resolve(Stdlib stdlib, List<OperationFacts.Declared> declared,
-            ValueName operation) {
-        List<NumericReading> found = readingsOf(stdlib, declared, operation);
+    static Resolution resolve(Stdlib stdlib, BoundOperationFacts facts, ValueName operation) {
+        List<NumericReading> found = readingsOf(stdlib, facts, operation);
         return switch (found.size()) {
             case 0 -> new Resolution.None();
             case 1 -> new Resolution.One(found.get(0));
@@ -112,69 +112,69 @@ final class NumericReadings {
      * <p>In the order the arms are written and not in the order the facts were declared, so a
      * message naming two readings names them the same way whichever of them was written first.
      */
-    private static List<NumericReading> readingsOf(Stdlib stdlib,
-            List<OperationFacts.Declared> declared, ValueName operation) {
-        Stdlib.Entry entry = DischargeRules.holdTheOperationToTheLibrary(stdlib, operation);
-        ValueName.Stdlib.Operation named = DischargeRules.theLibraryOperation(operation);
+    private static List<NumericReading> readingsOf(Stdlib stdlib, BoundOperationFacts facts,
+                                                   ValueName operation) {
+        OperationFactBinder.holdTheOperationToTheLibrary(stdlib, operation);
+        ValueName.Stdlib.Operation named = OperationFactBinder.theLibraryOperation(operation);
         // Whether a number is answered for some value the operation could be given, which is what a
         // reader of declarations can ask. Asked as "is the declared result a number", an operation
         // whose answer is what its container holds was read as answering none — and a walk that
         // adds up whole numbers answers one at every call it is given whole numbers.
-        if (!NumericAnswers.mayAnswerANumber(operation, stdlib)) {
+        if (!NumericAnswers.mayAnswerANumber(facts, operation, stdlib)) {
             return List.of();
         }
         List<NumericReading> terms = new ArrayList<>();
         List<NumericReading> forms = new ArrayList<>();
         List<NumericReading> arithmetic = new ArrayList<>();
-        for (OperationFacts.Declared each : declared) {
-            if (!operation.equals(each.operation())) {
+        for (BoundOperationFact each : facts.all()) {
+            if (!operation.equals(each.operation().operation())) {
                 continue;
             }
             // No default. A kind of fact added is a kind this has to answer for — whether it is an
             // account of the number an operation answers is a question about the fact, and one
             // nobody would think to come here and ask. Answered by falling through a default, the
             // fifth representation would be exclusive with nothing.
-            switch (each.fact()) {
-                case OperationFact.AnswersANumberTakenOfTheOneValueItIsGiven(TakenAs how) ->
-                        terms.add(new NumericReading.AsATermTakenOfItsArgument(how));
-                case OperationFact.AnswersAFormOfItsArguments(
-                        LinearForm<ArgumentRef> form) ->
+            switch (each) {
+                case BoundOperationFact.AnswersANumberTakenOfTheOneValueItIsGiven taken ->
+                        terms.add(new NumericReading.AsATermTakenOfItsArgument(taken.how()));
+                case BoundOperationFact.AnswersAFormOfItsArguments(
+                        var _, LinearForm<DeclaredArgument> form) ->
                         forms.add(new NumericReading.AsAFormOfItsArguments(form));
-                case OperationFact.ComputesANumber(NumericResult result) ->
+                case BoundOperationFact.ComputesANumber(
+                        var _, NumericResult<DeclaredArgument> result) ->
                         arithmetic.add(new NumericReading.AsTheArithmeticItComputes(result));
-                // The cases a definition is written in name which argument is answered under which
-                // relation between the arguments. A reader still reads the argument, so what the
-                // call answers has no account of its own here — and every operation carrying one
-                // today is written in the language as well, so nothing here has to tell the two
-                // apart.
                 // A walk that adds up what a container holds is a way of reading the number a call
                 // answered, and it is read as the account it already is rather than as a second
                 // one declared beside it. A walk of another kind carries an identity and a step
                 // and answers no number this reads — a join of strings, a product — so what it
                 // contributes here is nothing, and that it answers this question at all is said
                 // where the silences are.
-                case OperationFact.AccumulatesItsContainer _ -> {
-                    TakenAs how = OperationFacts.takenAs(operation);
+                case BoundOperationFact.AccumulatesItsContainer walk -> {
+                    TakenAs how = walk.takenAs();
                     if (how != null) {
                         terms.add(new NumericReading.AsATermTakenOfItsArgument(how));
                     }
                 }
-                case OperationFact.IsDefinedByCases _,
-                     // The rest say something else about the operation: where a number runs, what
-                     // an operation keeps of a container, what a predicate travels through, what a
-                     // shift is stated through, whether every answer has a value that gives it.
-                     // None of them is a way of reading the number a call answered.
-                     OperationFact.BoundsItsResult _,
-                     OperationFact.StatesTheOrderOfItsArguments _,
-                     OperationFact.ShiftsBy _,
-                     OperationFact.BuildsItsResultFrom _,
-                     OperationFact.ResultIsNoSmallerThan _,
-                     OperationFact.ReadsItsContainer _,
-                     OperationFact.IsStatedOverAProjection _,
-                     OperationFact.StatesItsPredicateOfEveryElement _,
-                     OperationFact.MeansTheSameAsASizeOfNought _,
-                     OperationFact.EveryAnswerItCanGiveHasASourceValue _,
-                     OperationFact.SaysNothingOf _ -> { }
+                // The cases a definition is written in name which argument is answered under which
+                // relation between the arguments. A reader still reads the argument, so what the
+                // call answers has no account of its own here — and every operation carrying one
+                // today is written in the language as well, so nothing here has to tell the two
+                // apart. The rest say something else about the operation: where a number runs,
+                // what an operation keeps of a container, what a predicate travels through, what a
+                // shift is stated through, whether every answer has a value that gives it. None
+                // of them is a way of reading the number a call answered.
+                case BoundOperationFact.IsDefinedByCases _,
+                     BoundOperationFact.BoundsItsResult _,
+                     BoundOperationFact.StatesTheOrderOfItsArguments _,
+                     BoundOperationFact.ShiftsBy _,
+                     BoundOperationFact.BuildsItsResultFrom _,
+                     BoundOperationFact.ResultIsNoSmallerThan _,
+                     BoundOperationFact.ReadsItsContainer _,
+                     BoundOperationFact.IsStatedOverAProjection _,
+                     BoundOperationFact.StatesItsPredicateOfEveryElement _,
+                     BoundOperationFact.MeansTheSameAsASizeOfNought _,
+                     BoundOperationFact.EveryAnswerItCanGiveHasASourceValue _,
+                     BoundOperationFact.SaysNothingOf _ -> { }
             }
         }
         List<NumericReading> found = new ArrayList<>(terms);

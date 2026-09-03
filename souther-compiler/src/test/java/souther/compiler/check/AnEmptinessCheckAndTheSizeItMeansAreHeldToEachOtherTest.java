@@ -34,7 +34,8 @@ class AnEmptinessCheckAndTheSizeItMeansAreHeldToEachOtherTest {
 
     @Test
     void theOnesTheLanguageDeclaresAreHeld() {
-        assertFalse(OperationFactBinder.bindAll(DefaultStdlib.get()).sizes().isEmpty(),
+        assertFalse(OperationFactBinder.bindAll(DefaultStdlib.get())
+                        .meansTheSameAsASizeOfNought().isEmpty(),
                 "nothing is declared to mean a size, so the rules below saw nothing");
     }
 

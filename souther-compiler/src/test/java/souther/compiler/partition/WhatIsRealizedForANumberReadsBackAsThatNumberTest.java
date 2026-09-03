@@ -7,6 +7,7 @@ import souther.compiler.ast.Hir;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.check.Carrier;
+import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.check.NumericAnswers;
 import souther.compiler.check.ReadingPolicy;
 import souther.compiler.check.Symbols;
@@ -15,7 +16,6 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Place;
 import souther.compiler.observe.ObservedValue;
-import souther.compiler.semantics.OperationFacts;
 import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
@@ -106,8 +106,8 @@ class WhatIsRealizedForANumberReadsBackAsThatNumberTest {
         List<Class<?>> arms = List.of(TakenAs.class.getPermittedSubclasses());
         assertFalse(arms.isEmpty(), "the accounts are a sealed set and there is at least one");
         for (Class<?> arm : arms) {
-            assertTrue(OperationFacts.answersANumberTakenOfItsArgument().stream()
-                            .anyMatch(each -> arm.isInstance(OperationFacts.takenAs(each))),
+            assertTrue(DefaultBoundOperationFacts.get().answersANumberTakenOfItsArgument().stream()
+                            .anyMatch(each -> arm.isInstance(DefaultBoundOperationFacts.get().takenAs(each))),
                     arm.getSimpleName() + " is an account no operation is declared under, so"
                             + " nothing reads or writes it");
         }
@@ -124,7 +124,7 @@ class WhatIsRealizedForANumberReadsBackAsThatNumberTest {
     @Test
     void everyValueBuiltForANumberReadsBackAsIt() {
         int checked = 0;
-        for (ValueName operation : OperationFacts.answersANumberTakenOfItsArgument()) {
+        for (ValueName operation : DefaultBoundOperationFacts.get().answersANumberTakenOfItsArgument()) {
             Type source = sourceOf(operation);
             NumericTerm.TakenOf term = NumericTerm.TakenOf.of(
                     (ValueName.Stdlib) operation, AT, source, SYMBOLS);
@@ -168,8 +168,8 @@ class WhatIsRealizedForANumberReadsBackAsThatNumberTest {
      */
     @Test
     void everyNumberAnOperationSaysHasAValueIsOneSomethingIsBuiltFor() {
-        for (ValueName operation : OperationFacts.answersANumberTakenOfItsArgument()) {
-            if (!OperationFacts.everyAnswerItCanGiveHasASourceValue(operation)) {
+        for (ValueName operation : DefaultBoundOperationFacts.get().answersANumberTakenOfItsArgument()) {
+            if (!DefaultBoundOperationFacts.get().everyAnswerItCanGiveHasASourceValue(operation)) {
                 continue;
             }
             Type source = sourceOf(operation);
@@ -318,7 +318,7 @@ class WhatIsRealizedForANumberReadsBackAsThatNumberTest {
      */
     @Test
     void aTermCannotBeBuiltForAnOperationThatDeclaresNoAccount() {
-        assertTrue(OperationFacts.takenAs(ValueName.Stdlib.operation("Int", "abs")) == null,
+        assertTrue(DefaultBoundOperationFacts.get().takenAs(ValueName.Stdlib.operation("Int", "abs")) == null,
                 "the premise: what it answers is read by reading its body, so no account is"
                         + " declared of it and none may be");
         assertNull(NumericTerm.TakenOf.of(ValueName.Stdlib.operation("Int", "abs"), AT,
