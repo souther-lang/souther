@@ -66,7 +66,7 @@ public final class DeclaredClauses {
      * @param conjuncts every conjunct of every rule written on it, in the order the author wrote
      *                  them; empty where the name carries none
      */
-    public record OnAName(TypeOps.Layer worn, List<Conjunct> conjuncts) {
+    public record OnAName(TypeSymbol worn, List<Conjunct> conjuncts) {
 
         public OnAName {
             conjuncts = List.copyOf(conjuncts);
@@ -75,17 +75,17 @@ public final class DeclaredClauses {
 
     /** Every conjunct of every rule written on the names {@code worn}, one entry per name, in the
      *  order the names were read off the position. */
-    public static List<OnAName> of(List<TypeOps.Layer> worn, RuleReadingSource source) {
+    public static List<OnAName> of(List<TypeSymbol> worn, RuleReadingSource source) {
         List<OnAName> out = new ArrayList<>();
-        for (TypeOps.Layer layer : worn) {
-            out.add(new OnAName(layer, writtenOn(layer, source)));
+        for (TypeSymbol wears : worn) {
+            out.add(new OnAName(wears, writtenOn(wears, source)));
         }
         return List.copyOf(out);
     }
 
     /** Every conjunct written on every one of them, which is what a reader that has no use for
      *  where a rule was written asks for. */
-    public static List<Conjunct> allOf(List<TypeOps.Layer> worn, RuleReadingSource source) {
+    public static List<Conjunct> allOf(List<TypeSymbol> worn, RuleReadingSource source) {
         List<Conjunct> out = new ArrayList<>();
         for (OnAName each : of(worn, source)) {
             out.addAll(each.conjuncts());
@@ -93,10 +93,12 @@ public final class DeclaredClauses {
         return List.copyOf(out);
     }
 
-    private static List<Conjunct> writtenOn(TypeOps.Layer layer, RuleReadingSource source) {
-        // A layer wraps a declaration a module wrote, which is what having a `Hir.Data` for it
-        // says; the pattern is where the layer's name says so.
-        if (!(layer.named() instanceof TypeSymbol.AtModule named)) {
+    private static List<Conjunct> writtenOn(TypeSymbol wears, RuleReadingSource source) {
+        // The declaration the name was written by, read here. A name a module wrote is one this
+        // finds a data for; a caller handed the body instead would be holding a declaration for a
+        // question that is this one's, and could read the position's structure back out of it.
+        if (!(wears instanceof TypeSymbol.AtModule named)
+                || !(source.symbols().declaredNode(named) instanceof Hir.Data data)) {
             return List.of();
         }
         List<Conjunct> out = new ArrayList<>();
@@ -104,7 +106,7 @@ public final class DeclaredClauses {
         // (ADR-0090). Read flat, every clause a spread brought in was named after the type that
         // spread it, and two clauses of one declaration were one rule.
         for (TypeOps.Declared declared : TypeOps.declaredForAnalysis(
-                named, layer.data(), source.symbols(), source.invariants())) {
+                named, data, source.symbols(), source.invariants())) {
             RuleRef.Invariant rule = new RuleRef.Invariant(Clause.Ref.of(declared));
             int conjunct = -1;
             for (Hir.Expr each : ClauseHelpers.conjunctsOf(declared.clause().expr())) {

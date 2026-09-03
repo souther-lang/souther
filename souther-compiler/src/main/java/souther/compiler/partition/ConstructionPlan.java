@@ -1,7 +1,6 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.Symbols;
-import souther.compiler.check.TypeOps;
 import souther.compiler.check.TypeView;
 import souther.compiler.inputs.Case;
 import souther.compiler.inputs.Distinctions;
@@ -93,7 +92,7 @@ final class ConstructionPlan {
          * {@code DecisionN(Special(5))}. A value composed without them is of a type the parameter
          * does not declare.
          */
-        List<TypeOps.Layer> worn();
+        List<TypeSymbol> worn();
     }
 
     /**
@@ -104,7 +103,7 @@ final class ConstructionPlan {
      * @param leaf why the search chooses a whole value here rather than composing one out of
      *             positions under it
      */
-    record Slot(TermPath at, Type type, List<TypeOps.Layer> worn, Leaf leaf) implements Node {
+    record Slot(TermPath at, Type type, List<TypeSymbol> worn, Leaf leaf) implements Node {
 
         Slot {
             worn = List.copyOf(worn);
@@ -180,7 +179,7 @@ final class ConstructionPlan {
      *              element's type: a class at an element asks for a list holding a value in it, and
      *              a list that met that and broke the rule about how many it holds is not a row
      */
-    record Held(TermPath at, Type type, List<TypeOps.Layer> worn, Node under, int least)
+    record Held(TermPath at, Type type, List<TypeSymbol> worn, Node under, int least)
             implements Node {
 
         Held {
@@ -202,7 +201,7 @@ final class ConstructionPlan {
      *              putting them back on is one thing done once
      * @param under the positions of its fields, in the order the declaration writes them
      */
-    record Built(TermPath at, Type type, TypeSymbol of, List<TypeOps.Layer> worn,
+    record Built(TermPath at, Type type, TypeSymbol of, List<TypeSymbol> worn,
                  Map<String, Node> under) implements Node {
 
         Built {
@@ -229,7 +228,7 @@ final class ConstructionPlan {
      * @param worn  {@link Node#worn}: every name the position wears, since the value arrives bare.
      *              A {@code data MaybeTagN = Tag?} carries {@code MaybeTagN(None)}
      */
-    record Exact(TermPath at, FixtureTemplate exact, List<TypeOps.Layer> worn) implements Node {
+    record Exact(TermPath at, FixtureTemplate exact, List<TypeSymbol> worn) implements Node {
 
         Exact {
             if (exact == null) {
@@ -487,7 +486,7 @@ final class ConstructionPlan {
         // after them — which is what a value composed here bare needs. Both are what the position
         // declares, kept: a value written under the narrowed type's names alone is of a type the
         // parameter does not declare.
-        List<TypeOps.Layer> worn = settled.outer().isEmpty() ? view.wrappers()
+        List<TypeSymbol> worn = settled.outer().isEmpty() ? view.wrappers()
                 : outside(settled.outer(), view.wrappers());
         // A sequence with something to be placed inside it. Built out of its element rather than
         // chosen whole, since what is being asked for is a list holding a value in a class and no
@@ -578,7 +577,7 @@ final class ConstructionPlan {
      * written at, and a plan handed back would compose a row the caller's value is missing from.
      */
     private static NodeResult givenUpAt(CompositionBudget figure, TermPath here, Type building,
-                                        List<TypeOps.Layer> outer, Set<TermPath> decided,
+                                        List<TypeSymbol> outer, Set<TermPath> decided,
                                         Requirements required) {
         Set<CompositionBudget> by = Set.of(figure);
         return anythingIsAskedUnder(here, decided, required) ? new NodeResult.Beyond(by)
@@ -638,7 +637,7 @@ final class ConstructionPlan {
      *                 arriving under the narrowed type is still missing
      */
     private record Settled(TermPath at, Type building, FixtureTemplate exact,
-                           List<TypeOps.Layer> outer) {
+                           List<TypeSymbol> outer) {
 
         Settled {
             if ((building == null) == (exact == null)) {
@@ -687,7 +686,7 @@ final class ConstructionPlan {
      */
     private static Settled applying(Settled settled, Refinement refinement, Symbols symbols,
                                     Requirements required) {
-        List<TypeOps.Layer> outer = outside(settled.outer(),
+        List<TypeSymbol> outer = outside(settled.outer(),
                 TypeView.of(settled.building(), symbols).wrappers());
         TermPath here = settled.at().refine(refinement);
         if (refinement instanceof Refinement.Presence presence && !presence.present()) {
@@ -737,9 +736,8 @@ final class ConstructionPlan {
     }
 
     /** {@code outer} and then {@code inner}, which is the order names are put back on a value. */
-    private static List<TypeOps.Layer> outside(List<TypeOps.Layer> outer,
-                                               List<TypeOps.Layer> inner) {
-        List<TypeOps.Layer> out = new ArrayList<>(outer);
+    private static List<TypeSymbol> outside(List<TypeSymbol> outer, List<TypeSymbol> inner) {
+        List<TypeSymbol> out = new ArrayList<>(outer);
         out.addAll(inner);
         return List.copyOf(out);
     }
@@ -776,7 +774,7 @@ final class ConstructionPlan {
      */
     private static Under under(Node inside) {
         Under below = switch (inside) {
-            case Slot(TermPath _, Type _, List<TypeOps.Layer> _, Leaf leaf) -> switch (leaf) {
+            case Slot(TermPath _, Type _, List<TypeSymbol> _, Leaf leaf) -> switch (leaf) {
                 case Leaf.Fixed _ -> new Under(true, Set.of());
                 case Leaf.Open _ -> new Under(false, Set.of());
                 // Nothing was asked below one of these, and that is settled where the position is

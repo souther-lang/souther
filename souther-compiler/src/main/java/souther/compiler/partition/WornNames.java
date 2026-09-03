@@ -1,7 +1,6 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.RuleReadingSource;
-import souther.compiler.check.TypeOps;
 import souther.compiler.types.TypeReachName;
 import souther.compiler.types.TypeSymbol;
 
@@ -42,12 +41,12 @@ sealed interface WornNames {
 
     /** How {@code worn} is written here, outermost first, or the first of them that has no
      *  spelling. */
-    static WornNames of(List<TypeOps.Layer> worn, RuleReadingSource ruleSource) {
+    static WornNames of(List<TypeSymbol> worn, RuleReadingSource ruleSource) {
         List<TypeReachName.Written> names = new ArrayList<>();
-        for (TypeOps.Layer layer : worn) {
-            if (!(ruleSource.symbols().scope().reach(layer.named())
+        for (TypeSymbol wears : worn) {
+            if (!(ruleSource.symbols().scope().reach(wears)
                     instanceof TypeReachName.Written written)) {
-                return new Unwritable(layer.named());
+                return new Unwritable(wears);
             }
             names.add(written);
         }
@@ -67,7 +66,7 @@ sealed interface WornNames {
      * {@link RepresentativeSource#under}'s, so a value never wears a name that was spelled anywhere
      * but here.
      */
-    static FixtureTemplate under(List<TypeOps.Layer> worn, FixtureTemplate value,
+    static FixtureTemplate under(List<TypeSymbol> worn, FixtureTemplate value,
                                  RuleReadingSource ruleSource) {
         if (value == null || worn.isEmpty()) {
             return value;

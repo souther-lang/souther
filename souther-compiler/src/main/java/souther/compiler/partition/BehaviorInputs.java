@@ -4,7 +4,6 @@ import souther.compiler.check.ReadableFields;
 import souther.compiler.check.Shape;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.Symbols;
-import souther.compiler.check.TypeOps;
 import souther.compiler.check.TypeView;
 import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.TermPath;
@@ -304,8 +303,7 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, RuleRead
                 return true;
             }
             TypeView view = TypeView.of(type, symbols);
-            ObservedValue here = Classifier.inside(
-                    view.wrappers().stream().map(TypeOps.Layer::named).toList(), value);
+            ObservedValue here = Classifier.inside(view.wrappers(), value);
             if (here.unread() != null) {
                 out.add(new Standing(here, type, reached, at));
                 return true;

@@ -109,7 +109,10 @@ sealed interface ValueReading {
     static ValueReading of(Type type, Symbols symbols) {
         TypeView view = TypeView.of(type, symbols);
         if (view.isWrapped()) {
-            TypeOps.Layer worn = view.wrappers().getFirst();
+            // What is readable under the name is written on the name's own declaration, so the
+            // declaration is asked of the walk over them. The reading above says which names are
+            // worn and stops there: a position's interpretation is not a way back to a body.
+            TypeOps.Layer worn = TypeOps.newtypeChain(type, symbols).getFirst();
             return new UnderAName(worn.named(), owning(worn.named(), symbols),
                     TypeOps.fieldTypes(worn.data(), symbols));
         }

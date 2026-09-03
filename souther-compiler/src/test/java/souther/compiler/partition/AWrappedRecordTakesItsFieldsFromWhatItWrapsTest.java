@@ -12,6 +12,7 @@ import souther.compiler.query.Compilation;
 import souther.compiler.report.GeneratedRows;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
+import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeSymbols;
 
 import java.util.List;
@@ -137,7 +138,7 @@ class AWrappedRecordTakesItsFieldsFromWhatItWrapsTest {
     }
 
     private static List<String> worn(String source, String name) {
-        return view(source, name).wrappers().stream().map(each -> each.named().name()).toList();
+        return view(source, name).wrappers().stream().map(TypeSymbol::name).toList();
     }
 
     /**

@@ -34,12 +34,19 @@ import java.util.List;
  * to find out whether a name is a newtype is the defect this exists to remove, not a shortcut around
  * it.
  *
+ * <p><b>Names, and not the declarations they are written by.</b> What a value wears is which names
+ * it is written under; the bodies those names are declared with are what a reader of the rules
+ * asks for, and it asks the walk over the declarations
+ * ({@link TypeOps#newtypeChain}) rather than this. Handed a declaration here, a consumer holding an
+ * interpreted position could read structure back out of it and settle for itself what this had
+ * already decided — which is the reading this exists to be the only one of.
+ *
  * @param declared the type the signature wrote
  * @param wrappers the newtype names worn over {@link #shape}, outermost first; empty for a type
  *                 written under no name of its own
  * @param shape    what the value is, with those names off
  */
-public record TypeView(Type declared, List<TypeOps.Layer> wrappers, Shape shape) {
+public record TypeView(Type declared, List<TypeSymbol> wrappers, Shape shape) {
 
     public TypeView {
         wrappers = List.copyOf(wrappers);
@@ -54,7 +61,8 @@ public record TypeView(Type declared, List<TypeOps.Layer> wrappers, Shape shape)
      */
     public static TypeView of(Type type, Symbols symbols) {
         TypeOps.NewtypeSpine spine = TypeOps.newtypeSpine(type, symbols);
-        return new TypeView(type, spine.layers(), shapeOf(spine.terminal(), symbols));
+        return new TypeView(type, spine.layers().stream().map(TypeOps.Layer::named).toList(),
+                shapeOf(spine.terminal(), symbols));
     }
 
     /** Whether any name is worn over the shape — which is a fact about how the value is written,

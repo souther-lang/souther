@@ -3,7 +3,6 @@ package souther.compiler.partition;
 import souther.compiler.check.ReadingPolicy;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.RuleReadingSource;
-import souther.compiler.check.TypeOps;
 import souther.compiler.check.TypeView;
 import souther.compiler.inputs.Case;
 import souther.compiler.inputs.Distinctions;
@@ -56,7 +55,7 @@ final class PartitionClasses {
         if (cases.isEmpty()) {
             return List.of();
         }
-        List<TypeSymbol> worn = view.wrappers().stream().map(TypeOps.Layer::named).toList();
+        List<TypeSymbol> worn = view.wrappers();
         // The same names twice over, because two different questions are asked of them. Whether an
         // observed value is under this class is asked of the declarations, and what a row writes it
         // under is asked of the module doing the writing — one of these is an identity and the other

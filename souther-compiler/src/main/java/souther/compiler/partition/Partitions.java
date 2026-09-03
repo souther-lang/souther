@@ -1272,8 +1272,8 @@ public final class Partitions {
         // itself and there is nothing to hand back. Which is the answer and not a limit: no value of
         // such a type exists.
         java.util.Set<TypeSymbol> inside = new LinkedHashSet<>(expanding);
-        for (TypeOps.Layer layer : view.wrappers()) {
-            if (!inside.add(layer.named())) {
+        for (TypeSymbol wears : view.wrappers()) {
+            if (!inside.add(wears)) {
                 return List.of();
             }
         }
