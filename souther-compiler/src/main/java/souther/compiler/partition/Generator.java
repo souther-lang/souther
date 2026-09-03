@@ -3636,7 +3636,7 @@ public final class Generator {
             // offered at a position the plan stopped short of is whole values of a type it declined
             // to look inside, and none being available is that decision and not a fact about the
             // model.
-            return whatTheSearchCameTo(plan.cutBy(),
+            return whatTheSearchCameTo(choices.missingUnderAFigure(),
                     new Outcome.Unresolved(UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
                             choices.missingAt()));
         }
@@ -4002,10 +4002,16 @@ public final class Generator {
      */
     private record Choices(ConstructionPlan plan, List<TermPath> at,
                            List<List<FixtureTemplate>> values,
-                           List<List<FixtureTemplate>> reserves, String missingAt) {
+                           List<List<FixtureTemplate>> reserves, String missingAt,
+                           java.util.Set<CompositionBudget> missingUnderAFigure) {
 
-        static Choices missing(ConstructionPlan plan, String at) {
-            return new Choices(plan, List.of(), List.of(), List.of(), at);
+        Choices {
+            missingUnderAFigure = java.util.Set.copyOf(missingUnderAFigure);
+        }
+
+        static Choices missing(ConstructionPlan plan, String at,
+                               java.util.Set<CompositionBudget> under) {
+            return new Choices(plan, List.of(), List.of(), List.of(), at, under);
         }
 
         boolean anythingHeldBack() {
@@ -4060,13 +4066,21 @@ public final class Generator {
                 // Nothing could be written at all: a position of a type nothing stands for. Which is
                 // not the same as a value that was written and refused, and reporting it as one sends
                 // the author looking for a rule relating two inputs that has nothing to do with it.
-                return Choices.missing(plan, slot.at() + ": " + Type.show(slot.type()));
+                //
+                // And where this is a position the plan stopped short at, nothing standing for it is
+                // that decision rather than a fact about the model: what such a position is offered
+                // is whole values of a type this declined to look inside. Read off the plan's own
+                // leaf and not off whether the plan was cut anywhere, so a figure reached at one
+                // position is never the reason given for another having nothing.
+                return Choices.missing(plan, slot.at() + ": " + Type.show(slot.type()),
+                        slot.leaf() instanceof ConstructionPlan.Leaf.Beneath(var cutBy)
+                                ? cutBy : java.util.Set.of());
             }
             paths.add(slot.at());
             values.add(stands);
             reserves.add(Partitions.inReserve(slot.type(), ruleSource, policy, here));
         }
-        return new Choices(plan, paths, values, reserves, null);
+        return new Choices(plan, paths, values, reserves, null, java.util.Set.of());
     }
 
     /**
