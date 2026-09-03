@@ -2,7 +2,6 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.ast.Hir;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Scopes;
@@ -53,9 +52,8 @@ class AQuestionExistsBecauseTheModelStatesItAndNotBecauseAReadingSucceededTest {
         Symbols symbols = Scopes.derived(compilation.db(), module).value();
         assertNotNull(symbols);
         TypeSymbol.AtModule named = TypeSymbols.declared(new TypeKey(module, "Length"));
-        Hir.Data data = (Hir.Data) symbols.declaredNode(named.key());
-        assertNotNull(data, "no `Length` declared");
-        return FieldDomains.of(named, data, RuleReadings.of(compilation, module),
+        assertNotNull(symbols.declaredNode(named.key()), "no `Length` declared");
+        return FieldDomains.of(named, RuleReadings.of(compilation, module),
                 souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
     }
 
@@ -310,9 +308,8 @@ class AQuestionExistsBecauseTheModelStatesItAndNotBecauseAReadingSucceededTest {
         Symbols symbols = Scopes.derived(compilation.db(), module).value();
         assertNotNull(symbols);
         TypeSymbol.AtModule at = TypeSymbols.declared(new TypeKey(module, named));
-        Hir.Data data = (Hir.Data) symbols.declaredNode(at.key());
-        assertNotNull(data, "no `" + named + "` declared");
-        return FieldDomains.of(at, data, RuleReadings.of(compilation, module),
+        assertNotNull(symbols.declaredNode(at.key()), "no `" + named + "` declared");
+        return FieldDomains.of(at, RuleReadings.of(compilation, module),
                 souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
     }
 
@@ -332,9 +329,8 @@ class AQuestionExistsBecauseTheModelStatesItAndNotBecauseAReadingSucceededTest {
         Symbols symbols = Scopes.derived(compilation.db(), module).value();
         assertNotNull(symbols);
         TypeSymbol.AtModule at = TypeSymbols.declared(new TypeKey(module, named));
-        Hir.Data data = (Hir.Data) symbols.declaredNode(at.key());
-        assertNotNull(data, "no `" + named + "` declared");
-        return FieldDomains.of(at, data, RuleReadings.of(compilation, module),
+        assertNotNull(symbols.declaredNode(at.key()), "no `" + named + "` declared");
+        return FieldDomains.of(at, RuleReadings.of(compilation, module),
                 souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
     }
 
@@ -352,9 +348,8 @@ class AQuestionExistsBecauseTheModelStatesItAndNotBecauseAReadingSucceededTest {
         Symbols symbols = Scopes.derived(compilation.db(), module).value();
         assertNotNull(symbols);
         TypeSymbol.AtModule named = TypeSymbols.declared(new TypeKey(module, "Code"));
-        Hir.Data data = (Hir.Data) symbols.declaredNode(named.key());
-        assertNotNull(data, "no `Code` declared");
-        FieldDomains domains = FieldDomains.of(named, data, RuleReadings.of(compilation, module),
+        assertNotNull(symbols.declaredNode(named.key()), "no `Code` declared");
+        FieldDomains domains = FieldDomains.of(named, RuleReadings.of(compilation, module),
                 souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         assertEquals(1, domains.required().size(),
                 () -> "one clause, one rule: " + domains.required().keySet());

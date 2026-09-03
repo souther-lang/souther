@@ -34,7 +34,7 @@ class AFloorHoldsWhereverItIsWrittenTest {
             TypeSymbol.AtModule named = TypeSymbols.declared(new TypeKey(module, type));
             Hir.Data data = (Hir.Data) rules.symbols().declaredNode(named.key());
             assertNotNull(data, "no `" + type + "`");
-            return FieldDomains.of(named, data, rules, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+            return FieldDomains.of(named, rules, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         }
 
         Type ref(String type) {

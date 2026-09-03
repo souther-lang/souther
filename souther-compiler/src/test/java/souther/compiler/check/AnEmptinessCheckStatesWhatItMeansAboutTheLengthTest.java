@@ -2,7 +2,6 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.ast.Hir;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
@@ -46,10 +45,9 @@ class AnEmptinessCheckStatesWhatItMeansAboutTheLengthTest {
         String module = compilation.modules().get(0);
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         TypeSymbol.AtModule named = TypeSymbols.declared(new TypeKey(module, "Name"));
-        Hir.Data data = (Hir.Data) rules.symbols().declaredNode(named.key());
-        assertNotNull(data, "no `Name` declared");
+        assertNotNull(rules.symbols().declaredNode(named.key()), "no `Name` declared");
         String[] taken = measure.split("\\.");
-        return FieldDomains.of(named, data, rules, ReadAs.THE_COMPILATION_DOES)
+        return FieldDomains.of(named, rules, ReadAs.THE_COMPILATION_DOES)
                 .leftAt(RuleKey.THE_VALUE, new NumberAt.OfWhatNumber.OfWhatAnOperationAnswers(
                         ValueName.Stdlib.operation(taken[0], taken[1])));
     }

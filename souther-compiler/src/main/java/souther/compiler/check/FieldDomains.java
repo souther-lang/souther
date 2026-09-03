@@ -296,10 +296,32 @@ public final class FieldDomains {
         return READINGS.get();
     }
 
-    /** What {@code data}, declared as {@code named}, leaves its fields able to hold. */
-    public static FieldDomains of(TypeSymbol.AtModule named, Hir.Data data, RuleReadingSource source,
+    /**
+     * What the record declared as {@code named} leaves its fields able to hold.
+     *
+     * <p>The declaration is read here rather than handed in. What is written about a record's
+     * fields is this reading's question, so the body it is written on is this reading's to fetch —
+     * a caller made to fetch one has a declaration in its hands for a question that was never its
+     * own, and can read the record's structure back out of it.
+     */
+    public static FieldDomains of(TypeSymbol.AtModule named, RuleReadingSource source,
                                   ReadingPolicy policy) {
-        return of(named, data, source, policy, Map.of());
+        return of(named, source, policy, Map.of());
+    }
+
+    /**
+     * The record {@code named} is declared as.
+     *
+     * <p>A name that is not one is a caller asking for the field rules of something that has no
+     * fields, which is a question about the caller rather than about the model: what a name stands
+     * for is decided before anything asks what is written about its fields.
+     */
+    private static Hir.Data declaring(TypeSymbol.AtModule named, RuleReadingSource source) {
+        if (source.symbols().declaredNode(named.key()) instanceof Hir.Data data) {
+            return data;
+        }
+        throw new IllegalArgumentException(
+                "the field rules of a name that declares no record: " + named);
     }
 
     /**
@@ -310,9 +332,9 @@ public final class FieldDomains {
      * not read off {@code endsAt}'s own range — which still runs from 1 — but off what is left of it
      * once the other end is fixed, which is 1440 and nothing else.
      */
-    public static FieldDomains of(TypeSymbol.AtModule named, Hir.Data data, RuleReadingSource source,
+    public static FieldDomains of(TypeSymbol.AtModule named, RuleReadingSource source,
                                   ReadingPolicy policy, Map<RuleKey, Count> settled) {
-        return of(named, data, source, policy, atValues(settled),
+        return of(named, declaring(named, source), source, policy, atValues(settled),
                 InvariantChecker.Reach.EVERYTHING);
     }
 

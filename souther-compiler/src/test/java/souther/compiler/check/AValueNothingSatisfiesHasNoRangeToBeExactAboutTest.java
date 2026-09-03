@@ -2,7 +2,6 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.ast.Hir;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Scopes;
 import souther.compiler.types.TypeKey;
@@ -65,9 +64,8 @@ class AValueNothingSatisfiesHasNoRangeToBeExactAboutTest {
         Symbols symbols = Scopes.derived(compilation.db(), module).value();
         assertNotNull(symbols);
         TypeSymbol.AtModule named = TypeSymbols.declared(new TypeKey(module, "Length"));
-        Hir.Data data = (Hir.Data) symbols.declaredNode(named.key());
-        assertNotNull(data, "no `Length` declared");
-        FieldDomains domains = FieldDomains.of(named, data, RuleReadings.of(compilation, module),
+        assertNotNull(symbols.declaredNode(named.key()), "no `Length` declared");
+        FieldDomains domains = FieldDomains.of(named, RuleReadings.of(compilation, module),
                 souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         return domains.projection().causes().stream()
                 .map(cause -> cause.getClass().getSimpleName())

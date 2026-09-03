@@ -9,8 +9,10 @@ import souther.compiler.check.RuleReadingSource;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.RuleKey;
 import souther.compiler.check.FieldDomains;
+import souther.compiler.check.Shape;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
+import souther.compiler.check.TypeView;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.reading.PathAccess;
 import souther.compiler.inputs.Refinement;
@@ -4286,10 +4288,13 @@ public final class Generator {
      */
     private static FieldDomains rulesOf(Type type, RuleReadingSource source, ReadingPolicy policy,
                                         Map<RuleKey, Count> settled) {
-        return type instanceof Type.Ref(TypeSymbol.AtModule named)
-                && source.symbols().declaredNode(named) instanceof Hir.Data data
-                && !data.newtype()
-                ? FieldDomains.of(named, data, source, policy, settled) : FieldDomains.NONE;
+        // Whether the position is a record, and which record, are one answer and it is the
+        // reading's. The rules are then read on the declaration the fields came off — a position
+        // written under a name takes its fields from what that name wraps, and reading the rules on
+        // the name instead would be asking a declaration that has no such field.
+        return TypeView.of(type, source.symbols()).shape()
+                        instanceof Shape.Product(TypeSymbol.AtModule declared, Map<String, Type> _)
+                ? FieldDomains.of(declared, source, policy, settled) : FieldDomains.NONE;
     }
 
     /**
