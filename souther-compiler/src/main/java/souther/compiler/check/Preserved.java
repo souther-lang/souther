@@ -1,16 +1,16 @@
 package souther.compiler.check;
 
 import souther.compiler.DefaultStdlib;
+import souther.compiler.core.CompleteSignature;
 import souther.compiler.stdlib.Stdlib;
-import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * The names the representation being typed keeps standing, and what each of them is known to be: a
- * signature for a call, a settled type for a reference to a value.
+ * The names the representation being typed keeps standing, and the signature each of them is known
+ * by: what the library declared an operation with, and what a value's own check settled it as.
  *
  * <p>Which calls a representation keeps is the representation's to decide
  * ({@link InliningPolicy}), so it is decided once, where that representation is built, and handed to
@@ -45,8 +45,8 @@ public record Preserved(Map<ValueName, CompleteSignature> operations, SettledVal
          * standalone check of a value does. */
         SettledValues NONE = _ -> null;
 
-        /** The type {@code name} was settled as, or null where nothing settled it. */
-        Type typeOf(ValueName name);
+        /** The signature {@code name} was settled with, or null where nothing settled it. */
+        CompleteSignature settledAs(ValueName name);
     }
 
     /** Every representation that keeps nothing standing — the tree the backend emits from, and every
@@ -58,8 +58,8 @@ public record Preserved(Map<ValueName, CompleteSignature> operations, SettledVal
     }
 
     /**
-     * A representation that keeps a reference to each of {@code settled} standing, under the type
-     * that value's own check settled for it.
+     * A representation that keeps a reference to each of {@code settled} standing, under the
+     * signature that value's own check settled for it.
      *
      * <p>What a value means is settled where it is declared and is the same wherever it is named
      * (ADR-0072), so a check that has that answer already needs nothing from the value's body. The
@@ -72,14 +72,18 @@ public record Preserved(Map<ValueName, CompleteSignature> operations, SettledVal
     }
 
     /**
-     * The type {@code name} was settled as, or null where this representation does not keep a
+     * The signature {@code name} was settled with, or null where this representation does not keep a
      * reference to it standing.
      *
      * <p>Asked of what the name was resolved to, as an operation is: a binding spelled like a value
      * is a binding, and two modules' same-named values are two values.
+     *
+     * <p>A signature and not the type alone, because what a reference to a value becomes is an
+     * application of no arguments: the reader that builds one is held to what the name declares in
+     * the same way a call is, and a value declaring no parameters is what makes that hold.
      */
-    public Type valueKept(ValueName name) {
-        return name == null ? null : values.typeOf(name);
+    public CompleteSignature valueKept(ValueName name) {
+        return name == null ? null : values.settledAs(name);
     }
 
     /**
@@ -116,7 +120,7 @@ public record Preserved(Map<ValueName, CompleteSignature> operations, SettledVal
     private static Preserved readTheLibrary(Stdlib stdlib) {
         Map<ValueName, CompleteSignature> operations = new LinkedHashMap<>();
         stdlib.entries().forEach((operation, entry) -> {
-            operations.put(operation, CompleteSignature.of(
+            operations.put(operation, CompleteSignature.ofDeclaration(
                     operation, entry.signature().params(), entry.signature().result()));
         });
         return new Preserved(operations);

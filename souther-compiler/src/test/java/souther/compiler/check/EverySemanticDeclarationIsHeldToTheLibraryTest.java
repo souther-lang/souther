@@ -40,7 +40,8 @@ class EverySemanticDeclarationIsHeldToTheLibraryTest {
     @Test
     void theBindingIsOverTheDeclarations() {
         assertEquals(OperationFacts.declarations(),
-                OperationFactBinder.bindAll(DefaultStdlib.get(), OperationFacts.declarations()),
+                OperationFactBinder.bindAll(DefaultStdlib.get(), OperationFacts.declarations())
+                        .visited(),
                 "what the binding visited is what is declared");
         assertTrue(!OperationFacts.declarations().isEmpty(),
                 "and there is something declared for that to mean anything");

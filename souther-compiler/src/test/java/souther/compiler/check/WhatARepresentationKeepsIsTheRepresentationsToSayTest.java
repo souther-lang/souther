@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import souther.compiler.DefaultStdlib;
 import souther.compiler.ast.Hir;
+import souther.compiler.core.CompleteSignature;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.Type;
@@ -97,7 +98,8 @@ class WhatARepresentationKeepsIsTheRepresentationsToSayTest {
 
     private static Preserved keeping(ValueName operation, Type.FnOf signature) {
         return new Preserved(Map.of(operation,
-                new CompleteSignature(signature.params(), signature.result())));
+                CompleteSignature.ofDeclaration(operation, signature.params(),
+                        signature.result())));
     }
 
     private static Core elaborate(Hir.Expr e, Preserved kept) {

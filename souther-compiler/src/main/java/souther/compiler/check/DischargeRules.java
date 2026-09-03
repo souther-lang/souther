@@ -15,15 +15,19 @@ import souther.compiler.semantics.PositiveOrder;
 import souther.compiler.semantics.ResultBound;
 import souther.compiler.semantics.SizeAgainstItsSource;
 import souther.compiler.types.BinOp;
+import souther.compiler.core.CompleteSignature;
 import souther.compiler.core.Core;
+import souther.compiler.core.DeclaredOperation;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
 
@@ -436,17 +440,23 @@ final class DischargeRules {
             return OperationFacts.statesItsPredicateOfEveryElement();
         }
 
-        private static ValueName meansTheSameAsASizeOfNought(ValueName operation) {
-            return OperationFacts
-                    .meansTheSameAsASizeOfNought(operation);
+        /* Read off what the binding produced rather than out of the authoring index beside it.
+         * This one fact is carried by a value the binding made, so the answer a reader gets is the
+         * answer that was held — not the same lookup done again, which agrees with it only for as
+         * long as nobody changes either. */
+        private static BoundOperationFact.MeansTheSameAsSizeOfNought meansTheSameAsASizeOfNought(
+                DeclaredOperation operation) {
+            return operation == null ? null : SEMANTICS.sizes().get(operation);
         }
 
         private static Set<ValueName> meansTheSameAsASizeOfNought() {
-            return OperationFacts.meansTheSameAsASizeOfNought();
+            return SEMANTICS.sizes().keySet().stream()
+                    .map(DeclaredOperation::operation)
+                    .collect(java.util.stream.Collectors.toCollection(java.util.LinkedHashSet::new));
         }
         /** What the declarations came to, held to the library. The list is walked whole, so a fact
          *  nothing here looks up is one this has held all the same. */
-        private static final List<OperationFacts.Declared> SEMANTICS =
+        private static final OperationFactBinder.Binding SEMANTICS =
                 OperationFactBinder.bindAll(DefaultStdlib.get());
         /* Holding the declarations to the library is a pure function of it, so this holder is the
          * only thing here that reaches for the process's own — {@link DefaultStdlib} says who may
@@ -755,6 +765,105 @@ final class DischargeRules {
     }
 
     /**
+     * Holds an emptiness check and the size it is said to mean to each other's declarations, and
+     * answers with the two as the library declares them.
+     *
+     * <p>What a reader does with this fact is write the second call where the first stands, keeping
+     * the arguments. So what has to hold is that the arguments the first takes are the ones the
+     * second takes, and that the two answer the kinds of thing the rewrite turns into each other: a
+     * truth on one side, a number to compare against nought on the other. Two operations of one
+     * argument each is not enough — a check on strings and a length of lists agree on how many
+     * arguments they take and on nothing else.
+     *
+     * <p>Asked here, where both declarations are in hand, and not by the reader doing the rewriting.
+     * That reader has a call and a name, which is enough to put the same question a second way and
+     * not enough to answer it.
+     */
+    static BoundOperationFact.MeansTheSameAsSizeOfNought holdSizeEquivalence(
+            Stdlib stdlib, ValueName operation, ValueName size) {
+        CompleteSignature asks = declaredSignature(stdlib, operation);
+        CompleteSignature counts = declaredSignature(stdlib, size);
+        if (asks.params().size() != 1 || asks.result() != Type.BOOL) {
+            throw new IllegalStateException(theLibraryOperation(operation).qualified()
+                    + " is declared to say whether one container is empty, and it takes "
+                    + asks.params().size() + " argument(s) and answers "
+                    + Type.show(asks.result()));
+        }
+        if (counts.params().size() != 1 || counts.result() != Type.INT) {
+            throw new IllegalStateException(theLibraryOperation(size).qualified()
+                    + " is named as the size " + theLibraryOperation(operation).qualified()
+                    + " means, and it takes " + counts.params().size()
+                    + " argument(s) and answers " + Type.show(counts.result()));
+        }
+        if (!sameShape(asks.params().get(0), counts.params().get(0),
+                new HashMap<>(), new HashMap<>())) {
+            throw new IllegalStateException(theLibraryOperation(operation).qualified() + " asks of "
+                    + Type.show(asks.params().get(0)) + " and "
+                    + theLibraryOperation(size).qualified() + " counts "
+                    + Type.show(counts.params().get(0))
+                    + ", so a call of the first is no call of the second");
+        }
+        return new BoundOperationFact.MeansTheSameAsSizeOfNought(asks.declaring(),
+                counts.declaring());
+    }
+
+    /** The library's declaration of {@code operation}, read whole. */
+    private static CompleteSignature declaredSignature(Stdlib stdlib, ValueName operation) {
+        Stdlib.Entry entry = holdTheOperationToTheLibrary(stdlib, operation);
+        return CompleteSignature.ofDeclaration(operation, entry.signature().params(),
+                entry.signature().result());
+    }
+
+    /**
+     * Whether the two are the same shape, telling type variables apart only by where they stand.
+     *
+     * <p>{@code List<'a>} and {@code List<'b>} are one shape and {@code List<'a>} and
+     * {@code List<Int>} are not, which is what a rewrite between two declarations needs and what
+     * unifying them does not answer: those two unify, by deciding that {@code 'a} is {@code Int},
+     * and a rewrite is not free to decide anything. The pairing is carried both ways so that two
+     * variables on one side cannot both stand for one on the other.
+     */
+    private static boolean sameShape(Type left, Type right, Map<String, String> paired,
+                                     Map<String, String> back) {
+        return switch (left) {
+            case Type.Var l when right instanceof Type.Var r ->
+                    r.name().equals(paired.computeIfAbsent(l.name(), _ -> r.name()))
+                            && l.name().equals(back.computeIfAbsent(r.name(), _ -> l.name()));
+            case Type.ListOf l when right instanceof Type.ListOf r ->
+                    sameShape(l.element(), r.element(), paired, back);
+            case Type.SetOf l when right instanceof Type.SetOf r ->
+                    sameShape(l.element(), r.element(), paired, back);
+            case Type.OptionOf l when right instanceof Type.OptionOf r ->
+                    sameShape(l.element(), r.element(), paired, back);
+            case Type.MapOf l when right instanceof Type.MapOf r ->
+                    sameShape(l.key(), r.key(), paired, back)
+                            && sameShape(l.value(), r.value(), paired, back);
+            case Type.FnOf l when right instanceof Type.FnOf r ->
+                    sameShapes(l.params(), r.params(), paired, back)
+                            && sameShape(l.result(), r.result(), paired, back);
+            case Type.TupleOf l when right instanceof Type.TupleOf r ->
+                    sameShapes(l.elements(), r.elements(), paired, back);
+            // A leaf stands for itself: a primitive, a declaration, a union of them. Nothing about
+            // one is a variable, so being the same shape is being the same type.
+            case Type.Leaf _ -> left.equals(right);
+            default -> false;
+        };
+    }
+
+    private static boolean sameShapes(List<Type> left, List<Type> right, Map<String, String> paired,
+                                      Map<String, String> back) {
+        if (left.size() != right.size()) {
+            return false;
+        }
+        for (int i = 0; i < left.size(); i++) {
+            if (!sameShape(left.get(i), right.get(i), paired, back)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
      * The library's declaration of {@code operation}, once what it answers is what a fact about its
      * result is about.
      *
@@ -1060,8 +1169,16 @@ final class DischargeRules {
         return Bound.statesItsPredicateOfEveryElement(operation);
     }
 
-    /** The size call an emptiness check means, or null where {@code operation} is not one. */
-    static ValueName sizeMeantBy(ValueName operation) {
+    /**
+     * The rewrite an emptiness check stands for, or null where {@code operation} is not one.
+     *
+     * <p>Asked with the operation as it was read against its declaration, and answered with the
+     * size operation read against its own. A reader with this has what it takes to write the second
+     * call where the first stands and nothing left to check: that the two take the same argument,
+     * and that a size is what one compares against nought, was settled where both declarations were
+     * in hand ({@link #holdSizeEquivalence}).
+     */
+    static BoundOperationFact.MeansTheSameAsSizeOfNought sizeMeantBy(DeclaredOperation operation) {
         return Bound.meansTheSameAsASizeOfNought(operation);
     }
 

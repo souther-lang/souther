@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import souther.compiler.stdlib.Stdlib;
 import souther.compiler.ast.Hir;
+import souther.compiler.core.CompleteSignature;
 import souther.compiler.core.Core;
 import souther.compiler.core.Kernel;
 import souther.compiler.core.KernelSignature;
@@ -252,7 +253,10 @@ public final class CallElaborator {
                 }
             }
         }
-        return new Core.PreservedCall(callee.denotes(), ca.cores(),
+        // The operation as the signature that just typed this call says it: what was applied and
+        // what it takes are one answer, and asking anything a second time for the name would be
+        // reaching for a declaration this already has in hand.
+        return new Core.PreservedCall(kept.declaring(), ca.cores(),
                 TypeOps.substitute(kept.result(), bind), call.pos());
     }
 

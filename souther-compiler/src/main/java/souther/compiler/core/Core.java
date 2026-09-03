@@ -391,14 +391,33 @@ public sealed interface Core {
      * representation that analysis reads keeps the operation. The tree the backend emits from keeps
      * none, and one arriving there is this compiler having failed to expand it.
      *
-     * <p>{@code operation} is what the name was resolved to, not how it was written: two spellings
-     * that reach one operation are one of these, and having a type in common is not being the same
-     * operation. A reader with no rule for what this names types it and learns nothing from it,
-     * which is the difference between a representation keeping a call and an analysis understanding
-     * one.
+     * <p>{@code declared} is what the name was resolved to, read against the declaration it reaches
+     * — not how it was written: two spellings that reach one operation are one of these, and having
+     * a type in common is not being the same operation. A reader with no rule for what this names
+     * types it and learns nothing from it, which is the difference between a representation keeping
+     * a call and an analysis understanding one.
+     *
+     * <p><b>Its arguments are the ones that declaration takes.</b> Said here because it is a fact
+     * about the node and not about whoever built one: a reader that finds an argument by a position
+     * some rule about the operation names is reading a position the declaration has. The operation
+     * and the arguments are one component and a list beside it, so that the two cannot be paired
+     * from different declarations — what may say that a name has been read against a declaration is
+     * {@link CompleteSignature} and nothing else.
      */
-    record PreservedCall(ValueName operation, List<Core> args, Type type,
+    record PreservedCall(DeclaredOperation declared, List<Core> args, Type type,
                          SourcePos pos) implements Core {
+
+        public PreservedCall {
+            if (args.size() != declared.arity()) {
+                throw new IllegalStateException("`" + declared + "` is declared to take "
+                        + declared.arity() + " arguments and this call stands with " + args.size());
+            }
+        }
+
+        /** What the name was resolved to. Every rule about an operation is keyed by this. */
+        public ValueName operation() {
+            return declared.operation();
+        }
 
         /**
          * What a reader that keeps no call standing says when one reaches it: this compiler failed to
@@ -408,7 +427,7 @@ public sealed interface Core {
          */
         public IllegalStateException unexpectedIn(String reader) {
             return new IllegalStateException(
-                    "a preserved call (" + operation + ") reached " + reader + ", at " + pos);
+                    "a preserved call (" + declared + ") reached " + reader + ", at " + pos);
         }
     }
 
@@ -751,7 +770,7 @@ public sealed interface Core {
             case PreservedCall p -> {
                 List<Core> args = each(p.args(), atExpr);
                 yield args == p.args() ? p
-                        : new PreservedCall(p.operation(), args, p.type(), p.pos());
+                        : new PreservedCall(p.declared(), args, p.type(), p.pos());
             }
             // what is applied is a binding holding a function, which the backend loads: a name slot
             case Apply a -> {
@@ -858,7 +877,7 @@ public sealed interface Core {
                     withoutItsPlace(b.right()), null, b.type(), null);
             case Call c -> new Call(c.fn(), allWithoutTheirPlace(c.args()), c.type(), null);
             case PreservedCall p ->
-                    new PreservedCall(p.operation(), allWithoutTheirPlace(p.args()), p.type(), null);
+                    new PreservedCall(p.declared(), allWithoutTheirPlace(p.args()), p.type(), null);
             case Apply a -> new Apply(readWithoutItsPlace(a.fn()), allWithoutTheirPlace(a.args()), a.type(), null);
             case If iff -> new If(withoutItsPlace(iff.cond()), withoutItsPlace(iff.then()),
                     withoutItsPlace(iff.els()), null, iff.type(), null, List.of());

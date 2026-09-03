@@ -217,8 +217,9 @@ enum Question {
     },
 
     /** Which size call a predicate over one container means, where it means one
-     * ({@link DischargeRules#sizeMeantBy}). Asked of a predicate of a single container or string:
-     * that is the shape an emptiness check has, and the question is whether this one is that. */
+     * ({@link DischargeRules#emptinessChecks}). Asked of a predicate of a single container or
+     * string: that is the shape an emptiness check has, and the question is whether this one is
+     * that. */
     EMPTINESS("which size call it means") {
         @Override
         boolean asksOf(Stdlib stdlib, Stdlib.Signature signature) {
@@ -228,7 +229,7 @@ enum Question {
 
         @Override
         boolean answeredFor(Stdlib stdlib, ValueName operation) {
-            return DischargeRules.sizeMeantBy(operation) != null;
+            return DischargeRules.emptinessChecks().contains(operation);
         }
 
         @Override

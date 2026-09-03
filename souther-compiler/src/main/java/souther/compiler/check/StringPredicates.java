@@ -264,11 +264,13 @@ public enum StringPredicates {
      * person to change one sees the other. Everything past the text they hand over is
      * {@link #readingOf} and is one.
      *
-     * <p>A call of another number of arguments is refused rather than read as no predicate. A call
-     * standing for one of these operations is an application that was typed against the signature
-     * it names, where its arity was settled, so one arriving here with another number of arguments
-     * says the table above and the library have come to disagree — read as no predicate, that
-     * disagreement would go on quietly costing every rule written with this operation.
+     * <p>The positions below are read off the call without being checked against it, and two things
+     * hold that up between them. A {@link Core.PreservedCall} has the arguments its declaration
+     * takes, which is the node's own and true of every one that exists. That the numbers this table
+     * names are positions such a declaration has is the other half, and it is a fact about this
+     * table and the library rather than about any call: where the two disagree, every rule written
+     * with the operation is being read at the wrong argument, and which call arrived first is no
+     * part of that. So it is not asked here.
      */
     public static Stated statedByChecked(Core clause, Symbols symbols) {
         if (!(clause instanceof Core.PreservedCall call)
@@ -278,10 +280,6 @@ public enum StringPredicates {
         StringPredicates predicate = of(symbols.kernelOf(operation));
         if (predicate == null) {
             return null;
-        }
-        if (call.args().size() != predicate.arity()) {
-            throw new IllegalStateException(predicate + " is read as a call of " + predicate.arity()
-                    + " arguments and the library declares one of " + call.args().size());
         }
         Core subject = call.args().get(predicate.subject());
         return Terms.folded(call.args().get(predicate.written()), symbols) instanceof String written

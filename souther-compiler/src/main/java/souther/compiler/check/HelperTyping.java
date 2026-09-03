@@ -3,6 +3,7 @@ package souther.compiler.check;
 import souther.compiler.stdlib.Stdlib;
 import souther.compiler.ast.Hir;
 import souther.compiler.ast.RowPosition;
+import souther.compiler.core.CompleteSignature;
 import souther.compiler.core.Core;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
@@ -54,7 +55,7 @@ public final class HelperTyping {
         // What each value of this module was settled as, filled in as they are checked. A value is
         // checked against these rather than against a copy of the body each of them stands for,
         // which is the same answer worked out once instead of once per name that reaches it.
-        Map<ValueName, Type> settledTypes = new HashMap<>();
+        Map<ValueName, CompleteSignature> settledTypes = new HashMap<>();
         Map<ValueName, Object> settledConstants = new HashMap<>();
         Preserved standing = Preserved.valuesAlreadySettled(settledTypes::get);
         for (Hir.FnDef h : valuesBeforeTheValuesThatNameThem(inliner, symbols.library(), toCheck)) {
@@ -183,7 +184,11 @@ public final class HelperTyping {
             }
             elaborated.definitionTypes.put(h.name(), bodyType);
             if (settled != null) {
-                settledTypes.put(settled, bodyType);
+                // Both halves of what a reference to it is held to, said where both are in hand:
+                // the empty parameter list is why this is a value at all, and the result is what
+                // checking its body just answered. A reader given the type alone would have to
+                // decide for itself that a value takes no arguments.
+                settledTypes.put(settled, CompleteSignature.ofSettledValue(settled, bodyType));
                 // What it is a constant of, read off the body it was checked as. A reference to it
                 // is written out as that constant, so every position that asks whether an
                 // expression is known at compile time goes on reading a literal.
