@@ -167,17 +167,19 @@ record UniversalElementFacts(Map<RuleKey, Bounds> byPath) {
     }
 
     /** What one lineage keeps of {@code source}, by the path under an element. */
-    private static Map<RuleKey, Bounds> keptBy(ElementLineage lineage, Core.PreservedCall call,
+    private static Map<RuleKey, Bounds> keptBy(ElementLineage<DeclaredArgument> lineage,
+                                              Core.PreservedCall call,
                                               Core source, Denotations at, Terms terms,
                                               RuleReadingSource rules, ReadingPolicy policy) {
         return switch (lineage) {
-            case ElementLineage.SameAs _ -> of(source, at, terms, rules, policy).byPath();
-            case ElementLineage.ClosureResult _ ->
+            case ElementLineage.SameAs<DeclaredArgument> _ ->
+                    of(source, at, terms, rules, policy).byPath();
+            case ElementLineage.ClosureResult<DeclaredArgument> _ ->
                     throughTheClosure(call, source, at, terms, rules, policy);
-            case ElementLineage.InsideClosureResult _ -> Map.of();
-            case ElementLineage.OneOf one -> {
+            case ElementLineage.InsideClosureResult<DeclaredArgument> _ -> Map.of();
+            case ElementLineage.OneOf<DeclaredArgument> one -> {
                 Map<RuleKey, Bounds> both = null;
-                for (ElementLineage alternative : one.alternatives()) {
+                for (ElementLineage<DeclaredArgument> alternative : one.alternatives()) {
                     Map<RuleKey, Bounds> keeps =
                             keptBy(alternative, call, source, at, terms, rules, policy);
                     both = both == null ? keeps : spanning(both, keeps);

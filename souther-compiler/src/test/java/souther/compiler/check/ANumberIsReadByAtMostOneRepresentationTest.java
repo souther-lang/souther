@@ -1,7 +1,6 @@
 package souther.compiler.check;
 
 import souther.compiler.DefaultStdlib;
-import souther.compiler.semantics.OperationFacts;
 import souther.compiler.stdlib.Stdlib;
 import souther.compiler.types.ValueName;
 
@@ -48,7 +47,7 @@ class ANumberIsReadByAtMostOneRepresentationTest {
                 : DefaultStdlib.get().entries().entrySet()) {
             ValueName operation = e.getKey();
             NumericReadings.Resolution read = NumericReadings.resolve(
-                    DefaultStdlib.get(), OperationFacts.declarations(), operation);
+                    DefaultStdlib.get(), DefaultBoundOperationFacts.get(), operation);
             if (read instanceof NumericReadings.Resolution.Multiple) {
                 // Named by whatever names them in a refusal, so what a reader is told here and what
                 // the library is refused with are one sentence rather than two that drift.

@@ -1,9 +1,8 @@
 package souther.compiler.check;
 
 import souther.compiler.stdlib.Stdlib;
-import souther.compiler.semantics.ArgumentRef;
+import souther.compiler.semantics.BuiltFrom;
 import souther.compiler.semantics.Combinator;
-import souther.compiler.semantics.ElementLineage;
 import souther.compiler.ast.DefinitionName;
 import souther.compiler.ast.Hir;
 import souther.compiler.ast.StructuralCost;
@@ -455,9 +454,13 @@ public final class HelperInliner {
         if (!(argument instanceof Hir.Expansion expansion)) {
             return;
         }
-        ArgumentRef holds = ElementLineage.holdsTheElementsOf(expansion.callee());
-        ArgumentRef made = holds != null ? null
-                : ElementLineage.derivesItsElementsFrom(expansion.callee());
+        BuiltFrom<DeclaredArgument> built =
+                DefaultBoundOperationFacts.get().buildsItsResultFrom(expansion.callee());
+        if (built == null) {
+            return;
+        }
+        DeclaredArgument holds = built.holdsTheElementsOf();
+        DeclaredArgument made = holds != null ? null : built.derivesItsElementsFrom();
         BindingId container = boundFor(expansion, holds != null ? holds : made);
         if (container == null) {
             return;
@@ -479,11 +482,11 @@ public final class HelperInliner {
      * no function has none to skip, which is why the closure is asked for separately rather than
      * assumed.
      */
-    private static BindingId boundFor(Hir.Expansion expansion, ArgumentRef which) {
+    private static BindingId boundFor(Hir.Expansion expansion, DeclaredArgument which) {
         if (which == null) {
             return null;
         }
-        int parameter = CallArguments.positionIn(which, expansion.callee());
+        int parameter = CallArguments.positionOf(which, expansion.callee());
         Combinator handed = Combinators.of(expansion.callee());
         int at = parameter - (handed != null && handed.closureArg() < parameter ? 1 : 0);
         return at < 0 || at >= expansion.bound().size() ? null
@@ -1408,7 +1411,10 @@ public final class HelperInliner {
         // And where this call is the operation that hands such a lambda its elements, the two ends
         // of that fact are among the arguments: the lambda is one and the container is another. Both
         // are gathered as they are met and joined once the loop has them.
-        ArgumentRef mapsEach = ElementLineage.mapsEachElementOf(calleeOf(call));
+        BuiltFrom<DeclaredArgument> builtByCallee =
+                DefaultBoundOperationFacts.get().buildsItsResultFrom(calleeOf(call));
+        DeclaredArgument mapsEach = builtByCallee == null ? null
+                : builtByCallee.mapsEachElementOf();
         BindingId theLambda = null;
         BindingId theContainer = null;
         for (int i = 0; i < helper.params().size(); i++) {
@@ -1512,7 +1518,7 @@ public final class HelperInliner {
                     provenance.projectsEachElementOf(f.id(), walked);
                 }
                 if (mapsEach != null
-                        && i == CallArguments.positionIn(mapsEach, calleeOf(call))) {
+                        && i == CallArguments.positionOf(mapsEach, calleeOf(call))) {
                     theContainer = f.id();
                 }
             }

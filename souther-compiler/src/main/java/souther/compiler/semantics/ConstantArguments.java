@@ -16,16 +16,20 @@ import java.util.Optional;
  * <p>Asked rather than handed over as a map, because what a value reads as is the reading's answer
  * and not a property of the syntax at the call: a name given a constant is that constant, wherever
  * it was written.
+ *
+ * @param <A> the word for an argument, the one the bounds being read are written in
  */
 @FunctionalInterface
-public interface ConstantArguments {
+public interface ConstantArguments<A> {
 
     /** The constant {@code argument} reads as, or empty where this reader cannot say. */
-    Optional<BigDecimal> at(ArgumentRef argument);
+    Optional<BigDecimal> at(A argument);
 
     /** A reader that knows no argument's value — what an operation's own facts are read under where
      *  there is no call in hand, and what an operation given no number is read under always. */
-    ConstantArguments NONE = _ -> Optional.empty();
+    static <A> ConstantArguments<A> none() {
+        return _ -> Optional.empty();
+    }
 
     /**
      * Whether these meet the condition a bound was stated under.
@@ -35,10 +39,10 @@ public interface ConstantArguments {
      * knows none of them meets only the condition that asks nothing, which is the bound the
      * operation states whatever it is given.
      */
-    default boolean satisfy(ResultBound.Provided provided) {
+    default boolean satisfy(ResultBound.Provided<A> provided) {
         return switch (provided) {
-            case ResultBound.Provided.Always _ -> true;
-            case ResultBound.Provided.ConstantAboveZero above ->
+            case ResultBound.Provided.Always<A> _ -> true;
+            case ResultBound.Provided.ConstantAboveZero<A> above ->
                     at(above.argument()).filter(read -> read.signum() > 0).isPresent();
         };
     }

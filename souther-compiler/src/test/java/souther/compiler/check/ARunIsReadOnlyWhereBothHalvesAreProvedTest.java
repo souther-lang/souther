@@ -7,6 +7,7 @@ import souther.compiler.core.GrowingFold;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.types.BindingId;
+import souther.compiler.types.ValueName;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -111,16 +112,21 @@ class ARunIsReadOnlyWhereBothHalvesAreProvedTest {
      */
     @Test
     void bothStatementsAreAskedAndNeitherAlone() {
-        assertNotNull(souther.compiler.semantics.ElementLineage.mapsEachElementOf(
-                        souther.compiler.types.ValueName.Stdlib.operation("List", "map")),
+        assertNotNull(mapsEachElementOf("List", "map"),
                 "a mapping answers what the closure made and as many as it was given");
-        assertNull(souther.compiler.semantics.ElementLineage.mapsEachElementOf(
-                        souther.compiler.types.ValueName.Stdlib.operation("Set", "map")),
+        assertNull(mapsEachElementOf("Set", "map"),
                 "a mapping into a set answers what the closure made and no more than it was given,"
                         + " which is not one per element");
-        assertNull(souther.compiler.semantics.ElementLineage.mapsEachElementOf(
-                        souther.compiler.types.ValueName.Stdlib.operation("List", "filter")),
+        assertNull(mapsEachElementOf("List", "filter"),
                 "a filter answers the elements it was given rather than what a closure made");
+    }
+
+    /** The argument the operation answers one closure result per element of, read off the bound
+     *  building — which every operation asked here has, so a null is the projection's answer. */
+    private static DeclaredArgument mapsEachElementOf(String module, String operation) {
+        return DefaultBoundOperationFacts.get()
+                .buildsItsResultFrom(ValueName.Stdlib.operation(module, operation))
+                .mapsEachElementOf();
     }
 
     /** With both halves, the closure's answer is kept as the way from the element to it. */

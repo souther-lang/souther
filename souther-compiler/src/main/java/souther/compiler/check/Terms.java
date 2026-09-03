@@ -1233,7 +1233,7 @@ final class Terms {
      */
     private Opens arithmetic(Type carried, Core scrutinee, Denotations at) {
         Core called = originating(scrutinee, at, new HashSet<>());
-        NumericResult result = called == null ? null
+        NumericResult<DeclaredArgument> result = called == null ? null
                 : DischargeRules.numericResult(operationOf(called));
         if (result == null || !(result.at() instanceof NumericResult.Answered.InTheCaseCarrying(
                 Type answersIn)) || !answersIn.equals(carried)) {
@@ -1752,8 +1752,7 @@ final class Terms {
         // answered for was a row this could not see, which is the silence the table exists to
         // remove. `asOperator` still writes a call as the operator it stands for, which is what
         // names the value; what it computes is answered here.
-        NumericResult result =
-                DischargeRules.numericResult(operationOf(e));
+        NumericResult<DeclaredArgument> result = DischargeRules.numericResult(operationOf(e));
         if (result != null && answersIn(result, answered)) {
             return computedBy(result, argsOf(e), answered);
         }
@@ -1765,7 +1764,7 @@ final class Terms {
 
     /** Whether {@code result} says the operation answers a value of {@code answered}: its own, or
      * the one the case carrying that type holds. */
-    private static boolean answersIn(NumericResult result, Type answered) {
+    private static boolean answersIn(NumericResult<DeclaredArgument> result, Type answered) {
         return result.at() instanceof NumericResult.Answered.Directly
                 || result.at() instanceof NumericResult.Answered.InTheCaseCarrying(Type carried)
                         && carried.equals(answered);
@@ -1782,7 +1781,8 @@ final class Terms {
      * come through here, which is what keeps one value from being two meanings depending on which
      * of the two reached it.
      */
-    NumericMeaning computedBy(NumericResult result, List<Core> args, Type answered) {
+    NumericMeaning computedBy(NumericResult<DeclaredArgument> result, List<Core> args,
+                              Type answered) {
         return theOneOf(NumericMeanings.of(result.computes(), args), answered);
     }
 

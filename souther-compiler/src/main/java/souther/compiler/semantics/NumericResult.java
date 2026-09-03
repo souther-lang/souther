@@ -6,12 +6,16 @@ import souther.compiler.types.Type;
 /**
  * What an operation computes, where it answers it, and when it answers nothing.
  *
+ * <p>Generic in the word for an argument, as {@link ResultBound} is, since the condition under
+ * which the other case comes back names one.
+ *
  * @param at       where in what the operation answers the number stands
  * @param computes which arithmetic it is
  * @param unless   the condition under which the union comes back as a case other than the number's,
  *                 or null for an operation whose result is the number itself
+ * @param <A>      the word for an argument of the operation
  */
-public record NumericResult(Answered at, Arithmetic computes, TheOtherCaseWhen unless) {
+public record NumericResult<A>(Answered at, Arithmetic computes, TheOtherCaseWhen<A> unless) {
 
     public NumericResult {
         java.util.Objects.requireNonNull(at, "a number is answered somewhere");
@@ -35,7 +39,7 @@ public record NumericResult(Answered at, Arithmetic computes, TheOtherCaseWhen u
     }
 
     /** The condition under which the operation answers a case other than the number's. */
-    public record TheOtherCaseWhen(ArgumentRef argument, BinOp op, long than) {
+    public record TheOtherCaseWhen<A>(A argument, BinOp op, long than) {
 
         public TheOtherCaseWhen {
             java.util.Objects.requireNonNull(argument, "this one names an argument");

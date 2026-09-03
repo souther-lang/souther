@@ -1,7 +1,6 @@
 package souther.compiler.check;
 
 import souther.compiler.semantics.NumericResult;
-import souther.compiler.semantics.OperationFacts;
 import souther.compiler.stdlib.Stdlib;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
@@ -128,7 +127,7 @@ public final class NumericAnswers {
      * the day one of them moved would be the day they disagreed.
      */
     public static Type typeOf(ValueName operation, Type source, Symbols symbols) {
-        if (OperationFacts.accumulatedContainer(operation) == null) {
+        if (DefaultBoundOperationFacts.get().accumulation(operation) == null) {
             return typeOf(operation, symbols.library());
         }
         Type element = source == null ? null
@@ -169,17 +168,12 @@ public final class NumericAnswers {
      * identity through a step exactly as a sum does, and what it answers is declared: no call of it
      * answers a number, and the walk says nothing about that either way.
      */
-    static boolean mayAnswerANumber(ValueName operation, Stdlib library) {
-        if (typeOf(operation, library) != null) {
+    static boolean mayAnswerANumber(BoundOperationFacts facts, ValueName.Stdlib.Operation named,
+                                    Stdlib.Signature signature) {
+        if (in(signature.result()) != null) {
             return true;
         }
-        if (OperationFacts.accumulatedContainer(operation) == null
-                || !(operation instanceof ValueName.Stdlib.Operation named)) {
-            return false;
-        }
-        Stdlib.Entry entry = library.entry(named);
-        return entry != null && entry.signature() != null
-                && answerIsLeftToTheCall(entry.signature().result());
+        return facts.accumulation(named) != null && answerIsLeftToTheCall(signature.result());
     }
 
     private NumericAnswers() {}

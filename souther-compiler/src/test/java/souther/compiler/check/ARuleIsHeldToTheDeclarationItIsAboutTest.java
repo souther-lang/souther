@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.DefaultStdlib;
+import souther.compiler.core.CompleteSignature;
 import souther.compiler.semantics.ArgumentRef;
 import souther.compiler.semantics.BuiltFrom;
 import souther.compiler.semantics.ElementLineage;
@@ -31,15 +32,22 @@ class ARuleIsHeldToTheDeclarationItIsAboutTest {
         return ValueName.Stdlib.operation(qualified.substring(0, dot), qualified.substring(dot + 1));
     }
 
+    /** The operation read against the library, as the binder reads every one before holding a
+     *  fact to it — so an operation the library does not have is refused here, one question before
+     *  the argument. */
+    private static CompleteSignature declared(String operation) {
+        return OperationFactBinder.declaredSignature(DefaultStdlib.get(), op(operation));
+    }
+
     private static void bindCarried(String operation, ArgumentRef container) {
-        DischargeRules.holdToTheDeclaration(DefaultStdlib.get(), op(operation), container,
+        OperationFactBinder.holdToTheDeclaration(declared(operation), container,
                 new ArgumentRef.TheContainer(), TypeRequirement.CONTAINER,
                 "the container a predicate reads");
     }
 
     private static void bindBuilt(String operation, ArgumentRef from) {
-        DischargeRules.holdToTheDeclaration(DefaultStdlib.get(), op(operation),
-                new BuiltFrom(new ElementLineage.SameAs(new ElementLineage.Source(from, 1)),
+        OperationFactBinder.holdToTheDeclaration(declared(operation),
+                new BuiltFrom<>(new ElementLineage.SameAs<>(new ElementLineage.Source<>(from, 1)),
                         SizeAgainstItsSource.AT_MOST).from(),
                 new ArgumentRef.TheContainer(), TypeRequirement.CONTAINER,
                 "the container something is built from");
@@ -104,8 +112,8 @@ class ARuleIsHeldToTheDeclarationItIsAboutTest {
     /** The binding reads what the declaration says, so a rule it agrees with binds. */
     @Test
     void aRuleThatAgreesWithTheDeclaration() {
-        assertDoesNotThrow(() -> DischargeRules.holdToTheDeclaration(DefaultStdlib.get(),
-                op("List.reverse"), new ArgumentRef.At(0), new ArgumentRef.TheContainer(),
+        assertDoesNotThrow(() -> OperationFactBinder.holdToTheDeclaration(declared("List.reverse"),
+                new ArgumentRef.At(0), new ArgumentRef.TheContainer(),
                 TypeRequirement.CONTAINER, "the container something is built from"));
     }
 }

@@ -1,13 +1,13 @@
 package souther.compiler.inputs;
 
 import souther.compiler.check.Carrier;
+import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.check.NumericAnswers;
 import souther.compiler.check.Symbols;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.semantics.ConstantArguments;
-import souther.compiler.semantics.OperationFacts;
 import souther.compiler.semantics.ResultRange;
 import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.Type;
@@ -158,7 +158,7 @@ public sealed interface NumericTerm permits NumericTerm.FromOnePosition, Numeric
          */
         public static TakenOf of(ValueName.Stdlib operation, TermPath position, Type at,
                                  Symbols symbols) {
-            TakenAs how = OperationFacts.takenAs(operation);
+            TakenAs how = DefaultBoundOperationFacts.get().takenAs(operation);
             // Of what stands here, because for an operation that walks a container the answer is
             // what the container holds. Asked of the operation alone, a sum answered no number this
             // could name and no term was made for any rule written on one.
@@ -183,7 +183,7 @@ public sealed interface NumericTerm permits NumericTerm.FromOnePosition, Numeric
         /** What this operation takes of the value at {@link #position()}. Never null: one of these
          *  cannot be built for an operation that declares none. */
         public TakenAs takenAs() {
-            return OperationFacts.takenAs(operation);
+            return DefaultBoundOperationFacts.get().takenAs(operation);
         }
 
         /** By the operation and the location, which is what makes two of these one term. */
@@ -249,7 +249,7 @@ public sealed interface NumericTerm permits NumericTerm.FromOnePosition, Numeric
          */
         public static TakenOver of(ValueName.Stdlib operation, RunSource source, Type each,
                                    Symbols symbols) {
-            TakenAs how = OperationFacts.takenAs(operation);
+            TakenAs how = DefaultBoundOperationFacts.get().takenAs(operation);
             // A container of what the run holds, with the names its values are written under taken
             // off — the same reach {@link TakenOf#of} takes of the value at a place, and for the
             // same reason: a name wrapped round a whole number is what the account is taken of.
@@ -274,7 +274,7 @@ public sealed interface NumericTerm permits NumericTerm.FromOnePosition, Numeric
         /** What this operation takes of what it is given. Never null: one of these cannot be made
          *  for an operation that declares none. */
         public TakenAs takenAs() {
-            return OperationFacts.takenAs(operation);
+            return DefaultBoundOperationFacts.get().takenAs(operation);
         }
 
         /** By the operation and where its values come from, which is what makes two of these one
@@ -381,7 +381,7 @@ public sealed interface NumericTerm permits NumericTerm.FromOnePosition, Numeric
      *
      * <p>Read with nothing said about the arguments, because a term of this kind carries none: what
      * a size is taken of is a container and what a magnitude is taken of is the one number, and a
-     * bound may only name an argument that is a number ({@code check.DischargeRules.holdBound}), so
+     * bound may only name an argument that is a number ({@code check.OperationFactBinder}), so
      * an operation like these declares no row that names one. A term whose operation does take
      * numbers would have to answer them here rather than be read the same way and quietly come back
      * wider.
@@ -389,14 +389,18 @@ public sealed interface NumericTerm permits NumericTerm.FromOnePosition, Numeric
     default NumericDomain.Bounds intrinsicBounds() {
         return switch (this) {
             case ValueOf _ -> NumericDomain.Bounds.OPEN;
-            case TakenOf taken -> ResultRange.of(taken.operation(), ConstantArguments.NONE);
+            case TakenOf taken -> ResultRange.of(
+                    DefaultBoundOperationFacts.get().boundsOnTheResult(taken.operation()),
+                    ConstantArguments.none());
             // Asked of the operation, as a taking is. That a total of non-negative amounts is
             // itself non-negative is not among the answers: it follows from what the values the run
             // walks guarantee, together with the value the operation starts from and the step it
             // repeats. That is a statement about the run and not about the operation, and it is the
             // run's own reading to make. Declared here as a range of the operation, it would be
             // wrong for a run whose elements may be negative.
-            case TakenOver over -> ResultRange.of(over.operation(), ConstantArguments.NONE);
+            case TakenOver over -> ResultRange.of(
+                    DefaultBoundOperationFacts.get().boundsOnTheResult(over.operation()),
+                    ConstantArguments.none());
         };
     }
 

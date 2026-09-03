@@ -41,12 +41,17 @@ class WhichArgumentAnOperationAnswersIsReadOutOfItsTableOnceTest {
      * declaring one and by holding it to a signature, which is not handing it to a reader. */
     private static final String FACTS = "souther.compiler.semantics.OperationFact";
 
+    /** The row types: one case of a definition, and one relation a case is reached under. Generic
+     * in their word for an argument, so the one shape is the authored row and the bound one. */
+    private static final Set<String> ROWS = Set.of("souther.compiler.semantics.DefinitionCase",
+            "souther.compiler.semantics.ArgumentsStand");
+
     private static final Set<String> DECLARING = Set.of(FACTS,
             "souther.compiler.semantics.OperationFacts",
-            "souther.compiler.check.OperationFactBinder");
-
-    /** The row types: one case of a definition, and one relation a case is reached under. */
-    private static final Set<String> ROWS = Set.of(FACTS + "$Case", FACTS + "$ArgumentsStand");
+            "souther.compiler.check.OperationFactBinder",
+            // A row reaches itself: its own equality and rendering read its parts.
+            "souther.compiler.semantics.DefinitionCase",
+            "souther.compiler.semantics.ArgumentsStand");
 
     @Test
     void nothingButTheChoiceItselfAsksWhatAnOperationChoosesBetween() throws IOException {
