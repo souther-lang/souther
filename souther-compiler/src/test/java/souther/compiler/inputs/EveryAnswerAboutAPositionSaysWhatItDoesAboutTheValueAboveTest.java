@@ -103,6 +103,13 @@ class EveryAnswerAboutAPositionSaysWhatItDoesAboutTheValueAboveTest {
                         + "reading is opened at, which is the one place the reading of the clauses "
                         + "as they are written cannot see them",
                 "NoRuleIsPlacedWhereNothingAccountsForItTest.everyRuleThatPlacedAnEndIsInTheAccount"));
+        table.put("statedAtTheValue", new Decided(Above.NOT_ASKED,
+                "the same answer as `placed` and for the same reason, and the other half of what "
+                        + "`movedAtTheValue` is the first half of: an end of the value above is "
+                        + "placed under that value and accounted for there. What is asked here is "
+                        + "the ends this value's own conjuncts state on its own coordinates, which "
+                        + "is where a rule stating no comparison puts one",
+                "ARunOfTheStringsIsABoundAndIsOwedItsEdgeTest"));
         table.put("bounds", new Decided(Above.NOT_ASKED,
                 "what a reading holds of its own value, which is what the answers above are taken "
                         + "from — the value above is asked through them and not through this",

@@ -72,6 +72,22 @@ public final class PatternPlan {
          * constant, the day either question wants a different size the other would move with it.
          */
         public static final Budget OF_A_WITNESS = new Budget(50_000, 200_000);
+
+        /**
+         * What working out where one rule's strings stop on the order is allowed to cost.
+         *
+         * <p>One rule's and not one position's. What is being asked is where the strings a single
+         * conjunct admits begin and end, and the answer is a line that conjunct drew — so a rule
+         * whose language is expensive taking the allowance the rule beside it needed would leave a
+         * line standing or going by the order the two happened to be read in.
+         *
+         * <p>Apart from what the values cost for the same reason {@link #OF_A_WITNESS} is: this is
+         * a question asked to write a report, and paying for it out of what the position's own
+         * answer is allowed would let a diagnostic decide what the model is read to admit.
+         *
+         * <p>The same numbers as the two above, and a coincidence rather than a fact.
+         */
+        public static final Budget OF_AN_ORDERED_EXTENT = new Budget(50_000, 200_000);
     }
 
     /** What one step of a plan does. */
@@ -311,9 +327,7 @@ public final class PatternPlan {
         // accepts its strings, and turning a machine into that one is the largest thing this does —
         // left to the reader, it would happen inside whichever question was asked first, where
         // there is no allowance and nobody counting.
-        Automaton made = built(step, meter);
-        Automaton one = made == null ? null : made.canonical(meter);
-        return one == null ? null : new Language(one);
+        return Language.canonical(built(step, meter), meter);
     }
 
     /**

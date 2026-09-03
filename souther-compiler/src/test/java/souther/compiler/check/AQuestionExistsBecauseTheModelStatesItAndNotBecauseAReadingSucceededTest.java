@@ -3,13 +3,16 @@ package souther.compiler.check;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.ast.Hir;
+import souther.compiler.inputs.BlockReason;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Scopes;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeSymbols;
 
+import java.util.ArrayList;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -114,6 +117,251 @@ class AQuestionExistsBecauseTheModelStatesItAndNotBecauseAReadingSucceededTest {
                 RuleAccounting.Outcome.Unaccounted.class, lineOf("invariant top = value <= 10 * 2"));
         assertInstanceOf(RuleAccounting.Why.TheEndReadingSays.class, open.why(),
                 "said by the reading that would have answered, in its own words");
+    }
+
+    /**
+     * A rule about the strings at the position states where they stop, and raises the question
+     * about it like any other rule that does.
+     *
+     * <p>Not a comparison, and that is the point. What the model states is where the values stop —
+     * {@code String.startsWith("JP", value)} admits the strings from {@code "JP"} up to but not
+     * including {@code "JQ"} — and which call an author wrote it as is no part of that. Raised off
+     * the shape of the clause, the question existed for one of the two spellings and the accounting
+     * for the other came back complete.
+     */
+    @Test
+    void aRuleAboutTheStringsThatStatesWhereTheyStopRaisesTheQuestionAboutItsLine() {
+        String clause = "invariant top = String.startsWith(\"JP\", value)";
+        assertEquals(BOTH, onAString(clause),
+                "the model states where the strings stop, so both are asked about");
+    }
+
+    /**
+     * And one whose strings stop nowhere raises no question about a line.
+     *
+     * <p>{@code [0-9]{4}} leaves out a string between two it admits, so there is no stretch of the
+     * order it holds the values between — which is what the rule states and not what a reading of it
+     * managed. A question raised here would be one no line could ever answer.
+     */
+    @Test
+    void aRuleWhoseStringsStopNowhereRaisesNoQuestionAboutALine() {
+        assertEquals(Set.of(CoverageObligation.ADMITTED_VALUES),
+                onAString("invariant top = String.matches(\"[0-9]{4}\", value)"));
+    }
+
+    /**
+     * A branch that says nothing about the strings at a position leaves every string standing
+     * there, and a choice between that and a run is every string.
+     *
+     * <p>The one place the two operations part. Held together, a reading that says nothing about a
+     * position changes nothing and the other side stands; held as a choice, it is every string and
+     * absorbs whatever the other side admits. Read as the one branch that spoke, the choice would
+     * stop the values where only one of its branches stops them — a line the model does not draw.
+     */
+    @Test
+    void aBranchSayingNothingAboutTheStringsAbsorbsTheRunOfTheOther() {
+        String source = """
+                module example.rooms
+
+                data Code = { s: String, b: Bool }
+                    invariant one = String.startsWith("JP", s) || b
+                """;
+        assertEquals(Set.of(CoverageObligation.ADMITTED_VALUES), raisedIn(source, "Code"),
+                "the choice leaves every string at `s`, so nothing stops them anywhere");
+    }
+
+    /**
+     * One clause can state where the values stop on one number and leave the next standing.
+     *
+     * <p>Both branches of the choice state a run at {@code a}, so the choice does; and at {@code b}
+     * the rule is one this reads no further into, so whether it states a line there is a question
+     * nothing settled. A classification that said one number would have to choose between them, and
+     * one that said "a bound" of the whole clause would lose the second question.
+     */
+    @Test
+    void oneClauseCanBoundOneNumberAndLeaveTheNextStanding() {
+        String deep = "(".repeat(201) + "x" + ")".repeat(201);
+        String source = """
+                module example.rooms
+
+                data Code = { a: String, b: String }
+                    invariant one =
+                        (String.startsWith("A", a) && String.matches("%s", b))
+                            || (String.startsWith("A", a) && String.matches("%s", b))
+                """.formatted(deep, deep);
+        assertEquals(Set.of(CoverageObligation.ADMITTED_VALUES, CoverageObligation.BOUNDARY),
+                raisedIn(source, "Code"),
+                "a line on one number and a question about the next");
+        assertEquals(Set.of(RuleKey.of("b")), undeterminedIn(source, "Code"),
+                "and whether it stops them at `b` is a question with no answer, which is what"
+                        + " would be lost if the clause were classified by the number it did stop"
+                        + " them on");
+    }
+
+    /**
+     * One clause can state where the values stop on two numbers, and both questions are raised.
+     *
+     * <p>Both branches of the choice state a run at each of the two positions, so the choice states
+     * one at each. Held as the number a clause stops the values on, one of them would have to be
+     * chosen between or refused — and read as the count of questions, the two collapse into one
+     * word, so what is asked here is which numbers they are about.
+     */
+    @Test
+    void oneClauseCanBoundTwoNumbers() {
+        String source = """
+                module example.rooms
+
+                data Code = { a: String, b: String }
+                    invariant one =
+                        (String.startsWith("A", a) && String.startsWith("B", b))
+                            || (String.startsWith("A", a) && String.startsWith("B", b))
+                """;
+        assertEquals(Set.of(RuleKey.of("a"), RuleKey.of("b")), boundedIn(source, "Code"),
+                "a line on each, and neither chosen between");
+    }
+
+    /**
+     * Two branches stopped by two things leave both of them standing, all the way to the accounting.
+     *
+     * <p>One branch is written more deeply than this reads and the other is written in a form it
+     * does not enter, and those go out under two different words. Kept as one, which of them an
+     * author is sent to would turn on which branch they wrote first — and each of the two is a thing
+     * that would have to change before the question could be answered, so neither stands for the
+     * other.
+     */
+    @Test
+    void twoBranchesStoppedByTwoThingsLeaveBothStanding() {
+        String deep = "(".repeat(201) + "x" + ")".repeat(201);
+        String source = """
+                module example.rooms
+
+                data Code = String
+                    invariant one =
+                        String.matches("%s", value) || String.matches(value, value)
+                """.formatted(deep);
+
+        assertEquals(List.of(new BlockReason.PatternTooDeeplyNested(),
+                        new BlockReason.UnreadValueRule()),
+                whyUndeterminedIn(source, "Code"),
+                "both of them, in the order the clause writes them");
+    }
+
+    /** What the one clause of {@code named} leaves the line question standing for. */
+    private static List<BlockReason.RuleReadingStopped> whyUndeterminedIn(String source,
+                                                                          String named) {
+        List<BlockReason.RuleReadingStopped> out = new ArrayList<>();
+        rulesOf(source, named).required().values().forEach(required ->
+                required.undetermined().forEach(each -> out.addAll(each.why())));
+        return out;
+    }
+
+    /** The numbers the one clause of {@code named} states the values stop on. */
+    private static Set<RuleKey> boundedIn(String source, String named) {
+        Set<RuleKey> out = new LinkedHashSet<>();
+        rulesOf(source, named).required().values().forEach(required ->
+                required.obligations().forEach(owed -> {
+                    if (owed instanceof Owed.Boundary line) {
+                        out.add(line.on().position());
+                    }
+                }));
+        return out;
+    }
+
+    /** The names whose line the one clause of {@code named} leaves undecided. */
+    private static Set<RuleKey> undeterminedIn(String source, String named) {
+        Set<RuleKey> out = new LinkedHashSet<>();
+        rulesOf(source, named).required().values().forEach(required ->
+                required.undetermined().forEach(each -> out.add(each.at())));
+        return out;
+    }
+
+    /**
+     * A reading that ran out of what it may build says so in its own words.
+     *
+     * <p>The pattern is one this reads and the machine for what it admits is one it makes; what runs
+     * out is the further machine that says where those strings begin and end. Written down as a
+     * pattern too large, an author would be sent to a pattern this read perfectly — so it is its
+     * own reason, and which limit refused it is kept.
+     */
+    @Test
+    void whereTheRunRanOutTheReasonIsTheRunsOwn() {
+        FieldDomains domains = read("invariant top = String.matches(\"[0-9]{300}\", value)",
+                "Code", "String");
+        List<BlockReason.RuleWithoutLineReason> why = domains.noLineAt(RuleKey.THE_VALUE).stream()
+                .map(FieldDomains.NoLine::why).toList();
+        assertEquals(1, why.size(), () -> "one rule, one reason: " + why);
+        BlockReason.OrderedExtentTooCostly stopped = assertInstanceOf(
+                BlockReason.OrderedExtentTooCostly.class, why.get(0));
+        assertEquals(souther.compiler.regex.Meter.Stopped.ONE_MACHINE, stopped.stopped(),
+                "the machine the run wanted is larger than a machine may be");
+    }
+
+    /** The rules of one declaration of {@code over}, read as the compilation reads them. */
+    private static FieldDomains read(String clause, String named, String over) {
+        String source = """
+                module example.rooms
+
+                data %s = %s
+                    %s
+                """.formatted(named, over, clause);
+        Compilation compilation = Compilation.ofSource(source, "Main");
+        compilation.answerEverything();
+        String module = compilation.modules().get(0);
+        Symbols symbols = Scopes.derived(compilation.db(), module).value();
+        assertNotNull(symbols);
+        TypeSymbol.AtModule at = TypeSymbols.declared(new TypeKey(module, named));
+        Hir.Data data = (Hir.Data) symbols.declaredNode(at.key());
+        assertNotNull(data, "no `" + named + "` declared");
+        return FieldDomains.of(at, data, RuleReadings.of(compilation, module),
+                souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+    }
+
+    /** What the one clause of {@code named} raises, over every place it writes. */
+    private static Set<CoverageObligation> raisedIn(String source, String named) {
+        Set<CoverageObligation> out = new LinkedHashSet<>();
+        rulesOf(source, named).required().values().forEach(required ->
+                required.obligations().forEach(owed -> out.add(owed.obligation())));
+        return out;
+    }
+
+    /** The rules of {@code named} in {@code source}, read as the compilation reads them. */
+    private static FieldDomains rulesOf(String source, String named) {
+        Compilation compilation = Compilation.ofSource(source, "Main");
+        compilation.answerEverything();
+        String module = compilation.modules().get(0);
+        Symbols symbols = Scopes.derived(compilation.db(), module).value();
+        assertNotNull(symbols);
+        TypeSymbol.AtModule at = TypeSymbols.declared(new TypeKey(module, named));
+        Hir.Data data = (Hir.Data) symbols.declaredNode(at.key());
+        assertNotNull(data, "no `" + named + "` declared");
+        return FieldDomains.of(at, data, RuleReadings.of(compilation, module),
+                souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+    }
+
+    /** The same of a declaration over strings, since a run is a statement about those. */
+    private static Set<CoverageObligation> onAString(String clause) {
+        String source = """
+                module example.rooms
+
+                data Code = String
+                    %s
+                """.formatted(clause);
+        Compilation compilation = Compilation.ofSource(source, "Main");
+        compilation.answerEverything();
+        String module = compilation.modules().get(0);
+        Symbols symbols = Scopes.derived(compilation.db(), module).value();
+        assertNotNull(symbols);
+        TypeSymbol.AtModule named = TypeSymbols.declared(new TypeKey(module, "Code"));
+        Hir.Data data = (Hir.Data) symbols.declaredNode(named.key());
+        assertNotNull(data, "no `Code` declared");
+        FieldDomains domains = FieldDomains.of(named, data, RuleReadings.of(compilation, module),
+                souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+        assertEquals(1, domains.required().size(),
+                () -> "one clause, one rule: " + domains.required().keySet());
+        Set<CoverageObligation> out = new LinkedHashSet<>();
+        domains.required().values().iterator().next().obligations()
+                .forEach(owed -> out.add(owed.obligation()));
+        return out;
     }
 
     /**

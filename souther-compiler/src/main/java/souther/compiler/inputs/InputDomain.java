@@ -1352,14 +1352,18 @@ public final class InputDomain {
         // are written cannot see: no comparison places them, and where they are is in what the
         // other rules leave.
         List<FieldDomains.Placed> moved = placed.movedAtTheValue();
-        // Three sources and not two: what the type's own clauses wrote, what a conjunct of them
-        // moved, and what the value this position sits in placed. Each is ends of one coordinate
-        // and they are intersected, every rule that put an end where it is kept.
+        // Four sources and not two: what the type's own comparisons wrote, what its conjuncts state
+        // that no comparison says — a rule about the strings at a position leaves them running
+        // between two places and orders nothing — what a conjunct of them moved, and what the value
+        // this position sits in placed. Each is ends of one coordinate and they are intersected,
+        // every rule that put an end where it is kept.
         NumberAt.OfWhatNumber kind = bySize ? answeredBy(taken) : ITS_OWN_VALUE;
         Carrier on = bySize ? Carrier.WHOLE : carried;
         DeclaredBounds.Bounds own = !bySize && carried == null ? null
                 : DeclaredBounds.and(
-                        DeclaredBounds.and(bySize ? ofType : valueOfType,
+                        DeclaredBounds.and(
+                                DeclaredBounds.and(bySize ? ofType : valueOfType,
+                                        DeclaredBounds.placed(placed.statedAtTheValue(), kind, on)),
                                 DeclaredBounds.placed(moved, kind, on)),
                         DeclaredBounds.placed(stated, kind, on));
         // A value whose rules contradict has no positions to cover: every edge of every field of it
@@ -1629,8 +1633,13 @@ public final class InputDomain {
                                                      RulesWithNoLine.Gathered found) {
         List<StandingQuestion> out = new ArrayList<>();
         for (PlacedRules.RuleUnclassifiedAt each : placed.unclassified(path)) {
-            found.asked(StandingQuestion.BoundaryUndetermined.of(each.rule(), each.cited(),
-                    FilingCoordinate.at(path), each.at().why()));
+            // One question per thing that stopped it. A published question carries one reason, and
+            // a classification can have been stopped by more than one — a clause read a branch at a
+            // time is stopped by whatever stopped each branch — so they are asked as the several
+            // questions they are rather than one of them standing for the rest.
+            each.at().why().forEach(why ->
+                    found.asked(StandingQuestion.BoundaryUndetermined.of(each.rule(), each.cited(),
+                            FilingCoordinate.at(path), why)));
         }
         for (souther.compiler.check.RuleAccounting.Unanswered each : placed.unanswered(path)) {
             out.add(StandingQuestion.Exact.of(each.rule(), each.cited(),

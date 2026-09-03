@@ -151,16 +151,18 @@ public sealed interface BlockReason {
             AboutARule {
 
         /**
-         * One switch over the nine, and the reason for it being one: a division of these into two
-         * is only reviewable where all nine answers are visible together.
+         * One switch over the ten, and the reason for it being one: a division of these into two
+         * is only reviewable where all ten answers are visible together.
          */
         @Override
         default RunSensitivity runSensitivity() {
             return switch (this) {
-                // Two figures this compiler compared a rule against: the states a pattern is built
-                // into, and how deeply one may be bracketed. A run allowed more of either need not
-                // stop at the same rule.
-                case PatternTooCostly _, PatternTooDeeplyNested _ -> RunSensitivity.MAY_CHANGE;
+                // Three figures this compiler compared a rule against: the states a pattern is
+                // built into, how deeply one may be bracketed, and the machines that say where the
+                // strings it admits stop. A run allowed more of any of them need not stop at the
+                // same rule.
+                case PatternTooCostly _, PatternTooDeeplyNested _,
+                     OrderedExtentTooCostly _ -> RunSensitivity.MAY_CHANGE;
                 // And seven where nothing was compared against anything. A form nothing takes
                 // apart, values no line can be drawn on, a rule about a value made from this one, a
                 // relation between two positions, two rules about two coordinates and a pairing
@@ -411,6 +413,32 @@ public sealed interface BlockReason {
      * write differently.
      */
     record PatternTooDeeplyNested() implements RuleReadingStopped {}
+
+    /**
+     * A rule whose strings this read, and whose place on the order they are measured on would take
+     * more machines than this compiler will make.
+     *
+     * <p>Its own case beside {@link PatternTooCostly}, and the difference is what was too large. That
+     * one is the pattern an author wrote turned into the strings it accepts, which is a machine as
+     * big as the pattern is written and is something they can write differently. This is the further
+     * work of asking where those strings begin and end — the strings above the first of them, the
+     * ones the rule leaves out, and the two put together — and none of those is a machine anybody
+     * wrote. Told the other, an author would go looking at a pattern that was read perfectly.
+     *
+     * <p>Which limit refused it is kept. A machine larger than one machine may be is a shape
+     * somebody wrote and could write smaller; an answer that had already spent what it was allowed
+     * is not, and the same rule asked first would have been read.
+     */
+    record OrderedExtentTooCostly(souther.compiler.regex.Meter.Stopped stopped)
+            implements RuleReadingStopped {
+
+        public OrderedExtentTooCostly {
+            if (stopped == null) {
+                throw new IllegalArgumentException(
+                        "a construction that stopped was stopped by a limit");
+            }
+        }
+    }
 
     /**
      * The rules about this position were followed, every one of them became the set it names, and

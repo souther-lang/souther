@@ -75,7 +75,13 @@ public final class ReportedReason {
             // question about what this compiler may say next rather than about what a document
             // promises its reader. Out there both are the same kind of thing: the values are wider
             // than the rules leave them, because working them out was too much.
-            case BlockReason.PatternTooCostly _, BlockReason.ExactValuesTooCostly _ ->
+            // And a third with them, for the same reason and about further work again: where the
+            // strings a rule admits stop is asked of machines made out of the ones the rule named,
+            // and a limit reached there is the values coming out wider than the rules leave them.
+            // Which of the three it was decides what may be said next and not what a reader is
+            // promised.
+            case BlockReason.PatternTooCostly _, BlockReason.ExactValuesTooCostly _,
+                 BlockReason.OrderedExtentTooCostly _ ->
                     UndividedPosition.Reason.EXACT_VALUES_TOO_COSTLY;
             // And its own word again, because this one never reached the values at all. A reader
             // told the values were too much would go looking for what makes them so, and what is

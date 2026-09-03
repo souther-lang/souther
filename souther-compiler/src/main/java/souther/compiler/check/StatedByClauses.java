@@ -55,6 +55,7 @@ sealed interface StatedByClauses {
     record Said(souther.compiler.values.PlannedValues<FactSubject> values,
                 OrderedIntervals<FactSubject> ordered,
                 Adoption<FactSubject> byValues, Adoption<FactSubject> byOrder,
+                Map<FactSubject, StringRestriction> strings,
                 Map<Core, Part> parts)
             implements StatedByClauses {
 
@@ -66,8 +67,8 @@ sealed interface StatedByClauses {
         @Override
         public StatedByClauses from(Core e) {
             Map<Core, Part> out = new java.util.IdentityHashMap<>(parts);
-            out.put(e, new Part(byValues, byOrder, values.standing()));
-            return new Said(values, ordered, byValues, byOrder, out);
+            out.put(e, new Part(byValues, byOrder, values.standing(), strings));
+            return new Said(values, ordered, byValues, byOrder, strings, out);
         }
     }
 
@@ -84,27 +85,36 @@ sealed interface StatedByClauses {
      * finally admits is not among them — that is the whole value's answer and belongs to the whole.
      *
      * @param standing what this part's reading recorded about positions it was short of
+     * @param aboutStrings what this part states about the strings at each position it states a rule
+     *                     about. The position is here whether or not the rule was read, because
+     *                     which of a position's numbers a rule is written about is settled by the
+     *                     call; what the rule leaves is the other half, and a rule this could not
+     *                     read has none
      */
     record Part(Adoption<FactSubject> byValues, Adoption<FactSubject> byOrder,
-                Map<FactSubject, java.util.List<souther.compiler.values.UnreadReason>> standing) {
+                Map<FactSubject, java.util.List<souther.compiler.values.UnreadReason>> standing,
+                Map<FactSubject, StringRestriction> aboutStrings) {
 
         /** The same part, in a branch nobody can be in — see {@link Adoption#inADeadBranch}. */
         Part inADeadBranch() {
             // The reasons go with it too. A rule of a branch nothing satisfies is not a rule of
             // this declaration that went unread; there is no branch for an author to look at.
-            return new Part(byValues.inADeadBranch(), byOrder.inADeadBranch(), Map.of());
+            //
+            // And neither is what it said about the strings at a position. A line drawn from a
+            // branch nobody can be in is a line the model does not draw.
+            return new Part(byValues.inADeadBranch(), byOrder.inADeadBranch(), Map.of(), Map.of());
         }
 
         /** This part of the branch that stands, beside the same part of one nobody can be in. */
         Part beside(Part gone) {
             return new Part(byValues.beside(gone.byValues()), byOrder.beside(gone.byOrder()),
-                    standing);
+                    standing, aboutStrings);
         }
 
         /** The same part of two branches, neither of which anybody can be in. */
         Part bothDead(Part other) {
             return new Part(byValues.bothDead(other.byValues()),
-                    byOrder.bothDead(other.byOrder()), Map.of());
+                    byOrder.bothDead(other.byOrder()), Map.of(), Map.of());
         }
 
         /** The same part of two branches somebody can be in. */
@@ -124,7 +134,7 @@ sealed interface StatedByClauses {
                         reachedBy(other.byValues()));
             }
             return new Part(byValues.either(other.byValues()), byOrder.either(other.byOrder()),
-                    why);
+                    why, StringRestriction.over(aboutStrings, other.aboutStrings(), false));
         }
 
         /** The positions a rule of this copy reached and did not merely settle: what it
@@ -174,7 +184,7 @@ sealed interface StatedByClauses {
     static StatedByClauses top() {
         return new Said(souther.compiler.values.PlannedValues.top(),
                 OrderedIntervals.top(),
-                Adoption.nothing(), Adoption.nothing(), Map.of());
+                Adoption.nothing(), Adoption.nothing(), Map.of(), Map.of());
     }
 
     /**
@@ -198,6 +208,7 @@ sealed interface StatedByClauses {
      * known yet and the part is in each of them until it is. Recorded on the outside instead, a part
      * whose branch turns out dead is a part nothing transformed, and the account it gives is the one
      * it gave before anybody knew.
+     *
      */
     StatedByClauses from(Core e);
 
@@ -329,6 +340,10 @@ sealed interface StatedByClauses {
                     // a leaf it read leaves at least one.
                     Adoption.at(mentions, said.adoptedAt(), said.dropped()),
                     Adoption.at(mentions, range.ranges().keySet(), range.ranges().isEmpty()),
+                    // And what the leaf states about the strings at a position, where it is a rule
+                    // about them. Asked of the reading that recognises one, so this is where the
+                    // answer enters and the connectives below are what compose it.
+                    values.stringRuleIn(e, said),
                     Map.of());
         }
 
@@ -380,6 +395,7 @@ sealed interface StatedByClauses {
             return new Said(here.values().meet(there.values()),
                     here.ordered().meet(there.ordered()),
                     here.byValues().both(there.byValues()), here.byOrder().both(there.byOrder()),
+                    StringRestriction.over(here.strings(), there.strings(), true),
                     // The parts of both, since a conjunction is every clause of it holding at once
                     // and each of them is still the part it was.
                     bothParts(here.parts(), there.parts()));
@@ -643,7 +659,8 @@ sealed interface StatedByClauses {
             said.parts().forEach((each, part) -> parts.put(each, new ReadByClauses.OfAPart(
                     part.byValues().unbuiltAt(unbuilt),
                     part.byOrder().unbuiltAt(unbuilt),
-                    aRuleIsAnswerableFor(part, made.made()))));
+                    aRuleIsAnswerableFor(part, made.made()),
+                    part.aboutStrings())));
             return parts;
         }
 
@@ -696,10 +713,12 @@ sealed interface StatedByClauses {
             read.parts().forEach((each, part) -> parts.put(each, new Part(
                     part.byValues().unbuiltAt(known.unbuilt()),
                     part.byOrder().unbuiltAt(known.unbuilt()),
-                    ReadByClauses.alsoSaying(part.standing(), known.standing()))));
+                    ReadByClauses.alsoSaying(part.standing(), known.standing()),
+                    part.aboutStrings())));
             return new Said(read.values().alsoStanding(known.standing()), read.ordered(),
                     read.byValues().unbuiltAt(known.unbuilt()),
                     read.byOrder().unbuiltAt(known.unbuilt()),
+                    read.strings(),
                     parts);
         }
 
@@ -754,6 +773,9 @@ sealed interface StatedByClauses {
                             there.ordered().leavingNothing()),
                     here.byValues().bothDead(there.byValues()),
                     here.byOrder().bothDead(there.byOrder()),
+                    // And what either of them said about the strings goes with them. A run drawn
+                    // from a branch nobody can take is a line the model does not draw.
+                    Map.of(),
                     branchParts(here.parts(), there.parts(), Part::bothDead,
                             Part::inADeadBranch));
         }
@@ -770,6 +792,9 @@ sealed interface StatedByClauses {
             return new Said(alive.values(), alive.ordered(),
                     alive.byValues().beside(gone.byValues()),
                     alive.byOrder().beside(gone.byOrder()),
+                    // The branch that stands, and what the other could not read is not its
+                    // business: a rule of a branch nothing satisfies hides no run of this one.
+                    alive.strings(),
                     branchParts(alive.parts(), gone.parts(), Part::beside,
                             Part::inADeadBranch));
         }
@@ -780,6 +805,7 @@ sealed interface StatedByClauses {
                     ordered.either(here.ordered(), there.ordered()),
                     here.byValues().either(there.byValues()),
                     here.byOrder().either(there.byOrder()),
+                    StringRestriction.over(here.strings(), there.strings(), false),
                     branchParts(here.parts(), there.parts(), Part::either,
                             java.util.function.UnaryOperator.identity()));
         }

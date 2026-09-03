@@ -485,6 +485,25 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
     }
 
     /**
+     * The ends the value's own conjuncts state on its own coordinates.
+     *
+     * <p>What {@link #placedAt} leaves out for the same reason it leaves the moved ones out: the
+     * ends of a value's own coordinates are read off the clauses as they are written, and this is
+     * the rest of them. A rule about the strings at a position leaves them running from one place
+     * to another and states no comparison, so that reading sees nothing of it.
+     *
+     * <p>The comparisons are here too and are not left out. An end two readings both saw is one
+     * end drawn by one conjunct of one rule, and putting the two together is what
+     * {@link souther.compiler.check.DeclaredBounds.End#tighter} does with them — a second copy adds
+     * no name and moves nothing.
+     */
+    List<FieldDomains.Placed> statedAtTheValue() {
+        return bounds().stated().stream()
+                .filter(each -> each.path().isTheValueItself())
+                .toList();
+    }
+
+    /**
      * The rules saying where the coordinate at {@code path} stops that no end came out of.
      *
      * <p>At every path the value has, its own included — unlike {@link #placedAt}, whose empty

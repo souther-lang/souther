@@ -66,7 +66,7 @@ public final class FieldDomains {
      */
     public static final FieldDomains NONE =
             new FieldDomains(Map.of(), Map.of(), Map.of(), Map.of(), Set.of(), List.of(), List.of(),
-                    List.of(), List.of(), PartsLeftOut.NONE, Map.of(),
+                    List.of(), List.of(), List.of(), PartsLeftOut.NONE, Map.of(),
                     Map.of(), Map.of(), new ReadingEvidence(), Map.of(),
                     Map.of(RuleKey.THE_VALUE, Set.of(new RulesMissed.NoReadingWasMade())), Set.of(),
                     NOTHING_NAMED,
@@ -86,6 +86,16 @@ public final class FieldDomains {
     private final List<WithoutAnEnd> withoutAnEnd;
     /** The conjuncts whose quantity is over one number — see {@link #aboutOneCoordinate}. */
     private final List<AboutOneCoordinate> aboutOneCoordinate;
+    /**
+     * The conjuncts stating a rule about the strings at one number.
+     *
+     * <p>Beside the list above and read by one question of the two that one answers. Both say which
+     * number a conjunct is written about, and only the first are candidates for working out which
+     * conjuncts account for where the values stop — a candidate that placed no end turns that
+     * working out on for every conjunct about the number, and each of those readings reads the
+     * declaration again. A conjunct stating a run states its own ends and needs no such attribution.
+     */
+    private final List<AboutOneCoordinate> aboutTheStrings;
     /**
      * Which conjunct this reading was asked to leave out, so that a reading standing in for a
      * counterfactual is not asked one of its own.
@@ -177,6 +187,7 @@ public final class FieldDomains {
                          Set<RuleKey> notSeparatedByName,
                          List<InvariantChecker.Direct> directs, List<NoLine> noLines,
                          List<WithoutAnEnd> withoutAnEnd, List<AboutOneCoordinate> aboutOneCoordinate,
+                         List<AboutOneCoordinate> aboutTheStrings,
                          PartsLeftOut withoutParts,
                          Map<RuleRef, Required> raised,
                          Map<RuleRef, Map<Core, Required>> raisedByPart,
@@ -200,6 +211,7 @@ public final class FieldDomains {
         this.noLines = noLines;
         this.withoutAnEnd = List.copyOf(withoutAnEnd);
         this.aboutOneCoordinate = List.copyOf(aboutOneCoordinate);
+        this.aboutTheStrings = List.copyOf(aboutTheStrings);
         this.withoutParts = withoutParts;
         this.raised = raised;
         this.raisedByPart = raisedByPart;
@@ -445,6 +457,7 @@ public final class FieldDomains {
         return new FieldDomains(Map.copyOf(out), Map.copyOf(holds), Map.copyOf(admitted),
                 Map.copyOf(unread), Set.copyOf(notSeparated), seeded.reading().directs(), seeded.reading().noLines(),
                 seeded.reading().withoutAnEnd(), seeded.reading().aboutOneCoordinate(),
+                seeded.reading().aboutTheStrings(),
                 reach.withoutParts(),
                 seeded.reading().raised(), seeded.reading().raisedByPart(),
                 seeded.reading().standing(), seeded.took(),
@@ -1051,12 +1064,31 @@ public final class FieldDomains {
      *
      */
     public List<Placed> placed() {
-        List<Placed> out = new ArrayList<>(directs.stream()
-                .map(each -> new Placed(each.at(), each.from(),
-                        each.bound().lower(), each.bound().end(), each.conjunct()))
-                .toList());
+        List<Placed> out = new ArrayList<>(stated());
         out.addAll(movedEnds());
         return List.copyOf(out);
+    }
+
+    /**
+     * The ends the conjuncts state, each against the conjunct that states it.
+     *
+     * <p>Apart from {@link #movedEnds}, and the difference is where the answer comes from. An end
+     * here is in the conjunct: an ordering places one, and a rule about the strings at a position
+     * leaves them running from one place to another. Those are read off the rule alone, so which
+     * conjunct they belong to needs no working out. What the other list holds is the ends the rules
+     * leave together, attributed by asking what they would leave without each conjunct.
+     *
+     * <p>For a reader that has its own way to the first kind and wants only what that way cannot
+     * see. A newtype's own comparisons are read off the clauses as they are written
+     * ({@link DeclaredBounds#of}), and a rule stating no comparison is invisible there — so such a
+     * reader takes these and drops what it already has, which two ends at one value with one rule
+     * behind them come to anyway ({@link DeclaredBounds.End#tighter}).
+     */
+    public List<Placed> stated() {
+        return directs.stream()
+                .map(each -> new Placed(each.at(), each.from(),
+                        each.bound().lower(), each.bound().end(), each.conjunct()))
+                .toList();
     }
 
     /**
@@ -1251,6 +1283,11 @@ public final class FieldDomains {
         Set<NumberAt<RuleKey>> out = new java.util.LinkedHashSet<>();
         directs.forEach(each -> out.add(each.at()));
         aboutOneCoordinate.forEach(each -> out.add(each.at()));
+        // And the numbers a rule about the strings is written about. Which number such a rule is
+        // about is settled by the call it is written as, so it is here whatever the reading made of
+        // the strings — a reader choosing which of a position's numbers it is measured at wants
+        // every rule written about one, and a rule read no further than the call is one of them.
+        aboutTheStrings.forEach(each -> out.add(each.at()));
         return java.util.Collections.unmodifiableSet(out);
     }
 
