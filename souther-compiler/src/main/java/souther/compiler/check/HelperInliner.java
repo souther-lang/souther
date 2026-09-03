@@ -2016,8 +2016,17 @@ public final class HelperInliner {
                     : fa.withTarget(rename(fa.target(), renaming));
             // the callee is renamed as the expression it is, like every other subexpression. A name
             // applied is an `Hir.Var` held here, so it goes through the arm above and is substituted
-            // exactly as a read of it would be — the position cannot ask a different question.
+            // exactly as a read of it would be.
+            //
+            // What the author applied is the application's own answer and is not read off that, so
+            // it is stamped here beside it: the name travels with the copy and the place it was
+            // written at is in the callee's file, which a copy read against another one may not
+            // carry — the rule the field read above goes by.
             case Hir.Apply call -> call.with(
+                    renaming.stamps()
+                            ? call.applied().restamped(renaming.at(call.function().pos()),
+                                    renaming.over(call.function().region()))
+                            : call.applied(),
                     rename(call.function(), renaming),
                     renameList(call.args(), renaming),
                     renaming.at(call.pos()), renaming.over(call.region()));

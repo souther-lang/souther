@@ -13,6 +13,7 @@ import souther.compiler.diag.msg.ExampleMessage;
 import souther.compiler.diag.msg.NameMessage;
 import souther.compiler.diag.msg.BehaviorMessage;
 import souther.compiler.diag.msg.ModuleMessage;
+import souther.compiler.diag.Region;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
@@ -1082,7 +1083,7 @@ public final class Resolve {
             // is answered as the expression it is, and what may be applied is the check's to say.
             case Ast.Apply call when call.function() instanceof Ast.Var callee ->
                     applied(call, callee, bound);
-            case Ast.Apply call -> Hir.Apply.read(call, appliedCallee(call.function()),
+            case Ast.Apply call -> Hir.Apply.read(call, appliedCallee(call),
                     callee(call.function(), bound), exprs(call.args(), bound));
             // `Map.empty`, `String.isEmpty`, `up.Amount` — a namespace and a member of it, which
             // the parser read as a field taken off a name because it reads no case at all. Folded
@@ -1229,7 +1230,7 @@ public final class Resolve {
                     ReachName.of(denotes, written.canonical(), reachable.module()),
                     callee.region());
         }
-        return Hir.Apply.read(call, appliedCallee(call.function()), name,
+        return Hir.Apply.read(call, appliedCallee(call), name,
                 exprs(call.args(), bound));
     }
 
@@ -1248,8 +1249,15 @@ public final class Resolve {
      * be read two ways depending on what it turned out to reach — and what the author wrote is not
      * a thing that turns on that.
      */
-    private static Hir.AppliedCallee appliedCallee(Ast.Expr callee) {
-        return new Hir.AppliedCallee(dottedName(callee), callee.reportedAt());
+    private static Hir.AppliedCallee appliedCallee(Ast.Apply call) {
+        Ast.Expr callee = call.function();
+        // Where the callee is written, or where the application is where the callee says nowhere at
+        // all. A report about what is applied points somewhere either way, and an application the
+        // parser read is somewhere — so this is the choice between two answers already held, and
+        // not a place worked out from one of them.
+        Region at = callee.reportedAt();
+        return new Hir.AppliedCallee(dottedName(callee),
+                at != null ? at : Region.point(call.pos()));
     }
 
     /**

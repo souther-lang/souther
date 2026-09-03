@@ -2108,6 +2108,21 @@ public interface Hir {
         public Region reportedAt() {
             return name == null ? at : name.reportedAt();
         }
+
+        /**
+         * The same applied callee in a file this copy is not read against — the name it was, written
+         * nowhere here, applied over {@code over} and complained about at {@code at}.
+         *
+         * <p>What the author applied travels with the copy; where they wrote it does not. A body
+         * spliced in from a source this compile cannot show carries no coordinate of that source, so
+         * the occurrence goes and the places are the ones the copy stands at — the same answer a
+         * field read taken off a copied value gives, and for the same reason.
+         */
+        public AppliedCallee restamped(SourcePos at, Region over) {
+            return new AppliedCallee(name == null ? null
+                    : WrittenName.synthetic(name.canonical(), at),
+                    over != null ? over : Region.point(at));
+        }
     }
 
     /**
@@ -2302,10 +2317,19 @@ public interface Hir {
             return new Apply(function, args, origin, applied, pos, region);
         }
 
-        /** The same application rewritten and stamped where the copy of it stands — what a pass
-         *  that copies a body into another one writes. What it does not name it carries, which is
-         *  where the construction came from and what the author applied. */
-        public Apply with(Expr function, List<Expr> args, SourcePos pos, Region region) {
+        /**
+         * The same application rewritten and stamped where the copy of it stands — what a pass that
+         * copies a body into another one writes. Where the construction came from it carries.
+         *
+         * <p>What the author applied it takes, because a copy is where that answer stops being one
+         * place. The name travels: a call the copy holds applies what it applied wherever the copy
+         * is read. Where they wrote it does not, and a copy read against another file carrying a
+         * coordinate of the first is a report pointing at a line its reader is not looking at.
+         * Which of the two this copy is, the pass making it knows and this does not
+         * ({@link AppliedCallee#restamped}).
+         */
+        public Apply with(AppliedCallee applied, Expr function, List<Expr> args, SourcePos pos,
+                          Region region) {
             return new Apply(function, args, origin, applied, pos, region);
         }
 
