@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.ast.Hir;
+import souther.compiler.ast.WrittenName;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 
@@ -93,12 +94,15 @@ public final class NewtypeDesugar {
                 TypeSymbol built = call.answered() != null
                         && call.answered().denotes() instanceof ValueName.OfType named
                         ? named.type() : null;
-                if (built != null && symbols.declaredNode(built) instanceof Hir.Data nt
+                // The type name is the one the author applied, which a construction is named by. A
+                // callee denoting a type is one they wrote, so this holds wherever the branch is
+                // taken; asked of the callee it would be whatever a lowering had put there.
+                if (built != null && call.applied().name() instanceof WrittenName wrote
+                        && symbols.declaredNode(built) instanceof Hir.Data nt
                         && nt.newtype() && args.size() == 1) {
                     // `T(v)` is what the author wrote and a construction is what it means, so the
                     // node that replaces the application stands over the same characters.
-                    yield Hir.NewData.fromApply(call,
-                            new Hir.Name.Denoting(call.name(), built),
+                    yield Hir.NewData.fromApply(call, new Hir.Name.Denoting(wrote, built),
                             List.of(new Hir.FieldInit("value", args.get(0), call.pos())));
                 }
                 yield call.withArgs(args);

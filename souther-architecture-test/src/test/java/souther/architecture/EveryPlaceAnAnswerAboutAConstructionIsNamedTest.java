@@ -121,8 +121,9 @@ class EveryPlaceAnAnswerAboutAConstructionIsNamedTest {
             new Settler("NewData.carriedByValue", "souther/compiler/ast/Hir$NewData",
                     "carriedByValue", "()Lsouther/compiler/ast/Hir$NewData;"),
             new Settler("Apply.read", "souther/compiler/ast/Hir$Apply", "read",
-                    "(Lsouther/compiler/ast/Ast$Apply;Lsouther/compiler/ast/Hir$Expr;"
-                            + "Ljava/util/List;)Lsouther/compiler/ast/Hir$Apply;"),
+                    "(Lsouther/compiler/ast/Ast$Apply;Lsouther/compiler/ast/Hir$AppliedCallee;"
+                            + "Lsouther/compiler/ast/Hir$Expr;Ljava/util/List;)"
+                            + "Lsouther/compiler/ast/Hir$Apply;"),
             new Settler("Apply.synthetic(Expr)", "souther/compiler/ast/Hir$Apply", "synthetic",
                     "(Lsouther/compiler/ast/Hir$Expr;Ljava/util/List;"
                             + "Lsouther/compiler/diag/SourcePos;Lsouther/compiler/diag/Region;)"
@@ -144,8 +145,8 @@ class EveryPlaceAnAnswerAboutAConstructionIsNamedTest {
      * {@code syntheticWithEveryFieldWritten} and {@code synthetic} are a pass writing one where no
      * source did. Three move an answer along the crossings a construction has:
      * {@code publishedBy}, {@code carriedByValue} and the {@code Origins} members that say what
-     * each crossing does. The rest carry or ask — {@code with}, {@code withArgs},
-     * {@code withFunction} and {@code standingIn} put back what they were handed and
+     * each crossing does. The rest carry or ask — {@code with}, {@code withArgs} and
+     * {@code replacedBy} put back what they were handed and
      * {@code atSlots} and {@code withRegion} are the rewrites that go through them, while
      * {@code mayOmitOptionalFields}, {@code wasCarried}, {@code wasCarriedByValue} and
      * {@code Origins#carried} are the questions a check puts to a node. The accessors and the
@@ -160,13 +161,12 @@ class EveryPlaceAnAnswerAboutAConstructionIsNamedTest {
             "souther/compiler/ast/Hir#withRegion(Lsouther/compiler/ast/Hir$Expr;Lsouther/compiler/diag/Region;)Lsouther/compiler/ast/Hir$Expr;",
             "souther/compiler/ast/Hir$Apply#carriedByValue()Lsouther/compiler/ast/Hir$Apply;",
             "souther/compiler/ast/Hir$Apply#origin()Lsouther/compiler/ast/ConstructionOrigin;",
-            "souther/compiler/ast/Hir$Apply#read(Lsouther/compiler/ast/Ast$Apply;Lsouther/compiler/ast/Hir$Expr;Ljava/util/List;)Lsouther/compiler/ast/Hir$Apply;",
-            "souther/compiler/ast/Hir$Apply#standingIn(Ljava/lang/String;)Lsouther/compiler/ast/Hir$Apply;",
+            "souther/compiler/ast/Hir$Apply#read(Lsouther/compiler/ast/Ast$Apply;Lsouther/compiler/ast/Hir$AppliedCallee;Lsouther/compiler/ast/Hir$Expr;Ljava/util/List;)Lsouther/compiler/ast/Hir$Apply;",
+            "souther/compiler/ast/Hir$Apply#replacedBy(Lsouther/compiler/ast/Hir$Expr;Ljava/util/List;)Lsouther/compiler/ast/Hir$Apply;",
             "souther/compiler/ast/Hir$Apply#synthetic(Lsouther/compiler/ast/Hir$Expr;Ljava/util/List;Lsouther/compiler/diag/SourcePos;Lsouther/compiler/diag/Region;)Lsouther/compiler/ast/Hir$Apply;",
             "souther/compiler/ast/Hir$Apply#wasCarriedByValue()Z",
             "souther/compiler/ast/Hir$Apply#with(Lsouther/compiler/ast/Hir$Expr;Ljava/util/List;Lsouther/compiler/diag/SourcePos;Lsouther/compiler/diag/Region;)Lsouther/compiler/ast/Hir$Apply;",
             "souther/compiler/ast/Hir$Apply#withArgs(Ljava/util/List;)Lsouther/compiler/ast/Hir$Apply;",
-            "souther/compiler/ast/Hir$Apply#withFunction(Lsouther/compiler/ast/Hir$Expr;)Lsouther/compiler/ast/Hir$Apply;",
             "souther/compiler/ast/Hir$Fields#$values()[Lsouther/compiler/ast/Hir$Fields;",
             "souther/compiler/ast/Hir$Fields#values()[Lsouther/compiler/ast/Hir$Fields;",
             "souther/compiler/ast/Hir$NewData#carriedByValue()Lsouther/compiler/ast/Hir$NewData;",
@@ -206,13 +206,12 @@ class EveryPlaceAnAnswerAboutAConstructionIsNamedTest {
     private static final List<String> SETTLING = List.of(
             "souther/compiler/ast/Hir$Apply#synthetic(Ljava/lang/String;Lsouther/compiler/types/ReachName;Ljava/util/List;Lsouther/compiler/diag/SourcePos;Lsouther/compiler/diag/Region;)Lsouther/compiler/ast/Hir$Apply; -> Apply.synthetic(Expr) x1",
             "souther/compiler/check/Elaborator#fromList(Ljava/lang/String;Lsouther/compiler/ast/Hir$Expr;Lsouther/compiler/ast/Hir$RowCollection;)Lsouther/compiler/ast/Hir$Expr; -> Apply.synthetic(String) x1",
-            "souther/compiler/check/HelperInliner#desugar(Lsouther/compiler/stdlib/Stdlib;Lsouther/compiler/ast/Hir$Apply;)Lsouther/compiler/ast/Hir$Apply; -> Apply.synthetic(Expr) x1",
             "souther/compiler/check/HelperInliner#etaExpand(Lsouther/compiler/ast/Hir$Var;ILjava/util/function/IntFunction;)Lsouther/compiler/ast/Hir$Block; -> Apply.synthetic(Expr) x1",
             "souther/compiler/check/HelperNames#carriedByValue(Lsouther/compiler/ast/Hir$Expr;)Lsouther/compiler/ast/Hir$Expr; -> Apply.carriedByValue x1",
             "souther/compiler/check/HelperNames#carriedByValue(Lsouther/compiler/ast/Hir$Expr;)Lsouther/compiler/ast/Hir$Expr; -> NewData.carriedByValue x1",
             "souther/compiler/check/HelperNames#publishedBy(Lsouther/compiler/ast/Hir$Expr;Ljava/lang/String;)Lsouther/compiler/ast/Hir$Expr; -> NewData.publishedBy x1",
             "souther/compiler/check/NewtypeDesugar#go(Lsouther/compiler/ast/Hir$Expr;Lsouther/compiler/check/Symbols;)Lsouther/compiler/ast/Hir$Expr; -> NewData.fromApply x1",
-            "souther/compiler/check/Resolve#applied(Lsouther/compiler/ast/Ast$Apply;Lsouther/compiler/check/Resolve$InForce;)Lsouther/compiler/ast/Hir$Expr; -> Apply.read x1",
+            "souther/compiler/check/Resolve#applied(Lsouther/compiler/ast/Ast$Apply;Lsouther/compiler/ast/Ast$Var;Lsouther/compiler/check/Resolve$InForce;)Lsouther/compiler/ast/Hir$Expr; -> Apply.read x1",
             "souther/compiler/check/Resolve#expr(Lsouther/compiler/ast/Ast$Expr;Lsouther/compiler/check/Resolve$InForce;)Lsouther/compiler/ast/Hir$Expr; -> Apply.read x1",
             "souther/compiler/check/Resolve#expr(Lsouther/compiler/ast/Ast$Expr;Lsouther/compiler/check/Resolve$InForce;)Lsouther/compiler/ast/Hir$Expr; -> NewData.read x1",
             "souther/compiler/check/Terms#asWrittenValue(Lsouther/compiler/core/Core;)Lsouther/compiler/ast/Hir$Expr; -> Apply.synthetic(String) x2",

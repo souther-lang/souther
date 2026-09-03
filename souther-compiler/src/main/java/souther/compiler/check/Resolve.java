@@ -13,7 +13,6 @@ import souther.compiler.diag.msg.ExampleMessage;
 import souther.compiler.diag.msg.NameMessage;
 import souther.compiler.diag.msg.BehaviorMessage;
 import souther.compiler.diag.msg.ModuleMessage;
-import souther.compiler.diag.Region;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
@@ -1081,9 +1080,10 @@ public final class Resolve {
             // Applying a name is answered as a name: which of a binding, a helper, a library
             // function or a type it is decides what the application means. Applying anything else
             // is answered as the expression it is, and what may be applied is the check's to say.
-            case Ast.Apply call when call.appliesAName() -> applied(call, bound);
-            case Ast.Apply call -> Hir.Apply.read(call, callee(call.function(), bound),
-                    exprs(call.args(), bound));
+            case Ast.Apply call when call.function() instanceof Ast.Var callee ->
+                    applied(call, callee, bound);
+            case Ast.Apply call -> Hir.Apply.read(call, appliedCallee(call.function()),
+                    callee(call.function(), bound), exprs(call.args(), bound));
             // `Map.empty`, `String.isEmpty`, `up.Amount` — a namespace and a member of it, which
             // the parser read as a field taken off a name because it reads no case at all. Folded
             // here and nowhere earlier: `Map` may be a parameter, and a binding in force wins over
@@ -1214,24 +1214,42 @@ public final class Resolve {
 
     /** An application of a name, with what the name denotes and how this module reaches it answered
      * here — the same pair, from the same place, as a name standing on its own. */
-    private Hir.Expr applied(Ast.Apply call, InForce bound) {
-        ValueName denotes = calledName(call, bound);
+    private Hir.Expr applied(Ast.Apply call, Ast.Var callee, InForce bound) {
         // Answered rather than rebuilt: what the callee means is settled here and where it is
         // written is not this pass's to decide. Building one from the name would take its extent
         // from the characters that spell it, which is short of what a parenthesized callee covers.
-        WrittenName written = call.function() instanceof Ast.Var applied ? applied.written()
-                : call.name();
-        Region over = call.function() instanceof Ast.Var applied ? applied.region()
-                : written.region();
+        WrittenName written = callee.written();
+        ValueName denotes = calledName(written, bound);
         Hir.Var name;
         if (denotes == null) {
-            name = new Hir.Var.Unanswered(written, over);
+            name = new Hir.Var.Unanswered(written, callee.region());
         } else {
-            answered(call.name(), denotes);
+            answered(written, denotes);
             name = new Hir.Var.Denoting(written,
-                    ReachName.of(denotes, call.written(), reachable.module()), over);
+                    ReachName.of(denotes, written.canonical(), reachable.module()),
+                    callee.region());
         }
-        return Hir.Apply.read(call, name, exprs(call.args(), bound));
+        return Hir.Apply.read(call, appliedCallee(call.function()), name,
+                exprs(call.args(), bound));
+    }
+
+    /**
+     * What the author applied, as a report says it — the name they wrote in the callee position and
+     * the characters they wrote it over.
+     *
+     * <p>Read here and nowhere later. A lowering replaces what is applied, and every one of them
+     * leaves the characters where they are: a report that asked the callee afterwards would quote
+     * the binding, the operation or the qualified spelling a pass put there. Which of the shapes
+     * spells a name is {@link #dottedName}'s answer, which is the same one a field read written on
+     * its own gets.
+     *
+     * <p>The name is taken from the surface and not from what the callee resolved to. A member of a
+     * namespace is folded into a name and a field of a value is not, so the same source shape would
+     * be read two ways depending on what it turned out to reach — and what the author wrote is not
+     * a thing that turns on that.
+     */
+    private static Hir.AppliedCallee appliedCallee(Ast.Expr callee) {
+        return new Hir.AppliedCallee(dottedName(callee), callee.reportedAt());
     }
 
     /**
@@ -1514,11 +1532,11 @@ public final class Resolve {
      * what a miss means does not. A name that resolved to nothing resolved to nothing, and the
      * position it was written in is a fact about the source rather than about the name.
      */
-    private ValueName calledName(Ast.Apply call, InForce bound) {
-        return switch (lookup(call.name(), true, bound)) {
+    private ValueName calledName(WrittenName applied, InForce bound) {
+        return switch (lookup(applied, true, bound)) {
             case Reach.Reaches(ValueName named) -> named;
             case Reach.StandsForNothing _ -> unanswered();
-            case Reach.NotInScope _ -> nothing(unknownIdentifier(call.name(), bound));
+            case Reach.NotInScope _ -> nothing(unknownIdentifier(applied, bound));
         };
     }
 

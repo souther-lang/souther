@@ -477,7 +477,7 @@ public final class HelperTyping {
         String reached = path.get(path.size() - 1).rendered();
         String rendered = "invariant -> " + PartialReachability.render(path);
         Hir.Apply at = firstCallTo(e, path.get(0));
-        throw CompileException.of(Diagnostic.at(at == null ? null : at.name().reportedAt())
+        throw CompileException.of(Diagnostic.at(at == null ? null : at.applied().reportedAt())
                 .say(new InvariantMessage.TheInvariantReachesAPartialHelper(data, reached, rendered))
                 .build());
     }
@@ -492,7 +492,7 @@ public final class HelperTyping {
         String reached = path.get(path.size() - 1).rendered();
         String rendered = "ensures -> " + PartialReachability.render(path);
         Hir.Apply at = firstCallTo(e, path.get(0));
-        throw CompileException.of(Diagnostic.at(at == null ? null : at.name().reportedAt())
+        throw CompileException.of(Diagnostic.at(at == null ? null : at.applied().reportedAt())
                 .say(new BehaviorMessage.TheEnsuresReachesAPartialHelper(
                         behavior, reached, rendered)).build());
     }

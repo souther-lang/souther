@@ -177,10 +177,13 @@ public final class HelperNames {
         return switch (rebuilt) {
             // The name is this pass's and the place is the callee's: only the spelling changes, so
             // what is underlined for it is the stretch the name it replaced was read over — not the
-            // application's, which takes in arguments this pass did not touch.
+            // application's, which takes in arguments this pass did not touch. What the author
+            // applied is neither, and the rewrite carries it: a reader reaching this helper writes
+            // it qualified because that is how a reader reaches it, and the author of the call
+            // wrote it bare.
             case Hir.Apply call when call.answered() != null
                     && foreign(call.answered().denotes(), which) ->
-                    call.withFunction(
+                    call.replacedBy(
                             Hir.Var.respelled(qualifiedName(call.answered().denotes()),
                                     ofModule(call.answered().denotes()), call.function().pos(),
                                     call.function().region()));

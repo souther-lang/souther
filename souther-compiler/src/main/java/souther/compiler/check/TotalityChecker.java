@@ -324,8 +324,12 @@ final class TotalityChecker {
                 walk(li.body(), group, paramNames, ltInner, eqInner, calls);
             }
             case Hir.Apply call -> {
+                // Named by what it reaches, which is what the group holds and what the definitions
+                // are keyed by. The spelling is what a report quotes: a helper of another module is
+                // written qualified where a reader reaches it and bare where its author wrote it,
+                // and the same call answers both.
                 if (call.answered() != null && group.contains(call.answered().reaches())) {
-                    calls.add(new RecCall(call.written(), call, lt, eq));
+                    calls.add(new RecCall(call.answered().reaches(), call, lt, eq));
                 }
                 Combinators.Written handed = Combinators.handedTo(call);
                 for (Hir.Expr arg : call.args()) {
