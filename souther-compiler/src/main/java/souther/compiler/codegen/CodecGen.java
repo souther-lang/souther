@@ -1353,7 +1353,7 @@ final class CodecGen {
                 clause.constraints().forEach(c -> emitConstraint(code, c));
             }
             if (clause.refined() && phase != ConstraintPhase.MAPPED) {
-                code.invokedynamic(invariantPredicateCallSite(cdName, base, clause.index()));
+                code.invokedynamic(invariantPredicateCallSite(base, clause.index()));
                 // The clause is captured off the stack, so a clause with no name captures null —
                 // a constant-pool entry could not have been one.
                 if (clause.name().isPresent()) {
@@ -1447,7 +1447,7 @@ final class CodecGen {
     /** {@code invokedynamic} producing a {@code Predicate} over the type's {@code $Ctfe.check$i} — the
      * clause declared {@code i}th as a plain boolean, emitted beside the whole-invariant check
      * compile-time construction checking uses (ADR-0032). */
-    private DynamicCallSiteDesc invariantPredicateCallSite(ClassDesc cdName, Type base, int clause) {
+    private DynamicCallSiteDesc invariantPredicateCallSite(Type base, int clause) {
         ClassDesc cdCtfe = cd(new GeneratedClass.Ctfe(decodedValue));
         MethodTypeDesc check = MethodTypeDesc.of(ConstantDescs.CD_boolean, JvmTypes.jvmType(base, ctx));
         // A Predicate's argument is a reference, so the instantiated type takes the decoded value's

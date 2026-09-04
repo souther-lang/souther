@@ -1381,9 +1381,8 @@ public final class InvariantChecker {
      */
     private void settle(Core part, RuleRef.Invariant rule, ClauseStates states,
                         InvariantBound.Read placed,
-                        Denotations at,
                         Map<FactSubject, Coordinate> byName, Map<RuleRef, Required> raised,
-                        ReadingEvidence took, Map<RuleKey, Type> typeAt,
+                        ReadingEvidence took,
                         PartsRead parts,
                         Map<RuleRef, Map<Core, Required>> raisedByPart) {
         raises(raised, rule, states);
@@ -1511,7 +1510,7 @@ public final class InvariantChecker {
             // the classification to be handed.
             settle(clause, from, states(clause, at, byName, null, runs),
                     new InvariantBound.Read.NoEnd(),
-                    at, byName, raised, took, typeAt, parts, raisedByPart);
+                    byName, raised, took, parts, raisedByPart);
             return;
         }
         // Where this clause is recognised as a comparison, and the one place it is. What each
@@ -1534,7 +1533,7 @@ public final class InvariantChecker {
         if (asWritten == null) {
             settle(bin, from, states(bin, at, byName, read, runs),
                     new InvariantBound.Read.NoEnd(),
-                    at, byName, raised, took, typeAt, parts, raisedByPart);
+                    byName, raised, took, parts, raisedByPart);
             return;
         }
         // Which number this conjunct is about, written down before anything is asked about what it
@@ -1560,7 +1559,7 @@ public final class InvariantChecker {
         if (asWritten instanceof ComparisonClaim.Singled named && !named.holdsAtTheValue()) {
             settle(bin, from, states(bin, at, byName, read, runs),
                     new InvariantBound.Read.NoEnd(),
-                    at, byName, raised, took, typeAt, parts, raisedByPart);
+                    byName, raised, took, parts, raisedByPart);
             // And handed on, which is not the same as being reported. A rule that rules one value
             // out places no end and is no failure of this reading, so there is nothing here for an
             // author to lift and there is a conjunct for the reading that draws lines to make what
@@ -1623,7 +1622,7 @@ public final class InvariantChecker {
                                             List.of(part))
                                     : had.and(part)));
         }
-        settle(bin, from, shape, end, at, byName, raised, took, typeAt, parts, raisedByPart);
+        settle(bin, from, shape, end, byName, raised, took, parts, raisedByPart);
         if (end instanceof InvariantBound.Read.NoEnd) {
             // A rule saying where the values stop that no end came out of, said as that. Here,
             // where the reading gave up, because this is the reading a report's line would have

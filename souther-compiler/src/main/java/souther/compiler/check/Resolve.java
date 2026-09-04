@@ -1090,7 +1090,7 @@ public final class Resolve {
             // here and nowhere earlier: `Map` may be a parameter, and a binding in force wins over
             // everything else — which is a fact the parser and the AST builder do not have.
             case Ast.FieldAccess fa -> {
-                Hir.Var member = qualifiedName(fa, false, bound);
+                Hir.Var member = qualifiedName(fa, bound);
                 yield member != null ? member
                         : new Hir.FieldAccess(expr(fa.target(), bound), fa.name(), fa.pos(),
                                 fa.region());
@@ -1422,7 +1422,7 @@ public final class Resolve {
      */
     private Hir.Expr callee(Ast.Expr function, InForce bound) {
         if (function instanceof Ast.FieldAccess fa) {
-            Hir.Var name = qualifiedName(fa, true, bound);
+            Hir.Var name = qualifiedName(fa, bound);
             if (name != null) {
                 return name;
             }
@@ -1447,7 +1447,7 @@ public final class Resolve {
      *
      * <p>Positioned at the root, so what a reader asks about covers every token of the name.
      */
-    private Hir.Var qualifiedName(Ast.FieldAccess fa, boolean applied, InForce bound) {
+    private Hir.Var qualifiedName(Ast.FieldAccess fa, InForce bound) {
         Ast.Var root = rootName(fa);
         if (root == null || bound.binderOf(root.name()) != null) {
             return null;

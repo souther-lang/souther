@@ -757,7 +757,7 @@ final class BodyGen {
                 }
                 case Core.Construct nd -> construct(nd);
                 case Core.Match m -> match(m, expected);
-                case Core.Call c -> call(c, expected);
+                case Core.Call c -> call(c);
                 case Core.Apply a -> applyFn(a, (Type.FnOf) a.fn().type());
                 case Core.LetIn li -> {
                     // a `let` outside tail position: bind, then value the body
@@ -1202,7 +1202,7 @@ final class BodyGen {
         static final Set<Kernel> WRITTEN_OUT =
                 Set.of(Kernel.INT_DIVIDE, Kernel.INT_TRUNCATING_REMAINDER);
 
-        private void call(Core.Call call, Type expected) {
+        private void call(Core.Call call) {
             // Which kernel a call reaches is on the call, so what is emitted for one is asked of
             // the operation. Matched against the rendered reach name instead, these arms would turn
             // on the alias the library publishes the operation under.
