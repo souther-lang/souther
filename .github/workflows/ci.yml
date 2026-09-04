@@ -5,17 +5,23 @@ on:
     branches: [ main, develop ]
   pull_request:
   schedule:
-    # Nightly, so a population left behind by a day's merges is found by morning.
+    # Nightly over what is released. A scheduled run is made against the default branch and no
+    # other, so this watches `main` — what a day's merges left behind on `develop` is found by
+    # the run that merge itself starts, below, and not here.
     - cron: '0 18 * * *'
 
 permissions:
   contents: read
 
 jobs:
-  # What a pull request waits on: everything except the tests whose subjects are the models,
-  # sources and specification this repository carries. Those are the job below.
+  # What a pull request waits on: everything except the tests whose subjects are the models this
+  # repository carries. Those are the job below.
+  #
+  # A pull request and nothing else. The job below runs everything this one runs and the population
+  # besides, so on a push the two together would build the reactor twice over and answer the same
+  # question the second time.
   build:
-    if: github.event_name == 'pull_request' || github.event_name == 'push'
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -26,7 +32,9 @@ jobs:
           java-version: '25'
           cache: maven
       - name: Build and test
-        run: mvn -B --no-transfer-progress verify
+        # Two, because that is what the runner has. The number in the pom is a ceiling for a
+        # machine somebody is also working on, and a runner is nobody's.
+        run: mvn -B --no-transfer-progress verify -DforkCount=2
 
   # And the population, asked where waiting for it costs nobody an edit: on the merge into
   # develop or main, and once a night. Emptying the property is what asks them; everything the
@@ -43,4 +51,4 @@ jobs:
           java-version: '25'
           cache: maven
       - name: Build and test, the population included
-        run: mvn -B --no-transfer-progress verify -Dtest.excluded.groups=
+        run: mvn -B --no-transfer-progress verify -DforkCount=2 -Dtest.excluded.groups=
