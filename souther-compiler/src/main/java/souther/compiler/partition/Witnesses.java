@@ -337,29 +337,38 @@ final class Witnesses {
     }
 
     /**
-     * A collection of {@code carrier} holding {@code chosen} and counting at least {@code least}, or
-     * null where none was built.
+     * A collection of {@code carrier} holding {@code chosen} and counting {@code needed}, or null
+     * where none was built.
      *
      * <p>For a row being built around one element. What the rest are is not what was asked for, and
      * what they may be is: a list may hold the same value again and a set may not, and a caller
      * padding one by hand would have to know which — the thing this reader is for.
+     *
+     * <p><b>How many, and not a floor to read one off.</b> What the rules leave the position and
+     * what a collection holding the chosen value comes to are two numbers, and the second is made
+     * from the first in one place ({@link ConstructionPlan#neededToHold}). Read again here, the
+     * conversion would be written twice and a caller handing over the floor would build the same
+     * collection as one handing over the count.
      */
     static FixtureTemplate holdingAlso(souther.compiler.check.Shape.Sequence carrier,
-                                       FixtureTemplate chosen, int least,
+                                       FixtureTemplate chosen, int needed,
                                        RuleReadingSource ruleSource, ReadingPolicy policy) {
-        int want = Math.max(1, least);
+        if (needed < 1) {
+            throw new IllegalArgumentException(
+                    "a collection built around a value holds it: " + needed);
+        }
         if (carrier.kind() == souther.compiler.check.Shape.Sequence.Kind.LIST) {
             List<FixtureTemplate> elements = new ArrayList<>();
-            while (elements.size() < want) {
+            while (elements.size() < needed) {
                 elements.add(chosen);
             }
             return FixtureTemplate.collection(elements);
         }
         List<FixtureTemplate> elements =
-                distinctFrom(chosen, carrier.element(), want, policy, ruleSource, Set.of());
+                distinctFrom(chosen, carrier.element(), needed, policy, ruleSource, Set.of());
         // Fewer than asked for is a type with too few values, which is a set the rules want and
         // nothing can build — said as nothing built rather than as a set of the wrong size.
-        return elements.size() < want ? null : FixtureTemplate.collection(elements);
+        return elements.size() < needed ? null : FixtureTemplate.collection(elements);
     }
 
     /**

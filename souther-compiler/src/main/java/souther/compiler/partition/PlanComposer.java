@@ -78,7 +78,11 @@ final class PlanComposer {
     }
 
     /**
-     * The list of one this plan builds around what stands at its element.
+     * The collection this plan builds around what stands at its element.
+     *
+     * <p>Holding as many as the plan says and not one: what a class at an element asks for is a
+     * collection holding a value in it, and where the rules ask the collection for more than that
+     * a collection of one is not a row.
      *
      * <p>Under the names the position is written with, as a record is: a row at a
      * {@code data Basket = List<Item>} carries {@code Basket([...])}, and a list composed without

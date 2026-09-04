@@ -169,8 +169,9 @@ final class ConstructionPlan {
      *
      * <p>One element and not however many. What a class at an element asks for is a list holding a
      * value in it; what the other elements are is a separate question, and answering it here would
-     * decide it for every rule at once. A list of one holds an element in the class and nothing
-     * else, which is the least a row can be and still meet what was asked.
+     * decide it for every rule at once. So what is built here holds the element in the class and
+     * whatever else the rules ask the list for, which is the least a row can be and still meet both
+     * ({@link #neededToHold}).
      *
      * @param worn  {@link Node#worn}: every name the position wears, since what is composed here
      *              is bare
@@ -331,6 +332,24 @@ final class ConstructionPlan {
     }
 
     /**
+     * How many a collection has to hold for a value to be placed in it, given what the rules leave
+     * it.
+     *
+     * <p><b>The one place the rules' floor becomes a count to build.</b> They are two numbers: the
+     * floor is how many the whole collection has to hold and says nothing about anything being
+     * placed, and this is what the composing has to make. They agree wherever the rules ask for
+     * more than none, which is why a second copy of this reads plausibly and why the two names
+     * collapsed back into one every time there was a second copy.
+     *
+     * <p>So everything that needs the count takes it from here — what the plan records at a
+     * collection, what a refusal compares the cap against, and what the composing builds — and a
+     * caller holding one of these numbers can say which it is by where it came from.
+     */
+    static int neededToHold(DeclaredBounds.CountRange holds) {
+        return Math.max(1, holds.least());
+    }
+
+    /**
      * What the model settles, where what it settles is that there is nothing to build.
      *
      * <p>Each of these is a fact about the declarations, established before anything was searched
@@ -366,7 +385,7 @@ final class ConstructionPlan {
         record NoRoom(TermPath at, DeclaredBounds.CountRange holds) implements ModelRefusal {
 
             public NoRoom {
-                if (holds.most() >= Math.max(1, holds.least())) {
+                if (holds.most() >= neededToHold(holds)) {
                     throw new IllegalArgumentException("a collection with room for what is placed"
                             + " in it refuses nothing: " + at + " holds " + holds);
                 }
@@ -380,7 +399,7 @@ final class ConstructionPlan {
              * for none, one is what a collection holding it comes to.
              */
             int needed() {
-                return Math.max(1, holds.least());
+                return neededToHold(holds);
             }
         }
     }
@@ -575,7 +594,7 @@ final class ConstructionPlan {
             // of them, so what a collection holding it comes to is the floor, or one where the
             // rules ask for none.
             DeclaredBounds.CountRange holds = demanded ? howMany.at(here, building) : null;
-            int needed = demanded ? Math.max(1, holds.least()) : 0;
+            int needed = demanded ? neededToHold(holds) : 0;
             // Asked before the figure and before the descent, because this is the model's answer
             // and those are this compiler's. A list the rules leave no room in holds nothing
             // however far this had read, so a figure named beside it sends an author to raise one
