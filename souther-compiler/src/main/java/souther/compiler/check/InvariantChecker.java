@@ -200,17 +200,18 @@ public final class InvariantChecker {
      * the representation the rules are written at ({@link InliningPolicy#DISCHARGE}) rather than the
      * one the backend emits from.
      *
-     * <p>{@code invariants} holds the clauses of the module being checked. A type another module
-     * declares is not among them and its clauses are read off its declaration, which for a module
-     * reached through its published classes is the declaration that module published, read back by
-     * this front end (spec §published-modules). That declaration carries the settled clauses, so an
-     * imported rule is read in the representation the backend emits from and an operation these
-     * rules are written about may already have been expanded out of it — which is where an imported
-     * clause falls outside the statically dischargeable fragment (spec
-     * §invariant-discharge-representation). Where the declaration was written decides which
-     * representation there is of it, and nothing else does.
+     * <p>{@code invariants} is where a declaration's clauses are answered from, asked by its
+     * address. Where the declaration was written decides nothing about what is read of it: one this
+     * module wrote, one a module compiled beside it wrote, and one published as classes and read
+     * back by this front end (spec §published-modules) all come back as what their own module
+     * expanded, and a construction of any of them comes to the same verdict (spec
+     * §invariant-discharge-representation).
+     *
+     * <p>What it may answer instead is that a declaration's clauses could not be worked out at all.
+     * That is a rule this check did not reach and is recorded as one; it is never read as a
+     * declaration with no rules, which is the same empty list and the opposite fact.
      */
-    public record Source(Hir.Expr body, AnalysisInvariants invariants,
+    public record Source(Hir.Expr body, ExpandedClauseLookup invariants,
                          Map<ValueName.Behavior, StatedContract> contracts) {
 
         public Source {
@@ -256,13 +257,13 @@ public final class InvariantChecker {
     private final List<Diagnostic> warnings = new ArrayList<>();
 
     private InvariantChecker(Symbols symbols,
-                             AnalysisInvariants dischargeInvariants,
+                             ExpandedClauseLookup dischargeInvariants,
                              ReadingPolicy policy) {
         this(symbols, dischargeInvariants, Map.of(), policy);
     }
 
     private InvariantChecker(Symbols symbols,
-                             AnalysisInvariants dischargeInvariants,
+                             ExpandedClauseLookup dischargeInvariants,
                              Map<ValueName.Behavior, StatedContract> contracts,
                              ReadingPolicy policy) {
         this.engine = new PathEngine(symbols, dischargeInvariants, contracts, policy);
@@ -664,8 +665,17 @@ public final class InvariantChecker {
             // missing from this reading is the position, since a clause of this declaration can
             // name any position of it.
             boolean skipped = false;
-            if (!opened && !c.clauses.of(named, data).isEmpty()) {
+            ExpandedRules rules = c.clauses.of(named, data);
+            if (!opened && !rules.reached().isEmpty()) {
                 gathering.missed(RuleKey.THE_VALUE, new RulesMissed.PositionNotOpened());
+            }
+            // A rule that never arrived, as against one this reading declined or could not read. It
+            // is recorded whether or not the position was opened: what it says is that the clauses
+            // of some declaration reached here were never worked out, which is true of this position
+            // however far the reading went into it.
+            if (!rules.everyRuleReached()) {
+                read = false;
+                gathering.missed(RuleKey.THE_VALUE, new RulesMissed.ClausesNotExpanded());
             }
             for (TypeOps.Declared declared :
                     opened ? c.clauses.declared(named, data) : List.<TypeOps.Declared>of()) {
@@ -2511,7 +2521,7 @@ public final class InvariantChecker {
      * is not something the body is and is not caught ({@link #gaveUp}). A {@code null} body is one
      * the analysis representation could not be built or typed for, and is not analyzed at all.
      */
-    static Findings analyze(Core body, AnalysisInvariants invariants,
+    static Findings analyze(Core body, ExpandedClauseLookup invariants,
                             Map<ValueName.Behavior, StatedContract> contracts,
                             Scope params, Symbols symbols, ReadingPolicy policy) {
         InvariantChecker c = new InvariantChecker(symbols, invariants, contracts, policy);

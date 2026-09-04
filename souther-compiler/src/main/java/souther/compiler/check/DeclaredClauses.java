@@ -105,8 +105,8 @@ public final class DeclaredClauses {
         // The clauses with the declaration each was written on, which is what names the line
         // (ADR-0090). Read flat, every clause a spread brought in was named after the type that
         // spread it, and two clauses of one declaration were one rule.
-        for (TypeOps.Declared declared : TypeOps.declaredForAnalysis(
-                named, data, source.symbols(), source.invariants())) {
+        for (TypeOps.Declared declared : TypeOps.declaredExpanded(
+                named, data, source.symbols(), source.invariants()).reached()) {
             RuleRef.Invariant rule = new RuleRef.Invariant(Clause.Ref.of(declared));
             int conjunct = -1;
             for (Hir.Expr each : ClauseHelpers.conjunctsOf(declared.clause().expr())) {
