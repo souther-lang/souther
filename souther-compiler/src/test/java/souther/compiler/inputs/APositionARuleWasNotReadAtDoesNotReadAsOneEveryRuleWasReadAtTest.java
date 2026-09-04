@@ -7,15 +7,13 @@ import souther.compiler.check.Prepared;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.check.Sig;
-import souther.compiler.conformance.ConformanceCorpus;
+import souther.compiler.conformance.RepositoryModels;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
 import souther.compiler.query.Shapes;
 
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -120,28 +118,10 @@ class APositionARuleWasNotReadAtDoesNotReadAsOneEveryRuleWasReadAtTest {
                 () -> "and nothing is short of the position's rules: " + at.reading());
     }
 
-    /** Every corpus this repository carries, as the files each is compiled from. */
-    private static final List<List<String>> CORPORA = List.of(
-            List.of("souther-bench/src/main/resources/souther/bench/corpus/crm/crm.sou",
-                    "souther-bench/src/main/resources/souther/bench/corpus/crm/pipeline.sou",
-                    "souther-bench/src/main/resources/souther/bench/corpus/crm/quoting.sou"),
-            List.of("souther-bench/src/main/resources/souther/bench/corpus/issuetracker/issues.sou"),
-            List.of("souther-bench/src/main/resources/souther/bench/corpus/runtime/runtime.sou"));
-
     /** The reading of every behavior of every model this repository carries. */
-    private static List<InputDomain> everyReading() throws Exception {
+    private static List<InputDomain> everyReading() {
         List<InputDomain> out = new ArrayList<>();
-        for (ConformanceCorpus corpus : ConformanceCorpus.all()) {
-            readings(corpus.analyse().compilation(), out);
-        }
-        Path root = souther.test.RepositoryLayout.ofWorkingDirectory().root();
-        for (List<String> corpus : CORPORA) {
-            List<String> sources = new ArrayList<>();
-            for (String each : corpus) {
-                sources.add(Files.readString(root.resolve(each)));
-            }
-            Compilation compilation = Compilation.ofSources(sources, ModulePath.EMPTY);
-            compilation.answerEverything();
+        for (Compilation compilation : RepositoryModels.all()) {
             readings(compilation, out);
         }
         return out;

@@ -2,15 +2,13 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.conformance.ConformanceCorpus;
+import souther.compiler.conformance.RepositoryModels;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.RuleWithoutALine;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.PartitionEvidence;
 
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -118,11 +116,8 @@ class ARuleWhoseReadingStoppedLeavesAQuestionTest {
     }
 
     /** The models this repository carries, and the three readers they do not exercise. */
-    private static List<Compilation> every() throws Exception {
-        List<Compilation> out = new ArrayList<>();
-        for (ConformanceCorpus corpus : ConformanceCorpus.all()) {
-            out.add(corpus.analyse().compilation());
-        }
+    private static List<Compilation> every() {
+        List<Compilation> out = new ArrayList<>(RepositoryModels.all());
         for (String each : List.of(COMPETING_COORDINATES, A_COMPARISON_NOBODY_READS,
                 AN_ENSURES_NOBODY_READS)) {
             Compilation one = Compilation.ofSource(each, "Main");
@@ -130,24 +125,6 @@ class ARuleWhoseReadingStoppedLeavesAQuestionTest {
             one.answerEverything();
             out.add(one);
         }
-        Path root = souther.test.RepositoryLayout.ofWorkingDirectory().root();
-        for (List<String> corpus : CORPORA) {
-            List<String> sources = new ArrayList<>();
-            for (String each : corpus) {
-                sources.add(Files.readString(root.resolve(each)));
-            }
-            Compilation compilation =
-                    Compilation.ofSources(sources, souther.compiler.meta.ModulePath.EMPTY);
-            compilation.answerEverything();
-            out.add(compilation);
-        }
         return out;
     }
-
-    private static final List<List<String>> CORPORA = List.of(
-            List.of("souther-bench/src/main/resources/souther/bench/corpus/crm/crm.sou",
-                    "souther-bench/src/main/resources/souther/bench/corpus/crm/pipeline.sou",
-                    "souther-bench/src/main/resources/souther/bench/corpus/crm/quoting.sou"),
-            List.of("souther-bench/src/main/resources/souther/bench/corpus/issuetracker/issues.sou"),
-            List.of("souther-bench/src/main/resources/souther/bench/corpus/runtime/runtime.sou"));
 }
