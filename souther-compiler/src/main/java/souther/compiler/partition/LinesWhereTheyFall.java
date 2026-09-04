@@ -80,7 +80,6 @@ public final class LinesWhereTheyFall {
     public static Filed of(InputReading read, List<LineEvidence> evidence,
                            List<LineDrawn> between) {
         InputDomain inputs = read.domain();
-        Quantities quantities = read.quantities();
         Symbols symbols = read.symbols();
         List<LineEvidence> out = new ArrayList<>();
         List<LineDrawn> outBetween = new ArrayList<>();

@@ -90,7 +90,6 @@ class AnObservationSaysTheSameThingWhereverThePathMeetsItTest {
                 .filter(b -> b.name().equals("book")).findFirst().orElseThrow();
         Core body = checked.behaviorBodies().get("book");
         CoverageSites.Plan plan = checked.plan();
-        List<String> parameters = spec.params().stream().map(Hir.Param::name).toList();
         InputDomain read = InputDomain.of(spec, sigs.get("book"), rules,
                 souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         Partitions.Partitioning partitioning = Partitions.withThresholds(

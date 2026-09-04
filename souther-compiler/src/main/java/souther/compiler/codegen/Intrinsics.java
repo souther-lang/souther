@@ -413,7 +413,6 @@ final class Intrinsics {
 
     private static Map<Kernel, Emit> buildTable() {
         ClassDesc bool = ConstantDescs.CD_boolean;
-        ClassDesc lng = ConstantDescs.CD_long;
         Map<Kernel, Emit> t = new java.util.EnumMap<>(Kernel.class);
 
         // String — JDK-native instance methods (explicit descriptor); receiver is the last Souther arg.

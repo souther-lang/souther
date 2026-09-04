@@ -426,10 +426,6 @@ public final class TypeChecker {
                 }
                 boolean imported = symbols.scope().inScope(e);
 
-                String why = imported
-                        ? " is imported into this module, not defined here; `exposing` lists a"
-                          + " module's own definitions and does not re-export imported names"
-                        : ", which is not a data or behavior of this module";
                 throw CompileException.of(Diagnostic.at(module.pos())
                         .say(imported
                                 ? new ModuleMessage.ExposingNamesAnImportedName(e)

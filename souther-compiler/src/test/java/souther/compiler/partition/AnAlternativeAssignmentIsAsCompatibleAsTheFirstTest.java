@@ -90,7 +90,6 @@ class AnAlternativeAssignmentIsAsCompatibleAsTheFirstTest {
         assertNotNull(checked, "the model under test compiles");
         Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().stream()
                 .filter(b -> b.name().equals("fee")).findFirst().orElseThrow();
-        Sig sig = sigs.get("fee");
         InputDomain inputs = compilation.db().ask(new Adequacy.Inputs(module)).value().get("fee");
         Core body = checked.behaviorBodies().get("fee");
         assertNotNull(body);

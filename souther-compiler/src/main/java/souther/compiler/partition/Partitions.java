@@ -1158,7 +1158,6 @@ public final class Partitions {
                                RulesWithNoLine.Gathered rulesWithoutALine) {
         rulesWithoutALine.addAll(position.rulesWithoutALine());
         NumericTerm.FromOnePosition term = position.term();
-        AxisId id = AxisId.of(behavior, term);
         switch (LocalInspection.of(position, ruleSource, policy)) {
             case LocalPartition.Divided divided -> {
                 if (position.structure() instanceof StructuralInspection.Decomposed) {

@@ -384,7 +384,6 @@ class ARowNothingRanFillsNoCombinationTest {
             assertNotNull(checked);
             Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().stream()
                     .filter(b -> b.name().equals(behavior)).findFirst().orElseThrow();
-            Sig sig = sigs.get(behavior);
             InputDomain inputs = compilation.db()
                     .ask(new souther.compiler.query.Adequacy.Inputs(module)).value()
                     .get(behavior);

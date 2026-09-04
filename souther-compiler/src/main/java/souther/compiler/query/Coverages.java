@@ -10,7 +10,6 @@ import souther.compiler.partition.LinesWhereTheyFall;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.PathReachability;
 import souther.compiler.check.RuleReadingSource;
-import souther.compiler.check.Symbols;
 import souther.compiler.numeric.Place;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.CoverageSites;
@@ -88,7 +87,6 @@ final class Coverages {
                                       CoverageSites.Plan plan,
                                       PathReachability.Answers arrives,
                                       souther.compiler.check.StatedContract stated) {
-        Symbols symbols = read.symbols();
         RuleReadingSource ruleSource = read.rules();
         ReadingPolicy policy = read.domain().policy();
         souther.compiler.inputs.Quantities quantities = read.quantities();
@@ -1210,7 +1208,6 @@ final class Coverages {
     private static Measurement<ItemAssessment.Coverage> verdictOf(
             StandingAtAPoint.Met met, boolean guard, souther.compiler.partition.Border border,
             souther.compiler.query.Adequacy.RowReading observed) {
-        List<RowOutcome> rows = observed.rowsSeen();
         if (met instanceof StandingAtAPoint.Met.Reached) {
             // Found is found: a row settles this whatever else went unread, so nothing weakens it.
             return new Measurement.Complete<>(new ItemAssessment.Coverage.Hit());
