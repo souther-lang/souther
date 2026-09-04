@@ -1622,7 +1622,7 @@ public final class Partitions {
      *
      * <p><b>Both ends of one reading, and there is no reading of the cap alone.</b> A caller
      * deciding whether there is room for a value being placed needs the floor to know how many the
-     * rules ask for besides it and the cap to know whether the one fits at all. Taken as two
+     * whole collection has to hold and the cap to know whether that many fit. Taken as two
      * readings, the two can be of different states of the row — which is how a floor settled where
      * the caller had fixed a field came to be compared with a cap read where it had not. So the
      * cap has no projection of its own here: a caller wanting it takes both and is holding one

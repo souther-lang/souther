@@ -3670,13 +3670,12 @@ public final class Generator {
                                     "`" + against.at() + "` would have to be both "
                                             + against.one().spelled() + " and "
                                             + against.other().spelled());
-                    case ConstructionPlan.ModelRefusal.NoRoom(TermPath at, int needed,
-                                                              DeclaredBounds.CountRange holds) ->
+                    case ConstructionPlan.ModelRefusal.NoRoom noRoom ->
                             new Outcome.Unresolved(
                                     UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
-                                    "`" + at + "` would have to hold " + needed
+                                    "`" + noRoom.at() + "` would have to hold " + noRoom.needed()
                                             + " for the value placed in it, and the rules leave"
-                                            + " room for " + holds.most());
+                                            + " room for " + noRoom.holds().most());
                 };
             }
             // What the caller asked for is under a position the plan stopped short of reading, so
@@ -3880,7 +3879,7 @@ public final class Generator {
      *
      * <p>Both ends off one reading of {@code rules}, which is the reading the values are chosen
      * against. A collection built around an element has to meet both — the floor says how many it
-     * holds besides the one being placed, and the cap says whether that one fits at all — and taken
+     * holds in all, and the cap says whether that many fit — and taken
      * as two readings the two answered about different states of the row.
      */
     private static DeclaredBounds.CountRange heldRange(FieldDomains rules, TermPath path,

@@ -353,24 +353,34 @@ final class ConstructionPlan {
         /**
          * A value is to be placed inside a collection the rules leave no room in.
          *
-         * <p>Both numbers off one reading of the rules, taken where the plan is made and against
-         * the positions the caller has settled. What the floor says is how many the collection has
-         * to hold besides the one being placed, so what is needed is never fewer than one; what the
-         * cap says is whether that many fit. Read apart, the two can be of different states of the
-         * row.
+         * <p><b>One reading, and {@link #needed} is read off it here rather than handed in.</b> The
+         * two numbers are ends of one answer, and what this refusal says is that they do not meet:
+         * the collection has to hold at least as many as the floor and at least the one being
+         * placed, and the cap is under that. A maker that brought its own count could bring one
+         * read where the row had settled something this one had not — which is the reading in two
+         * places that this refusal exists because of.
          *
-         * @param needed how many the collection would have to hold for the value to be placed in it
-         * @param holds  from how few to how many the rules let it hold
+         * @param holds from how few to how many the rules let it hold, against the positions the
+         *              caller has settled
          */
-        record NoRoom(TermPath at, int needed, DeclaredBounds.CountRange holds)
-                implements ModelRefusal {
+        record NoRoom(TermPath at, DeclaredBounds.CountRange holds) implements ModelRefusal {
 
             public NoRoom {
-                if (needed <= holds.most()) {
+                if (holds.most() >= Math.max(1, holds.least())) {
                     throw new IllegalArgumentException("a collection with room for what is placed"
-                            + " in it refuses nothing: " + at + " holds " + holds
-                            + " and needs " + needed);
+                            + " in it refuses nothing: " + at + " holds " + holds);
                 }
+            }
+
+            /**
+             * How many it would have to hold for the value to be placed in it.
+             *
+             * <p>The floor is how many the rules ask the whole collection to hold, and the value
+             * being placed is one of them rather than another beside them — so where the rules ask
+             * for none, one is what a collection holding it comes to.
+             */
+            int needed() {
+                return Math.max(1, holds.least());
             }
         }
     }
@@ -560,9 +570,10 @@ final class ConstructionPlan {
             // room for it are one question — is the caller asking for something inside this list —
             // and read twice they are free to come apart over one list.
             boolean demanded = anythingIsAskedUnder(here, decided, required);
-            // How many it would have to hold, and how many it may, off one reading. What the floor
-            // says is how many the rules ask for besides the value being placed, so what is needed
-            // is that and never fewer than the one.
+            // How many it would have to hold, and how many it may, off one reading. The floor is
+            // how many the rules ask the whole collection to hold and the value being placed is one
+            // of them, so what a collection holding it comes to is the floor, or one where the
+            // rules ask for none.
             DeclaredBounds.CountRange holds = demanded ? howMany.at(here, building) : null;
             int needed = demanded ? Math.max(1, holds.least()) : 0;
             // Asked before the figure and before the descent, because this is the model's answer
@@ -571,7 +582,7 @@ final class ConstructionPlan {
             // that changes nothing, and a figure named instead of it says this compiler did not
             // look, of a position it has the answer for.
             if (demanded && holds.most() < needed) {
-                return new NodeResult.Refused(new ModelRefusal.NoRoom(here, needed, holds));
+                return new NodeResult.Refused(new ModelRefusal.NoRoom(here, holds));
             }
             // A sequence is planned by asking what stands at its element, so the figure is met here
             // rather than below: read as a shape nothing composes — which is what a sequence is to
@@ -623,27 +634,40 @@ final class ConstructionPlan {
         }
         Map<String, Node> under = new LinkedHashMap<>();
         Set<CompositionBudget> beyond = new LinkedHashSet<>();
+        NodeResult.Unnarrowed owed = null;
         for (Map.Entry<String, Type> field : composed.fields().entrySet()) {
             switch (node(field.getValue(), here.then(field.getKey()), symbols, depth + 1, decided,
                     required, howMany)) {
                 case NodeResult.Made(Node built) -> under.put(field.getKey(), built);
-                // One position, and the first of them, which is what both of these are.
-                //
-                // <p>Neither outranks the other, because they are not about one position. What
-                // #1315 orders is a refusal against a figure met at the same place, and a sequence
-                // settles that before it descends. Between two fields there is nothing to order: a
-                // caller told to state a narrowing at one field is told something true of that
-                // field whatever the next one comes to, and a caller told the model refuses another
-                // is told something true of that one. Walking on to prefer one of them would buy no
-                // answer and would take the walk into fields the first answer says nothing about.
+                // The model settling that there is no value ends the walk. Nothing a field further
+                // along could say outranks it, and one proof is the whole of what a reader gets — a
+                // second would name another position to look at where there is no row to look for.
                 case NodeResult.Refused refused -> { return refused; }
-                case NodeResult.Unnarrowed unnarrowed -> { return unnarrowed; }
-                // Every field's, and not the first one's — which is where this parts from the two
-                // above. Two fields whose demands are out of reach are two figures a reader could
-                // raise, and a reader owed one of them is owed both; taking whichever the walk met
-                // first would make what they are told turn on the order the fields are declared in.
+                // Every field's, and not the first one's. Two fields whose demands are out of reach
+                // are two figures a reader could raise, and a reader owed one of them is owed both;
+                // taking whichever the walk met first would make what they are told turn on the
+                // order the fields are declared in.
                 case NodeResult.Beyond(Set<CompositionBudget> by) -> beyond.addAll(by);
+                // One position, and the first of them. A narrowing is stated at a position rather
+                // than gathered up, and the caller states one and asks again — so what it is owed
+                // is somewhere to begin, and the field a second one is under may not even be
+                // reached under the narrowing it settles on here.
+                //
+                // Kept rather than returned, because these two are not alike: a refusal is an
+                // answer about the value, and this is a question put to whoever asked for it. A
+                // caller sent to state a narrowing where a field further along leaves no row at all
+                // has been sent to do work that cannot help, so the walk goes on to find out
+                // whether there is one. Which narrowing is owed does not change — it is still the
+                // first, in the order the declarations write them.
+                case NodeResult.Unnarrowed unnarrowed -> {
+                    if (owed == null) {
+                        owed = unnarrowed;
+                    }
+                }
             }
+        }
+        if (owed != null) {
+            return owed;
         }
         if (!beyond.isEmpty()) {
             return new NodeResult.Beyond(beyond);
