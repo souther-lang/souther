@@ -1417,7 +1417,7 @@ public final class Partitions {
                                                                NumericDomain.Bounds within,
                                                                java.util.Set<TypeSymbol> inside) {
         return switch (shape) {
-            case Shape.Scalar scalar -> standsForA(scalar.prim(), within, ruleSource);
+            case Shape.Scalar scalar -> standsForA(scalar, within, ruleSource);
             // The empty one, for every collection nothing has said otherwise about. A row whose
             // collection is not what it is about should say so by carrying nothing, and where no rule
             // counts what the position holds there is nothing else to go on.
@@ -1446,10 +1446,10 @@ public final class Partitions {
 
     /** The value a primitive stands for, which for a number is one the position is left able to
      *  hold and for everything else is one fixed value. */
-    private static List<FixtureTemplate> standsForA(Type.Prim prim, NumericDomain.Bounds within,
+    private static List<FixtureTemplate> standsForA(Shape.Scalar scalar, NumericDomain.Bounds within,
                                                     RuleReadingSource ruleSource) {
-        return switch (prim) {
-            case INT, DECIMAL -> numberStandingFor(prim, within, ruleSource);
+        return switch (scalar.prim()) {
+            case INT, DECIMAL -> numberStandingFor(numbersOf(scalar), within, ruleSource);
             case STRING -> List.of(FixtureTemplate.string("x"));
             case BOOL -> List.of(FixtureTemplate.bool(true));
             // A date is built from its ISO 8601 form, which is how a row writes one. One fixed day
@@ -1466,10 +1466,9 @@ public final class Partitions {
     }
 
     /** A number the position is left able to hold, or none where what is left of it holds none. */
-    private static List<FixtureTemplate> numberStandingFor(Type.Prim prim,
+    private static List<FixtureTemplate> numberStandingFor(Carrier carrier,
                                                            NumericDomain.Bounds within,
                                                            RuleReadingSource ruleSource) {
-        Carrier carrier = prim == Type.Prim.DECIMAL ? Carrier.DENSE : Carrier.WHOLE;
         Place at = inside(within, carrier);
         FixtureTemplate standing = at == null ? null
                 : FixtureTemplate.on(carrier, at, ruleSource.symbols().scope()::reach);
@@ -1667,18 +1666,44 @@ public final class Partitions {
      * names the one number inside its range and no more.
      */
     static Place numberInside(TypeView view, RuleReadingSource ruleSource, int index) {
-        Type base = TypeOps.numericBase(view.declared(), ruleSource.symbols());
-        if (base == null) {
+        Carrier carrier = numbersOf(view.shape());
+        if (carrier == null) {
             return null;
         }
         NumericDomain.Bounds range =
                 TypeBounds.admissible(DeclaredBounds.of(view, ruleSource), null);
-        Place from = inside(range, base == Type.DECIMAL ? Carrier.DENSE : Carrier.WHOLE);
-        if (from == null || base != Type.INT) {
+        Place from = inside(range, carrier);
+        if (from == null || carrier != Carrier.WHOLE) {
             return from != null && index == 0 ? from : null;
         }
         Count stepped = Count.number(from).plus(index);
         return holdsCount(range, stepped) ? stepped : null;
+    }
+
+    /**
+     * The order a position's own numbers are counted on, or null where its values are not numbers.
+     *
+     * <p>Of the shape, which is what the position is with every name off — so this is a projection
+     * of the reading and not a second look at what the names wrap. Asked of the type instead, it
+     * walked the names again to find the number under them, which is the reading's answer and was
+     * already in hand.
+     *
+     * <p>Exhaustive over the primitives, with no {@code default}: whether a primitive's values are
+     * counted is a question about each of them, and one added later is one this has to be told about
+     * rather than one that falls to the arm it was not named in.
+     */
+    private static Carrier numbersOf(Shape shape) {
+        if (!(shape instanceof Shape.Scalar scalar)) {
+            return null;
+        }
+        return switch (scalar.prim()) {
+            case INT -> Carrier.WHOLE;
+            case DECIMAL -> Carrier.DENSE;
+            // Ordered, some of them, and none of them counted in numbers of its own: a date is a
+            // count of days and a string a count of characters, which is what a rule about them
+            // counts rather than what the value is.
+            case STRING, BOOL, DATE, TIME, DATETIME, INSTANT, RAW -> null;
+        };
     }
 
     /**
@@ -1771,13 +1796,12 @@ public final class Partitions {
                 base.add(kept);
             }
         }
-        Type numeric = TypeOps.numericBase(type, ruleSource.symbols());
-        if (numeric == null) {
+        Carrier carrier = numbersOf(view.shape());
+        if (carrier == null) {
             return List.copyOf(base);
         }
         NumericDomain.Bounds range =
                 TypeBounds.admissible(DeclaredBounds.of(view, ruleSource), within);
-        Carrier carrier = numeric == Type.INT ? Carrier.WHOLE : Carrier.DENSE;
         Place step = displaced(range, carrier);
         if (step == null) {
             return List.copyOf(base);
