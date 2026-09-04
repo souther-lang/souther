@@ -2,14 +2,20 @@ name: CI
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, develop ]
   pull_request:
+  schedule:
+    # Nightly, so a population left behind by a day's merges is found by morning.
+    - cron: '0 18 * * *'
 
 permissions:
   contents: read
 
 jobs:
+  # What a pull request waits on: everything except the tests whose subjects are the models,
+  # sources and specification this repository carries. Those are the job below.
   build:
+    if: github.event_name == 'pull_request' || github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -21,3 +27,20 @@ jobs:
           cache: maven
       - name: Build and test
         run: mvn -B --no-transfer-progress verify
+
+  # And the population, asked where waiting for it costs nobody an edit: on the merge into
+  # develop or main, and once a night. Emptying the property is what asks them; everything the
+  # job above runs is run here too, so this is the whole suite and not the remainder of it.
+  population:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Set up JDK 25
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+      - name: Build and test, the population included
+        run: mvn -B --no-transfer-progress verify -Dtest.excluded.groups=
