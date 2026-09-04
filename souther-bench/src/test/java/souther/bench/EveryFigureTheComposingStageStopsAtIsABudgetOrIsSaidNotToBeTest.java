@@ -31,9 +31,11 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * a rule about spelling would be passed by the next figure spelled differently, which is the failure
  * that made this necessary.
  *
- * <p>What it still does not see is a figure derived from something other than a number: how many
- * ways a total is decomposed is the size of a walk, and no constant holds it. That one is caught by
- * the other sheet, which sees the enum being read where the walk stops. Neither is enough alone.
+ * <p>What it still does not see is a figure derived from something other than a number, which is
+ * anything worked out rather than written down. Every figure there is is written down as one of
+ * this compiler's budgets, so what such a number would be is a bound somebody put beside a walk
+ * without registering it — and that one is caught by the other sheet, which sees the enum being
+ * read where the walk stops. Neither is enough alone.
  */
 class EveryFigureTheComposingStageStopsAtIsABudgetOrIsSaidNotToBeTest {
 

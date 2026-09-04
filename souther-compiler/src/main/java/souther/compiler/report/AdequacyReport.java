@@ -15,6 +15,7 @@ import souther.compiler.partition.AuthoredLine;
 import souther.compiler.partition.BorderObligationPoint;
 import souther.compiler.partition.ClosureGap;
 import souther.compiler.partition.CompositionBudget;
+import souther.compiler.partition.CompositionRepertoire;
 import souther.compiler.partition.DomainPoint;
 import souther.compiler.partition.FarEnd;
 import souther.compiler.partition.Generator;
@@ -1985,9 +1986,20 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 // this was, so what is written is what both of them establish: nothing was
                 // composed, and a figure of this compiler's is why. Which way it happened is said
                 // per search, where the outcome that knows is still in hand.
-                case EstablishmentGap.Composition(var budgets) ->
-                        "nothing was composed for it, and a figure of this compiler's is why: "
-                                + said(budgets);
+                // Two sentences and not one list, because what a reader does about them differs. A
+                // figure is a number to raise and reaching it is why the search went no further; a
+                // population this writes some of is work nobody has done, and no number anybody
+                // raises reaches the rest of it. Run together, an author reads the second as
+                // something to raise and finds that raising it changes nothing.
+                case EstablishmentGap.Composition(var budgets, var repertoires) ->
+                        "nothing was composed for it"
+                                + (budgets.isEmpty() ? ""
+                                        : ", and a figure of this compiler's is why: "
+                                                + said(budgets))
+                                + (repertoires.isEmpty() ? ""
+                                        : ", and this compiler writes some of "
+                                                + writes(repertoires)
+                                                + " rather than all of them");
             });
         }
         return String.join(", and ", out);
@@ -2070,8 +2082,21 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         return switch (attempt) {
             case ItemAssessment.Attempt.Certified _, ItemAssessment.Attempt.Unverified _,
                  ItemAssessment.Attempt.Unavailable _ -> "";
+            // And what it separately writes some of, where it does. Both are things the offer is
+            // short of and only one is a number, so the second is said in its own clause rather
+            // than folded into the figures or left out because a figure was there to name.
             case ItemAssessment.Attempt.Stopped it ->
-                    " — this compiler stopped at " + said(it.stoppedBy().budgets()) + ": "
+                    " — this compiler stopped at " + said(it.stoppedBy())
+                            + andWritesSomeOf(it.notAllOf()) + ": "
+                            + it.why().said().orElseGet(() -> whyUnresolved(it.why()))
+                            + whatTheRegionLeftOut(it.unaccountedFor(), names, declaredIn);
+            // Said as what this compiler writes rather than as a number it stopped at, because
+            // there is no number: an author told to raise one would raise it and get the same
+            // offer. What would change this is somebody writing the rest of what it walks, and the
+            // sentence says so.
+            case ItemAssessment.Attempt.Unexhausted it ->
+                    " — this compiler writes some of " + writes(it.notAllOf())
+                            + " rather than all of them: "
                             + it.why().said().orElseGet(() -> whyUnresolved(it.why()))
                             + whatTheRegionLeftOut(it.unaccountedFor(), names, declaredIn);
             // Both halves, because neither says what the other does. The word is what the search
@@ -2080,14 +2105,14 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             // for; said as the figure alone, they go looking for a search that stopped.
             case ItemAssessment.Attempt.Limited it ->
                     " — as far as this compiler plans, which stops at "
-                            + said(it.limitedBy().budgets()) + ": "
+                            + said(it.limitedBy()) + ": "
                             + it.why().said().orElseGet(() -> whyUnresolved(it.why()))
                             + whatTheRegionLeftOut(it.unaccountedFor(), names, declaredIn);
             // No search to report on, which is what this says instead of saying what one found. The
             // figure is what an author would raise to get one made at all.
             case ItemAssessment.Attempt.Unplanned it ->
                     " — nothing was planned for it, because this compiler stops at "
-                            + said(it.limitedBy().budgets())
+                            + said(it.limitedBy())
                             + whatTheRegionLeftOut(it.unaccountedFor(), names, declaredIn);
             case ItemAssessment.Attempt.Unresolved it ->
                     (it.why().reason().provesInfeasible() ? " — " : " — nothing composed one: ")
@@ -2159,6 +2184,37 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
     }
 
     /**
+     * What a search that met a figure also walked in part, said after the figure, or nothing.
+     *
+     * <p>Beside the figure and never among them. What a reader does about the two differs, and a
+     * stop that also wrote some of a population is a point where raising the figure is worth doing
+     * and is not the whole of what is missing.
+     */
+    private static String andWritesSomeOf(
+            CanonicalSelection<CompositionRepertoire> repertoires) {
+        return repertoires.isEmpty() ? ""
+                : ", and writes some of " + writes(repertoires) + " rather than all of them";
+    }
+
+    /**
+     * What a population this compiler writes some of is called where a reader meets one.
+     *
+     * <p>Its own sentence and not one of the figures'. Nothing here is a number, so what a reader
+     * is told is what this compiler writes rather than how much of it — and a population added
+     * arrives here as a compile error rather than as a name nobody wrote a sentence for.
+     */
+    private static String writes(CanonicalSelection<CompositionRepertoire> repertoires) {
+        List<String> out = new ArrayList<>();
+        for (CompositionRepertoire each : repertoires.written()) {
+            out.add(switch (each) {
+                case WAYS_A_TOTAL_IS_SPREAD ->
+                        "the ways a total may be spread over what adds up to it";
+            });
+        }
+        return String.join(", ", out);
+    }
+
+    /**
      * What a budget of this compiler's is called where a reader meets one.
      *
      * <p>Its own words and not the constant's name. What the compiler calls a figure is a name for
@@ -2176,8 +2232,6 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 case ELEMENTS_A_TOTAL_IS_SPREAD_OVER ->
                         "how many elements a total is spread over";
                 case SHAPES_OF_A_TOTAL_OFFERED -> "how many containers are offered for one total";
-                case DECOMPOSITIONS_OF_A_TOTAL_OFFERED ->
-                        "how many ways a total is decomposed";
                 case WAYS_DOWN_TO_A_TOTAL_TRIED ->
                         "how many ways down to what a total adds up are tried";
                 case PLACES_A_PAIR_IS_TRIED_AT -> "how many places a pair is tried at";
@@ -2232,7 +2286,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         return switch (why.reason()) {
             case NOTHING_COMPOSES_ONE -> "nothing here could build a representative for " + at;
             case ALL_CANDIDATES_REJECTED -> "every value tried at " + at + " was refused";
-            case SEARCH_LIMIT -> "the search stopped before reaching " + at;
+            // Not "stopped", which is one of the two ways a search leaves something untried and is
+            // the only one with a number in it. Said as a stop, a walk that went to the end of what
+            // this compiler writes is reported as one that halted, and an author looks for the
+            // figure that halted it.
+            case THE_SEARCH_LEFT_SOMETHING_UNTRIED ->
+                    "the search left something untried before reaching " + at;
             // What is missing here, and not what cannot exist. The combinations are there and this
             // declined to walk them, so a reader is told the offer was not made rather than that
             // nothing reaches the arm — and told that raising the row budget is not what lifts it.

@@ -7,6 +7,7 @@ import souther.compiler.inputs.InputQuestion;
 import souther.compiler.inputs.RulesWithNoLine;
 import souther.compiler.inputs.StandingQuestion;
 import souther.compiler.partition.LinesWhereTheyFall;
+import souther.compiler.publish.PublicationOrders;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.PathReachability;
 import souther.compiler.check.RuleReadingSource;
@@ -910,7 +911,9 @@ final class Coverages {
                                     new souther.compiler.partition.Generator.UnresolvedCombination(
                                             java.util.List.of(label), wordOf(unknown)),
                                     within, java.util.List.of(),
-                                    EstablishmentGap.Composition.of(unknown.stoppedBy()));
+                                    PublicationOrders.COMPOSITION_BUDGETS.keep(unknown.stoppedBy()),
+                                    PublicationOrders.COMPOSITION_REPERTOIRES.keep(
+                                            java.util.List.of()));
                 };
             }
         };
@@ -1059,8 +1062,8 @@ final class Coverages {
         return switch (unknown.why()) {
             case NOTHING_COMPOSED_ONE -> souther.compiler.partition.Generator
                     .UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE;
-            case THE_SEARCH_RAN_OUT -> souther.compiler.partition.Generator
-                    .UnresolvedCombination.Reason.SEARCH_LIMIT;
+            case THE_SEARCH_LEFT_SOMETHING_UNTRIED -> souther.compiler.partition.Generator
+                    .UnresolvedCombination.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED;
         };
     }
 
@@ -1151,19 +1154,28 @@ final class Coverages {
             // declined to work on left the count as one the model admits no row at.
             case souther.compiler.partition.Generator.BoundaryAttempt.Stopped left ->
                     new ItemAssessment.Attempt.Stopped(left.why(), within, left.unrepresented(),
-                            EstablishmentGap.Composition.of(left.by()));
+                            PublicationOrders.COMPOSITION_BUDGETS.keep(left.by()),
+                            PublicationOrders.COMPOSITION_REPERTOIRES.keep(left.notAllOf()));
+            // A search that ran to the end of what this compiler writes, where that is not the end
+            // of what there is to write. It leaves the point open the way the one above does and
+            // names nothing anybody could raise, which is why it arrives as its own arm and its
+            // gap holds a vocabulary of its own.
+            case souther.compiler.partition.Generator.BoundaryAttempt.Unexhausted left ->
+                    new ItemAssessment.Attempt.Unexhausted(left.why(), within,
+                            left.unrepresented(),
+                            PublicationOrders.COMPOSITION_REPERTOIRES.keep(left.writes()));
             // A search that ran to the end of what it was handed, where what it was handed was
             // short of the point. It names a figure like the one above and its word is its own, so
             // the two are carried side by side rather than one being read off the other.
             case souther.compiler.partition.Generator.BoundaryAttempt.Limited left ->
                     new ItemAssessment.Attempt.Limited(left.why(), within, left.unrepresented(),
-                            EstablishmentGap.Composition.of(left.by()));
+                            PublicationOrders.COMPOSITION_BUDGETS.keep(left.by()));
             // And a point no search was made for at all. It names a figure like the two above and
             // is not an outcome of a search, which is what keeps it out of what the readings of a
             // line together establish.
             case souther.compiler.partition.Generator.BoundaryAttempt.Unplanned left ->
                     new ItemAssessment.Attempt.Unplanned(left.why(), within, left.unrepresented(),
-                            EstablishmentGap.Composition.of(left.by()));
+                            PublicationOrders.COMPOSITION_BUDGETS.keep(left.by()));
         };
     }
 

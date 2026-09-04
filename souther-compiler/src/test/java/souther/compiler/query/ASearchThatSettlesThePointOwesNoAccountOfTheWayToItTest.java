@@ -63,7 +63,7 @@ class ASearchThatSettlesThePointOwesNoAccountOfTheWayToItTest {
     @Test
     void aSearchThatSettledNothingOwesWhatTheWayLeftOut() {
         assertEquals(List.of(new souther.compiler.partition.ReachabilityGap.Unstated(LEFT_OUT)),
-                came(Generator.UnresolvedCombination.Reason.SEARCH_LIMIT).unaccountedFor());
+                came(Generator.UnresolvedCombination.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED).unaccountedFor());
         assertEquals(List.of(new souther.compiler.partition.ReachabilityGap.Unstated(LEFT_OUT)),
                 came(Generator.UnresolvedCombination.Reason.NO_CERTIFIED_WITNESS).unaccountedFor());
         assertEquals(List.of(new souther.compiler.partition.ReachabilityGap.Unstated(LEFT_OUT)),

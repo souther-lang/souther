@@ -240,10 +240,11 @@ public final class LevelRealizer {
         if (bounded && over.where() instanceof Criterion.AtTheLevel) {
             return new Realization.Impossible();
         }
-        // A side is never settled by looking, so what this comes back with is that the search ran
-        // out — which is what it has always come back with, whether or not a figure of this
-        // compiler's was reached. The figures are said beside that answer and do not choose it.
-        return Realization.Unknown.searchRanOut(stoppedBy);
+        // A side is never settled by looking, so what this comes back with is that something was
+        // left untried — which is what it has always come back with, whether or not a figure of
+        // this compiler's was reached. The figures are said beside that answer and do not choose
+        // it, which is why the answer is not named for one of them running out.
+        return Realization.Unknown.searchLeftSomethingUntried(stoppedBy);
     }
 
     /** How many assignments the search will try before it stops and says it did not settle it. */

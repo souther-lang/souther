@@ -100,7 +100,7 @@ class APositionNothingBoundsIsGivenAValueTheRestCanCompleteTest {
 
         assertTrue(report.contains("! no row is at the ON point (comparison"), report);
         assertTrue(report.contains("read as f/3 * p.a + 6 * p.b: = 3"), report);
-        assertFalse(report.contains("the search stopped before reaching 3 * p.a + 6 * p.b = 3"),
+        assertFalse(report.contains("the search left something untried before reaching 3 * p.a + 6 * p.b = 3"),
                 report);
     }
 
@@ -112,7 +112,7 @@ class APositionNothingBoundsIsGivenAValueTheRestCanCompleteTest {
 
         assertTrue(report.contains("! no row is at the OFF point (comparison"), report);
         assertTrue(report.contains("read as f/p.a + 3 * p.b: = 1"), report);
-        assertFalse(report.contains("the search stopped before reaching p.a + 3 * p.b = 1"), report);
+        assertFalse(report.contains("the search left something untried before reaching p.a + 3 * p.b = 1"), report);
     }
 
     private static String report(String model) {

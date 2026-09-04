@@ -635,7 +635,7 @@ class CompileExampleGenerateTest {
 
         assertFalse(left.isEmpty(), "nothing builds, so something is left");
         for (Generator.UnresolvedCombination each : left) {
-            assertEquals(Generator.UnresolvedCombination.Reason.SEARCH_LIMIT, each.reason(),
+            assertEquals(Generator.UnresolvedCombination.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED, each.reason(),
                     each.toString());
             assertTrue(each.subject().startsWith("request.flag="),
                     "and it is still about the combination: " + each.subject());

@@ -66,19 +66,31 @@ class AsManyContainersAreOfferedAsAreWrittenDownTest {
                         + built.values().stream().map(FixtureTemplate::text).toList());
     }
 
-    /** And the ones it did not make are what it says it did not make. */
+    /**
+     * And what the offer leaves out is said, whichever way it came to be left out.
+     *
+     * <p>Two of them and for two different reasons. A fifth container was in front of the walk and
+     * the figure left no room for it; the shapes a count of two is spread in were all offered, and
+     * two shapes are not all the ways two elements take a difference. Both are things this offer
+     * does not hold, which is what a reader deciding whether every container was refused needs.
+     *
+     * <p><b>And the count's own figure is not among them.</b> The counts above the one the walk
+     * reached were never asked for, because the containers ran out first — so a reader told to raise
+     * it would raise it and get the same four.
+     */
     @Test
     void whatWasNotOfferedIsSaid() {
         TermRealizations.Realization.Built built =
                 assertInstanceOf(TermRealizations.Realization.Built.class, offering());
 
-        assertEquals(Set.of(CompositionBudget.ELEMENTS_A_TOTAL_IS_SPREAD_OVER,
-                        CompositionBudget.SHAPES_OF_A_TOTAL_OFFERED,
-                        CompositionBudget.DECOMPOSITIONS_OF_A_TOTAL_OFFERED),
-                built.heldBack(),
-                "the walk stopped at the figure with counts left to try, and a reader told every"
-                        + " container had been refused would act on a walk that never made them");
-        assertEquals(Generator.UnresolvedCombination.Reason.SEARCH_LIMIT,
+        assertEquals(Set.of(CompositionBudget.SHAPES_OF_A_TOTAL_OFFERED), built.heldBack(),
+                "the walk had a fifth container and no room for it, which is the figure a reader"
+                        + " raises — and the counts above the one it reached were never asked for,"
+                        + " so no figure over them took anything away");
+        assertEquals(Set.of(CompositionRepertoire.WAYS_A_TOTAL_IS_SPREAD), built.notAllOf(),
+                "and the ways a count of more than one element is spread are two of the many,"
+                        + " which is not a number anybody raises and is said apart from one");
+        assertEquals(Generator.UnresolvedCombination.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED,
                 Generator.UnresolvedCombination.Reason.wordFor(built.heldBack()),
                 "and the word such a walk has always come back with is the one it comes back with");
     }

@@ -3227,6 +3227,11 @@ public final class Adequacy {
                     // figure ended it is the point's own to say and is said where a reader asks
                     // about the point, not in a list of what this run did not offer.
                     case ItemAssessment.Attempt.Stopped why -> unresolved.add(why.why());
+                    // And a search that ran to the end of what this compiler writes. It came to
+                    // nothing the way the one above did, and what it writes some of is the point's
+                    // own to say, in the same place — a list of what this run did not offer is no
+                    // more the place for that than it is for a figure.
+                    case ItemAssessment.Attempt.Unexhausted why -> unresolved.add(why.why());
                     // And a search whose answer was about less than the point had. It came to
                     // nothing in the same sense the two above did, and which figure made its answer
                     // short is the point's own to say, in the same place.
