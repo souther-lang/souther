@@ -16,7 +16,6 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 /**
@@ -130,23 +129,24 @@ class ADeclarationReadBackFromClassesStatesWhatItsAuthorWroteTest {
 
     /**
      * The clause calling an unexposed helper reaches the same outcome here as in its own module,
-     * which is not the readable one.
+     * and it is the outcome a clause read to the end gets.
      *
      * <p>Two halves, and both are needed. That it agrees with the module that wrote it is the claim;
-     * that the outcome is a different one from the clause read to the end is what says the agreement
-     * is about something — two readings that both stopped agree perfectly.
+     * that the outcome is the readable one is what says the agreement is about something — two
+     * readings that both stopped agree perfectly. The second half is what a helper's clause being
+     * read as the rule it states settles (ADR-0106); before that, this held the two apart.
      */
     @Test
-    void aClauseCallingAnUnexposedHelperReachesTheSameLimitAsInItsOwnModule() {
+    void aClauseCallingAnUnexposedHelperIsReadHereAsInItsOwnModule() {
         Map<String, JsonNode> here = readInTheConsumer();
         assertNotNull(here.get("onThroughHelper"), "the consumer measures it");
 
         assertEquals(inTheLibrarysOwnBuild("throughHelper"), here.get("onThroughHelper"),
                 "a clause calling a helper the dependency never exposed reaches from here exactly"
                         + " what it reaches in the module that wrote it");
-        assertNotEquals(here.get("onWritten"), here.get("onThroughHelper"),
-                "and that outcome is not the one a clause read to the end gets, so the agreement"
-                        + " above is not two readings that both said nothing");
+        assertEquals(here.get("onWritten"), here.get("onThroughHelper"),
+                "and that outcome is the one a clause read to the end gets, so the agreement above"
+                        + " is not two readings that both said nothing");
     }
 
     /**

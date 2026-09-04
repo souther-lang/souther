@@ -1015,7 +1015,7 @@ public final class FieldDomains {
         // one conjunct is not an account of the conjunct written beside it.
         if (took.anyLeftStanding(rule, named)) {
             return new RuleAccounting.Outcome.Unaccounted(
-                    stoppedBy(rule, named));
+                    stoppedBy(rule, at, named));
         }
         // The reading that turns this clause into where the values stop, said by the end it placed.
         if (directs.stream()
@@ -1027,7 +1027,7 @@ public final class FieldDomains {
         if (took.tookIn(rule, named)) {
             return new RuleAccounting.Outcome.Accounted(RuleAccounting.Reader.THE_VALUE_READING);
         }
-        return new RuleAccounting.Outcome.Unaccounted(stoppedBy(rule, named));
+        return new RuleAccounting.Outcome.Unaccounted(stoppedBy(rule, at, named));
     }
 
     /**
@@ -1038,20 +1038,74 @@ public final class FieldDomains {
      * there is named beside a limit that belongs to its neighbour, which is the misattribution the
      * whole accounting is asked per rule to avoid.
      *
-     * <p>A form this reading has no word for where it recorded nothing of the rule there. What
-     * reaches here is a rule no reading took in, so this reading was short of it however little it
-     * wrote down — and an empty answer would say a question stands with nothing behind it. Not the
-     * name's reasons: those belong to whichever rule left them.
+     * <p>Not the name's other reasons: those belong to whichever rule left them, and a rule answered
+     * from the name is named beside a limit that is its neighbour's.
+     *
+     * <p><b>The name is asked one thing, and it is whether the answer accounts for the question.</b>
+     * An allowance run down by everything a position admits is a fact about the answer and not about
+     * any rule that paid into it ({@link UnreadReason.About#THE_ANSWER}), and
+     * {@link ReadingEvidence#stoppedBy} refuses such a reason rather than filing it under a rule. So
+     * a question standing for that reason has nothing under its rule by construction, and that is
+     * what tells it from the accounting coming apart.
+     *
+     * <p>Asked as itself and not as "not about a rule". A reason is about a rule, about the answer,
+     * or about neither, and the third is a reading that never reached the position — which accounts
+     * for nothing, as its name says. Written as the complement of the first, one of those at the
+     * name would stand in for an account that is not there.
      */
-    private RuleAccounting.Why stoppedBy(RuleRef rule, List<FactSubject> named) {
+    private RuleAccounting.Why stoppedBy(RuleRef rule, RuleKey at, List<FactSubject> named) {
         List<UnreadReason> why = took.stoppedBy(rule, named);
-        // Nothing recorded, so nothing is answerable for it. A rule reaches the readings that
-        // recognise the names it writes, and one about a name none of them knows — a field
-        // of a value a helper reads, reached through the call — is claimed by none of them and
-        // gave none of them anything to write down. Named as the value reading's, an author is
-        // sent to a reader that never held their clause.
-        return why.isEmpty() ? new RuleAccounting.Why.NothingTookItIn()
-                : new RuleAccounting.Why.TheValueReadingSays(why);
+        if (!why.isEmpty()) {
+            return new RuleAccounting.Why.TheValueReadingSays(why);
+        }
+        if (unreadByName.getOrDefault(at, List.of()).stream()
+                .noneMatch(FieldDomains::standsInForARulesOwnAccount)) {
+            throw new AStandingQuestionWithNoAccount(rule, named);
+        }
+        return new RuleAccounting.Why.NothingTookItIn();
+    }
+
+    /**
+     * Whether {@code why} accounts for a question a rule left standing, in place of the rule's own
+     * account of it.
+     *
+     * <p>Named and asked once, because it is the whole of the refusal above: written inline as a
+     * test of the shape a reason is not, a reason of the third kind stood in for an account that is
+     * not there. Its three answers are the three kinds a reason is about, so a reason added to any
+     * of them is decided here rather than by where it happens to be written.
+     *
+     * <p>A reason about the answer does stand in: an allowance run down by everything a position
+     * admits is a fact about what the rules come to and about none of them, so no rule is answerable
+     * for it and none is filed. A reason about a rule does not — it is filed under its rule and
+     * reached before this. A reason about neither accounts for nothing, which is what it says: the
+     * reading never got to the position.
+     */
+    static boolean standsInForARulesOwnAccount(UnreadReason why) {
+        return switch (why.about()) {
+            case THE_ANSWER -> true;
+            case A_RULE, NEITHER -> false;
+        };
+    }
+
+    /**
+     * A question left standing that neither a rule nor the answer has an account of.
+     *
+     * <p>Two walks and one clause. A rule reaches this reading, which either adopts it or records
+     * where it gave up; a question stands where nothing adopted it. So a question standing with no
+     * account under the rule and none at the name either is the two coming apart — the rule was met
+     * by the walk that asks and by nothing that reads.
+     *
+     * <p>Not an ordinary limit, so not swallowed. Answered as one, an author is told that this
+     * compiler has no word for their rule, which is a sentence about their model printed because two
+     * of this compiler's accounts disagreed.
+     */
+    static final class AStandingQuestionWithNoAccount extends TheCheckDisagreesWithItself {
+
+        private static final long serialVersionUID = 1L;
+
+        AStandingQuestionWithNoAccount(RuleRef rule, List<FactSubject> named) {
+            super("a question stands that nothing accounts for: " + rule + " at " + named);
+        }
     }
 
     /** Every subject the place at {@code path} answers to. */

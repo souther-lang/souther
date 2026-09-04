@@ -39,10 +39,9 @@ import java.util.Set;
  * the values can be written out ({@link ValueUniverse}) and is kept as a denial where they cannot,
  * so nothing reaches emptiness except through values this had in hand.
  */
-final class AdmissibleReading implements ClauseReading<PlannedValues<FactSubject>> {
+final class AdmissibleReading implements ClauseReading<PlannedValues<FactSubject>, Denotations> {
 
     private final Terms terms;
-    private final Denotations at;
     /** What each position of the value is called, and what type stands there. A position is here
      * whether or not it is a number: which values a boolean has is as much an answer as which
      * values an integer has, and the reading that asked the carrier had no word for the first. */
@@ -67,20 +66,23 @@ final class AdmissibleReading implements ClauseReading<PlannedValues<FactSubject
      */
     private final Map<Core, StringPredicates.Stated> asStated = new IdentityHashMap<>();
 
-    private AdmissibleReading(Terms terms, Denotations at, Map<FactSubject, Type> byName,
+    private AdmissibleReading(Terms terms, Map<FactSubject, Type> byName,
                               Symbols symbols, Alternatives alternatives, Allowance<FactSubject> allowed) {
         this.terms = terms;
-        this.at = at;
         this.byName = byName;
         this.symbols = symbols;
         this.alternatives = alternatives;
         this.allowed = allowed;
     }
 
-    /** The reading of one value's positions, for {@link StatedByClauses} to take the leaves of. */
-    static AdmissibleReading of(Terms terms, Denotations at, Map<FactSubject, Type> byName,
+    /** The reading of one value's positions, for {@link StatedByClauses} to take the leaves of.
+     *
+     *  <p>No environment is held. A leaf is read at where it stands, which the fold hands down; a
+     *  reading holding the environment the clause began in would read a rule under a binding at
+     *  names that mean nothing there, and every such rule came out as a form nothing reads. */
+    static AdmissibleReading of(Terms terms, Map<FactSubject, Type> byName,
                                 Symbols symbols, Alternatives alternatives, Allowance<FactSubject> allowed) {
-        return new AdmissibleReading(terms, at, byName, symbols, alternatives, allowed);
+        return new AdmissibleReading(terms, byName, symbols, alternatives, allowed);
     }
 
     /** What this reading is spending, for whoever meets its answer with the next rule's. */
@@ -126,25 +128,25 @@ final class AdmissibleReading implements ClauseReading<PlannedValues<FactSubject
      * ({@link Conditions#restated}), so nothing here asks how the author spelled it.
      */
     @Override
-    public PlannedValues<FactSubject> leaf(Core e, boolean positive) {
+    public PlannedValues<FactSubject> leaf(Core e, boolean positive, Denotations at) {
         if (e instanceof Core.Binary b
                 && Comparison.of(b).map(Comparison::claim).orElse(null)
                         instanceof ComparisonClaim.Singled singled) {
             // Which of the two it states, once the denials above have been counted: what the
             // comparison holds at the value it names, turned over by each denial it stands under.
-            return comparison(b, singled.holdsAtTheValue() == positive);
+            return comparison(b, singled.holdsAtTheValue() == positive, at);
         }
-        PlannedValues<FactSubject> truth = truthValued(e, positive);
+        PlannedValues<FactSubject> truth = truthValued(e, positive, at);
         if (truth != null) {
             return truth;
         }
-        PlannedValues<FactSubject> matched = pattern(e, positive);
-        return matched != null ? matched : unreadable(e);
+        PlannedValues<FactSubject> matched = pattern(e, positive, at);
+        return matched != null ? matched : unreadable(e, at);
     }
 
     /** What naming a position of two values says about it, or null where {@code e} is not one. */
-    private PlannedValues<FactSubject> truthValued(Core e, boolean states) {
-        FactSubject position = positionIn(e);
+    private PlannedValues<FactSubject> truthValued(Core e, boolean states, Denotations at) {
+        FactSubject position = positionIn(e, at);
         Type type = position == null ? null : byName.get(position);
         return type == Type.BOOL
                 ? PlannedValues.at(position,
@@ -170,9 +172,9 @@ final class AdmissibleReading implements ClauseReading<PlannedValues<FactSubject
      * of the same thing. That is every leaf that is not one of these, and every one of these whose
      * reading stopped at something other than this reading's own limit.
      */
-    private PlannedValues<FactSubject> pattern(Core e, boolean states) {
-        StringPredicates.Stated stated = statedIn(e);
-        FactSubject position = stated == null ? null : positionIn(stated.subject());
+    private PlannedValues<FactSubject> pattern(Core e, boolean states, Denotations at) {
+        StringPredicates.Stated stated = statedIn(e, at);
+        FactSubject position = stated == null ? null : positionIn(stated.subject(), at);
         if (position == null) {
             return null;
         }
@@ -227,13 +229,13 @@ final class AdmissibleReading implements ClauseReading<PlannedValues<FactSubject
     }
 
     /** What one comparison of a position with a value says, or nothing where it is not one. */
-    private PlannedValues<FactSubject> comparison(Core.Binary b, boolean states) {
-        PlannedValues<FactSubject> read = sided(b.left(), b.right(), states);
+    private PlannedValues<FactSubject> comparison(Core.Binary b, boolean states, Denotations at) {
+        PlannedValues<FactSubject> read = sided(b.left(), b.right(), states, at);
         if (read == null) {
             // `"A" == value` says what `value == "A"` says.
-            read = sided(b.right(), b.left(), states);
+            read = sided(b.right(), b.left(), states, at);
         }
-        return read != null ? read : unreadable(b);
+        return read != null ? read : unreadable(b, at);
     }
 
     /**
@@ -252,8 +254,8 @@ final class AdmissibleReading implements ClauseReading<PlannedValues<FactSubject
      * ordering comparison and an equality answer alike — written per shape, {@code <} fell through
      * one path and {@code ==} another, and a relation came out as a form nobody could read.
      */
-    private PlannedValues<FactSubject> unreadable(Core e) {
-        return PlannedValues.unreadable(names(e), relatesTwoPositions(e)
+    private PlannedValues<FactSubject> unreadable(Core e, Denotations at) {
+        return PlannedValues.unreadable(names(e, at), relatesTwoPositions(e, at)
                 ? UnreadReason.RELATES_TWO_POSITIONS : UnreadReason.FORM_NOT_READ);
     }
 
@@ -265,16 +267,16 @@ final class AdmissibleReading implements ClauseReading<PlannedValues<FactSubject
      * there tells an author two different things about one clause. What stays here is how this
      * reading looks a position up.
      */
-    private boolean relatesTwoPositions(Core e) {
-        return Relates.twoPositions(e, this::positionIn);
+    private boolean relatesTwoPositions(Core e, Denotations at) {
+        return Relates.twoPositions(e, part -> positionIn(part, at));
     }
 
     /** The same, with {@code where} read as the position and {@code what} as the value, or null
      * where they are not those. */
-    private PlannedValues<FactSubject> sided(Core where, Core what, boolean states) {
-        FactSubject position = positionIn(where);
+    private PlannedValues<FactSubject> sided(Core where, Core what, boolean states, Denotations at) {
+        FactSubject position = positionIn(where, at);
         Type type = position == null ? null : byName.get(position);
-        Value value = type == null ? null : valueOf(what);
+        Value value = type == null ? null : valueOf(what, at);
         return value == null ? null
                 : PlannedValues.at(position, AdmittedPlan.of(admits(value, states, type)));
     }
@@ -299,9 +301,10 @@ final class AdmissibleReading implements ClauseReading<PlannedValues<FactSubject
      * the conjunct states such a rule about — a denial and a choice inside it are still the
      * conjunct's.
      */
-    Map<FactSubject, StringRestriction> stringRuleIn(Core e, PlannedValues<FactSubject> said) {
-        StringPredicates.Stated stated = statedIn(e);
-        FactSubject position = stated == null ? null : positionIn(stated.subject());
+    Map<FactSubject, StringRestriction> stringRuleIn(Core e, PlannedValues<FactSubject> said,
+                                                    Denotations at) {
+        StringPredicates.Stated stated = statedIn(e, at);
+        FactSubject position = stated == null ? null : positionIn(stated.subject(), at);
         if (position == null) {
             return Map.of();
         }
@@ -342,17 +345,17 @@ final class AdmissibleReading implements ClauseReading<PlannedValues<FactSubject
      * about. Asked twice of the table, the two would be one question with two derivations — which
      * is the arrangement {@link StringPredicates} exists to stop, one file further down.
      */
-    private StringPredicates.Stated statedIn(Core e) {
+    private StringPredicates.Stated statedIn(Core e, Denotations at) {
         if (asStated.containsKey(e)) {
             return asStated.get(e);
         }
-        StringPredicates.Stated said = StringPredicates.statedByChecked(e, symbols);
+        StringPredicates.Stated said = StringPredicates.statedByChecked(e, symbols, terms, at);
         asStated.put(e, said);
         return said;
     }
 
     /** The position {@code e} is, or null where it is not one of the positions being read for. */
-    private FactSubject positionIn(Core e) {
+    private FactSubject positionIn(Core e, Denotations at) {
         FactSubject named = terms.subjectOf(e, at);
         return named != null && byName.containsKey(named) ? named : null;
     }
@@ -385,11 +388,11 @@ final class AdmissibleReading implements ClauseReading<PlannedValues<FactSubject
      * strings joined — is the value it comes to. A case of an enumeration holds nothing and is not
      * folded to anything; what it is is which declaration it is.
      */
-    private Value valueOf(Core e) {
+    private Value valueOf(Core e, Denotations at) {
         if (e instanceof Core.UnitValue unit) {
             return Value.of(unit.data());
         }
-        Object folded = Terms.folded(e, symbols);
+        Object folded = Terms.folded(e, symbols, at);
         if (folded instanceof String text) {
             return Value.text(text);
         }
@@ -409,18 +412,25 @@ final class AdmissibleReading implements ClauseReading<PlannedValues<FactSubject
      * nothing here relates one position to another, so a rule narrowing a position names it — and a
      * rule relating two of them names both and is itself one of these.
      */
-    private Set<FactSubject> names(Core e) {
+    private Set<FactSubject> names(Core e, Denotations at) {
         Set<FactSubject> found = new LinkedHashSet<>();
-        gather(e, found);
+        gather(e, found, at);
         return found;
     }
 
-    private void gather(Core e, Set<FactSubject> found) {
+    private void gather(Core e, Set<FactSubject> found, Denotations at) {
+        // A binding is crossed as a binding: its body is what the clause states, read inside it,
+        // and what it was given is not a part of the clause on its own. Walked as an ordinary node,
+        // an argument a helper never reads was counted among the positions the rule names.
+        if (e instanceof Core.LetIn li) {
+            gather(li.body(), found, terms.inside(li, at));
+            return;
+        }
         FactSubject here = terms.subjectOf(e, at);
         if (here != null && byName.containsKey(here)) {
             found.add(here);
             return;   // a position names itself, and nothing under it is a position of its own
         }
-        Core.forEachChild(e, child -> gather(child, found));
+        Core.forEachChild(e, child -> gather(child, found, at));
     }
 }

@@ -55,7 +55,13 @@ class WhatAClauseWouldExpandToIsCountedByTheFoldThatReadsItTest {
     }
 
     private static long cost(Core e) {
-        return new ExpansionCost(64).read(e, true);
+        return counted(new ExpansionCost(64), e, true);
+    }
+
+    /** The count this reading comes to. It carries no environment, so a binding leaves what it was
+     *  given ({@link ClauseScope#unchanged}) and the count is over the shape alone. */
+    private static long counted(ExpansionCost counting, Core e, boolean positive) {
+        return counting.read(e, positive, null, ClauseScope.unchanged());
     }
 
     /** A conjunction of choices, which doubles what it comes to per level and stays as long as the
@@ -92,7 +98,7 @@ class WhatAClauseWouldExpandToIsCountedByTheFoldThatReadsItTest {
     void aDenialCountsWhatTheClauseUnderItCountsDenied() {
         for (Core each : List.of(leaf(), or(leaf(), leaf()), and(leaf(), leaf()),
                 and(or(leaf(), leaf()), leaf()), or(and(leaf(), leaf()), leaf()))) {
-            assertEquals(new ExpansionCost(64).read(each, false), cost(not(each)),
+            assertEquals(counted(new ExpansionCost(64), each, false), cost(not(each)),
                     "a denial is carried down and not applied to what a branch came to");
         }
         assertEquals(1L, cost(not(or(leaf(), leaf()))), "a denied choice is a conjunction");
@@ -134,7 +140,8 @@ class WhatAClauseWouldExpandToIsCountedByTheFoldThatReadsItTest {
     @Test
     void aCountThatRunsPastTheLimitSaturates() {
         assertEquals(65, cost(doubling(64)), "saturated at one past the limit, and not overflowed");
-        assertEquals(4L, new ExpansionCost(3).read(and(or(leaf(), leaf()), or(leaf(), leaf())), true),
+        assertEquals(4L, counted(new ExpansionCost(3),
+                        and(or(leaf(), leaf()), or(leaf(), leaf())), true),
                 "a limit of its own is saturated at one past that");
     }
 
@@ -150,9 +157,9 @@ class WhatAClauseWouldExpandToIsCountedByTheFoldThatReadsItTest {
         Core wide = doubling(40);
 
         for (int limit : new int[] {Integer.MAX_VALUE - 1, Integer.MAX_VALUE}) {
-            assertEquals((long) limit + 1, new ExpansionCost(limit).read(wide, true),
+            assertEquals((long) limit + 1, counted(new ExpansionCost(limit), wide, true),
                     "one past the limit, whatever the limit is: " + limit);
-            assertTrue(new ExpansionCost(limit).read(wide, true) > limit,
+            assertTrue(counted(new ExpansionCost(limit), wide, true) > limit,
                     "and above it, so the guardrail refuses what it exists to refuse: " + limit);
         }
     }

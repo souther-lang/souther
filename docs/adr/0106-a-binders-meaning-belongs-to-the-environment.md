@@ -103,6 +103,44 @@ readers and is a separate gap (#866); every binder-introducing form is a place w
 has to be applied rather than restated, and where it has not been applied yet the reader in question
 still owns an account of its own.
 
+### Applied to the clause readings
+
+The readings that ask what a declaration's positions admit were such a place. They folded a clause
+into one answer carried upward and had nowhere for a binding to be, so a clause under one arrived as
+a shape none of them had a word for — and since a helper call is expanded as a binding, that is
+every rule an author stated by naming it rather than writing it out.
+
+The fold now hands an environment downward beside the answer it carries upward. `ClauseExpr.Scoped`
+marks where that environment changes and composes nothing; `ClauseScope` answers what a binding is
+entered as, and for a reading carrying `Denotations` the answer is `Terms.inside`. No clause
+evaluator is handed a binding **as the clause's shape**, and none of them holds an environment of its
+own any more: a leaf is read at where it stands. `Predicates` reads the body of a binding under the
+same environment, asking the same one place for it, though it still recognises the connectives for
+itself.
+
+**A binding nested inside a leaf stays part of that leaf**, and the decision reaches it there rather
+than by taking the shape further in. Every question asked about the inside of a leaf crosses the
+binding through the environment instead of interpreting the binder: which position an operand is
+(`Terms.subjectOf`), what written value it is (`Terms.asWrittenValue`, and `Terms.folded` over it),
+and which positions a part names (the descents in `AdmissibleReading`, `StatedByClauses` and
+`Predicates`). What the shape settles is where the environment changes; what the leaf language reads
+is unchanged by any of it.
+
+So binding transparency is not a property of the clause's topology. It is a property of every
+semantic question a reading asks about what is inside a leaf, and a question that answers from the
+tree alone is one this decision has not been applied to yet.
+
+A helper-expanded clause is therefore read under the same denotation environment as the equivalent
+inline clause. In particular, passing through a helper is no longer a way for a rule to reach an
+admitted-values question without any reading recognising its positions.
+
+This does not make every standing question attributable to a rule-level reading failure. A reading
+may consume the rule completely and still be unable to construct the exact answer its rules come to
+within its allowance; such a loss is about the answer rather than about any rule that paid into it,
+and it remains represented separately (`RuleAccounting.Why.NothingTookItIn`, which is where a
+question with no reason filed under its rule arrives). A question with neither a rule's account nor
+the answer's is the accounting disagreeing with itself and is refused where it is made.
+
 The initializer is now read where a read of the binder asks for it, rather than once before the body.
 A binding the body never reads is no longer read at all, which is the intended reading: what a name
 was given is part of what the name means, and a name nothing reads means nothing to this check.
@@ -113,6 +151,8 @@ is which values reach it.
 ## References
 
 - Issue #867 — an expansion binding a value the arithmetic cannot read is one atom
+- Issue #1333 — a clause reaching its rule through a helper is read less than the same rule written
+  out (this decision applied to the clause readings)
 - ADR-0092 — a helper carries the variables its body leaves open (why almost every binding this
   check reads is one an expansion made)
 - `[#invariant-discharge-terms]`, `[#invariant-discharge-reduction]`

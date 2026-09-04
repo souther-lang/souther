@@ -277,7 +277,8 @@ public enum StringPredicates {
      * with the operation is being read at the wrong argument, and which call arrived first is no
      * part of that. So it is not asked here.
      */
-    public static Stated statedByChecked(Core clause, Symbols symbols) {
+    public static Stated statedByChecked(Core clause, Symbols symbols, Terms terms,
+                                         Denotations at) {
         if (!(clause instanceof Core.PreservedCall call)
                 || !(call.operation() instanceof ValueName.Stdlib.Operation operation)) {
             return null;
@@ -287,7 +288,7 @@ public enum StringPredicates {
             return null;
         }
         Core subject = call.args().get(predicate.subject());
-        return Terms.folded(call.args().get(predicate.written()), symbols) instanceof String written
+        return Terms.folded(call.args().get(predicate.written()), symbols, at) instanceof String written
                 ? new Stated(subject, predicate.readingOf(written))
                 : new Stated(subject, new Reading.WrittenArgumentNotKnown());
     }
