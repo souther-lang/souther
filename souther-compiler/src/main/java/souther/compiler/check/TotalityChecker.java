@@ -101,10 +101,6 @@ final class TotalityChecker {
         if (group.size() == 1) {
             String name = group.iterator().next();
             Hir.FnDef h = own.get(name);
-            String message = "recursive helper `let " + name + "` is not structurally recursive: `" + name
-                    + "(...)` passes no argument that is a strictly smaller part of a parameter."
-                    + " Recurse on a part obtained by `match` (a field or a case), count with"
-                    + " `fold`, or mark the helper `partial`";
             Hir.Apply at = firstCall.get(name);
             return at == null
                     ? error(h, new BehaviorMessage.NotStructurallyRecursive(name))

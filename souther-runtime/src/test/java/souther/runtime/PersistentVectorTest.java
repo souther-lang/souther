@@ -272,7 +272,7 @@ class PersistentVectorTest {
         PersistentVector<Integer> pv = PersistentVector.from(List.of(1, 2, 3));
         assertThrows(UnsupportedOperationException.class, () -> pv.add(4));
         assertThrows(UnsupportedOperationException.class, () -> pv.set(0, 9));
-        assertThrows(UnsupportedOperationException.class, () -> pv.remove(0));
+        assertThrows(UnsupportedOperationException.class, pv::removeFirst);
     }
 
     @Test

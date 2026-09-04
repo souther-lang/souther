@@ -103,7 +103,7 @@ public sealed interface RulesMissed {
      * rule this reading never saw, and a position told the first would be reported as admitting
      * every value its type has while the model says otherwise.
      *
-     * <p>Its own arm rather than {@link #ClauseNotTyped}, which is a clause this had and could not
+     * <p>Its own arm rather than {@link ClauseNotTyped}, which is a clause this had and could not
      * read. Here there was no clause to fail on.
      */
     record ClausesNotExpanded() implements RulesMissed {

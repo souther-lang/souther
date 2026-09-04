@@ -54,7 +54,7 @@ public final class JvmClassName {
         return binaryName.replace('.', '/') + ".class";
     }
 
-    /** @see #classFile(String) */
+    /** The path of this name's class file; see {@link #classFile(String)}. */
     public String classFile() {
         return classFile(binaryName);
     }

@@ -583,24 +583,6 @@ class EverySchemaWordIsAccountedForTest {
         return out;
     }
 
-    /**
-     * One answer of each question, for a caller that wants the word rather than the answer.
-     *
-     * <p>The word a document carries is the question's and not what left it open, so any member of
-     * the family spells it — which {@code AnObligationsExplanationNamesEachReasonOnceTest} holds
-     * the writer to.
-     */
-    private static ObligationDisposition.Uncertainty oneOf(
-            Class<? extends ObligationDisposition.Uncertainty> question) {
-        for (ObligationDisposition each : dispositions()) {
-            if (each instanceof ObligationDisposition.Undecided open
-                    && open.because().written().getFirst().question() == question) {
-                return open.because().written().getFirst();
-            }
-        }
-        throw new AssertionError("no sample above is open on " + question);
-    }
-
     /** The grounds a document may name, spelled by the one writer of the field. */
     private static Set<String> groundWords() {
         return Arrays.stream(ItemAssessment.WritabilityEvidence.Ground.values())

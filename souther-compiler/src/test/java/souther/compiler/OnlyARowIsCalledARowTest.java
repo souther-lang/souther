@@ -180,8 +180,9 @@ class OnlyARowIsCalledARowTest {
     private static boolean answersARow(Signature answered) {
         return answered instanceof Signature.ClassTypeSig cls
                 && (isARow(cls)
-                        || CONTAINERS.contains(Signatures.named(cls)) && cls.typeArgs().size() == 1
-                        && holdsARow(cls.typeArgs().getFirst()));
+                        || (CONTAINERS.contains(Signatures.named(cls))
+                                && cls.typeArgs().size() == 1
+                                && holdsARow(cls.typeArgs().getFirst())));
     }
 
     /** Whether a type is one of the rows themselves. */

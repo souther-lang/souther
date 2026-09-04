@@ -3,7 +3,6 @@ package souther.compiler.check;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.query.Compilation;
-import souther.compiler.query.Scopes;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeSymbols;
@@ -111,7 +110,6 @@ class WhoHoldsAnEndIsWorkedOutWhenItIsAskedForTest {
     private static FieldDomains reading() {
         Compilation compilation = Compilation.ofSource(SOURCE, "Main");
         compilation.answerEverything();
-        Symbols symbols = Scopes.derived(compilation.db(), compilation.modules().get(0)).value();
         TypeSymbol.AtModule held = TypeSymbols.declared(new TypeKey("demo", "Held"));
         return FieldDomains.of(held,
                 RuleReadings.of(compilation, compilation.modules().get(0)),

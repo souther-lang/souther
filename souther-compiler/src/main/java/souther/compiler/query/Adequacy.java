@@ -891,10 +891,6 @@ public final class Adequacy {
                     db.ask(new Bodies.Checked(name)).value();
             Map<String, souther.compiler.core.Core> bodies =
                     checked == null ? Map.of() : checked.behaviorBodies();
-            // What each body's operations handed their closures, read where they were still
-            // operations. The tree beside it has none of them left in it.
-            Map<String, souther.compiler.check.ElementBindings> elementsOf =
-                    checked == null ? Map.of() : checked.elementBindings();
             if (bodies.isEmpty()) {
                 // Nothing checked, so there are no places to be about. Asked further, the reading
                 // of the input is derived over types that did not check — which is a position the
@@ -1292,6 +1288,16 @@ public final class Adequacy {
             return name;
         }
 
+        /**
+         * The measures of every behavior this module divides.
+         *
+         * <p>Some of what it asks for is asked and not read. {@code Db.ask} records the read, so a
+         * query whose answer nobody looks at is still an edge: this measure is recomputed when
+         * that query's answer moves. Dropping the call would drop the edge, which is a change to
+         * when this is recomputed and not a tidy-up, so the asks stay until somebody says which of
+         * the two each edge is — a dependency this measure has, or one a rewrite left behind.
+         * Written as a call and not a binding, so that what is wanted is on the page.
+         */
         @Override
         public Answer<Map<String, PartitionEvidence>> compute(Db db) {
             Answer<CheckSurface> prepared =
@@ -1301,30 +1307,18 @@ public final class Adequacy {
             if (!prepared.present() || !scope.present() || !sigs.present()) {
                 return Answer.absent();
             }
-            souther.compiler.query.Bodies.Elaborated checked =
-                    db.ask(new Bodies.Checked(name)).value();
-            Map<String, souther.compiler.core.Core> bodies =
-                    checked == null ? Map.of() : checked.behaviorBodies();
-            // What each body's operations handed their closures, read where they were still
-            // operations. The tree beside it has none of them left in it.
-            Map<String, souther.compiler.check.ElementBindings> elementsOf =
-                    checked == null ? Map.of() : checked.elementBindings();
-            souther.compiler.coverage.CoverageSites.Plan plan =
-                    checked == null
-                            ? souther.compiler.coverage.CoverageSites.Plan.NONE : checked.plan();
+            db.ask(new Bodies.Checked(name));
             Level level = levelOf(db);
             Map<String, RowReading> byTarget = db.ask(new RowReadings(name)).value();
             Map<String, InputDomain> readInputs = db.ask(new Inputs(name)).value();
             // What the guards above each place leave, asked once for the module and read by
             // every measure below — the same reason the reading of the input is.
-            Map<String, souther.compiler.check.PathReachability.Answers> arrives =
-                    db.ask(new PathReached(name)).value();
+            db.ask(new PathReached(name));
             // What every line this module's rules drew came to, asked once and read here. Measuring a
             // line takes building values, which is not this measure's work and not work to do twice.
             // What each behavior states about its answer, read into the representation the analysis
             // holds it in. A comparison written there draws a line as a `guard`'s does.
-            Map<String, souther.compiler.check.StatedContract> declared =
-                    db.ask(new Bodies.StatedContracts(name)).value();
+            db.ask(new Bodies.StatedContracts(name));
 
             Map<String, Measure<List<BorderAssessment>>> lines =
                     db.ask(new BoundaryReadings(name)).value();
@@ -1345,8 +1339,8 @@ public final class Adequacy {
                 return switch (BoundaryForMeasurement.of(sigs.value(), readInputs, spec)) {
                     case BoundaryForMeasurement.NotDerived why ->
                             PartitionEvidence.notMeasurable(why, spec.name());
-                    case BoundaryForMeasurement.Derived(Sig sig, InputForMeasurement _) ->
-                            measured(db, name, spec, sig, level, scope.value(),
+                    case BoundaryForMeasurement.Derived(Sig _, InputForMeasurement _) ->
+                            measured(db, name, spec, level,
                                     byTarget, lines.get(spec.name()));
                 };
             });
@@ -1354,8 +1348,8 @@ public final class Adequacy {
 
         /** What one behavior whose boundary was worked out reaches of what its model divides it
          *  into. */
-        private PartitionEvidence measured(Db db, String name, Hir.SpecBehavior spec, Sig sig,
-                                           Level level, Symbols scope,
+        private PartitionEvidence measured(Db db, String name, Hir.SpecBehavior spec,
+                                           Level level,
                                            Map<String, RowReading> byTarget,
                                            Measure<List<BorderAssessment>> lines) {
             // A behavior whose signature and input were both read is one the model divides
@@ -1954,7 +1948,7 @@ public final class Adequacy {
      * Every line each of a module's behaviors met, and how far the reading that found them got.
      *
      * <p>Where the lines a behavior was read at are kept. Two accounts are made from these — what a
-     * behavior is owed a row for ({@link PartitionEvidence#owes}) and what a module's declarations
+     * behavior is owed a row for ({@link PartitionEvidence}) and what a module's declarations
      * are ({@link DeclaredBorders}) — and what a report shows of a border whole is this: a block
      * accounts for a border's four points whosever they are, which is a different question from
      * whose debt each of them is.
@@ -2253,7 +2247,7 @@ public final class Adequacy {
                     WeakeningSet.of(new Weakening.BodiesNotElaborated(module))));
         }
 
-        public static BranchEvidence notAsked(NotAsked reason) {
+        public static BranchEvidence notAsked(BranchEvidence.NotAsked reason) {
             return new BranchEvidence(new Measurement.NotMeasured<>(reason));
         }
 
@@ -2496,15 +2490,15 @@ public final class Adequacy {
     }
 
     /**
-     * What a module's sources saw of one behavior: the rows, and what stopped them being seen.
+     * What a module's sources saw of one behavior.
      *
-     * <p>Both, and carried together, because a measure that reads only the rows cannot tell a case no
-     * row covers from a case a row it never saw covers. The evaluation keeps the two apart on purpose
-     * — a source with no runtime to run against contributes no rows and one reason — and an aggregate
-     * that kept only the rows would answer as if the reason were nothing.
+     * <p>The rows alone, and what stopped them being seen is beside this rather than in it: a
+     * {@link RowReading} holds one of these under a {@link Measurement}, and what that reading went
+     * without is the measurement's. The two have to reach a reader together, because a measure with
+     * only the rows cannot tell a case no row covers from a case a row it never saw covers — which
+     * is why {@link RowReading} is what a measure is handed and this is not.
      *
-     * @param rows           what was observed
-     * @param incompleteness why what was observed is not all there was
+     * @param rows what was observed
      */
     public record Observed(List<RowOutcome> rows) {
 
@@ -2556,7 +2550,7 @@ public final class Adequacy {
         /** Nothing was asked of a behavior's rows, which is not a reading that found none. An
          *  answer, for the reason {@link #NONE} is. */
         public static final RowReading NOT_ASKED =
-                new RowReading(new Measurement.NotMeasured<>(NotAsked.ROWS_NOT_ASKED));
+                new RowReading(new Measurement.NotMeasured<>(RowReading.NotAsked.ROWS_NOT_ASKED));
 
         /** Why a reading was not made. Its own enum: what the level did not ask for is not one of
          *  the ways a reading that was made came out. */
@@ -2794,6 +2788,13 @@ public final class Adequacy {
             return name;
         }
 
+        /**
+         * What a search of this module's behaviors filled.
+         *
+         * <p>Two of the queries it asks are asked and not read, for the reason written on
+         * {@link Coverage#compute}: the ask is what records the edge, and taking it out changes
+         * when this is recomputed.
+         */
         @Override
         public Answer<Filling> compute(Db db) {
             Answer<CheckSurface> prepared =
@@ -2812,10 +2813,6 @@ public final class Adequacy {
                     db.ask(new Bodies.Checked(name)).value();
             Map<String, souther.compiler.core.Core> bodies =
                     checked == null ? Map.of() : checked.behaviorBodies();
-            // What each body's operations handed their closures, read where they were still
-            // operations. The tree beside it has none of them left in it.
-            Map<String, souther.compiler.check.ElementBindings> elementsOf =
-                    checked == null ? Map.of() : checked.elementBindings();
             souther.compiler.coverage.CoverageSites.Plan plan =
                     checked == null
                             ? souther.compiler.coverage.CoverageSites.Plan.NONE : checked.plan();
@@ -2828,13 +2825,11 @@ public final class Adequacy {
             Map<String, InputDomain> readInputs = db.ask(new Inputs(name)).value();
             // What the guards above each place leave, asked once for the module and read by
             // every measure below — the same reason the reading of the input is.
-            Map<String, souther.compiler.check.PathReachability.Answers> arrives =
-                    db.ask(new PathReached(name)).value();
+            db.ask(new PathReached(name));
             Symbols symbols = scope.value();
 
             // And what each behavior states about its answer, which draws lines of its own.
-            Map<String, souther.compiler.check.StatedContract> declared =
-                    db.ask(new Bodies.StatedContracts(name)).value();
+            db.ask(new Bodies.StatedContracts(name));
 
             List<Finding> findings = db.ask(new Findings(name)).value();
             Map<String, PartitionEvidence> partitions = coverage.value();
@@ -2892,7 +2887,7 @@ public final class Adequacy {
                                 // where a body did not check — and a declaration the check said
                                 // nothing about is a value this cannot reach rather than a fault.
                                 new souther.compiler.check.ResolvedFieldTypes(symbols)),
-                        divided, bodies.get(behavior), plan, numbering,
+                        bodies.get(behavior), plan, numbering,
                         RowReadings.readingFor(byTarget, behavior),
                         constructing(db, name),
                         read,
@@ -3308,7 +3303,7 @@ public final class Adequacy {
                     continue;
                 }
                 for (Hir.ExampleRow row : block.rows()) {
-                    Generator.Baseline named = namesIn(module, spec, row.inputs());
+                    Generator.Baseline named = namesIn(spec, row.inputs());
                     if (!named.isEmpty() && !out.contains(named)) {
                         out.add(named);
                     }
@@ -3323,8 +3318,7 @@ public final class Adequacy {
 
         /** The parameters a row names a module-level value at, which is the only thing a spread can
          *  be written over: a row writing the value out has no name for this to reach it by. */
-        private static Generator.Baseline namesIn(String module, Hir.SpecBehavior spec,
-                                                  List<Hir.Expr> inputs) {
+        private static Generator.Baseline namesIn(Hir.SpecBehavior spec, List<Hir.Expr> inputs) {
             Map<String, Generator.Baseline.Named> at = new LinkedHashMap<>();
             for (int p = 0; p < inputs.size() && p < spec.params().size(); p++) {
                 if (inputs.get(p) instanceof Hir.Var.Denoting denoting
@@ -3402,7 +3396,6 @@ public final class Adequacy {
                 Hir.SpecBehavior spec, Sig sig, RuleReadingSource reading,
                 souther.compiler.partition.GenerationPlan asked,
                 List<Generator.Baseline> baselines,
-                souther.compiler.partition.Partitions.Partitioning partitioning,
                 souther.compiler.core.Core body,
                 souther.compiler.coverage.CoverageSites.Plan plan,
                 Optional<SiteNumbering> numbering, RowReading observed,
@@ -3860,19 +3853,20 @@ public final class Adequacy {
          * the kinds a second time, so what a report marks and what a build refuses over cannot come
          * apart.
          */
-        public Disposition disposition(AdequacyBar held) {
+        public Finding.Disposition disposition(AdequacyBar held) {
             if (!held.refuses(kind())) {
-                return Disposition.REPORTED;
+                return Finding.Disposition.REPORTED;
             }
             // What the measurement that found this went without, and not a word for how far it
             // got. A build refuses over a gap a measure established; where something the measure
             // reads could not be read, what it did not find is undecided rather than absent.
-            return weakenedBy.isEmpty() ? Disposition.REFUSED : Disposition.UNDECIDED;
+            return weakenedBy.isEmpty()
+                    ? Finding.Disposition.REFUSED : Finding.Disposition.UNDECIDED;
         }
 
         /** Whether a build held to {@code held} is entitled to refuse over this. */
         public boolean isAdequacyGap(AdequacyBar held) {
-            return disposition(held) == Disposition.REFUSED;
+            return disposition(held) == Finding.Disposition.REFUSED;
         }
 
         public Optional<DiagnosticCode> code() {

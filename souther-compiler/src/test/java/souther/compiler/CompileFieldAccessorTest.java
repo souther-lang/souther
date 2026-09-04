@@ -19,7 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class CompileFieldAccessorTest {
 
-    private static Object decodeMember(BytesClassLoader loader, Class<?> member) throws Exception {
+    private static Object decodeMember(Class<?> member) throws Exception {
         return Codecs.decoded(member, Map.of("id", "m-1", "age", 30L));
     }
 
@@ -34,7 +34,7 @@ class CompileFieldAccessorTest {
                 """;
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());
         Class<?> member = loader.loadClass("demo.Member");
-        Object m = decodeMember(loader, member);
+        Object m = decodeMember(member);
 
         Method age = member.getMethod("age");
         assertTrue(Modifier.isPublic(age.getModifiers()), "accessor is public");

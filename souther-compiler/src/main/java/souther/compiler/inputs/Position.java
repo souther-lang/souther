@@ -224,8 +224,8 @@ public sealed interface Position permits ReadPosition {
      * Whether the values at this position are read from a product this reading cannot show the
      * rules admit.
      *
-     * <p>Beside {@link #valuesUnread()} and answering a different question. That one says what
-     * stopped the reading; this one is true where nothing stopped it — every rule arrived and every
+     * <p>Beside {@link #reading()} and answering a different question. That one says what stopped
+     * the reading; this one is true where nothing stopped it — every rule arrived and every
      * rule was taken in, and what is held is one set per position standing for a relation the two
      * of them cannot state. Read off {@link #completeness()} rather than carried, since it is the
      * same fact said in the vocabulary a caller here already has.

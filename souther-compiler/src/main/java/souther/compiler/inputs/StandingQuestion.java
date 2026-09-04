@@ -244,10 +244,9 @@ public sealed interface StandingQuestion {
      * knows which. Where a measure's own answer is written is {@code MeasureClosure}'s, which asks
      * the question rather than the reason.
      *
-     * @param filed which rule, where it was filed and what stopped the reading, which together are
-     *              the whole of what makes two of these one
-     * @param cited how a reader finds it — a name where the author gave one, a place where they did
-     *              not
+     * <p>What makes two of these one is the whole of which rule it is, where it was filed and what
+     * stopped the reading. How a reader finds it is a separate thing — a name where the author gave
+     * one, a place where they did not — and is not part of that identity.
      */
     sealed interface Unclassified extends StandingQuestion {
 
@@ -272,7 +271,7 @@ public sealed interface StandingQuestion {
      * rule and one of its questions came out undecided, which names that question and holds open
      * only the measure answering it.
      */
-    record NothingClassifiesIt(Filed filed,
+    record NothingClassifiesIt(NothingClassifiesIt.Filed filed,
                                   Set<RuleCitation> cited) implements Unclassified {
 
         public NothingClassifiesIt {
@@ -291,7 +290,8 @@ public sealed interface StandingQuestion {
         public static NothingClassifiesIt of(RuleRef rule, RuleCitation cited,
                                                     FilingCoordinate at,
                                                     BlockReason.RuleReadingStopped why) {
-            return new NothingClassifiesIt(new Filed(rule, at, why), Set.of(cited));
+            return new NothingClassifiesIt(new NothingClassifiesIt.Filed(rule, at, why),
+                    Set.of(cited));
         }
 
         @Override
@@ -300,11 +300,13 @@ public sealed interface StandingQuestion {
         }
 
         /** Where a reader is sent to look, which is not what the rule is about. */
+        @Override
         public FilingCoordinate at() {
             return filed.at();
         }
 
         /** What stopped the reading, in this compiler's own terms. */
+        @Override
         public BlockReason.RuleReadingStopped why() {
             return filed.why();
         }
@@ -377,7 +379,8 @@ public sealed interface StandingQuestion {
      * @param filed which rule, where it was filed and what stopped the reading
      * @param cited how a reader finds the rule
      */
-    record BoundaryUndetermined(Filed filed, Set<RuleCitation> cited) implements Unclassified {
+    record BoundaryUndetermined(BoundaryUndetermined.Filed filed,
+                                Set<RuleCitation> cited) implements Unclassified {
 
         public BoundaryUndetermined {
             if (filed == null) {
@@ -395,7 +398,8 @@ public sealed interface StandingQuestion {
         public static BoundaryUndetermined of(RuleRef rule, RuleCitation cited,
                                               FilingCoordinate at,
                                               BlockReason.RuleReadingStopped why) {
-            return new BoundaryUndetermined(new Filed(rule, at, why), Set.of(cited));
+            return new BoundaryUndetermined(new BoundaryUndetermined.Filed(rule, at, why),
+                    Set.of(cited));
         }
 
         @Override

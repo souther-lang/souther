@@ -394,14 +394,14 @@ public final class HelperTyping {
      * of one declaration would agree only until one of them was edited.
      */
     static Map<String, Type> recursiveCallSigs(HelperInliner inliner, Symbols symbols) {
-        return sigsOf(inliner.recursiveInReach(), inliner::helper, symbols, inliner.moduleName());
+        return sigsOf(inliner.recursiveInReach(), inliner::helper, inliner.moduleName());
     }
 
     /** The same, read off a table rather than off an inliner over it. */
     static Map<String, Type> recursiveCallSigs(
             HelperTable table, java.util.Collection<souther.compiler.types.ReachName.Declaration> references,
             Symbols symbols) {
-        return sigsOf(references, table::reached, symbols, table.module());
+        return sigsOf(references, table::reached, table.module());
     }
 
     /**
@@ -416,7 +416,7 @@ public final class HelperTyping {
             java.util.Collection<souther.compiler.types.ReachName.Declaration> references,
             java.util.function.Function<souther.compiler.types.ReachName.Declaration, Hir.FnDef>
                     declaring,
-            Symbols symbols, String ownModule) {
+            String ownModule) {
         Map<String, Type> sigs = new HashMap<>();
         for (souther.compiler.types.ReachName.Declaration reference : references) {
             // Which declaration each is, the reference answers. What comes out is a scope — the
@@ -779,7 +779,7 @@ public final class HelperTyping {
     /**
      * The data each recursive helper constructs, transitively. A recursive helper is lowered to a
      * method rather than inlined, so its constructions do not appear in a caller's body; this map lets
-     * {@link #collectConstructs} attribute them to the behavior that calls the helper (spec §blocks). The
+     * {@link DataChecker#collectConstructs} attribute them to the behavior that calls the helper (spec §blocks). The
      * closure follows recursive-helper calls: a helper's set includes what the recursive helpers it
      * calls construct. Non-recursive helper calls are already inlined into the bodies here.
      */

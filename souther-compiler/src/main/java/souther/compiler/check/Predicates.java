@@ -326,15 +326,17 @@ final class Predicates {
         }
 
         boolean dischargedBy(NumericDomain<FactSubject> d, PredicateFacts<FactSubject> facts) {
-            return numeric != null && d.entails(numeric.form(), numeric.rel())
-                    || fact != null && fact.entailedBy(facts)
-                    || piecewise != null && !decidedAsWritten(d, facts) && piecewise.entailedBy(d);
+            return (numeric != null && d.entails(numeric.form(), numeric.rel()))
+                    || (fact != null && fact.entailedBy(facts))
+                    || (piecewise != null && !decidedAsWritten(d, facts)
+                            && piecewise.entailedBy(d));
         }
 
         boolean refutedBy(NumericDomain<FactSubject> d, PredicateFacts<FactSubject> facts) {
-            return numeric != null && d.refutes(numeric.form(), numeric.rel())
-                    || fact != null && fact.refutedBy(facts)
-                    || piecewise != null && !decidedAsWritten(d, facts) && piecewise.refutedBy(d);
+            return (numeric != null && d.refutes(numeric.form(), numeric.rel()))
+                    || (fact != null && fact.refutedBy(facts))
+                    || (piecewise != null && !decidedAsWritten(d, facts)
+                            && piecewise.refutedBy(d));
         }
 
         /**
@@ -349,10 +351,10 @@ final class Predicates {
          * that takes the call as an unknown cannot settle, and that is untouched.
          */
         private boolean decidedAsWritten(NumericDomain<FactSubject> d, PredicateFacts<FactSubject> facts) {
-            return numeric != null
-                    && (d.entails(numeric.form(), numeric.rel())
-                            || d.refutes(numeric.form(), numeric.rel()))
-                    || fact != null && (fact.entailedBy(facts) || fact.refutedBy(facts));
+            return (numeric != null
+                            && (d.entails(numeric.form(), numeric.rel())
+                                    || d.refutes(numeric.form(), numeric.rel())))
+                    || (fact != null && (fact.entailedBy(facts) || fact.refutedBy(facts)));
         }
     }
 
@@ -907,7 +909,7 @@ final class Predicates {
     private Boolean decidedAt(StatedComparison stated) {
         Object left = Terms.folded(stated.left(), terms.symbols());
         Object right = Terms.folded(stated.right(), terms.symbols());
-        return left == null || right == null ? null
+        return (left == null || right == null) ? null
                 : ConstEval.stands(stated.claim().statedRelation(), left, right);
     }
 
@@ -924,12 +926,13 @@ final class Predicates {
      * afterwards by comparing the state to what went in: that comparison says whether anything
      * changed, which is a third question and is the answer to neither.
      *
-     * @param read whether any of these domains took the condition in
+     * @param taken     whether any of these domains took the condition in
+     * @param shapeRead whether a rule here read the shape it is written in at all
      */
     record Assumed(Known known, boolean taken, boolean shapeRead) {
 
         Assumed alsoRead(boolean moreTaken, boolean moreShape) {
-            return moreTaken && !taken || moreShape && !shapeRead
+            return (moreTaken && !taken) || (moreShape && !shapeRead)
                     ? new Assumed(known, taken || moreTaken, shapeRead || moreShape) : this;
         }
     }

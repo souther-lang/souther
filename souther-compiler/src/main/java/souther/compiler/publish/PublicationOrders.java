@@ -116,7 +116,7 @@ public final class PublicationOrders {
             .comparing((PublishedAt each) -> each.source().value())
             .thenComparingInt(PublishedAt::line)
             .thenComparingInt(PublishedAt::column)
-            .thenComparing(PublicationOrders::whereRank)
+            .thenComparingInt(PublicationOrders::whereRank)
             .thenComparing(PublicationOrders::declarationOf);
 
     private static int whereRank(PublishedAt place) {

@@ -316,6 +316,7 @@ public interface Ast {
         }
 
         /** Where the entry is written. */
+        @Override
         public SourcePos pos() {
             return written.pos();
         }
@@ -337,6 +338,7 @@ public interface Ast {
             return written().canonical();
         }
 
+        @Override
         SourcePos pos();
     }
 
@@ -384,6 +386,7 @@ public interface Ast {
         }
 
         /** Where the name is written. */
+        @Override
         public SourcePos pos() {
             return written.pos();
         }
@@ -661,6 +664,7 @@ public interface Ast {
             return written().authored() ? written().pos() : null;
         }
 
+        @Override
         SourcePos pos();
     }
 
@@ -733,6 +737,7 @@ public interface Ast {
         }
 
         /** Where the name is written. */
+        @Override
         public SourcePos pos() {
             return written.pos();
         }
@@ -806,6 +811,7 @@ public interface Ast {
         }
 
         /** Where the field name is written. */
+        @Override
         public SourcePos pos() {
             return written.pos();
         }
@@ -1163,7 +1169,7 @@ public interface Ast {
          * <p>The field is named and written nowhere, the occurrence it was read from being in the
          * file this copy is no longer being read against. The characters are still somebody's, and
          * they are whatever stands at {@code region} in the file this is read in. The counterpart of
-         * {@link Var#respelled}, for the same reason.
+         * {@link Hir.Var#respelled}, for the same reason.
          */
         public static FieldAccess restamped(Expr target, String field, SourcePos at, Region over) {
             return new FieldAccess(target, WrittenName.synthetic(field, at), at, over);

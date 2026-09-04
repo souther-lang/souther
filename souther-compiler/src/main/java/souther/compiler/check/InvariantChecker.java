@@ -322,10 +322,12 @@ public final class InvariantChecker {
      * is nothing left to get wrong: it says where it was written and what it comes to, and the two
      * were made together ({@link ClausesForDischarge}).
      *
-     * @param clause the conjunct, as written and as this check reads it
-     * @param typing what types the read form here — a declaration's fields, a signature's names —
-     *               answering {@link TypedClause.Stopped} where typing it did not finish
+     * @param conjunct the conjunct, as written and as this check reads it
      * @param locations the names it may read, each standing for itself
+     * @param source what the rule is read against — the symbols that type the form here and the
+     *               invariants it may reach — which is what says where the reading comes from
+     *               rather than leaving each reader to assemble one
+     * @param policy what to do where the reading does not finish
      * @param describing what is being read, for the record a fail-open leaves behind
      */
     static ClauseDischarge capabilityOf(StatedContract.Conjunct conjunct,
@@ -402,7 +404,7 @@ public final class InvariantChecker {
      * What the invariants reaching a value of {@code data} leave each of its fields able to hold, and
      * the atom each field is named by.
      *
-     * <p>The same seeding a parameter of that type gets ({@link #seedAt}), read for what it says of
+     * <p>The same seeding a parameter of that type gets ({@link PathEngine#seedAt}), read for what it says of
      * the values instead of for what it discharges. A record's own clause relates its fields; each
      * field's type bounds that field on its own; and both land in one state over the same atoms,
      * which is what lets a bound reach one field through another.
@@ -890,13 +892,6 @@ public final class InvariantChecker {
         return counted == null ? null : counted.atom();
     }
 
-    /** The same over a whole reading, for the readers that take the map. */
-    private static Map<RuleKey, FactSubject> heldAtomsOf(Map<RuleKey, FieldDomains.Counted> held) {
-        Map<RuleKey, FactSubject> out = new LinkedHashMap<>();
-        held.forEach((path, counted) -> out.put(path, counted.atom()));
-        return out;
-    }
-
     /** How many alternatives a reading came to, a reading that admits nothing holding none. */
     private static int heldApart(AdmissibleValues<FactSubject> values) {
         return values.held() instanceof AdmissibleValues.Held.Alternatives<FactSubject> it
@@ -906,10 +901,10 @@ public final class InvariantChecker {
     /**
      * The atom each position under {@code value} is named by, keyed by the path it is reached at.
      *
-     * <p>The walk {@link #seedAt} took, over the same reads, so a position the seeding put a bound on
-     * is a position this can name. Two levels down as well as one: a clause on a record relates a
-     * field of a field to something, and the bound that leaves on it is read at the path it sits at
-     * rather than at the record it happens to be inside.
+     * <p>The walk {@link PathEngine#seedAt} took, over the same reads, so a position the seeding
+     * put a bound on is a position this can name. Two levels down as well as one: a clause on a
+     * record relates a field of a field to something, and the bound that leaves on it is read at
+     * the path it sits at rather than at the record it happens to be inside.
      *
      * <p>A name wrapped round a value is not a step of the path ({@link Location#isStep}), which is
      * the rule the rest of this already reads by: the atom of {@code w.value.n} <em>is</em> the atom
@@ -1026,8 +1021,8 @@ public final class InvariantChecker {
      * and places nothing on it: that 9 is where {@code b} stops, and a position whose only limit is
      * another position's is one the model draws no line through. Only what is here may be a line.
      *
-     * @param path     where the coordinate sits, read from the value these are of
-     * @param measured whether the coordinate is a count taken of the position rather than its value
+     * @param at       where the coordinate sits, read from the value these are of, and which of the
+     *                 numbers there this end is on — a count taken of the position, or its value
      * @param from     the rule that placed it, which is what names the line. The clause and not
      *                 the declaration it is on: two clauses of one declaration placing an end at
      *                 one value are two rules a row could be owed to, and held as declarations
@@ -1083,7 +1078,7 @@ public final class InvariantChecker {
         /**
          * A value the construction need not make, so a rule under it refuses no construction.
          *
-         * <p>The same reach {@link #everyRuleRead} has, and for the same reason: a rule four records
+         * <p>The same reach {@link #BY_EVERY_VALUE} has, and for the same reason: a rule four records
          * down the required chain refuses the outermost construction exactly as one on its own
          * fields does.
          *
@@ -1396,9 +1391,8 @@ public final class InvariantChecker {
      */
     private void settle(Core part, RuleRef.Invariant rule, ClauseStates states,
                         InvariantBound.Read placed,
-                        Denotations at,
                         Map<FactSubject, Coordinate> byName, Map<RuleRef, Required> raised,
-                        ReadingEvidence took, Map<RuleKey, Type> typeAt,
+                        ReadingEvidence took,
                         PartsRead parts,
                         Map<RuleRef, Map<Core, Required>> raisedByPart) {
         raises(raised, rule, states);
@@ -1526,7 +1520,7 @@ public final class InvariantChecker {
             // the classification to be handed.
             settle(clause, from, states(clause, at, byName, null, runs),
                     new InvariantBound.Read.NoEnd(),
-                    at, byName, raised, took, typeAt, parts, raisedByPart);
+                    byName, raised, took, parts, raisedByPart);
             return;
         }
         // Where this clause is recognised as a comparison, and the one place it is. What each
@@ -1549,7 +1543,7 @@ public final class InvariantChecker {
         if (asWritten == null) {
             settle(bin, from, states(bin, at, byName, read, runs),
                     new InvariantBound.Read.NoEnd(),
-                    at, byName, raised, took, typeAt, parts, raisedByPart);
+                    byName, raised, took, parts, raisedByPart);
             return;
         }
         // Which number this conjunct is about, written down before anything is asked about what it
@@ -1575,7 +1569,7 @@ public final class InvariantChecker {
         if (asWritten instanceof ComparisonClaim.Singled named && !named.holdsAtTheValue()) {
             settle(bin, from, states(bin, at, byName, read, runs),
                     new InvariantBound.Read.NoEnd(),
-                    at, byName, raised, took, typeAt, parts, raisedByPart);
+                    byName, raised, took, parts, raisedByPart);
             // And handed on, which is not the same as being reported. A rule that rules one value
             // out places no end and is no failure of this reading, so there is nothing here for an
             // author to lift and there is a conjunct for the reading that draws lines to make what
@@ -1638,7 +1632,7 @@ public final class InvariantChecker {
                                             List.of(part))
                                     : had.and(part)));
         }
-        settle(bin, from, shape, end, at, byName, raised, took, typeAt, parts, raisedByPart);
+        settle(bin, from, shape, end, byName, raised, took, parts, raisedByPart);
         if (end instanceof InvariantBound.Read.NoEnd) {
             // A rule saying where the values stop that no end came out of, said as that. Here,
             // where the reading gave up, because this is the reading a report's line would have
@@ -2234,7 +2228,7 @@ public final class InvariantChecker {
         }
 
         /** What stopped the reading at each name it stopped at, for the classification to carry. */
-        SequencedMap<RuleKey, List<BlockReason.RuleReadingStopped>> undecided(
+        private SequencedMap<RuleKey, List<BlockReason.RuleReadingStopped>> undecided(
                 Map<FactSubject, Coordinate> byName) {
             SequencedMap<RuleKey, List<BlockReason.RuleReadingStopped>> out = new LinkedHashMap<>();
             byPosition.forEach((position, run) -> {
@@ -3478,12 +3472,7 @@ public final class InvariantChecker {
     }
 
     /** What a construction came out as where it is being read on a branch rather than said. */
-    private record Reported(Hir.Data type, SourcePos pos, Judgment judgment, boolean attempted) {
-
-        Verdict verdict() {
-            return judgment.verdict();
-        }
-    }
+    private record Reported(Hir.Data type, SourcePos pos, Judgment judgment, boolean attempted) {}
 
     /**
      * Which construction a reading found: the one in the body as it was written. A reading is that
@@ -3561,7 +3550,7 @@ public final class InvariantChecker {
      * A case split a value is handed, and the bindings in scope where it stands. A case split is a
      * node answering one of several arms where which one is decided by something a reading can
      * assume — an {@code if} by its condition, a {@code match} by which case the scrutinee is — and
-     * which arms those are is {@link #armsOf}'s answer, so nothing reading a site asks which of the
+     * which arms those are is settled where the split is read, so nothing reading a site asks which of the
      * forms it was handed.
      *
      * <p>The node and the scope go together: a node is found by searching down from the outside, and
@@ -3749,7 +3738,7 @@ public final class InvariantChecker {
      * enough and was once all there was: a kind can be answered {@code true} here and still reach no
      * reader that opens one. What carries the decision out is that this is the one gate — {@link
      * #splitIn} finds a site by asking it, and {@link #splitOf} reads the arms off the same
-     * {@link Choice} — and that {@link #choosing} switches over {@link Choice.Decides}, which is
+     * {@link Choice} — and that {@link Terms#choosing} switches over {@link Choice.Decides}, which is
      * sealed, so a kind declared a split with nothing to enter it by does not compile.
      */
     private static boolean isASplit(Core e) {

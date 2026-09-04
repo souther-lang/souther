@@ -4,7 +4,6 @@ import souther.compiler.ast.Hir;
 import souther.compiler.check.ExpandedClauseLookup;
 import souther.compiler.check.ExpandedClauseResult;
 import souther.compiler.check.BehaviorContract;
-import souther.compiler.check.Symbols;
 import souther.compiler.check.CheckedEnsures;
 import souther.compiler.check.ClauseDischarge;
 import souther.compiler.check.ContractDischarge;
@@ -109,7 +108,6 @@ class AClassificationIsPlacedInsideTheClauseItIsAboutTest {
     void everyClauseIsPlacedInsideTheInvariantItIsWrittenUnder() {
         Compilation c = compiled();
         ExpandedClauseLookup declared = Shapes.expandedClauses(c.db());
-        Symbols scope = Scopes.derived(c.db(), "m.a").value();
         Map<TypeSymbol, List<ClauseDischarge>> classified =
                 c.db().ask(new Shapes.InvariantCapabilities("m.a")).value();
         assertNotNull(declared);

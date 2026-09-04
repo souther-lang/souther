@@ -43,10 +43,10 @@ class OneReadingTakesBothRoadsToAPositionTest {
             """;
 
     /** Four links down, which the enumeration stops three links short of. */
-    private static TermPath fourLinksDown(InputDomain read) {
+    private static TermPath fourLinksDown() {
         TermPath at = TermPath.of("c");
         for (int i = 0; i < 4; i++) {
-            at = at.refine(caseOf(read, "Cons")).then(i == 3 ? "head" : "tail");
+            at = at.refine(caseOf("Cons")).then(i == 3 ? "head" : "tail");
         }
         return at;
     }
@@ -61,11 +61,11 @@ class OneReadingTakesBothRoadsToAPositionTest {
      */
     @Test
     void whatWasWalkedThroughIsNotReported() {
-        InputDomain read = reading(fourLinksDown(readingOf(CHAIN, "read", InputDemand.NONE)));
+        InputDomain read = reading(fourLinksDown());
 
-        assertNotNull(read.at(fourLinksDown(read)), () -> spelled(read));
-        assertNull(read.at(TermPath.of("c").refine(caseOf(read, "Cons")).then("tail")
-                        .refine(caseOf(read, "Cons")).then("head")),
+        assertNotNull(read.at(fourLinksDown()), () -> spelled(read));
+        assertNull(read.at(TermPath.of("c").refine(caseOf("Cons")).then("tail")
+                        .refine(caseOf("Cons")).then("head")),
                 () -> "one link down is on the way to it and nothing named it: " + spelled(read));
     }
 
@@ -73,7 +73,7 @@ class OneReadingTakesBothRoadsToAPositionTest {
     @Test
     void theEnumerationIsWhatItWasWithoutTheDemand() {
         InputDomain alone = readingOf(CHAIN, "read", InputDemand.NONE);
-        InputDomain asked = reading(fourLinksDown(alone));
+        InputDomain asked = reading(fourLinksDown());
 
         for (Position each : alone.positions()) {
             assertNotNull(asked.at(each.path()),
@@ -93,9 +93,8 @@ class OneReadingTakesBothRoadsToAPositionTest {
      */
     @Test
     void twoDemandsSharingAPrefixOpenItOnce() {
-        InputDomain read = readingOf(CHAIN, "read", InputDemand.NONE);
-        TermPath head = fourLinksDown(read);
-        TermPath tail = sibling(read);
+        TermPath head = fourLinksDown();
+        TermPath tail = sibling();
 
         assertEquals(placedIn(reading(List.of(head))), placedIn(reading(List.of(head, tail))),
                 "the prefix the two share is opened once, so it places its rules once");
@@ -108,10 +107,10 @@ class OneReadingTakesBothRoadsToAPositionTest {
     }
 
     /** The `tail` beside the demanded `head`, four links down. */
-    private static TermPath sibling(InputDomain read) {
+    private static TermPath sibling() {
         TermPath at = TermPath.of("c");
         for (int i = 0; i < 4; i++) {
-            at = at.refine(caseOf(read, "Cons")).then("tail");
+            at = at.refine(caseOf("Cons")).then("tail");
         }
         return at;
     }
@@ -119,16 +118,15 @@ class OneReadingTakesBothRoadsToAPositionTest {
     /** And the answer does not turn on which order the demands arrived in. */
     @Test
     void theOrderTheDemandsArrivedInDecidesNothing() {
-        InputDomain read = readingOf(CHAIN, "read", InputDemand.NONE);
-        TermPath head = fourLinksDown(read);
-        TermPath tail = sibling(read);
+        TermPath head = fourLinksDown();
+        TermPath tail = sibling();
 
         assertEquals(spelled(reading(List.of(head, tail))), spelled(reading(List.of(tail, head))));
     }
 
     /** The narrowing to one leaf, spelled the way the checker's resolution of an arm spells it: a
      *  leaf is a case that covers itself, so selecting it narrows to that one distinction. */
-    private static Refinement caseOf(InputDomain read, String name) {
+    private static Refinement caseOf(String name) {
         souther.compiler.types.TypeSymbol leaf = souther.compiler.types.TypeSymbols.declared(
                 new souther.compiler.types.TypeKey("g", name));
         return Refinement.of(souther.compiler.types.ResolvedCase.of(

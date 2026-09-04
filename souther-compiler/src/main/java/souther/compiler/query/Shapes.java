@@ -60,7 +60,7 @@ public final class Shapes {
      *
      * <p>Which clauses govern a declaration is a separate question and is not answered here:
      * a clause of a type this one spreads stays that type's, and
-     * {@link souther.compiler.check.TypeOps#declaredInvariants} composes them where one is asked
+     * {@link souther.compiler.check.TypeOps#settledInvariants} composes them where one is asked
      * for.
      *
      * <p>Settling substitutes what the modules this one imports publish to it, as lowering a body

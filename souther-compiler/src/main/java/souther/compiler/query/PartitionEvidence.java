@@ -32,7 +32,7 @@ import java.util.Set;
  * reader holding one of its entries could walk back to the border and the roles beside it; asked
  * for by name, each is one answer with one owner.
  *
- * @param axes         one entry per position the model divides
+ * @param partitioned  one entry per position the model divides
  * @param notDerivable positions no class came back for, each saying whether the model divides them
  *                     no way at all or this could not read what it divides them by. Both used to be
  *                     one list of paths, and the sentence written from it claimed the first about
@@ -50,7 +50,7 @@ import java.util.Set;
  * not a measurement of it, and the rule this normalization follows is to drop only what something
  * shows is covered.
  *
- * @param whyUnclassified why the rows counted in {@link AxisCoverage#unclassifiedRows} could not be
+ * @param whyUnclassified why the rows counted in {@link AxisCoverage.Reached#unclassifiedRows} could not be
  *                     placed. The count is the measurement and this is what it came out of, which
  *                     is why they are two things and not one wider count. Not a report's list of
  *                     reasons: these are what classification observed, and joining them to
@@ -168,6 +168,7 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
          * whether anything worked either of those out are the question's own answers, and a reader
          * that needs one of them asks the question rather than a projection of it made here.
          */
+        @Override
         public StandingQuestion asked() {
             return asked;
         }
@@ -526,7 +527,7 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
 
         /** A space nobody counted. It keeps its size, which the model settles, and has no counts. */
         public static PairSpace noRows(int total) {
-            return new PairSpace(total, new Measurement.NotMeasured<>(NoRows.NO_ROWS));
+            return new PairSpace(total, new Measurement.NotMeasured<>(PairSpace.NoRows.NO_ROWS));
         }
 
         /** The same, where nobody asked for a measurement at all. */
@@ -684,7 +685,7 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
         public static AxisCoverage noRows(souther.compiler.partition.AxisId at, String path,
                                           List<String> classes, Reading read) {
             return new AxisCoverage(at, path, classes, read,
-                    new Measurement.NotMeasured<>(NoRows.NO_ROWS));
+                    new Measurement.NotMeasured<>(AxisCoverage.NoRows.NO_ROWS));
         }
 
         /** The same, where nobody asked for a measurement at all. */
@@ -711,7 +712,7 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
          * name and nothing else cannot say which position to write the row at, and neither can a
          * document trying to join the two back together.
          *
-         * <p>Which of {@link #axis} and {@link #path} names the position to a reader is not settled
+         * <p>Which of {@link #at} and {@link #path} names the position to a reader is not settled
          * here. The two are for different readers and a value that chose one of them would be this
          * measure writing a report's sentence.
          */

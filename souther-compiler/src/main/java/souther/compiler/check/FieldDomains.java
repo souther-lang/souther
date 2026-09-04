@@ -606,11 +606,10 @@ public final class FieldDomains {
      * <p>One per name the rule writes, since a rule relating two coordinates is filed under
      * neither of them alone.
      *
-     * @param path     what the value's rules call where the coordinate sits
-     * @param measured whether the end was to be on a count taken of what stands at the name rather
-     *                 than on the value there. One name carries both — a {@code String} bounded on
-     *                 its length has an end on the count and values of its own — and a rule stopped
-     *                 at one of them is no account of the other
+     * @param at   where the coordinate sits, and which of the numbers there the end was to be on.
+     *             One name carries both — a {@code String} bounded on its length has an end on the
+     *             count and values of its own — and a rule stopped at one of them is no account of
+     *             the other, so the two travel together
      * @param from the rule that says where the values stop, which is what a reader is sent to look
      *             at
      * @param part which conjunct of it this is. A rule is read a conjunct at a time and a reason

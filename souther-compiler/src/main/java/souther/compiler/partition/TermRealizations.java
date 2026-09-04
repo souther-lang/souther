@@ -18,7 +18,8 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * The values that put a term at a number, which is the other direction of {@link NumericTerm#read}.
+ * The values that put a term at a number, which is the other direction of reading a
+ * {@link NumericTerm} off an observation.
  *
  * <p><b>Not its inverse.</b> Reading is not injective and building cannot undo it: many strings are
  * five long, and every time in an hour falls in that hour. What holds is one way round — every value

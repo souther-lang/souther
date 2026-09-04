@@ -458,45 +458,32 @@ public final class GrowingFold {
      * the counts in {@link #grownStep} and {@link #puttingStep} settle.
      */
     private static Core answers(Core e, Set<BindingId> acc, int[] found, Growth growth) {
-        switch (e) {
+        return switch (e) {
             case Core.Read v -> {
                 if (!acc.contains(v.binding())) {
-                    return null;
+                    yield null;
                 }
                 found[0]++;
-                return v;
+                yield v;
             }
             case Core.If iff -> {
                 Core then = answers(iff.then(), acc, found, growth);
                 Core els = then == null ? null : answers(iff.els(), acc, found, growth);
-                return els == null ? null
+                yield els == null ? null
                         : new Core.If(iff.cond(), then, els, iff.origin(), iff.type(), iff.pos(),
                                 iff.expansion());
             }
             case Core.LetIn li -> {
                 if (acc.contains(li.binder().binding()) && !(li.value() instanceof Core.Read v
                         && acc.contains(v.binding()))) {
-                    return null;   // one of the accumulator's names now stands for something else
+                    // one of the accumulator's names now stands for something else
+                    yield null;
                 }
                 Core body = answers(li.body(), acc, found, growth);
-                return body == null ? null
+                yield body == null ? null
                         : new Core.LetIn(li.binder(), li.value(), body, li.type(), li.pos());
             }
-            case Core.Match m -> {
-                List<Core.Case> cases = new ArrayList<>();
-                for (Core.Case c : m.cases()) {
-                    if (c.binder() != null && acc.contains(c.binder().binding())) {
-                        return null;
-                    }
-                    Core body = answers(c.body(), acc, found, growth);
-                    if (body == null) {
-                        return null;
-                    }
-                    cases.add(c.answering(body));
-                }
-                return new Core.Match(m.scrutinee(), cases, m.origin(), m.type(), m.pos(),
-                        m.expansion());
-            }
+            case Core.Match m -> answers(m, acc, found, growth);
             // A call a representation kept standing is not part of the tree a fold grows in: this
             // reads what the backend emits, and that keeps none.
             case Core.PreservedCall p -> throw p.unexpectedIn("fold growing");
@@ -505,9 +492,31 @@ public final class GrowingFold {
                 if (grown != null) {
                     found[0]++;
                 }
-                return grown;
+                yield grown;
             }
+        };
+    }
+
+    /**
+     * The same walk over a match, which answers where every one of its cases does.
+     *
+     * <p>A case binding one of the accumulator's names takes the answer away for the whole match:
+     * inside it the name stands for what the case bound, so what the arms answer with is no longer
+     * the accumulator.
+     */
+    private static Core answers(Core.Match m, Set<BindingId> acc, int[] found, Growth growth) {
+        List<Core.Case> cases = new ArrayList<>();
+        for (Core.Case c : m.cases()) {
+            if (c.binder() != null && acc.contains(c.binder().binding())) {
+                return null;
+            }
+            Core body = answers(c.body(), acc, found, growth);
+            if (body == null) {
+                return null;
+            }
+            cases.add(c.answering(body));
         }
+        return new Core.Match(m.scrutinee(), cases, m.origin(), m.type(), m.pos(), m.expansion());
     }
 
     /**

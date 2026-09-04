@@ -93,7 +93,8 @@ public final class ConstEval {
         // condition down with it — so a construction the language calls constant would be checked
         // where it was written one way and not the other.
         if (l.orElse(null) instanceof Boolean settled
-                && (bin.op() == BinOp.AND && !settled || bin.op() == BinOp.OR && settled)) {
+                && ((bin.op() == BinOp.AND && !settled)
+                        || (bin.op() == BinOp.OR && settled))) {
             return Optional.of(settled);
         }
         Optional<Object> r = eval(bin.right());

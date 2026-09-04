@@ -204,9 +204,9 @@ public interface LevelSpace {
                 // question, a rule holding one string above another lost the whole of the side above
                 // it, because a string has no successor.
                 if (carrier.spacing() == souther.compiler.numeric.Granularity.DISCRETE) {
-                    return lo != null && least == null || hi != null && greatest == null
-                            || least != null && greatest != null
-                                    && compare(least, greatest) > 0
+                    return (lo != null && least == null) || (hi != null && greatest == null)
+                            || (least != null && greatest != null
+                                    && compare(least, greatest) > 0)
                             ? new Occupancy.Empty() : new Occupancy.Inhabited(least, greatest);
                 }
                 // And where they fill, the one run that holds nothing is a single place the carrier
@@ -594,8 +594,8 @@ public interface LevelSpace {
                     : generated(low, Towards.ABOVE, !look.min().inclusive());
             Level greatest = high == null ? null
                     : generated(high, Towards.BELOW, !look.max().inclusive());
-            if (least != null && !run.contains(least) || greatest != null
-                    && !run.contains(greatest)) {
+            if ((least != null && !run.contains(least))
+                    || (greatest != null && !run.contains(greatest))) {
                 return new Occupancy.Empty();
             }
             // Where the values fill there is no first one, and whether the run holds anything is
@@ -642,9 +642,9 @@ public interface LevelSpace {
             if (strict && on.compareTo(at) == 0) {
                 on = into == Towards.ABOVE ? on.add(generator) : on.subtract(generator);
             }
-            if (low != null && (lowIn ? on.compareTo(low) < 0 : on.compareTo(low) <= 0)
-                    || high != null && (highIn ? on.compareTo(high) > 0
-                            : on.compareTo(high) >= 0)) {
+            if ((low != null && (lowIn ? on.compareTo(low) < 0 : on.compareTo(low) <= 0))
+                    || (high != null && (highIn ? on.compareTo(high) > 0
+                            : on.compareTo(high) >= 0))) {
                 return Witness.NONE;
             }
             return new Witness.Found(new Level.ACount(new Count(on)));

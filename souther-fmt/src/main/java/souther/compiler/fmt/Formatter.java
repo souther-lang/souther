@@ -492,7 +492,7 @@ public final class Formatter {
 
     /**
      * What ends the line a construct opens with — the {@code example j}, the {@code data D =}, the
-     * {@code match … with}, the {@code else}, the {@code {}.
+     * {@code match … with}, the {@code else}, the <code>{</code>.
      *
      * <p>A construct written over several lines has a first line that none of its members is on, so
      * that line is a place of its own: what the source wrote at the end of it is about the construct
@@ -507,8 +507,9 @@ public final class Formatter {
                 new Written.Run(opener.start(), opener.end())));
     }
 
-    /** {@code d}, written at {@code place}, with the comments that construct still hands over. */
-    private Member member(Place place, SyntaxNode node, TokenDoc d) {
+    /** {@code d}, written at {@code place}, with the comments that construct still hands over. The
+     *  place is what says which construct that is, so nothing here reads the node again. */
+    private Member member(Place place, TokenDoc d) {
         return new Member(TokenDoc.at(place, d), TokenDoc.endsTheLineOf(place));
     }
 
@@ -596,8 +597,9 @@ public final class Formatter {
 
     /** The same for a part the grammar writes as a bare identifier rather than as a node — a sum's
      * cases. It is the only other way a chain's part can stand for something written, so between the
-     * two of them nothing else builds a segment. */
-    private TokenDoc segment(Place place, SyntaxToken owner, TokenDoc doc) {
+     * two of them nothing else builds a segment. Such a part always stands for something, so unlike
+     * the one above there is no absent owner to ask about and the place says all of it. */
+    private TokenDoc segment(Place place, TokenDoc doc) {
         return TokenDoc.at(place, concat(GAP, doc, TokenDoc.endsTheLineOf(place)));
     }
 
@@ -618,18 +620,15 @@ public final class Formatter {
                 Written.of(owner));
     }
 
-    /** The part of a chain written before the first connector, from the construct it stands for. A
-     * head is a member like a segment is, and the same three things it can stand for: a node, an
-     * identifier, or nothing the source wrote. */
-    private Member head(Place place, SyntaxNode owner, TokenDoc doc) {
-        return new Member(TokenDoc.at(place, doc), TokenDoc.endsTheLineOf(place));
-    }
-
-    /** The same for a head the grammar writes as a token — an example row's description, a match
-     * arm's pattern. Nothing is read above it: a comment written above one of those, or between the
-     * {@code |} and the token itself, is about the row, and the row writes it above its own line. So
-     * this head carries only what ends the line it opens. */
-    private Member head(Place place, SyntaxToken owner, TokenDoc doc) {
+    /**
+     * The part of a chain written before the first connector.
+     *
+     * <p>The same whatever it stands for — a node, an identifier the grammar writes as a token, or
+     * nothing the source wrote. What is written above a head belongs to the construct holding the
+     * chain and is written above that construct's own line, so a head carries only what ends the
+     * line it opens, and the place is all this needs to say that.
+     */
+    private Member head(Place place, TokenDoc doc) {
         return new Member(TokenDoc.at(place, doc), TokenDoc.endsTheLineOf(place));
     }
 
@@ -826,7 +825,7 @@ public final class Formatter {
                         ? places.under(ofTheWith, b.kind(), Opening.NONE, Written.of(b))
                         : memberPlace(ofTheWith, b);
                 // The dependency, which is a name and may be written through its module.
-                binds.add(member(bind, b, TokenDoc.node(b.kind(), concat(dottedName(idents(b)), GAP,
+                binds.add(member(bind, TokenDoc.node(b.kind(), concat(dottedName(idents(b)), GAP,
                         ASSIGN, GAP,
                         childAt(bind, firstExprChildOpt(b).orElseThrow(), Opening.NONE)))));
             }
@@ -840,12 +839,12 @@ public final class Formatter {
         List<TokenDoc> segs = new ArrayList<>();
         Member head;
         if (desc.isPresent()) {
-            head = head(ofTheHead, desc.get(), token(desc.get()));
+            head = head(ofTheHead, token(desc.get()));
             segs.add(segment(ofTheInput, argList.orElse(null), input));
         } else {
             // with no description the input opens the row, so the row's head carries its comments
             head = argList.isEmpty() ? new Member(TokenDoc.at(ofTheHead, input), TokenDoc.NIL)
-                    : head(ofTheHead, argList.get(), input);
+                    : head(ofTheHead, input);
         }
         List<SyntaxNode> expected = exprChildren(n);   // the row's expr child that is not the ARG_LIST
         SyntaxNode gives = expected.isEmpty() ? null : expected.get(0);
@@ -885,7 +884,7 @@ public final class Formatter {
         }
         List<SyntaxNode> outs = exprChildren(n);
         // the input opens the row, so the head carries what was written above and beside it
-        Member head = args.isPresent() ? head(ofTheInput, args.get(), input)
+        Member head = args.isPresent() ? head(ofTheInput, input)
                 : new Member(TokenDoc.at(ofTheInput, input), TokenDoc.NIL);
         SyntaxNode gives = outs.isEmpty() ? null : outs.get(0);
         Place ofTheOutput = segmentPlace(at, ARROW, gives);
@@ -908,7 +907,7 @@ public final class Formatter {
         for (SyntaxNode e : childNodes(clause, SyntaxKind.EXPOSED_ENTRY)) {
             Place entry = memberPlace(run, e);
             TokenDoc name = qualifiedName(e.child(SyntaxKind.QUALIFIED_NAME).orElseThrow(), entry);
-            entries.add(member(entry, e, TokenDoc.node(e.kind(), e.child(SyntaxKind.RET_TYPE)
+            entries.add(member(entry, TokenDoc.node(e.kind(), e.child(SyntaxKind.RET_TYPE)
                     .map(rt -> concat(name, GAP, COLON, GAP, retType(rt, entry)))
                     .orElse(name))));
         }
@@ -936,7 +935,7 @@ public final class Formatter {
         for (SyntaxToken t : idents(list.get())) {
             names.add(tokenMember(places.under(run, t.kind(),
                     Opening.breaks(TokenDoc.Break.MAY),
-                    new Written.Run(nameStart(t), nameEnd(t))), t, t, token(t)));
+                    new Written.Run(nameStart(t), nameEnd(t))), token(t)));
         }
         return TokenDoc.node(n.kind(), concat(d, GAP, TokenDoc.at(run,
                 delimited(run, SyntaxKind.NAME_LIST, LPAREN, withEndComments(run, names),
@@ -1004,7 +1003,7 @@ public final class Formatter {
                     head = TokenDoc.at(first,
                             concat(token(t), TokenDoc.endsTheLineOf(first)));
                 } else {
-                    cases.add(segment(segmentPlace(chainAt, PIPE, t), t, token(t)));
+                    cases.add(segment(segmentPlace(chainAt, PIPE, t), token(t)));
                 }
             }
             TokenDoc chain = TokenDoc.at(chainAt, TokenDoc.node(sum.get().kind(),
@@ -1083,8 +1082,9 @@ public final class Formatter {
      * Whether {@code body} has nothing for the block to write a line for. A body holding only
      * comments is not empty: they are written where a member would be, so the block keeps its lines.
      *
-     * <p>Asked of the attachments rather than through {@link #endLines}, which takes the comments it
-     * reports. A question about what is there has to leave it there for whoever writes it.
+     * <p>Asked of the attachments rather than through the walk that writes the end-of-line
+     * comments, which takes the comments it reports. A question about what is there has to leave it
+     * there for whoever writes it.
      */
     private boolean isEmptyProduct(SyntaxNode body) {
         for (SyntaxNode m : body.childNodes()) {
@@ -1234,7 +1234,7 @@ public final class Formatter {
         List<Member> params = new ArrayList<>();
         for (SyntaxNode p : childNodes(n, SyntaxKind.PARAM)) {
             Place param = memberPlace(run, p);
-            params.add(member(param, p, TokenDoc.node(p.kind(),
+            params.add(member(param, TokenDoc.node(p.kind(),
                     concat(ident(firstIdent(p)), GAP, COLON, GAP,
                             retType(p.child(SyntaxKind.RET_TYPE).orElseThrow(), param)))));
         }
@@ -1294,7 +1294,7 @@ public final class Formatter {
         Place place = places.under(run, from.kind(),
                 first ? Opening.NONE : Opening.breaks(TokenDoc.Break.MAY),
                 new Written.Run(nameStart(from), nameEnd(to)));
-        return tokenMember(place, from, to, dottedName(idents));
+        return tokenMember(place, dottedName(idents));
     }
 
     /** The {@code : T} a node wrote, or nothing — a helper's return type, a local binding's annotation. */
@@ -1416,7 +1416,7 @@ public final class Formatter {
         for (SyntaxNode c : lambda.childNodes()) {
             if (isPatternNode(c.kind())) {
                 Place param = memberPlace(run, c);
-                params.add(member(param, c, pattern(c, param)));
+                params.add(member(param, pattern(c, param)));
             }
         }
         return TokenDoc.at(run,
@@ -1435,7 +1435,7 @@ public final class Formatter {
             if (rt.isPresent()) {
                 d = concat(d, GAP, COLON, GAP, retType(rt.get(), param));
             }
-            params.add(member(param, p, TokenDoc.node(p.kind(), d)));
+            params.add(member(param, TokenDoc.node(p.kind(), d)));
         }
         return TokenDoc.at(run,
                 delimited(run, SyntaxKind.FN_PARAM_LIST, LPAREN, withEndComments(run, params), RPAREN));
@@ -1458,7 +1458,7 @@ public final class Formatter {
                     result = TokenDoc.at(ofTheResult, concat(retType(c, ofTheResult), TokenDoc.endsTheLineOf(ofTheResult)));
                 } else {
                     Place param = memberPlace(run, c);
-                    params.add(member(param, c, retType(c, param)));
+                    params.add(member(param, retType(c, param)));
                 }
             }
         }
@@ -1502,7 +1502,7 @@ public final class Formatter {
             for (SyntaxNode c : n.childNodes()) {
                 if (isTypeNode(c.kind())) {
                     Place elem = memberPlace(run, c);
-                    elems.add(member(elem, c, typeTerm(c, elem)));
+                    elems.add(member(elem, typeTerm(c, elem)));
                 }
             }
             return TokenDoc.at(run,
@@ -1522,7 +1522,7 @@ public final class Formatter {
         for (SyntaxNode c : args.get().childNodes()) {
             if (isTypeNode(c.kind())) {
                 Place arg = memberPlace(run, c);
-                typeArgs.add(member(arg, c, typeTerm(c, arg)));
+                typeArgs.add(member(arg, typeTerm(c, arg)));
             }
         }
         return TokenDoc.node(n.kind(), concat(name, GAP, TokenDoc.at(run,
@@ -1613,7 +1613,7 @@ public final class Formatter {
         List<Member> argDocs = new ArrayList<>();
         for (SyntaxNode a : args) {
             Place arg = memberPlace(run, a);
-            argDocs.add(member(arg, a, expr(a, arg)));
+            argDocs.add(member(arg, expr(a, arg)));
         }
         return TokenDoc.at(run, delimited(run, SyntaxKind.ARG_LIST, LPAREN,
                 withEndComments(run, argDocs), RPAREN));
@@ -1731,7 +1731,7 @@ public final class Formatter {
             Place p = parts.isEmpty()
                     ? places.under(run, c.kind(), Opening.NONE, Written.of(c))
                     : memberPlace(run, c);
-            parts.add(member(p, c, expr(c, p)));
+            parts.add(member(p, expr(c, p)));
         }
         List<Member> all = withEndComments(run, parts);
         Member element = all.get(0);
@@ -1761,11 +1761,11 @@ public final class Formatter {
                 nest(INDENT, TokenDoc.at(then, concat(expr(parts.get(1), then), TokenDoc.endsTheLineOf(then)))),
                 SOFT_GAP, TokenDoc.token(SyntaxKind.ELSE_KW, "else"),
                 departures instanceof TokenDoc.Nil
-                        ? otherwise(n, at, parts.get(2))
+                        ? otherwise(at, parts.get(2))
                         : departures)));
     }
 
-    private TokenDoc otherwise(SyntaxNode n, Place at, SyntaxNode part) {
+    private TokenDoc otherwise(Place at, SyntaxNode part) {
         Place branch = places.under(at, part.kind(), Opening.breaks(TokenDoc.Break.MAY),
                 Written.of(part));
         return nest(INDENT, TokenDoc.at(branch, concat(expr(part, branch), TokenDoc.endsTheLineOf(branch))));
@@ -1871,7 +1871,7 @@ public final class Formatter {
                         : new Written[] {new Written.Run(patternEnd.start(), patternEnd.end())});
         Member headMember = patternEnd == null
                 ? new Member(TokenDoc.at(ofThePattern, written), TokenDoc.NIL)
-                : head(ofThePattern, patternEnd, written);
+                : head(ofThePattern, written);
         Place ofTheBody = segmentPlace(at, ARROW, body);
         return concat(PIPE, GAP, TokenDoc.node(n.kind(), chained(headMember,
                 List.of(segment(ofTheBody, body, expr(body, ofTheBody))))));
@@ -1887,7 +1887,7 @@ public final class Formatter {
             if (isPatternNode(c.kind())) {
                 Place param = bracketed ? memberPlace(run, c)
                         : places.under(run, c.kind(), Opening.NONE, Written.of(c));
-                params.add(member(param, c, pattern(c, param)));
+                params.add(member(param, pattern(c, param)));
             }
         }
         // `x -> e` keeps its bare parameter; anything parenthesised was written that way
@@ -1925,7 +1925,7 @@ public final class Formatter {
             // A member's leading comments come before it, each on its own line. The boundary after
             // one forces the enclosing group to break, which is what a literal with a comment in it
             // wants anyway: a `//` on a line the group had collapsed would swallow the rest of it.
-            members.add(member(place, c, written));
+            members.add(member(place, written));
         }
         return TokenDoc.node(n.kind(), concat(ident(typeName), GAP, TokenDoc.at(run,
                 delimited(run, SyntaxKind.NEW_DATA_EXPR, LBRACE, withEndComments(run, members),
@@ -1975,26 +1975,24 @@ public final class Formatter {
      * constructor, or a record's fields. */
     private TokenDoc pattern(SyntaxNode n, Place at) {
         places.within(n, at);
-        switch (n.kind()) {
-            case PATTERN_NAME -> {
-                return ident(firstIdent(n));
-            }
+        return switch (n.kind()) {
+            case PATTERN_NAME -> ident(firstIdent(n));
             case PATTERN_TUPLE -> {
                 Place run = places.under(at, n.kind(), Opening.NONE, Written.of(n));
                 List<Member> elems = new ArrayList<>();
                 for (SyntaxNode c : n.childNodes()) {
                     if (isPatternNode(c.kind())) {
                         Place elem = memberPlace(run, c);
-                        elems.add(member(elem, c, pattern(c, elem)));
+                        elems.add(member(elem, pattern(c, elem)));
                     }
                 }
-                return TokenDoc.at(run, delimited(run, SyntaxKind.PATTERN_TUPLE, LPAREN,
+                yield TokenDoc.at(run, delimited(run, SyntaxKind.PATTERN_TUPLE, LPAREN,
                         withEndComments(run, elems), RPAREN));
             }
             case PATTERN_CTOR -> {
                 SyntaxNode inner = patternChild(n);
                 Place ofTheInner = places.under(at, inner.kind(), Opening.NONE, Written.of(inner));
-                return TokenDoc.node(n.kind(), concat(qualifiedName(n, at), GAP, LPAREN, GAP,
+                yield TokenDoc.node(n.kind(), concat(qualifiedName(n, at), GAP, LPAREN, GAP,
                         TokenDoc.at(ofTheInner, pattern(inner, ofTheInner)), GAP, RPAREN));
             }
             case PATTERN_RECORD -> {
@@ -2005,19 +2003,17 @@ public final class Formatter {
                         continue;
                     }
                     List<SyntaxToken> names = idents(f);
-                    fields.add(member(memberPlace(run, f), f, TokenDoc.node(f.kind(),
+                    fields.add(member(memberPlace(run, f), TokenDoc.node(f.kind(),
                             names.size() > 1
                                     ? concat(token(names.get(0)), GAP, ASSIGN, GAP,
                                             token(names.get(1)))
                                     : token(names.get(0)))));
                 }
-                return TokenDoc.at(run, delimited(run, SyntaxKind.PATTERN_RECORD, LBRACE,
+                yield TokenDoc.at(run, delimited(run, SyntaxKind.PATTERN_RECORD, LBRACE,
                         withEndComments(run, fields), RBRACE));
             }
-            default -> {
-                return ident(firstIdent(n));
-            }
-        }
+            default -> ident(firstIdent(n));
+        };
     }
 
     private static boolean isPatternNode(SyntaxKind k) {
@@ -2663,9 +2659,9 @@ public final class Formatter {
         }
     }
 
-    /** A member the grammar wrote as an identifier: the same shape as one written as a node, held
-     * against where the identifier is. */
-    private Member tokenMember(Place place, SyntaxToken above, SyntaxToken end, TokenDoc d) {
+    /** A member the grammar wrote as an identifier: the same shape as one written as a node. Where
+     * the identifier is, the place already says. */
+    private Member tokenMember(Place place, TokenDoc d) {
         return new Member(TokenDoc.at(place, d), TokenDoc.endsTheLineOf(place));
     }
 
@@ -2746,7 +2742,7 @@ public final class Formatter {
         List<Member> out = new ArrayList<>();
         for (SyntaxNode c : exprChildren(n)) {
             Place at = memberPlace(run, c);
-            out.add(member(at, c, expr(c, at)));
+            out.add(member(at, expr(c, at)));
         }
         return withEndComments(run, out);
     }

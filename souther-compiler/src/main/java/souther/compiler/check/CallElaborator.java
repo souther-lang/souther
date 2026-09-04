@@ -368,7 +368,7 @@ public final class CallElaborator {
             return cores[i].type();
         }
 
-        /** Argument {@code i} checked against {@code expected}, as {@link #requireType} does. */
+        /** Argument {@code i} checked against {@code expected}, as {@link Elaborator#requireType} does. */
         void require(int i, Type expected, String what) {
             Core c = Elaborator.elaborate(args.get(i), env, ctx);
             cores[i] = c;
@@ -809,13 +809,6 @@ public final class CallElaborator {
                         .at(call.appliedAt())
                         
                         .hint(new TypeMessage.MapToTheNumericFieldFirst(call.written())).say(new DeclarationMessage.ItNeedsANumericElement(call.written(), Localizable.of("kind.numeric.list"), Type.show(element))).build());
-    }
-
-    /** The name without its qualifier: {@code List.sum} reads as {@code sum} in a sentence about the
-     * function itself, and a call may be written either way. */
-    private static String shortName(String fn) {
-        int dot = fn.indexOf('.');
-        return dot < 0 ? fn : fn.substring(dot + 1);
     }
 
     /** A stdlib error where a list's element (or a key) must be an ordered primitive to sort/compare. */

@@ -471,7 +471,7 @@ class TheJapiCommandReadsAJarsPublicApiTest {
                 try (Stream<Path> entries = Files.list(path)) {
                     // Files.list reads the directory as the stream is consumed, and whether it can
                     // be read is the question here. The entries themselves are not wanted.
-                    var unused = entries.toList();
+                    var _ = entries.toList();
                 }
             } else {
                 Files.readAllBytes(path);

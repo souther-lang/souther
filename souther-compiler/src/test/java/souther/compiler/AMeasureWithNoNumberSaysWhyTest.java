@@ -611,7 +611,7 @@ class AMeasureWithNoNumberSaysWhyTest {
                 report.human(SourceNameResolver.identity()));
 
         List<Object[]> measures = allMeasures();
-        assertTrue(measures.stream().anyMatch(m -> m[1] instanceof Measurement.NotApplicable<?>),
+        assertTrue(measures.stream().anyMatch(m -> m[1] instanceof Measure.NotApplicable<?>),
                 "the model holds an inapplicable measure");
         assertTrue(measures.stream().anyMatch(m -> m[1] instanceof Measurement.NotMeasured<?>),
                 "and one nobody made");
@@ -701,7 +701,7 @@ class AMeasureWithNoNumberSaysWhyTest {
 
         // A measure with no number holds no number, rather than holding zeroes that read as one.
         assertThrows(NullPointerException.class, () -> new Measurement.NotMeasured<>(null));
-        assertThrows(NullPointerException.class, () -> new Measurement.NotApplicable<>(null));
+        assertThrows(NullPointerException.class, () -> new Measure.NotApplicable<>(null));
         assertThrows(NullPointerException.class, () -> new Measurement.Complete<>(null));
     }
 

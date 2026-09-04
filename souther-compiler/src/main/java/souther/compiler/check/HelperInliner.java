@@ -54,14 +54,14 @@ public final class HelperInliner {
      *
      * <p>Not final: a recursive helper's own body is expanded against a table narrowed by its
      * parameters ({@link #inlineRecursiveBody}), and what that narrows is what a call reaches — never
-     * what recurses, which {@link #recursive} settled over the table as it was built.
+     * what recurses, which {@link #recursiveInReach} settled over the table as it was built.
      */
     private HelperTable table;
     /**
      * The behaviors a body expanded here may name, with how many inputs each takes — the module's
      * own callable ones and the ones it borrows (spec {@code [#calling-a-behavior]}).
      *
-     * <p>Apart from {@link #helpers} because a behavior is never expanded: what stands behind its
+     * <p>Apart from {@link #helpersOf} because a behavior is never expanded: what stands behind its
      * name may be a Java implementation, so a body that reached past it to the {@code let} would be
      * a second answer to the same name. All this holds is what reifying the name needs, which is its
      * arity; the query layer works out which behaviors are here, since which of them may be named is
@@ -1904,10 +1904,6 @@ public final class HelperInliner {
                     new ReachName.InScope(new ValueName.Local(binder.name(), binder.id())));
         }
 
-        /** What stands here reaches. */
-        ValueName denotes() {
-            return reachedAs.denotes();
-        }
     }
 
     /**
@@ -1934,7 +1930,7 @@ public final class HelperInliner {
          * <p>A prelude helper is copied with the call site stamped over it, so a type error inside its
          * body points at the user's call — {@code filter(xs, x -> x * 2)} — rather than at a line of
          * {@code souther.list} the user never wrote. A module-own helper, and a lambda given to a fn
-         * parameter, keep the positions their bodies have ({@link HelperInliner#keepsItsPositions}).
+         * parameter, keep the positions their bodies have.
          * The caller's argument expressions are spliced in separately and keep their own either way.
          */
         SourcePos at(SourcePos own) {

@@ -363,7 +363,6 @@ class WhatIsFixedIsAskedTogetherHoweverItArrivedTest {
         souther.compiler.types.TypeSymbol.AtModule name =
                 souther.compiler.types.TypeSymbols.declared(
                 new souther.compiler.types.TypeKey(read.rules().symbols().module(), "P"));
-        Hir.Data data = (Hir.Data) read.rules().symbols().declaredNode(name.key());
         souther.compiler.check.FieldDomains whole = souther.compiler.check.FieldDomains.of(
                 name, read.rules(), ReadAs.THE_COMPILATION_DOES);
 

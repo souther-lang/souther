@@ -287,7 +287,7 @@ final class NeutralForm {
      * some other declaration does with the type does not reach a fixture written at the type itself.
      *
      * <p>Takes a case already resolved: a name spelled here would have to be one
-     * {@link Symbols#resolve} answers to, which an imported type's declared name is not.
+     * {@link Symbols#declaredNode} answers to, which an imported type's declared name is not.
      */
     Object newtypeAt(Position position, TypeSymbol caseName, Object inner) {
         Map<String, Object> envelope = new LinkedHashMap<>();
@@ -391,8 +391,8 @@ final class NeutralForm {
         return value;
     }
 
-    /** The element a list or a set holds, or null where the type holds neither. Narrower than
-     *  {@link #elementOf}, which opens an optional and reads a map's entry as a pair. */
+    /** The element a list or a set holds, or null where the type holds neither. Narrower than the
+     *  reading a position gives, which opens an optional and reads a map's entry as a pair. */
     private static Type sequenceElementOf(Type type) {
         return type instanceof Type.ListOf l ? l.element()
                 : type instanceof Type.SetOf s ? s.element() : null;

@@ -536,7 +536,7 @@ final class ConstructionPlan {
             // change them — a figure is raised, and this is a narrowing the caller has yet to
             // state.
             if (anythingIsAskedUnder(here, decided, required)) {
-                return new NodeResult.Unnarrowed(here, narrowingsAt(settled, symbols, required));
+                return new NodeResult.Unnarrowed(here, narrowingsAt(settled, symbols));
             }
             return new NodeResult.Made(
                     new Slot(here, building, settled.outer(), new Leaf.Open()));
@@ -604,13 +604,12 @@ final class ConstructionPlan {
      * into two values and holds nothing under either, which says, correctly, that stating something
      * here is not what would make the demand reachable.
      */
-    private static List<Refinement> narrowingsAt(Settled settled, Symbols symbols,
-                                                 Requirements required) {
+    private static List<Refinement> narrowingsAt(Settled settled, Symbols symbols) {
         List<Refinement> out = new ArrayList<>();
         for (Case one : Distinctions.ofType(TypeView.of(settled.building(), symbols), symbols)) {
             Refinement narrowing = Refinement.of(one);
             if (narrowing != null
-                    && applying(settled, narrowing, symbols, required).exact() == null) {
+                    && applying(settled, narrowing, symbols).exact() == null) {
                 out.add(narrowing);
             }
         }
@@ -665,7 +664,7 @@ final class ConstructionPlan {
         Settled settled = new Settled(at, declared, null, List.of());
         for (Refinement refinement = required.at(settled.at()); refinement != null;
                 refinement = required.at(settled.at())) {
-            settled = applying(settled, refinement, symbols, required);
+            settled = applying(settled, refinement, symbols);
             // Nothing narrows what is not there, so a narrowing that settled the value is the end
             // of the chain whatever else was written.
             if (settled.exact() != null) {
@@ -684,8 +683,7 @@ final class ConstructionPlan {
      * from the declaration — a narrowing may leave a position wearing a name the next one takes off
      * in turn, and the declaration wore neither.
      */
-    private static Settled applying(Settled settled, Refinement refinement, Symbols symbols,
-                                    Requirements required) {
+    private static Settled applying(Settled settled, Refinement refinement, Symbols symbols) {
         List<TypeSymbol> outer = outside(settled.outer(),
                 TypeView.of(settled.building(), symbols).wrappers());
         TermPath here = settled.at().refine(refinement);

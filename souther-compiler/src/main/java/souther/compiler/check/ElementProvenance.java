@@ -145,8 +145,8 @@ public final class ElementProvenance {
     @Override
     public boolean equals(Object other) {
         return this == other
-                || other instanceof ElementProvenance that && edges.equals(that.edges)
-                        && projections.equals(that.projections);
+                || (other instanceof ElementProvenance that && edges.equals(that.edges)
+                        && projections.equals(that.projections));
     }
 
     @Override

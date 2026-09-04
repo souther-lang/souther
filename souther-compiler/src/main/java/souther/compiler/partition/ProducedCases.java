@@ -41,6 +41,9 @@ import java.util.Set;
 public final class ProducedCases {
 
     /**
+     * The cases {@code body} can produce, which is the declared ones less those a guard's arm
+     * proves unreachable.
+     *
      * @param declared what the output type's cases are, which is what this answers where nothing is
      *                 taken away
      */

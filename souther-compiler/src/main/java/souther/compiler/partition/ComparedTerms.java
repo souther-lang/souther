@@ -164,7 +164,6 @@ record ComparedTerms(TermOrders on, TermOrders against, Count stepsApart) {
         TermOrders hereOn = quantities.ordersOf(two[0]);
         TermOrders thereOn = quantities.ordersOf(two[1]);
         Carrier here = hereOn.answered();
-        Carrier there = thereOn.answered();
         // Whether the order has a place at the number the rule wrote is the order's own answer and
         // is asked where the quantity is built ({@link LevelSpace#canCutAt}). Asked here as "do
         // these counts count", a property of the values stood in for a property of the places: two

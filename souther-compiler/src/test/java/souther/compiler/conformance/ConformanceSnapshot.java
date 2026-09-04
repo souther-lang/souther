@@ -13,6 +13,7 @@ import souther.compiler.report.GeneratedRows;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * The two documents a corpus is held against, written the same way every time.
@@ -88,7 +89,7 @@ final class ConformanceSnapshot {
         for (Located located : analysed.said()) {
             Diagnostic diagnostic = located.diagnostic();
             String code = diagnostic.code() == null ? "<uncoded>" : diagnostic.code();
-            lines.add(diagnostic.severity().name().toLowerCase() + " " + code + " "
+            lines.add(diagnostic.severity().name().toLowerCase(Locale.ROOT) + " " + code + " "
                     + where(diagnostic.primary(), names));
         }
         return lines.isEmpty() ? "" : String.join(System.lineSeparator(), lines)

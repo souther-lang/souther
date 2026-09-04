@@ -412,7 +412,6 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
                     invariant ordered = a < b
                 """), souther.compiler.meta.ModulePath.EMPTY);
         compilation.answerEverything();
-        Symbols symbols = Scopes.derived(compilation.db(), "example.pair").value();
         TypeSymbol.AtModule named = TypeSymbols.declared(new TypeKey("example.pair", "Pair"));
         FieldDomains domains = FieldDomains.of(named,
                 RuleReadings.of(compilation,"example.pair"),
@@ -515,7 +514,6 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
                     invariant ordered = a < b
                 """), souther.compiler.meta.ModulePath.EMPTY);
         compilation.answerEverything();
-        Symbols symbols = Scopes.derived(compilation.db(), "example.report").value();
         TypeSymbol.AtModule named = TypeSymbols.declared(new TypeKey("example.report", "Pair"));
         FieldDomains domains = FieldDomains.of(named,
                 RuleReadings.of(compilation,"example.report"),

@@ -178,6 +178,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
     }
 
     /**
+     * What one module's compile came to, as this report says it.
+     *
      * @param owedByDeclarations what this module's declarations are owed and how far the reading it
      *                           was made from got. An account and not a list of debts: a module
      *                           whose lines nobody could read holds no debts anybody found, and read
@@ -289,11 +291,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
     }
 
     /**
-     * @param reading   how far the reading of this behavior's rows got, and what it read. The
-     *                  counts a document prints are this measurement's value and are absent where
-     *                  it has none: a source nobody evaluated leaves no row to count, and printing
-     *                  {@code rows 0} for it says the author wrote none (issue #996)
-     * @param signature what those rows establish about the cases of its inputs and its output
+     * What one behavior's compile came to, as this report says it.
+     *
      * @param claimed   what the body declared cannot arrive, beside the measures rather than in
      *                  them. The two are joined where this report is written and nowhere else,
      *                  which is what keeps a claim from reaching a denominator
@@ -308,7 +307,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             findings = List.copyOf(findings);
         }
 
-        /** How far the reading of this behavior's rows got, and what it read. */
+        /** How far the reading of this behavior's rows got, and what it read. The counts a document
+         *  prints are this measurement's value and are absent where it has none: a source nobody
+         *  evaluated leaves no row to count, and printing {@code rows 0} for it says the author
+         *  wrote none. */
         public Adequacy.RowReading reading() {
             return evidence.reading();
         }
@@ -1054,8 +1056,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         return owed;
     }
 
-    /** Whether the bar refuses over any of {@code kinds}, which is what puts the measure that finds
-     *  them among the answers a verdict needs. */
+    /** Whether the bar refuses over {@code kind}, which is what puts the measure that finds them
+     *  among the answers a verdict needs. */
     private boolean refuses(Adequacy.Kind kind) {
         return held.refuses(kind);
     }
@@ -1750,8 +1752,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * one, since that is what tells two questions at one position apart; the position is what is
      * left.
      */
-    private static String subjectOf(PartitionEvidence.Unanswered asked,
-                                    SourceNameResolver names, SourceId declaredIn) {
+    private static String subjectOf(PartitionEvidence.Unanswered asked) {
         return asked.measure() != null ? asked.measure() : asked.at();
     }
 
@@ -2336,12 +2337,6 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         };
     }
 
-    /** What an obligation's coverage was left short by, where a reason says. A coverage that came
-     *  to an answer has none, and the note beside the item is what this fills in. */
-    private static String whyNoBoundaryItem(ObligationCoverage coverage) {
-        return coverage.theReasonAsOne().map(why -> ReasonProse.of(why).clause()).orElse("");
-    }
-
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
     /**
@@ -2397,7 +2392,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                     && mine.test(asked)) {
                 out.append(String.format("      %s not accounted for: %s — %s %s: %s%n",
                         mark(f), cited(asked.cited(), names, declaredIn),
-                        asked(asked.asked()), subjectOf(asked, names, declaredIn),
+                        asked(asked.asked()), subjectOf(asked),
                         whyStanding(asked).written().stream().map(AdequacyReport::whyUnread)
                                 .collect(Collectors.joining("; "))));
             }
@@ -3542,7 +3537,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             case About.AQuestionNothingAnswered(var asked) ->
                     handle(asked.cited()).said(sources::written, null)
                             + " — " + asked(asked.asked())
-                            + " " + subjectOf(asked, sources::written, null);
+                            + " " + subjectOf(asked);
             case About.ACaseNoRowAppliesItTo(var input, var missing) ->
                     missing.name() + " (in #" + (input.at() + 1) + ")";
             // The point and the line, and no quantity: a body's line is owed once wherever it is

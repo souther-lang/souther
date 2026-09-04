@@ -20,12 +20,16 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  */
 class TheTextReadAtACallIsTheOneWrittenThereTest {
 
-    /** A call whose text is written at it. */
+    /** A call whose text is written at it. Called by nothing and read by name: what these two
+     *  bodies are is what the tests below look up in this file's source. */
+    @SuppressWarnings("UnusedMethod")
     private static int written() {
         return "incompleteness".length();
     }
 
-    /** And one whose text is put somewhere first, so it is not written at the call. */
+    /** And one whose text is put somewhere first, so it is not written at the call. Read by name,
+     *  as the one above is. */
+    @SuppressWarnings("UnusedMethod")
     private static int throughALocal() {
         String name = "keptOpenBy";
         return name.length();

@@ -135,10 +135,8 @@ class WhatARecipeIsReadFromIsWhatAReadingReachesTest {
      */
     @Test
     void twoChoicesDifferingOnlyInWhichArmStatesTheRelationAreNotOneRecipe() {
-        Terms terms = RuleReadings.termsOfNoClauseFiled(Symbols.none(DefaultStdlib.get()), souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         FactSubject answered = marker();
         FactSubject other = marker();
-        FactSubject atom = marker();
         Derivation stated = new Derivation.Chosen(List.of(
                 new Derivation.Chosen.Arm(LinearForm.atom(answered),
                         List.of(new NumericConstraint(LinearForm.atom(other), Rel.LT))),

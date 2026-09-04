@@ -135,10 +135,6 @@ class WhatAReadingLeavesStandingIsAStateTheSchemaSaysTest {
         throw new AssertionError("no behavior called " + behavior);
     }
 
-    private static JsonNode readOf(String source, String behavior) {
-        return partitionOf(source, behavior).get("axes").get(0).get("read");
-    }
-
     /**
      * The states are in the schema, and `complete` is the one where the key is not written.
      *

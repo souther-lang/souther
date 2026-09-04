@@ -1993,7 +1993,7 @@ public final class ExampleVerifier {
      *
      * <p>What a stand-in answers and nothing more. Making it something the behavior can be constructed
      * with is a fact about the loader the implementation comes from, so it is the answerer's
-     * ({@link Answerer#applying}) — and reading a row's fakes is the same reading whoever that is.
+     * ({@link Answerer.Answer.Something#applying}) — and reading a row's fakes is the same reading whoever that is.
      */
     private StoodInFor readStandIn(FixtureReader fixtures, String target,
                                    BehaviorRequirement req, Hir.ExampleRow row) {

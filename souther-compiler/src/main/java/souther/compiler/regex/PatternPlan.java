@@ -162,7 +162,7 @@ public final class PatternPlan {
      */
     @Override
     public boolean equals(Object other) {
-        return this == other || other instanceof PatternPlan it && step.equals(it.step);
+        return this == other || (other instanceof PatternPlan it && step.equals(it.step));
     }
 
     @Override

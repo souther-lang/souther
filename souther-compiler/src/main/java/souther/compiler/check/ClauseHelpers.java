@@ -49,7 +49,7 @@ public final class ClauseHelpers {
      * in scope where it is written, and an imported definition is in scope there as it is in a body; it
      * is substituted here for the reason a body's is, so what the invariant carries afterwards names
      * nothing of the module that declared it. The names are written qualified first, because that is
-     * the spelling the table is keyed by — {@link HelperNames#qualifyImports} does it again for the
+     * the spelling the table is keyed by — {@link HelperNames#qualifyImportsIn} does it again for the
      * bodies below, and says the same thing both times.
      */
     static Expansion<Hir.Module> withSettledInvariants(Hir.Module m, Symbols symbols,

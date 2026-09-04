@@ -142,6 +142,9 @@ public final class DeclaredBounds {
     }
 
     /**
+     * What the rules a position wears leave {@code measure} of it between, or null where nothing
+     * here reads the position's values.
+     *
      * @param view    the position as it was read: the rules of every name it wears are the rules of
      *                its value, and which names those are is that reading's answer rather than one
      *                worked out again here

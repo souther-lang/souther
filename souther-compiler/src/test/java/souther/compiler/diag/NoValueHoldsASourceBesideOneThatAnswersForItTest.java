@@ -200,7 +200,7 @@ class NoValueHoldsASourceBesideOneThatAnswersForItTest {
     private static boolean mentions(Type held, Class<?> wanted) {
         if (held instanceof Class<?> c) {
             return wanted.isAssignableFrom(c)
-                    || c.isArray() && mentions(c.getComponentType(), wanted);
+                    || (c.isArray() && mentions(c.getComponentType(), wanted));
         }
         if (held instanceof GenericArrayType array) {
             return mentions(array.getGenericComponentType(), wanted);

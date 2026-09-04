@@ -31,7 +31,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class AnObservationThisCompilerStoppedIsNotAPointNothingWritesTest {
 
-    private static final String LINE = "List.sum(明細[*].金額) = 100000";
 
     /**
      * The same rule with {@code names} wrappers around the list.

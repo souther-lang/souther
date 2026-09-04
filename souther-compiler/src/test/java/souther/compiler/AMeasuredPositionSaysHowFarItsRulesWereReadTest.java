@@ -113,8 +113,6 @@ class AMeasuredPositionSaysHowFarItsRulesWereReadTest {
     /** Nothing is invented: a position whose rules were read in full gains no line either way. */
     @Test
     void aPositionWhoseRulesWereReadInFullGainsNoLine() {
-        String human = humanOf(READ_IN_FULL);
-
         JsonNode read = partitionOf(READ_IN_FULL).get("axes").get(0).get("read");
         assertEquals("complete", read.get("extent").asString());
         assertFalse(read.has("rulesNotReached"), "nothing was left standing: " + read);

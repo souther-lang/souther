@@ -24,7 +24,7 @@ import java.util.Map;
  *
  * <p>What is <em>not</em> settled is what a declaration takes in by a spread. A clause of the type
  * spread from is still that type's, and which clauses apply to a declaration is composed on demand
- * by {@link TypeOps#declaredInvariants} walking {@code includes()}. A reader that took this state to
+ * by {@link TypeOps#settledInvariants} walking {@code includes()}. A reader that took this state to
  * mean the spreads had been flattened into each declaration would find a declaration's own clauses
  * where it expected every clause that governs it.
  *

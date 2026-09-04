@@ -222,6 +222,8 @@ public final class Front {
     public record Layout() implements Key<Layout.Of> {
 
         /**
+         * Which source each module and each of its example files is written in.
+         *
          * @param idOfModule the source each module was declared in
          * @param exampleFilesOf the {@code examples for} sources contributing to each module
          * @param exampleFileTargets the module each {@code examples for} source names, by source id
@@ -231,7 +233,7 @@ public final class Front {
                          Map<SourceId, String> exampleFileTargets) {}
 
         @Override
-        public Answer<Of> compute(Db db) {
+        public Answer<Layout.Of> compute(Db db) {
             List<SourceId> ids = db.ask(new Ids()).value();
             if (ids == null) {
                 return Answer.absent();
@@ -252,7 +254,7 @@ public final class Front {
                 }
                 idOfModule.putIfAbsent(m.name(), id);
             }
-            return Answer.of(new Of(Ordered.map(idOfModule), Ordered.map(exampleFilesOf),
+            return Answer.of(new Layout.Of(Ordered.map(idOfModule), Ordered.map(exampleFilesOf),
                     Ordered.map(exampleFileTargets)));
         }
     }
@@ -451,6 +453,9 @@ public final class Front {
         }
 
         /**
+         * The modules this compilation can see, and the ones it can see are there and will not
+         * read.
+         *
          * @param modules the ones this compilation may read declarations from
          * @param refused the ones it will not, and knows are there all the same — a module that
          *        took a name no module may take, and one this compiler cannot read what it
@@ -462,11 +467,11 @@ public final class Front {
         public record Of(Map<String, OnThePath> modules, Set<String> refused) {}
 
         @Override
-        public Answer<Of> compute(Db db) {
+        public Answer<FromPath.Of> compute(Db db) {
             Layout.Of layout = db.ask(new Layout()).value();
             ModulePath path = db.ask(new Path()).value();
             if (layout == null || path == null) {
-                return Answer.of(new Of(Map.of(), Set.of()));
+                return Answer.of(new FromPath.Of(Map.of(), Set.of()));
             }
             // Read the graph, work out where each of its modules is reached from, and only then say
             // anything. Each of the three needs the one before it finished: a module is read once
@@ -569,7 +574,7 @@ public final class Front {
             }
             SequencedSet<String> notRead = new LinkedHashSet<>(refused.keySet());
             notRead.addAll(unreadable.keySet());
-            return Answer.of(new Of(Ordered.map(found), Ordered.set(notRead)), reports);
+            return Answer.of(new FromPath.Of(Ordered.map(found), Ordered.set(notRead)), reports);
         }
     }
 

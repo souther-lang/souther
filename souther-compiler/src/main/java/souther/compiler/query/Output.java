@@ -982,11 +982,11 @@ public final class Output {
         }
 
         @Override
-        public Answer<Of> compute(Db db) {
+        public Answer<RowsRead.Of> compute(Db db) {
             java.util.SequencedSet<SourceId> origins =
                     db.ask(new Front.ExampleSources(name)).value();
             if (origins == null) {
-                return Answer.of(new Of(Map.of(), List.of()));
+                return Answer.of(new RowsRead.Of(Map.of(), List.of()));
             }
             Answer<souther.compiler.check.Prepared> prepared = db.ask(new Shapes.Prepared(name));
             Map<String, List<ReadRow>> written = new LinkedHashMap<>();
@@ -1033,7 +1033,7 @@ public final class Output {
                 out.put(behavior, new ReadRows(written.getOrDefault(behavior, List.of()),
                         stopped.getOrDefault(behavior, List.of())));
             }
-            return Answer.of(new Of(out, distinct(everywhere)));
+            return Answer.of(new RowsRead.Of(out, distinct(everywhere)));
         }
 
         /**
@@ -1203,8 +1203,8 @@ public final class Output {
          * by two builds.
          */
         @Override
-        public Answer<Of> compute(Db db) {
-            Answer<Of> ran = evaluate(db, name, sourceId, arms);
+        public Answer<Examples.Of> compute(Db db) {
+            Answer<Examples.Of> ran = evaluate(db, name, sourceId, arms);
             if (!(fakeTables(db, name, sourceId)
                     instanceof souther.compiler.observe.TableBuild.Built(
                             List<Diagnostic> wrong))) {
@@ -1258,13 +1258,14 @@ public final class Output {
          * that held under one and failed under the other would be a difference in the measurement
          * and not in the model, and the report has no way to tell.
          */
-        static Answer<Of> evaluate(Db db, String name, SourceId sourceId, ArmObservation arms) {
+        static Answer<Examples.Of> evaluate(Db db, String name, SourceId sourceId,
+                                            ArmObservation arms) {
             ExampleExecution asked = ExampleExecutions.of(db, name);
             if (asked == null) {
                 return Answer.absent();   // nothing here can have its examples evaluated yet
             }
             if (asked.forExamplesWrittenIn(sourceId).examples().isEmpty()) {
-                return Answer.of(Of.NONE);
+                return Answer.of(Examples.Of.NONE);
             }
             List<Report> reports = new ArrayList<>(alreadyDeclared(db, name, sourceId));
             if (!reports.isEmpty()) {
@@ -1277,7 +1278,7 @@ public final class Output {
                 // holds a row to a budget is the counting and a row run without it is back on the
                 // clock. Where they were not, nothing was worked out at all.
                 return arms == ArmObservation.OMIT ? Answer.absent()
-                        : Answer.of(new Of(List.of(), List.of(
+                        : Answer.of(new Examples.Of(List.of(), List.of(
                                 souther.compiler.observe.Incompleteness.of(
                                         souther.compiler.observe.Incompleteness.Code.INSTRUMENTATION_ABSENT,
                                         souther.compiler.observe.Incompleteness.Scope.MODULE, name))));
@@ -1285,7 +1286,7 @@ public final class Output {
             for (Diagnostic failure : observed.failures()) {
                 reports.add(Report.of(failure));
             }
-            return Answer.of(new Of(observed.rows(), observed.incompleteness()), reports);
+            return Answer.of(new Examples.Of(observed.rows(), observed.incompleteness()), reports);
         }
 
         /**

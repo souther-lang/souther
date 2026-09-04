@@ -54,7 +54,7 @@ public final class ClauseComparison {
      * did not write.
      */
     public ClauseComparison turned() {
-        return new ClauseComparison(right, left, claim.turned());
+        return new ClauseComparison(/* left= */ right, /* right= */ left, claim.turned());
     }
 
     /** The side the claim is stated of. */

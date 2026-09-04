@@ -583,7 +583,7 @@ public final class InputDomain {
                     next.add(under);
                     continue;
                 }
-                PlacementOutcome.Reason why = whyNothingAt(at, step);
+                PlacementOutcome.Reason why = whyNothingAt(at);
                 if (why != null) {
                     otherwise.add(new PlacementOutcome.Unresolved(why));
                 } else {
@@ -614,7 +614,7 @@ public final class InputDomain {
      * with the language about what may be written — which is not a limitation an author can be told
      * about, and not something to hand on as one.
      */
-    private PlacementOutcome.Reason whyNothingAt(TermPath at, String step) {
+    private PlacementOutcome.Reason whyNothingAt(TermPath at) {
         Position position = byPath.get(at);
         if (position != null
                 && position.structure() instanceof StructuralInspection.Retained retained
@@ -1113,7 +1113,7 @@ public final class InputDomain {
                     walkBranch(branch, placed.root(), path, ancestry, source, policy, found, roots,
                             visited, handoffs, observed, reaching,
                             new RootOpening.Refined(placed.root(), crossing), account,
-                            reach.into(path.refine(branch.refinement()), stopped), stopped);
+                            reach.into(path.refine(branch.refinement()), stopped));
                     crossed(observed, crossing, found, before);
                 }
             }
@@ -1238,7 +1238,7 @@ public final class InputDomain {
                                    java.util.Set<Type> visited, RuleHandoffs handoffs,
                                    NameReach.Observed observed, PlacedRules.Reaching crossing,
                                    RootOpening opening,
-                                   Gathered account, Reach reach, boolean stopped) {
+                                   Gathered account, Reach reach) {
         // <b>A descent that costs no level stops only where it returns to a value it has already
         // been at without a step into one.</b> That is the whole of the rule, and what it is keyed
         // on is the value reached and never the narrowing taken: a narrowing is an edge and the
@@ -1402,7 +1402,7 @@ public final class InputDomain {
         List<StandingQuestion> open = new ArrayList<>(noLine.unclassified());
         open.addAll(exact);
 
-        ReadingResult reading = crossed(declared, view, admissible, admitted, source, noLine, open,
+        ReadingResult reading = crossed(declared, view, admissible, admitted, source, noLine,
                 nothingExists, type);
         return new ReadPosition(path, view, term, admissible, own, projected,
                 // Where the position actually stops, which the ends as written do not say: a clause
@@ -1448,7 +1448,7 @@ public final class InputDomain {
     private static ReadingResult crossed(List<Case> declared, TypeView view,
                                          NumericDomain.Bounds admissible, AdmissibleSet admitted,
                                          RuleReadingSource source,
-                                         RulesWithNoLine found, List<StandingQuestion> open,
+                                         RulesWithNoLine found,
                                          boolean nothingExists, Type type) {
         BlockReason.AboutThePosition unreadable = Distinctions.unreadableAt(view);
         if (unreadable != null) {

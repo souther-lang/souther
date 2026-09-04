@@ -15,6 +15,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -65,9 +66,9 @@ public final class ApiCommand {
                 err.println("usage: souther api --search <term>");
                 return 2;
             }
-            String needle = args[1].toLowerCase();
+            String needle = args[1].toLowerCase(Locale.ROOT);
             List<String> found = surface(stdlib).entrySet().stream()
-                    .filter(e -> e.getKey().toLowerCase().contains(needle))
+                    .filter(e -> e.getKey().toLowerCase(Locale.ROOT).contains(needle))
                     .map(e -> line(e.getKey(), e.getValue()))
                     .toList();
             if (found.isEmpty()) {
@@ -194,7 +195,7 @@ public final class ApiCommand {
             err.println("modules: " + String.join(", ", Reserved.QUALIFIERS.stream().sorted().toList()));
             return 2;
         }
-        String resource = "/souther/" + alias.toLowerCase() + ".sou";
+        String resource = "/souther/" + alias.toLowerCase(Locale.ROOT) + ".sou";
         try (InputStream in = ApiCommand.class.getResourceAsStream(resource)) {
             if (in == null) {
                 err.println("no bundled source for `" + alias + "`");

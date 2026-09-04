@@ -10,6 +10,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.LinkedHashSet;
 import java.util.Map;
+import java.util.SequencedMap;
 import java.util.Set;
 
 /**
@@ -436,7 +437,7 @@ public final class Prepared {
 
         /** Every dependency a table here stands in for, each under the table that answers for it,
          *  in the order the tables are written. */
-        public LinkedHashMap<ValueName.Behavior, FakeTable> tablesThatAnswer() {
+        public SequencedMap<ValueName.Behavior, FakeTable> tablesThatAnswer() {
             LinkedHashMap<ValueName.Behavior, FakeTable> answering = new LinkedHashMap<>();
             for (FakeTable table : module.fakes()) {
                 if (table.standsInFor() != null) {

@@ -155,9 +155,9 @@ public final class Preserved {
         private static final Preserved OPERATIONS = readTheLibrary(DefaultStdlib.get());
     }
 
-    /* A pure function of the library, so the holder above is the only thing here that reaches for
-     * the process's own — {@link souther.compiler.DefaultStdlib} says who may and why the loader
-     * may not. */
+    /** A pure function of the library, so the holder above is the only thing here that reaches for
+     *  the process's own — {@link souther.compiler.DefaultStdlib} says who may and why the loader
+     *  may not. */
     private static Preserved readTheLibrary(Stdlib stdlib) {
         List<CompleteSignature> operations = new ArrayList<>();
         stdlib.entries().forEach((operation, entry) -> {

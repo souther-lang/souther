@@ -6,11 +6,9 @@ import souther.compiler.coverage.ControlClaim;
 import souther.compiler.coverage.ControlPointId;
 import souther.compiler.check.ReadingPolicy;
 import souther.compiler.check.RuleReadingSource;
-import souther.compiler.ast.Hir;
 import souther.compiler.check.RuleKey;
 import souther.compiler.check.FieldDomains;
 import souther.compiler.check.Shape;
-import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeView;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.reading.PathAccess;
@@ -148,7 +146,7 @@ public final class Generator {
      * <p>In this package's own words and not the report's. A finding is what a report is written
      * from and lives a layer above; what a search here is asked for is a class of a position, a
      * combination the body decides together, or a point of a border — and a reader upstream joins
-     * those to its findings by identity ({@link GenerationResult#attemptAt}).
+     * those to its findings by identity ({@link GenerationResult}).
      */
     public sealed interface Purpose {
 
@@ -425,8 +423,8 @@ public final class Generator {
              * ADR-0091 took. A reason added is then a case here rather than a word that quietly
              * joins whichever side a reader's condition happened to leave it on.
              *
-             * <p>Named as {@link souther.compiler.query.PartitionEvidence.PairSpace#provenInfeasible}
-             * names it, since it is the same question about the same thing.
+             * <p>Named as {@link souther.compiler.query.PartitionEvidence.PairSpace} names it, since
+             * it is the same question about the same thing.
              */
             public boolean provesInfeasible() {
                 return switch (this) {
@@ -1316,10 +1314,10 @@ public final class Generator {
      * and what a cell is does not depend on which arm is being looked for in it. The arms it claims
      * are read here for the same reason.
      *
-     * @param tried what came of searching it, or null where nothing has yet. One cell is searched
-     *              once however many arms are looked for in it: the candidates it admits and what
-     *              they did are facts about the cell, and composing them again per arm is the same
-     *              work done twice for the same answer
+     * <p>What came of searching it is held here too, and is null where nothing has yet. One cell is
+     * searched once however many arms are looked for in it: the candidates it admits and what they
+     * did are facts about the cell, and composing them again per arm is the same work done twice for
+     * the same answer.
      */
     private static final class WhereToLook {
 
@@ -1484,11 +1482,6 @@ public final class Generator {
         return id;
     }
 
-    /** What a row is written as, which is what tells one line of a file from another. */
-    private static List<String> writtenAs(GeneratedRow row) {
-        return row.inputs().stream().map(FixtureTemplate::text).toList();
-    }
-
     /** The arms a list of claims names, by the numbers the plan gave them. Shared with the groups
      *  the limit held back, which have claims and no cell to read them off. */
     private static List<ArmProbe> armsIn(
@@ -1543,14 +1536,13 @@ public final class Generator {
      *
      * <p>And a refusal of the exact mutation is a reason to repair it, not to abandon the origin.
      * Where {@code f = C} needs {@code g = G2} beside it, what a reader wants is the baseline with
-     * both moved — {@code Cond &#123;...none, f = C, g = G2&#125;} — and falling back to a
+     * both moved — {@code Cond {...none, f = C, g = G2}} — and falling back to a
      * composition moves everything the classes happened to name. The supporting position is part of
      * the row and no part of what it is for: the row is still named for the class alone
      * ({@link Purpose.ForAClass}).
      */
     private static ClassAttempt rowFor(MeasuredInput.MeasuredAxes axes, int at, int cls,
                                        List<ResolvedOrigin> origins, CandidateCheck check) {
-        MeasuredInput subject = axes.subject();
         Axis axis = axes.get(at);
         String classId = axis.classes().get(cls).id();
         String label = label(axis, cls);
@@ -3060,50 +3052,6 @@ public final class Generator {
         return true;
     }
 
-    /**
-     * Which one class each ordered axis fell in for one row, or -1 where the row named no single
-     * one — because it could not be read there, or because its values fell in more than one.
-     *
-     * <p>Where a row sits, which is what a cell to be filled beside it is worked out from. A row
-     * whose list holds elements either side of a line sits in no one cell at that position, and
-     * choosing one of them would place the next row against an element this picked.
-     */
-    private static int[] whereIn(Map<AxisId, Classification> row, List<Axis> axes) {
-        List<int[]> reached = reachedIn(row, axes);
-        int[] at = new int[axes.size()];
-        for (int i = 0; i < axes.size(); i++) {
-            at[i] = reached.get(i).length == 1 ? reached.get(i)[0] : -1;
-        }
-        return at;
-    }
-
-    /**
-     * Which classes each ordered axis fell in for one row, empty where the row did not say.
-     *
-     * <p>More than one where the position is inside a sequence: a row whose list holds elements
-     * either side of a line stands in both classes there, and picking one of them would report what
-     * the row covers off an element this chose.
-     */
-    private static List<int[]> reachedIn(Map<AxisId, Classification> row, List<Axis> axes) {
-        List<int[]> at = new ArrayList<>();
-        for (Axis axis : axes) {
-            List<Integer> here = new ArrayList<>();
-            if (row.get(axis.id()) instanceof Classification.Classified in) {
-                for (int c = 0; c < axis.classes().size(); c++) {
-                    if (in.classIds().contains(axis.classes().get(c).id())) {
-                        here.add(c);
-                    }
-                }
-            }
-            int[] found = new int[here.size()];
-            for (int k = 0; k < here.size(); k++) {
-                found[k] = here.get(k);
-            }
-            at.add(found);
-        }
-        return at;
-    }
-
     /** Where {@code id} sits among {@code axis}'s classes, or -1 where it is none of them. */
     private static int classIn(Axis axis, String id) {
         for (int c = 0; c < axis.classes().size(); c++) {
@@ -3505,16 +3453,9 @@ public final class Generator {
      * later one at every position is a row further from what the model says it is about. The walk
      * stops at {@link #MAX_TUPLES}, and stopping is reported as having stopped rather than as
      * everything having been refused.
-     */
-    private static Attempt build(MeasuredInput.MeasuredAxes axes, int[] where,
-                                 CandidateCheck check) {
-        return build(axes, where, check, Map.of());
-    }
-
-    /**
-     * The same, with the parameters {@code given} names written as it says instead of composed.
      *
-     * <p>Which is what makes a value the model already states an origin of the search rather than a
+     * <p>The parameters {@code given} names are written as it says instead of composed, which is
+     * what makes a value the model already states an origin of the search rather than a
      * rewrite of its answer. Composed first and rewritten after, a row the baseline could have been
      * written for came back as one nothing composed — a representative chosen from the classes
      * alone breaks a rule relating two positions while the model's own value does not — and a row
@@ -4025,7 +3966,7 @@ public final class Generator {
      * <p>Depth first, so that a position is chosen against a projection that already has the ones
      * before it in it. The projection is the same one the whole search started from — what the
      * record's rules leave each of its fields — asked again with the assignment so far settled into
-     * it, which is what {@link FieldDomains#of(TypeSymbol, Hir.Data, Symbols, Map)} is for.
+     * it, which is what {@link FieldDomains#of} is for.
      *
      * <p>Second, and not instead. What it costs is a reading of the record's rules per position per
      * branch, and the search in front of it answers most rows without any of that; running this one
@@ -4285,7 +4226,7 @@ public final class Generator {
      * it — offered its first class regardless, every row about a class under one case of a sum
      * would ask to be another case as well, and none of them would be composed.
      *
-     * @param at  which axis the row is about, or {@link #NOT_HERE} where it is about none
+     * @return which axis the row is about, or {@link #NOT_HERE} where it is about none
      */
     private static int[] standing(List<Axis> axes, int[] from, int[] anchors) {
         return standing(axes, from, anchors, (_, _) -> true);
@@ -4805,24 +4746,6 @@ public final class Generator {
                     new UnresolvedCombination(List.of(label), reason(), detail()), unrepresented);
         }
 
-        /**
-         * What to report where every value offered here was refused.
-         *
-         * <p>Not always that they were refused. Where the values are some of the values and the rest
-         * were never built, the search stopping is the more of the two facts, and the one a reader
-         * would act on: another value of this edge may be the one that builds.
-         *
-         * <p>Which holds however the rest came to be unbuilt. A figure that refused one and a
-         * population this writes some of leave the same thing untried, and a reader told every value
-         * was refused would be acting on a walk that never wrote most of them.
-         */
-        UnresolvedCombination.Reason refused() {
-            if (!stoppedBy().isEmpty()) {
-                return UnresolvedCombination.Reason.wordFor(stoppedBy());
-            }
-            return notAllOf().isEmpty() ? UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED
-                    : UnresolvedCombination.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED;
-        }
     }
 
     /**

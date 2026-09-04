@@ -9,7 +9,7 @@ import java.util.List;
  * Where the ways in cannot be enumerated or run past the bound, the reading falls back on naming the
  * arm itself — which is a way in that holds a run to something and steers no row anywhere. A walk
  * looking for meetings goes on under it, so the fallback is carried; a reader asking how to compose
- * a row that arrives here is told what is missing instead, which is what {@link #told()} answers.
+ * a row that arrives here is told what is missing instead, which is what {@code told} answers.
  * One value with both, so that the fallback cannot reach a caller that would compose from it.
  */
 sealed interface Reach {

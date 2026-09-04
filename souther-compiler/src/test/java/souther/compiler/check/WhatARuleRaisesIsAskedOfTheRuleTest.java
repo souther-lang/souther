@@ -156,7 +156,7 @@ class WhatARuleRaisesIsAskedOfTheRuleTest {
      * had answered.
      *
      * <p>Which the quantity settles and the spelling cannot. What a rule restricts is what its
-     * canonical form cuts, which is the rule {@link UnreadComparison#why} is written around one
+     * canonical form cuts, which is the rule {@link UnreadComparison.Quantity.NotRead} is written around one
      * layer down — and this classification was still counting the sides.
      */
     @Test

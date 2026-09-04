@@ -30,7 +30,8 @@ import java.util.Set;
  *
  * <p><b>The connectives are over this and not over either of them.</b> A choice between two
  * alternatives is a choice between two readings of the whole value, so an alternative that cannot be
- * taken is dropped by asking the whole of what is known about it ({@link #holdsNothing}). Applied
+ * taken is dropped by asking the whole of what is known about it
+ * ({@link souther.compiler.values.PlannedValues#holdsNothingAsBuilt}). Applied
  * inside each language on its own, the drop happened only where the language doing the joining was
  * also the one that could show the branch impossible: {@code s < "" || (b == true && b == false)}
  * has a branch no order admits beside a branch no set of values admits, and each language, joining

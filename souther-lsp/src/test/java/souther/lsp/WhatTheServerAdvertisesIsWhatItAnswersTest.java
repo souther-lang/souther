@@ -127,8 +127,9 @@ class WhatTheServerAdvertisesIsWhatItAnswersTest {
     }
 
     /** {@code true}, or an options object; {@code false} or an absent field declines the request. */
-    private static final Predicate<JsonNode> TRUE_OR_OPTIONS =
-            value -> (value.isBoolean() && value.booleanValue()) || value.isObject();
+    private static boolean trueOrOptions(JsonNode value) {
+        return (value.isBoolean() && value.booleanValue()) || value.isObject();
+    }
 
     /** An options object and nothing else — these two capabilities have no boolean form. */
     private static final Predicate<JsonNode> OPTIONS = JsonNode::isObject;
@@ -149,13 +150,13 @@ class WhatTheServerAdvertisesIsWhatItAnswersTest {
      * <p>The shorthand carries it; the long form does not unless it says so, and a client reading
      * options without {@code openClose} sends neither notification.
      */
-    private static final Predicate<JsonNode> OPEN_CLOSE_SYNC = value -> {
+    private static boolean openCloseSync(JsonNode value) {
         if (syncedByKind(value)) {
             return true;
         }
         JsonNode openClose = value.isObject() ? value.get("openClose") : null;
         return openClose != null && openClose.isBoolean() && openClose.booleanValue();
-    };
+    }
 
     /**
      * Changing a document, which the options form puts behind its own {@code change}.
@@ -164,23 +165,24 @@ class WhatTheServerAdvertisesIsWhatItAnswersTest {
      * absent or {@code None} in options that say nothing about them, and either way no
      * {@code didChange} arrives.
      */
-    private static final Predicate<JsonNode> CHANGE_SYNC = value -> {
+    private static boolean changeSync(JsonNode value) {
         if (syncedByKind(value)) {
             return true;
         }
         JsonNode change = value.isObject() ? value.get("change") : null;
         return change != null && syncedByKind(change);
-    };
+    }
 
     /** Semantic tokens for a whole document are behind the options' own {@code full}. */
-    private static final Predicate<JsonNode> FULL_DOCUMENT_TOKENS = value -> {
+    private static boolean fullDocumentTokens(JsonNode value) {
         JsonNode full = value.isObject() ? value.get("full") : null;
         return full != null && (full.isObject() || (full.isBoolean() && full.booleanValue()));
-    };
+    }
 
     private static Protocol offered(LspMethod method, String wire, String key) {
         return new Protocol(method, wire,
-                new Told.Capability(key, TRUE_OR_OPTIONS, "true or an options object"));
+                new Told.Capability(key, WhatTheServerAdvertisesIsWhatItAnswersTest::trueOrOptions,
+                        "true or an options object"));
     }
 
     private static Protocol lifecycle(LspMethod method, String wire) {
@@ -208,20 +210,24 @@ class WhatTheServerAdvertisesIsWhatItAnswersTest {
             protocolNotification(LspMethod.DID_CHANGE_CONFIGURATION,
                     "workspace/didChangeConfiguration"),
             new Protocol(LspMethod.DID_OPEN, "textDocument/didOpen",
-                    new Told.Capability("textDocumentSync", OPEN_CLOSE_SYNC,
+                    new Told.Capability("textDocumentSync",
+                            WhatTheServerAdvertisesIsWhatItAnswersTest::openCloseSync,
                             "a sync kind that syncs, or options whose `openClose` is on")),
             new Protocol(LspMethod.DID_CHANGE, "textDocument/didChange",
-                    new Told.Capability("textDocumentSync", CHANGE_SYNC,
+                    new Told.Capability("textDocumentSync",
+                            WhatTheServerAdvertisesIsWhatItAnswersTest::changeSync,
                             "a sync kind that syncs, or options whose `change` is not None")),
             new Protocol(LspMethod.DID_CLOSE, "textDocument/didClose",
-                    new Told.Capability("textDocumentSync", OPEN_CLOSE_SYNC,
+                    new Told.Capability("textDocumentSync",
+                            WhatTheServerAdvertisesIsWhatItAnswersTest::openCloseSync,
                             "a sync kind that syncs, or options whose `openClose` is on")),
             new Protocol(LspMethod.DID_CHANGE_WATCHED_FILES, "workspace/didChangeWatchedFiles",
                     new Told.Registration()),
             offered(LspMethod.DOCUMENT_SYMBOL, "textDocument/documentSymbol",
                     "documentSymbolProvider"),
             new Protocol(LspMethod.SEMANTIC_TOKENS_FULL, "textDocument/semanticTokens/full",
-                    new Told.Capability("semanticTokensProvider", FULL_DOCUMENT_TOKENS,
+                    new Told.Capability("semanticTokensProvider",
+                            WhatTheServerAdvertisesIsWhatItAnswersTest::fullDocumentTokens,
                             "options whose `full` offers whole-document tokens")),
             offered(LspMethod.HOVER, "textDocument/hover", "hoverProvider"),
             offered(LspMethod.DEFINITION, "textDocument/definition", "definitionProvider"),

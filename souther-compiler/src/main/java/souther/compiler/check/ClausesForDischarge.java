@@ -30,7 +30,7 @@ import java.util.Map;
  * makes the wrong position unwritable rather than merely wrong.
  *
  * <p>What is <em>not</em> here is the reading the check itself does of a whole clause
- * ({@link ClauseHelpers#invariantsForDischarge}). That answers a different question — what a
+ * ({@link ClauseHelpers}). That answers a different question — what a
  * construction owes — and is read against the values a construction hands over rather than placed in
  * front of an author.
  */

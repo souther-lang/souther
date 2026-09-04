@@ -568,7 +568,7 @@ public final class PathReachability {
      * domain went empty: what is wanted is whether the guards above did any of the work, and that
      * is a question about those two states and not about how either was reached.
      */
-    private Proof why(Core cond, boolean holds, Predicates.Assumed taken,
+    private Proof why(Core cond, boolean holds,
                       List<PathDecision> under, InputReads reads) {
         if (engine.assuming(cond, entry, entered, holds).known().reachesNothing()) {
             TermPath position = comparedPositionIn(cond, reads);
@@ -679,7 +679,7 @@ public final class PathReachability {
         if (arms != null && index < arms.length) {
             out.put(arms[index], inside.reachesNothing()
                     ? new Reachability.Unreachable(
-                            why(iff.cond(), holds, taken, under, reads))
+                            why(iff.cond(), holds, under, reads))
                     : new Reachability.Unsettled(whyNot(taken, iff.cond())));
         }
         walk(arm, inside, at, reads, under, false);

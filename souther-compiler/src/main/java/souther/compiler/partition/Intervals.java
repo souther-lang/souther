@@ -90,7 +90,7 @@ final class Intervals {
             }
             // One subject and two relations where both ends can name the same one, which is what
             // an author reads a range as. Two subjects are two conditions and are said as two.
-            String subject = subjectOf(carrier);
+            String subject = subjectOf();
             return subject == null ? low + " and " + high
                     : low.substring(0, low.length() - subject.length())
                             + subject + high.substring(subject.length());
@@ -98,7 +98,7 @@ final class Intervals {
 
         /** What both ends of this run relate a row to, where they relate it to the same thing.
          *  Null where one end names the position and the other a multiple of it. */
-        private String subjectOf(Carrier carrier) {
+        private String subjectOf() {
             if (lo != null && hi != null) {
                 return "x";
             }

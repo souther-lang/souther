@@ -126,8 +126,6 @@ public final class EnsuresThresholds {
      *               is said where the declaration is held to its rules
      */
     public static Clauses of(StatedContract stated, InputReading read) {
-        InputDomain inputs = read.domain();
-        Symbols symbols = read.symbols();
         if (stated == null || stated.isEmpty()) {
             return Clauses.NONE;
         }

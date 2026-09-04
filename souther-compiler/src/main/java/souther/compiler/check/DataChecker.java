@@ -22,6 +22,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.SequencedSet;
 import java.util.Set;
 
 /**
@@ -338,7 +339,7 @@ public final class DataChecker {
      * against. Reported here rather than left to the walks, which would recurse until the stack ran
      * out — codec derivation runs before this check and stops at the repeat for the same reason. */
     private static List<String> sumCycle(TypeSymbol target, Symbols symbols,
-                                         LinkedHashSet<TypeSymbol> path) {
+                                         SequencedSet<TypeSymbol> path) {
         if (!(symbols.declaredNode(
                 path.isEmpty() ? target : last(path)) instanceof Hir.SumData s)) {
             return null;
@@ -369,7 +370,7 @@ public final class DataChecker {
         return null;
     }
 
-    private static TypeSymbol last(LinkedHashSet<TypeSymbol> path) {
+    private static TypeSymbol last(SequencedSet<TypeSymbol> path) {
         TypeSymbol out = null;
         for (TypeSymbol t : path) {
             out = t;
@@ -632,10 +633,6 @@ public final class DataChecker {
 
         checkDecoder(derived.decoder(), ctx, fields);
         checkEncoder(derived.encoder(), ctx);
-    }
-
-    private static Scope fieldScope(CheckContext ctx) {
-        return fieldScope(ctx.data().declares(), ctx.data(), ctx.symbols());
     }
 
     /**

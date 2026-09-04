@@ -26,7 +26,7 @@ import java.util.Map;
  * read after the module it is attached to.
  *
  * <p>Every corpus must compile without an error. A language change that leaves one behind is caught
- * by {@link #check()} before any timing is reported — a compile that stops early is faster and would
+ * by {@link #check(Compilation)} before any timing is reported — a compile that stops early is faster and would
  * read as an improvement.
  *
  * <p>Compiling is all that is asked of these. What the compiler <em>answers</em> about a model of

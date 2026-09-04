@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Modifier;
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
@@ -51,7 +52,8 @@ class CompileInjectedMultiArgTest {
         // the silent-drop hole: send(a) on a 2-input spec used to compile, dropping b
         String src = HEAD + "let use (a, b, send) = send(a)\n";
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
-        assertTrue(e.getMessage().contains("send") || e.getMessage().toLowerCase().contains("argument"),
+        assertTrue(e.getMessage().contains("send")
+                        || e.getMessage().toLowerCase(Locale.ROOT).contains("argument"),
                 e.getMessage());
     }
 

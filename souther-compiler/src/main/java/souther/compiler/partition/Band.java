@@ -257,7 +257,7 @@ public record Band(BandEnd lower, BandEnd upper) {
             return ruleLow + " <= " + tail(ruleHigh);
         }
         String plain = (nullToEmpty(low) + left + nullToEmpty(high)).trim();
-        boolean anyPlain = low != null && !low.isEmpty() || high != null && !high.isEmpty();
+        boolean anyPlain = (low != null && !low.isEmpty()) || (high != null && !high.isEmpty());
         java.util.List<String> said = new java.util.ArrayList<>();
         if (ruleLow != null) {
             said.add(ruleLow);

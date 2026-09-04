@@ -7,7 +7,6 @@ import souther.compiler.ast.Hir;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.check.Prepared;
-import souther.compiler.check.Sig;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.AlignedObservation;
 import souther.compiler.coverage.ControlClaim;
@@ -25,7 +24,6 @@ import souther.compiler.reading.PathAccess;
 
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -245,7 +243,6 @@ class ARowThroughAnArmIsComposedFromTheWayIntoItTest {
             compilation.answerEverything();
             String module = compilation.modules().get(0);
             Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
-            Map<String, Sig> sigs = compilation.db().ask(new Bodies.Signatures(module)).value();
             RuleReadingSource rules = RuleReadings.of(compilation, module);
             Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
             assertNotNull(checked, "the model under test compiles");

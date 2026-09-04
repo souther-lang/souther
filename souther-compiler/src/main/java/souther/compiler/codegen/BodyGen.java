@@ -68,16 +68,8 @@ final class BodyGen {
         return ctx.cd(typeName);
     }
 
-    private ClassDesc matchCaseClass(TypeSymbol caseName) {
-        return ctx.matchCaseClass(caseName);
-    }
-
     private Map<String, Type> fieldTypes(Hir.Data data) {
         return ctx.fieldTypes(data);
-    }
-
-    private Type successType(Hir.RetType ret) {
-        return ctx.successType(ret);
     }
 
     private ClassDesc jvmType(Type type) {
@@ -273,7 +265,7 @@ final class BodyGen {
          * unboxes its arguments from the {@code Object[]} and boxes its result (spec §blocks). */
         private byte[] generateLambdaClass(ClassDesc cd, List<Core.Binder> params, Core body,
                                            List<Type> paramTypes,
-                                           Type resultType, List<Core.Read> captures,
+                                           List<Core.Read> captures,
                                            List<ValueName.Behavior> injectedNames,
                                            Map<ValueName.Behavior, Type> reqSuccess,
                                            Map<ValueName.Behavior, List<Type>> reqParams) {
@@ -650,7 +642,7 @@ final class BodyGen {
          * Emits a Core expression — the single expression emitter (ADR-0021); every node kind is
          * handled here. A {@code let} whose value is a runtime-selected function still asks the
          * type checker (which works on the AST) whether the value is such a function and for its
-         * parameter types, so those calls go through {@link Core#toAst()}: Core is untyped and type
+         * parameter types, so those calls go through the tree the checker reads: Core is untyped and type
          * inference lives in the checker, so the backend reuses it rather than re-deriving types.
          */
         Type genExpr(Core e) {
@@ -765,7 +757,7 @@ final class BodyGen {
                 }
                 case Core.Construct nd -> construct(nd);
                 case Core.Match m -> match(m, expected);
-                case Core.Call c -> call(c, expected);
+                case Core.Call c -> call(c);
                 case Core.Apply a -> applyFn(a, (Type.FnOf) a.fn().type());
                 case Core.LetIn li -> {
                     // a `let` outside tail position: bind, then value the body
@@ -1210,7 +1202,7 @@ final class BodyGen {
         static final Set<Kernel> WRITTEN_OUT =
                 Set.of(Kernel.INT_DIVIDE, Kernel.INT_TRUNCATING_REMAINDER);
 
-        private void call(Core.Call call, Type expected) {
+        private void call(Core.Call call) {
             // Which kernel a call reaches is on the call, so what is emitted for one is asked of
             // the operation. Matched against the rendered reach name instead, these arms would turn
             // on the alias the library publishes the operation under.
@@ -2021,17 +2013,16 @@ final class BodyGen {
          * captured free variables (and any injected behaviors it calls) to its constructor. Its
          * parameter and result types are the ones the checker put on the block (issue #81). */
         private void emitLambda(Core.Block block, List<Type> paramTypes) {
-            emitLambda(block.params(), block.body(), paramTypes,
-                    ((Type.FnOf) block.type()).result(), freeVars(block));
+            emitLambda(block.params(), block.body(), paramTypes, freeVars(block));
         }
 
         private void emitLambda(List<Core.Binder> params, Core body, List<Type> paramTypes,
-                                Type resultType, Reaches free) {
+                                Reaches free) {
             List<Core.Read> captures = free.bindings();
             List<ValueName.Behavior> injectedNames = free.injected();
             GeneratedClass.Lambda lambda = new GeneratedClass.Lambda(pkg, ctx.nextLambdaId());
             ClassDesc cd = ctx.cd(lambda);
-            ctx.addSynth(lambda, generateLambdaClass(cd, params, body, paramTypes, resultType,
+            ctx.addSynth(lambda, generateLambdaClass(cd, params, body, paramTypes,
                     captures, injectedNames, reqSuccess, reqParams));
 
             // the same condition generateLambdaClass interned on — it must stay the same one

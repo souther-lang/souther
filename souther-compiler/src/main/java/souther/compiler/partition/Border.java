@@ -70,8 +70,8 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<DomainPoint, Poin
         for (Map.Entry<DomainPoint, PointAnswer> each : answers.entrySet()) {
             boolean atTheLine = each.getValue() instanceof PointAnswer.AtLine;
             boolean inARegion = each.getValue() instanceof PointAnswer.InRegion;
-            if (atTheLine && !each.getKey().againstTheLine()
-                    || inARegion && each.getKey().againstTheLine()) {
+            if ((atTheLine && !each.getKey().againstTheLine())
+                    || (inARegion && each.getKey().againstTheLine())) {
                 throw new IllegalArgumentException("the " + each.getKey() + " of a border,"
                         + " answered as " + each.getValue());
             }
@@ -114,9 +114,9 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<DomainPoint, Poin
         // through it, and a report that showed a line's points in the order a switch happened to
         // fill them in would move them about as the shapes of line changed.
         points.sort(Comparator
-                .comparingInt((DomainPoint point) ->
-                        PointRole.of(point, origin.lineFacts().holdsAt(point)).ordinal())
-                .thenComparing(point -> point.side() == Towards.BELOW ? 0 : 1));
+                .comparing((DomainPoint point) ->
+                        PointRole.of(point, origin.lineFacts().holdsAt(point)))
+                .thenComparingInt(point -> point.side() == Towards.BELOW ? 0 : 1));
         return new LinkedHashSet<>(points);
     }
 
@@ -694,7 +694,7 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<DomainPoint, Poin
                         //
                         // Nothing outside a bound can be constructed, so a bound has no second side
                         // for the line's own value to settle anything about.
-                        || !drawnByAnInvariant && admits(within, cut);
+                        || (!drawnByAnInvariant && admits(within, cut));
             }
         };
     }
@@ -923,7 +923,7 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<DomainPoint, Poin
                 : new DomainPoint.BesideTheLine(kept);
         DomainPoint outside = holdsHere ? new DomainPoint.BesideTheLine(kept.opposite())
                 : new DomainPoint.AtTheLine();
-        PointAnswer on = againstABound(space, cut, kept, holdsHere, within, origin);
+        PointAnswer on = againstABound(space, cut, kept, holdsHere, within);
         demands.put(inside, on);
         demands.put(outside, new PointAnswer.NotOwed(NotOwedReason.THE_RULES_REFUSE_IT));
         // The partition the bound bounds, without the value against the line.
@@ -961,8 +961,7 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<DomainPoint, Poin
      * side the bound keeps, which is the question the point is about anyway.
      */
     private static PointAnswer againstABound(LevelSpace space, Level cut, Towards kept,
-                                             boolean holdsHere, NumericDomain.Bounds within,
-                                             OriginRef origin) {
+                                             boolean holdsHere, NumericDomain.Bounds within) {
         if (holdsHere) {
             return pointAt(space, cut, kept, true, within);
         }
@@ -998,12 +997,6 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<DomainPoint, Poin
             throw new IllegalStateException(
                     "a bound whose line is not where what it leaves stops: " + origin.named());
         }
-    }
-
-    /** Where a side starts: the point against the line on that side, or the line where there is
-     *  none. */
-    private static Level levelOf(Demand against, Level line) {
-        return against.criterion() instanceof Criterion.AtTheLevel at ? at.at() : line;
     }
 
     /**

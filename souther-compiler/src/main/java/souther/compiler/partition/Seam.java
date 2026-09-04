@@ -244,8 +244,8 @@ public record Seam(CutPosition at, Level below, Level above) {
         if (line == null) {
             return null;
         }
-        return below != null && below.key().equals(line.key())
-                || above != null && above.key().equals(line.key()) ? line : null;
+        return (below != null && below.key().equals(line.key()))
+                || (above != null && above.key().equals(line.key())) ? line : null;
     }
 
     /**

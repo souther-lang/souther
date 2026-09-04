@@ -353,7 +353,7 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
     /**
      * What the readings came to.
      *
-     * <p>The coverage is folded ({@link ItemAssessment.Coverage#acrossTheReadings}). So is what
+     * <p>The coverage is folded ({@link ItemAssessment.Coverage}). So is what
      * building a value came to, and it is here for one thing: that a value at the point was built
      * is evidence the point exists, and whether a point exists is what tells a line no row stands at
      * from one no row could stand at ({@link ItemAssessment#isUnmetGap}). Every reading of one point

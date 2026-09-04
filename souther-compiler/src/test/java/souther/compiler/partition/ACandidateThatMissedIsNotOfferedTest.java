@@ -215,7 +215,6 @@ class ACandidateThatMissedIsNotOfferedTest {
             assertNotNull(checked);
             Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().stream()
                     .filter(b -> b.name().equals(behavior)).findFirst().orElseThrow();
-            Sig sig = sigs.get(behavior);
             InputDomain inputs =
                     compilation.db().ask(new Adequacy.Inputs(module)).value().get(behavior);
             assertNotNull(inputs, "the behavior's inputs were read");

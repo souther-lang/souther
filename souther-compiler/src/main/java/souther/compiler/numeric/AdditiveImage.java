@@ -87,7 +87,6 @@ public sealed interface AdditiveImage {
         }
         Rational divisor = Rational.ZERO;
         boolean anyFills = false;
-        boolean anySteps = false;
         for (Map.Entry<A, Rational> each : coefs.entrySet()) {
             if (each.getValue().isZero()) {
                 throw new IllegalArgumentException(
@@ -98,7 +97,6 @@ public sealed interface AdditiveImage {
                 throw new IllegalStateException("no granularity given for `" + each.getKey() + "`");
             }
             anyFills |= how == Granularity.DENSE;
-            anySteps |= how == Granularity.DISCRETE;
             divisor = Rational.gcd(divisor, each.getValue());
         }
         if (!anyFills) {

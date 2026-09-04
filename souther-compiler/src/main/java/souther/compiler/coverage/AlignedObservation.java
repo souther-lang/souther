@@ -95,10 +95,10 @@ public final class AlignedObservation {
     @Override
     public boolean equals(Object other) {
         return this == other
-                || other instanceof AlignedObservation that
+                || (other instanceof AlignedObservation that
                         && numbering.equals(that.numbering)
                         && arms.equals(that.arms)
-                        && comparisons.equals(that.comparisons);
+                        && comparisons.equals(that.comparisons));
     }
 
     @Override

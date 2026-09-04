@@ -521,7 +521,7 @@ final class ContainersAddingUp {
         List<BigDecimal> split = new ArrayList<>();
         for (int i = 0; i < many; i++) {
             BigDecimal wanted = how == Spread.MASSED ? owed : shared(owed, many - i, elements);
-            BigDecimal add = toward(wanted, ends, elements);
+            BigDecimal add = toward(wanted, ends);
             BigDecimal at = ends.from().add(add);
             // Put back to the rules and to the carrier, which are the two things a number has to be
             // to be a value here. Where an element starts and how far it may be moved are worked out
@@ -564,7 +564,7 @@ final class ContainersAddingUp {
      * about the move. Bounded by whichever end happened to be named, an element moving down was held
      * to how far it could go up.
      */
-    private static BigDecimal toward(BigDecimal wanted, Ends ends, Carrier elements) {
+    private static BigDecimal toward(BigDecimal wanted, Ends ends) {
         if (wanted.signum() >= 0) {
             return ends.upTo() == null ? wanted
                     : wanted.min(ends.upTo().subtract(ends.from()));

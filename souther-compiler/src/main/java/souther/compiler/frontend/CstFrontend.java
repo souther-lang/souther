@@ -150,7 +150,7 @@ public final class CstFrontend {
     public record Slices(String header, List<String> imports, Map<String, String> defs,
                          Map<String, String> behaviors, Map<String, String> fns) {}
 
-    /** The parser's first error, positioned in {@code sourceId}. The index is built here rather than
+    /** The parser's first error, positioned in the file it was read from. The index is built here rather than
      * taken off the builder — the build never ran — so this is the one position of a source that
      * would otherwise not say which file it is in, and a syntax error would be the single kind of
      * mistake still reported against whatever file the reader guessed at. */

@@ -98,9 +98,9 @@ public final class Workspace {
     private static boolean isClassOutput(Path dir) {
         Path parent = dir.getParent();
         return parent != null
-                && (dir.getFileName().toString().equals("classes")
-                        && parent.getFileName().toString().equals("target")
-                || dir.endsWith(Path.of("build", "classes", "java", "main")));
+                && ((dir.getFileName().toString().equals("classes")
+                                && parent.getFileName().toString().equals("target"))
+                        || dir.endsWith(Path.of("build", "classes", "java", "main")));
     }
 
     private Map<String, String> scanDisk() {
