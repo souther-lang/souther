@@ -19,9 +19,15 @@ import java.util.Map;
  * two answers are the same map at a record and are not the same question: a value of a sum is a
  * value of one of its cases, and a product of the shared fields is a value of none of them. Read
  * from there, a plan would compose a sum out of the part its cases have in common; read from here,
- * a walk into what a row wrote would go somewhere no row writes anything. The coincidence at a
- * record is a law over the two answers and is not a reason for either to be the other's
- * implementation.
+ * a walk deciding where to <em>write</em> a value would go somewhere no row writes anything. The
+ * coincidence at a record is a law over the two answers and is not a reason for either to be the
+ * other's implementation.
+ *
+ * <p><b>And this is what a walk over a value already written asks.</b> Reading is what such a walk
+ * does: the case is settled in the value it holds, so what it may take is what every value of the
+ * position carries, and a name only some case declares is not readable however many rows turn out
+ * to be that case. The written relation answers nothing at a sum's shared name, so a walk that took
+ * it read no value at every name a model reads through a sum.
  *
  * <p><b>Asked of a {@link Shape} and not of a {@link Type}.</b> How far to look through the names a
  * value wears is the reader's own policy — the elaboration of a field read looks through none of
