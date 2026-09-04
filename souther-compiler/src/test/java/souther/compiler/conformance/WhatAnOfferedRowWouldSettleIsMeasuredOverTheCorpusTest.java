@@ -1,5 +1,6 @@
 package souther.compiler.conformance;
 
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.OfferItem;
@@ -42,6 +43,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * come back {@code Undetermined} here. Strengthening the assertion to {@code Settles} would be
  * asserting something nothing establishes.
  */
+@Tag("population")
 class WhatAnOfferedRowWouldSettleIsMeasuredOverTheCorpusTest {
 
     @Test

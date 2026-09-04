@@ -5,6 +5,7 @@ import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -34,6 +35,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
  * language's own list of what a term can be, so a kind added later is unreached here until someone
  * says what its place is.
  */
+@Tag("population")
 class EveryTermCanBeReadWithoutItsPlaceTest {
 
 

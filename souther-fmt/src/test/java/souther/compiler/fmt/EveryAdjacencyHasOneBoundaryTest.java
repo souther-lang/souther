@@ -1,5 +1,6 @@
 package souther.compiler.fmt;
 
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.cst.CstParser;
@@ -19,6 +20,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * <p>This does not say that the construct each boundary names is the one the canonical form has.
  * That is a separate check and it is not made yet — see issue #476.
  */
+@Tag("population")
 class EveryAdjacencyHasOneBoundaryTest {
 
     @Test

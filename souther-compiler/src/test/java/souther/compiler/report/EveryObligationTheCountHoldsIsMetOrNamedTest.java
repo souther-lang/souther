@@ -1,5 +1,6 @@
 package souther.compiler.report;
 
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.DoesNotComeBack;
@@ -38,6 +39,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * which no source reaches is a law that passes by not applying, and the counts below are what says
  * it does apply.
  */
+@Tag("population")
 class EveryObligationTheCountHoldsIsMetOrNamedTest {
 
     /**

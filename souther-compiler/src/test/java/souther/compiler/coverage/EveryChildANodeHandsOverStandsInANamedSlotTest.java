@@ -1,5 +1,6 @@
 package souther.compiler.coverage;
 
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.conformance.ConformanceCorpus;
@@ -38,6 +39,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * elsewhere, rather than of a model written to have one of everything. A model like that says what
  * its author remembered to put in it.
  */
+@Tag("population")
 class EveryChildANodeHandsOverStandsInANamedSlotTest {
 
     @Test

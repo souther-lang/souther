@@ -1,5 +1,6 @@
 package souther.bench;
 
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.query.Compilation;
@@ -17,6 +18,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * nothing: these sources are timed, not read back, and every measure a report carries could move
  * without one of them failing to compile.
  */
+@Tag("population")
 class CorpusTest {
 
     @Test

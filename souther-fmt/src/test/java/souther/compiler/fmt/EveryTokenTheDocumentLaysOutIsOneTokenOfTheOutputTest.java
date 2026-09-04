@@ -1,5 +1,6 @@
 package souther.compiler.fmt;
 
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.cst.CstParser;
@@ -30,6 +31,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * never emitted is missing from the document and from the output alike and this check passes; that
  * one is the golden corpus's to catch.
  */
+@Tag("population")
 class EveryTokenTheDocumentLaysOutIsOneTokenOfTheOutputTest {
 
     /** Every token of {@code doc}, in the order it is laid out. */
