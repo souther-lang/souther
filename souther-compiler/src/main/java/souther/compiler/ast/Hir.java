@@ -203,7 +203,7 @@ public interface Hir {
          * {@code pos} is what a complaint about it points at. The spelling is the declaration's own,
          * which is what a reference internal to a module reaches it by. */
         static Name resolved(TypeSymbol denotes, SourcePos pos) {
-            return new Denoting(WrittenName.synthetic(denotes.name(), pos), denotes);
+            return new Name.Denoting(WrittenName.synthetic(denotes.name(), pos), denotes);
         }
 
         /**
@@ -214,7 +214,7 @@ public interface Hir {
          * write. What it denotes is the same either way.
          */
         static Name reached(TypeReachName.Written type, SourcePos pos) {
-            return new Denoting(WrittenName.synthetic(type.rendered(), pos), type.denotes());
+            return new Name.Denoting(WrittenName.synthetic(type.rendered(), pos), type.denotes());
         }
 
         /** The bare name this reaches its declaration by, whatever the source spelled. */
@@ -235,13 +235,13 @@ public interface Hir {
          * narrowing to the two forms, and says what it does with an {@link Unanswered} name where it
          * makes that choice.
          */
-        default Denoting answered() {
-            return this instanceof Denoting denoting ? denoting : null;
+        default Name.Denoting answered() {
+            return this instanceof Name.Denoting denoting ? denoting : null;
         }
 
         /** The same name, read and found to name nothing. */
         default Name unanswered() {
-            return new Unanswered(name());
+            return new Name.Unanswered(name());
         }
 
         /**
@@ -1823,7 +1823,7 @@ public interface Hir {
         /** The same, off an occurrence already read: a name standing as an expression over exactly
          * the characters that spell it — every one but a name the author parenthesized. */
         static Var denoting(WrittenName written, ReachName reachedAs) {
-            return new Denoting(written, reachedAs, written.region());
+            return new Var.Denoting(written, reachedAs, written.region());
         }
 
         /**
@@ -1836,7 +1836,7 @@ public interface Hir {
          * replaced was read over.
          */
         static Var respelled(String spelling, ReachName reachedAs, SourcePos pos, Region region) {
-            return new Denoting(WrittenName.synthetic(spelling, pos), reachedAs, region);
+            return new Var.Denoting(WrittenName.synthetic(spelling, pos), reachedAs, region);
         }
 
         /**
@@ -1849,7 +1849,7 @@ public interface Hir {
         static Var local(Binder binder, SourcePos pos) {
             ValueName.Local local = new ValueName.Local(binder.name(), binder.id());
             WrittenName written = WrittenName.synthetic(binder.name(), pos);
-            return new Denoting(written, new ReachName.InScope(local), written.region());
+            return new Var.Denoting(written, new ReachName.InScope(local), written.region());
         }
 
         /** The bare name this reaches its declaration by, whatever the source spelled. */
@@ -1875,8 +1875,8 @@ public interface Hir {
          * so a reader arrives at it through this projection or through narrowing to the two forms,
          * and says what it does with an {@link Unanswered} name where it makes that choice.
          */
-        default Denoting answered() {
-            return this instanceof Denoting denoting ? denoting : null;
+        default Var.Denoting answered() {
+            return this instanceof Var.Denoting denoting ? denoting : null;
         }
 
         /** Whether this name denotes nothing — read by resolution, and reported where it was
@@ -1896,20 +1896,20 @@ public interface Hir {
          * {@link Unanswered}.
          */
         default Var denoting(ReachName reachedAs) {
-            return new Denoting(written(), reachedAs, region());
+            return new Var.Denoting(written(), reachedAs, region());
         }
 
         /** The same name, over {@code region} — whichever of the two it is. */
         default Var over(Region region) {
             return switch (this) {
-                case Denoting d -> new Denoting(d.written(), d.reachedAs(), region);
-                case Unanswered u -> new Unanswered(u.written(), region);
+                case Var.Denoting d -> new Var.Denoting(d.written(), d.reachedAs(), region);
+                case Var.Unanswered u -> new Var.Unanswered(u.written(), region);
             };
         }
 
         /** The same name, read and found to name nothing. */
         default Var unanswered() {
-            return new Unanswered(written(), region());
+            return new Var.Unanswered(written(), region());
         }
 
         /**
