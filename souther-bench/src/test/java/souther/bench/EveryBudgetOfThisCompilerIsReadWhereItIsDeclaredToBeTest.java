@@ -48,6 +48,11 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * figure over; that the place reaches it only where there was more to do is not something either
  * sheet can read. What says that is the threshold tests, one either side of a figure and on it, and
  * they exist for the walks that can be put there.
+ *
+ * <p>Which is why a place that reaches a figure and a place that decides a walk was stopped are
+ * worth keeping apart. A consumer here says it has no room for the piece in front of it and says
+ * under which figure; that the walk was holding a piece at all is the walk's, and a walk that
+ * records a figure without one is the reading these sheets cannot see going wrong.
  */
 class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
 
@@ -79,16 +84,32 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/check/ReadingPolicy;Ljava/util/Set;)"
                             + "Lsouther/compiler/partition/Witnesses$Built;",
                     "stops at the pairings a map is built from at once, and says which"),
-            Map.entry("souther.compiler.partition.ContainersAddingUp#<clinit>()V",
-                    "how many elements a total is spread over, and how many shapes are offered"),
-            Map.entry("souther.compiler.partition.ContainersAddingUp#to("
-                            + "Lsouther/compiler/numeric/Place;Lsouther/compiler/types/Type;"
-                            + "Lsouther/compiler/inputs/TermOrders;"
-                            + "Lsouther/compiler/inputs/SearchRegion;"
-                            + "Lsouther/compiler/check/RuleReadingSource;"
-                            + "Lsouther/compiler/check/ReadingPolicy;)"
-                            + "Lsouther/compiler/partition/TermRealizations$Realization;",
-                    "records the three a total can be short of, where each decides not to go on"),
+            // A total's three, one consumer each. The figure is asked for twice per consumer and
+            // for two questions: whether there is room for the piece in front of it, and — where
+            // the walk finds there was not — which figure to say so under. Held apart, a consumer
+            // could report having run out of one figure while making room by another.
+            Map.entry("souther.compiler.partition.ContainersAddingUp$HowManyElements#take("
+                            + "Ljava/lang/Integer;)Lsouther/compiler/partition/Taking$Taken;",
+                    "has no room for a count of more elements than a row carries"),
+            Map.entry("souther.compiler.partition.ContainersAddingUp$HowManyElements#figure()"
+                            + "Lsouther/compiler/partition/CompositionBudget;",
+                    "says which figure that was, which is what the walk hands over"),
+            Map.entry("souther.compiler.partition.ContainersAddingUp$HowItIsSpread#take("
+                            + "Lsouther/compiler/partition/ContainersAddingUp$Spread;)"
+                            + "Lsouther/compiler/partition/Taking$Taken;",
+                    "has no room for a shape past as many as one total is spread in"),
+            Map.entry("souther.compiler.partition.ContainersAddingUp$HowItIsSpread#figure()"
+                            + "Lsouther/compiler/partition/CompositionBudget;",
+                    "says which figure that was — and it is the one the walk hands over where it"
+                            + " ran out of the shapes there are to try, which are not all the ways"
+                            + " a difference is spread"),
+            Map.entry("souther.compiler.partition.ContainersAddingUp$WhatIsOffered#take("
+                            + "Lsouther/compiler/partition/FixtureTemplate;)"
+                            + "Lsouther/compiler/partition/Taking$Taken;",
+                    "has no room for a container past as many as are offered"),
+            Map.entry("souther.compiler.partition.ContainersAddingUp$WhatIsOffered#figure()"
+                            + "Lsouther/compiler/partition/CompositionBudget;",
+                    "says which figure that was, which is what the walk hands over"),
             Map.entry("souther.compiler.partition.ContainersAddingUp$Asking#next()"
                             + "Lsouther/compiler/partition/ConstructionPlan$Result;",
                     "stops asking about ways down to the number, which is the one place they are"

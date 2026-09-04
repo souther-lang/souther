@@ -48,6 +48,12 @@ final class TermRealizations {
          * <p>Two halves of one answer, as {@link Witnesses.Sized} keeps them. A caller reading only
          * the first says every value was refused where some were never built, which is a different
          * thing to tell an author.
+         *
+         * <p><b>Everything the offer leaves out, and not only what a figure refused.</b> A walk that
+         * went everywhere it knows how to go and a walk a figure turned back both leave values a
+         * reader was not shown, and the reader deciding whether every value was refused needs the
+         * two alike. Which of them a figure came to be here by is what {@link Stopped} is told
+         * apart by, and it is not this.
          */
         record Built(List<FixtureTemplate> values,
                      java.util.Set<CompositionBudget> heldBack) implements Realization {
@@ -74,6 +80,13 @@ final class TermRealizations {
          * policy running out leaves the question of whether a value exists open in a way somebody
          * could act on by raising it.
          *
+         * <p><b>So a figure is here only where a candidate was in front of the walk and this figure
+         * left no room for it.</b> Raise it and that candidate gets tried — which is what makes the
+         * word one an author can act on. A figure a walk merely ran under, having gone everywhere it
+         * knows how to go, stopped nothing and belongs to no arm of this: what it leaves out is
+         * {@link Built#heldBack()} where something was built, and where nothing was, nothing here
+         * declined to look and the answer is {@link None}.
+         *
          * <p>Never where a value was built. A budget that cut an offering short after something was
          * composed is {@link Built#heldBack()}: what it stopped is the rest of the offer, and the
          * point it was composed for has a value at it either way.
@@ -91,6 +104,11 @@ final class TermRealizations {
 
         /**
          * Nothing here writes a value answering it, and no budget of this compiler's is why.
+         *
+         * <p>Which is a walk that looked everywhere it was going to look and found nothing, and not
+         * one that declined to look. A figure may still have bounded what it offered — the ways a
+         * total is spread are two of the many however far a search runs — and that is a thing to
+         * say about an offer rather than a reason there is none.
          *
          * <p>The word is how a reader downstream treats it and {@code detail} is what happened in
          * this attempt, which is the arrangement {@link Generator.UnresolvedCombination} has. A
