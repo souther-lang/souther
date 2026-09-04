@@ -11,6 +11,7 @@ import souther.compiler.inputs.InputQuestion;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.StandingQuestion;
 import souther.compiler.inputs.StructuralInspection;
+import souther.compiler.inputs.WhatAQuestionStandsOn;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
@@ -109,7 +110,7 @@ class AnAbsenceIsWhatCompletingAPositionProducesTest {
                         java.util.Optional.empty())),
                 new RuleCitation.Named("invariant N"),
                 new InputQuestion.AboutAPosition(AT),
-                List.of(new BlockReason.UnreadValueRule()));
+                WhatAQuestionStandsOn.sortedOutOf(List.of(new BlockReason.UnreadValueRule())));
     }
 
     /**

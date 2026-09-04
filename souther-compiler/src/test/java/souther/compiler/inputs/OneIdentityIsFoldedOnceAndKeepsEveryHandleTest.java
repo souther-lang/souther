@@ -111,24 +111,44 @@ class OneIdentityIsFoldedOnceAndKeepsEveryHandleTest {
      *  wrote it short of is untouched. */
     @Test
     void oneQuestionCitedTwoWaysKeepsBothHandlesAndTheAuthorsOrder() {
-        List<BlockReason.QuestionStandingReason> stopped = List.of(new BlockReason.UnreadComparisonForm(),
-                new BlockReason.ExactValuesTooCostly());
+        List<BlockReason.QuestionStandingReason> stopped =
+                List.of(new BlockReason.UnreadComparisonForm(),
+                        new BlockReason.ExactValuesTooCostly());
 
         StandingQuestion both = asked(NAMED, stopped).mergedWith(asked(PLACED, stopped));
 
         assertEquals(Set.of(NAMED, PLACED), both.cited());
-        assertEquals(stopped, both.stopped());
+        assertEquals(WhatAQuestionStandsOn.sortedOutOf(stopped), both.stopped());
     }
 
     /** And two accounts of one question that disagree about that order are not put together. */
     @Test
     void twoAccountsOfOneQuestionCannotDisagreeAboutWhatTheAuthorWrote() {
         BlockReason.QuestionStandingReason form = new BlockReason.UnreadComparisonForm();
-        BlockReason.QuestionStandingReason answer = new BlockReason.ExactValuesTooCostly();
-        StandingQuestion one = asked(NAMED, List.of(form, answer));
-        StandingQuestion theOtherWayRound = asked(PLACED, List.of(answer, form));
+        BlockReason.QuestionStandingReason domain = new BlockReason.UnreadComparisonDomain();
+        StandingQuestion one = asked(NAMED, List.of(form, domain));
+        StandingQuestion theOtherWayRound = asked(PLACED, List.of(domain, form));
 
         assertThrows(TwoAccountsOfOneQuestion.class, () -> one.mergedWith(theOtherWayRound));
+    }
+
+    /**
+     * And a difference in where the answer's limit was met is not a disagreement about anything.
+     *
+     * <p>The order the author wrote runs over the parts of the rule and stops there. A limit the
+     * position's answer ran into is no part of any of them, so where a reading happened to record
+     * it says nothing about the model — and two accounts that put it at different points in a list
+     * are two accounts of one question that agree.
+     */
+    @Test
+    void whereTheAnswersLimitWasMetIsNoDisagreement() {
+        BlockReason.QuestionStandingReason form = new BlockReason.UnreadComparisonForm();
+        BlockReason.QuestionStandingReason answer = new BlockReason.ExactValuesTooCostly();
+
+        StandingQuestion both = asked(NAMED, List.of(form, answer))
+                .mergedWith(asked(PLACED, List.of(answer, form)));
+
+        assertEquals(Set.of(NAMED, PLACED), both.cited());
     }
 
     /** And a question that asks something is not an account of one that asks nothing. */
@@ -189,7 +209,8 @@ class OneIdentityIsFoldedOnceAndKeepsEveryHandleTest {
     private static StandingQuestion asked(RuleCitation cited,
                                           List<BlockReason.QuestionStandingReason> stopped) {
         return StandingQuestion.Exact.of(comparison(), cited,
-                new InputQuestion.AboutAPosition(TermPath.of("x")), stopped);
+                new InputQuestion.AboutAPosition(TermPath.of("x")),
+                WhatAQuestionStandsOn.sortedOutOf(stopped));
     }
 
     private static RuleRef comparison() {

@@ -1,5 +1,7 @@
 package souther.compiler.check;
 
+import souther.compiler.inputs.BlockReason;
+import souther.compiler.inputs.WhatAQuestionStandsOn;
 import souther.compiler.values.UnreadReason;
 
 import java.util.ArrayList;
@@ -263,21 +265,26 @@ public final class RuleAccounting {
          * they come out in is the order they were met, which is kept so that one compiler over one
          * source publishes one document and is asserted as nothing more. Which written place a
          * reader is sent to first is the source's to say and is settled where a document is written.
+         *
+         * <p>Both kinds go in and {@link WhatAQuestionStandsOn} tells them apart by what each of
+         * them is, so nothing here decides which of the two a reader meets first. What a rule is
+         * answerable for and what its position's answer was short of come out of two carriers and
+         * stay two: a list holding both would give a limit the rules ran into a place among the
+         * things somebody wrote.
          */
-        default List<souther.compiler.inputs.BlockReason.QuestionStandingReason> stopped() {
-            List<souther.compiler.inputs.BlockReason.QuestionStandingReason> out =
-                    new java.util.ArrayList<>();
-            for (souther.compiler.inputs.BlockReason.QuestionStandingReason each : switch (this) {
-                case TheValueReadingSays it -> it.why().stream()
-                        .map(souther.compiler.inputs.BlockReason::ofAQuestionStandingOn)
-                        .toList();
-                case TheEndReadingSays it -> List.of(it.why());
+        default WhatAQuestionStandsOn stopped() {
+            List<BlockReason.QuestionStandingReason> out = new ArrayList<>();
+            for (BlockReason.QuestionStandingReason each : switch (this) {
+                case TheValueReadingSays it -> java.util.stream.Stream.concat(
+                                it.why().stream(), it.aboutTheAnswer().reasons().stream())
+                        .map(BlockReason::ofAQuestionStandingOn).toList();
+                case TheEndReadingSays it -> List.<BlockReason.QuestionStandingReason>of(it.why());
             }) {
                 if (!out.contains(each)) {
                     out.add(each);
                 }
             }
-            return List.copyOf(out);
+            return WhatAQuestionStandsOn.sortedOutOf(out);
         }
 
         /**
@@ -366,7 +373,7 @@ public final class RuleAccounting {
             }
 
             /** Which limit stopped it, which is one word however many parts are behind it. */
-            public souther.compiler.inputs.BlockReason.RuleReadingStopped why() {
+            public BlockReason.RuleReadingStopped why() {
                 return standing.why();
             }
         }

@@ -178,16 +178,16 @@ class WhatAStandingQuestionIsAccountedForByTest {
         assertEquals(List.of(UnreadReason.FORM_NOT_READ, UnreadReason.EXACT_VALUES_TOO_COSTLY),
                 standingOn(A_FORM_NO_READING_TAKES_APART_BESIDE_AN_ANSWER_BEYOND_THE_ALLOWANCE)
                         .get("invariant N (r) at y"),
-                "what the rule left first, in the order its parts were written, and what its"
-                        + " position was short of after — which is the order a document promises");
+                "both, as the reading recorded them — which of the two a document says where is"
+                        + " WhatAQuestionStandsOn's, and no order runs between them");
     }
 
     /**
      * And a rule short in one way is spelled the way it was before there was a second.
      *
-     * <p>The control on the order above. What the rule itself left comes first, so asking the
-     * position beside the rule leaves every question that stands on one reason alone exactly where
-     * it was — the reasons a reader had, in the order they had them.
+     * <p>The control on the one above. Asking the position beside the rule leaves every question
+     * that stands on one reason alone exactly where it was — the reasons a reader had, in the order
+     * they had them.
      */
     @Test
     void askingThePositionLeavesAQuestionShortInOneWayWhereItWas() {

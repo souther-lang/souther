@@ -1,10 +1,8 @@
 package souther.compiler.partition;
 
+import souther.compiler.inputs.AuthoredOrder;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.publish.SourceOrdered;
-
-import java.util.ArrayList;
-import java.util.List;
 
 /**
  * The word an adequacy document writes for a reason a derivation stopped.
@@ -21,12 +19,14 @@ import java.util.List;
 public final class ReportedReason {
 
     /**
-     * The words for what a question stands on, in the order the parts that raised it were written.
+     * The words for what the parts of a rule left a question standing on, in the order they were
+     * written.
      *
-     * <p>Made here, where what the order is is still known. What a question was short of arrives in
-     * the order the author wrote the parts of the rule, a document promises a reader that order, and
-     * nothing downstream of this can tell it from the order a walk happened to take — so a reader
-     * that made the claim there would be claiming what it cannot see.
+     * <p><b>Carried and not claimed.</b> The order arrives already said — it was said where a
+     * reading's own record of a clause was still in hand — and this maps each member to the word a
+     * document writes. Handed a bare list instead, this stated an order it had nothing to see: it
+     * was right while every member came from one producer, and stopped being right when a second
+     * arrived with nobody in a position to notice.
      *
      * <p>Each projected on its own and the words made distinct afterwards, never the other way
      * round. What a document promises is deliberately coarser than what this compiler records, so
@@ -34,12 +34,8 @@ public final class ReportedReason {
      * projection saying they are one thing to lift, rather than a reader dropping one of them.
      */
     public static SourceOrdered<UndividedPosition.Reason> asWritten(
-            List<BlockReason.QuestionStandingReason> stopped) {
-        List<UndividedPosition.Reason> said = new ArrayList<>();
-        for (BlockReason.QuestionStandingReason each : stopped) {
-            said.add(of(each));
-        }
-        return SourceOrdered.asWritten(said);
+            AuthoredOrder<BlockReason.RuleReadingStopped> stopped) {
+        return SourceOrdered.carrying(stopped.map(ReportedReason::of));
     }
 
     /**

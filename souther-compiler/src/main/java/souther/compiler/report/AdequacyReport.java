@@ -2400,11 +2400,16 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         for (Adequacy.Finding f : behavior.findings()) {
             if (f.about() instanceof About.AQuestionNothingAnswered(var asked)
                     && mine.test(asked)) {
+                // The two said as two, in one sentence and joined by nothing that reads as an
+                // order. A reader is owed both and is owed no precedence between them.
+                List<String> said = new ArrayList<>(whyStanding(asked).written().stream()
+                        .map(AdequacyReport::whyUnread).toList());
+                whatItsPositionWasShortOf(asked).map(AdequacyReport::whyUnread)
+                        .ifPresent(said::add);
                 out.append(String.format("      %s not accounted for: %s — %s %s: %s%n",
                         mark(f), cited(asked.cited(), names, declaredIn),
                         asked(asked.asked()), subjectOf(asked),
-                        whyStanding(asked).written().stream().map(AdequacyReport::whyUnread)
-                                .collect(Collectors.joining("; "))));
+                        String.join("; ", said)));
             }
         }
     }
@@ -2417,19 +2422,42 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * send an author to lift it and find the question still there. Which is also why nothing here
      * chooses between them — the only thing there is to choose by is which the reading met first.
      *
-     * <p><b>In the order the author wrote the parts that raised the question</b>, which is what the
-     * schema promises a consumer of {@code stopped} and what says which of these to lift first. So
-     * it is a {@link SourceOrdered} and not an order of this compiler's: a written order over this
-     * kind would answer by a precedence nothing in the model decides.
+     * <p><b>What the parts of its rule left, and nothing else.</b> A limit its position's answer ran
+     * into belongs to what the rules of that position come to between them and to no part of any of
+     * them, so it has no place in an order taken from the source and is written on its own
+     * ({@link #whatItsPositionWasShortOf}). Held here as well, the sequence would say that a form
+     * nothing reads comes before an allowance that ran out, or after it, and the model says
+     * neither — what it would be saying is which of this compiler's stores a reason came out of.
      *
-     * <p>Asked of the projection rather than made here. What the order is is known where the
-     * reasons still are what a walk recorded; by the time they are words a document writes, nothing
-     * left can tell the author's order from the walk's, and a claim made here would be a claim
-     * about something this cannot see.
+     * <p>So this is a {@link SourceOrdered} and not an order of this compiler's: what is in it is
+     * the parts the author wrote, and a written order over those would answer by a precedence
+     * nothing in the model decides.
+     *
+     * <p>Carried and not claimed here. What the order is is known where the reasons still are what
+     * a reading recorded; by the time they are words a document writes, nothing left can tell the
+     * author's order from a walk's, and a claim made here would be a claim about something this
+     * cannot see.
      */
     private static SourceOrdered<UndividedPosition.Reason> whyStanding(
             PartitionEvidence.Unanswered asked) {
-        return ReportedReason.asWritten(asked.stopped());
+        return ReportedReason.asWritten(asked.stopped().itsRuleLeft());
+    }
+
+    /**
+     * The word for what the position a question stands at was short of, where it was short of
+     * anything.
+     *
+     * <p>Its own line and its own field, because what a reader does about it is its own: there is
+     * no rule to go and look at, and what would lift it is an allowance.
+     *
+     * <p>One word and not a list holding one. There is one such limit, and a list would ask what
+     * order its members are in before there are two to put in one — which is the question a
+     * question's account answered by claiming an order it did not have. A second is a decision to
+     * take when there is something to decide about.
+     */
+    private static Optional<UndividedPosition.Reason> whatItsPositionWasShortOf(
+            PartitionEvidence.Unanswered asked) {
+        return asked.stopped().itsPositionWasShortOf().map(ReportedReason::of);
     }
 
     /**
@@ -3034,8 +3062,16 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 // not gathered a second way: a document saying less about a question than the
                 // report beside it is the two disagreeing about one question, and nothing would
                 // have said which of them to believe.
-                ArrayNode stopped = one.putArray("stopped");
-                whyStanding(each).written().forEach(reason -> stopped.add(word(reason)));
+                // Two fields, because the two are two facts and no order runs between them. What
+                // the parts of the rule left keeps the order they were written in; what the
+                // position's answer was short of names no part of the rule, so it is written on
+                // its own rather than given a place among things it is not one of.
+                if (!whyStanding(each).isEmpty()) {
+                    ArrayNode stopped = one.putArray("stopped");
+                    whyStanding(each).written().forEach(reason -> stopped.add(word(reason)));
+                }
+                whatItsPositionWasShortOf(each)
+                        .ifPresent(reason -> one.put("answerStopped", word(reason)));
             }
         }
         ArrayNode offAxis = out.putArray("claimsOffAxis");

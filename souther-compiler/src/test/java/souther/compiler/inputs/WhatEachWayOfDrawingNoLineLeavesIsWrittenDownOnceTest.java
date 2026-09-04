@@ -9,6 +9,7 @@ import souther.compiler.check.RuleCitation;
 import souther.compiler.check.RuleRef;
 import souther.compiler.observe.RunSensitivity;
 import souther.compiler.partition.ReportedReason;
+import souther.compiler.partition.UndividedPosition;
 import souther.compiler.types.CoverageConstruct;
 import souther.compiler.types.CoverageOrigin;
 import souther.compiler.values.UnreadReason;
@@ -16,6 +17,7 @@ import souther.compiler.values.UnreadReason;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -427,9 +429,12 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
 
         assertEquals(aPosition, words(schema, "notReadReason"),
                 "an entry about a position admits what a position's readings can be short of");
-        assertEquals(projected(everyReasonAQuestionStandsOn()),
-                words(schema, "questionStoppedReason"),
-                "a question admits what can leave it standing");
+        assertEquals(projected(everyRuleReadingStopped()),
+                words(schema, "ruleStoppedReadingReason"),
+                "what a question's rule left admits what a reading can stop on");
+        assertEquals(projected(everyAnswerRealizationStopped()),
+                words(schema, "answerRealizationStoppedReason"),
+                "and what its position was short of admits what an answer can be short of");
     }
 
     /**
@@ -580,11 +585,68 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
         }
     }
 
-    /** And those of them a question a rule raised can be left standing by. */
-    private static List<BlockReason.QuestionStandingReason> everyReasonAQuestionStandsOn() {
+    /**
+     * What a question stands on reaches a document as two, and each is under the order that can
+     * answer for it.
+     *
+     * <p>The parts of the rule have a written place and keep it. A limit the position's answer ran
+     * into has none — the same rules met in another order would have been built — so it stands
+     * under no order beside them, and a sequence across the two would publish a precedence read off
+     * which of this compiler's stores a reason came out of.
+     *
+     * <p>Sorted on the capability, so the placing is the reason's own answer rather than a
+     * convention whoever assembled the list knew.
+     */
+    @Test
+    void whatAQuestionStandsOnIsSaidAsTheTwoOrdersThatAnswerForIt() {
+        WhatAQuestionStandsOn said = WhatAQuestionStandsOn.sortedOutOf(List.of(
+                new BlockReason.UnreadComparisonDomain(),
+                new BlockReason.ExactValuesTooCostly(),
+                new BlockReason.UnreadValueRule()));
+
+        assertEquals(List.of(UndividedPosition.Reason.UNSUPPORTED_DOMAIN,
+                        UndividedPosition.Reason.UNSUPPORTED_SYNTAX),
+                ReportedReason.asWritten(said.itsRuleLeft()).written(),
+                "the parts of the rule, in the order they were written");
+        assertEquals(Optional.of(UndividedPosition.Reason.EXACT_VALUES_TOO_COSTLY),
+                said.itsPositionWasShortOf().map(ReportedReason::of),
+                "and what the position's answer was short of, on its own");
+    }
+
+    /**
+     * And a second limit the answer ran into is refused rather than put in an order.
+     *
+     * <p>There is one such reason today. A second would be a pair with no order between them
+     * either, and what a document should write for a pair is a decision to take when there is one
+     * to take — taken by silence here, it would be taken by whichever a walk met first.
+     */
+    @Test
+    void aSecondLimitTheAnswerRanIntoIsADecisionSomebodyTakes() {
+        assertEquals(1, everyAnswerRealizationStopped().size(),
+                "a second one is a decision about what a document writes, and this is where it"
+                        + " comes up for taking");
+    }
+
+    /**
+     * Those of them a question stands on because a reading stopped on a part of its rule, and those
+     * it stands on because the position's answer was not built.
+     *
+     * <p>Two lists because they are two surfaces. A question's account is written as what the parts
+     * of the rule left, in the order they were written, and what its position was short of beside
+     * it under no order at all — so a word each of them admits is a word the other need not, and a
+     * check over their union would pass on either of them holding a word only the other reaches.
+     */
+    private static List<BlockReason.RuleReadingStopped> everyRuleReadingStopped() {
         return everyReason().stream()
-                .filter(BlockReason.QuestionStandingReason.class::isInstance)
-                .map(BlockReason.QuestionStandingReason.class::cast).toList();
+                .filter(BlockReason.RuleReadingStopped.class::isInstance)
+                .map(BlockReason.RuleReadingStopped.class::cast).toList();
+    }
+
+    /** The other half, which names no rule. */
+    private static List<BlockReason.AnswerRealizationStopped> everyAnswerRealizationStopped() {
+        return everyReason().stream()
+                .filter(BlockReason.AnswerRealizationStopped.class::isInstance)
+                .map(BlockReason.AnswerRealizationStopped.class::cast).toList();
     }
 
     /** And those of them that name a position and no rule. */

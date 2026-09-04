@@ -122,7 +122,7 @@ public sealed interface ClosureGap {
          */
         @Override
         public RunSensitivity runSensitivity() {
-            return question.stopped().stream()
+            return question.stopped().all().stream()
                     .allMatch(each -> each.runSensitivity()
                             == RunSensitivity.MAY_CHANGE)
                     ? RunSensitivity.MAY_CHANGE
