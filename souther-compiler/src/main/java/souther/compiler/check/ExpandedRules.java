@@ -4,6 +4,7 @@ import souther.compiler.ast.Hir;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * The clauses a walk of a declaration and what it spreads found, and whether it found all of them.
@@ -25,13 +26,27 @@ public record ExpandedRules(List<TypeOps.Declared> reached, boolean everyRuleRea
         reached = List.copyOf(reached);
     }
 
-    /** The clauses alone, for a reader that has already accounted for what was not reached. */
-    public List<Hir.InvariantClause> clauses() {
+    /**
+     * The clauses, where every rule that applies was reached, and nothing where one was not.
+     *
+     * <p>The way out for a reader that may not proceed on part of the rules — one building
+     * something a value is afterwards held to, where what is not read is what is not enforced.
+     * Empty is not a shorter list here: it is the reader being told it does not have what it asked
+     * for, in a shape it cannot mistake for a declaration that states nothing.
+     *
+     * <p>There is deliberately no accessor that hands over the clauses alone. Every way to them
+     * says which obligation the reader is meeting: this one, or {@link #reached()} for a reader
+     * that has already recorded what it did not get.
+     */
+    public Optional<List<Hir.InvariantClause>> whole() {
+        if (!everyRuleReached) {
+            return Optional.empty();
+        }
         List<Hir.InvariantClause> out = new ArrayList<>();
         for (TypeOps.Declared each : reached) {
             out.add(each.clause());
         }
-        return List.copyOf(out);
+        return Optional.of(List.copyOf(out));
     }
 
     /** These and {@code other}'s together, reaching everything only where both did. */

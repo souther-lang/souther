@@ -38,14 +38,14 @@ public final class RuleReadings {
     }
 
     /** A reading with nothing expanded anywhere, for a test whose model states no rules. Asking it
-     *  about a declaration is asking for a reading this never had, and it answers nothing rather
-     *  than the tree the declaration happens to carry. */
+     *  about a declaration is asking for a reading this never had, and it answers that nothing
+     *  declares one rather than the tree the declaration happens to carry. */
     public static RuleReadingSource ofNoClauseFiled(Symbols symbols) {
-        return new RuleReadingSource(symbols, noClauseFiled(symbols));
+        return new RuleReadingSource(symbols, noClauseFiled());
     }
 
     /** Where a reading with nothing expanded anywhere gets its clauses. */
-    public static ExpandedClauseLookup noClauseFiled(Symbols symbols) {
+    public static ExpandedClauseLookup noClauseFiled() {
         return ExpandedClauseLookup.NONE;
     }
 
@@ -61,6 +61,6 @@ public final class RuleReadings {
      *  and never by handing over a scope alone. */
     static Terms termsOfNoClauseFiled(Symbols symbols, ReadingPolicy policy) {
         return new Terms(symbols, Terms.Of.THE_DISCHARGE_TREE, policy,
-                new Clauses(symbols, noClauseFiled(symbols)));
+                new Clauses(symbols, noClauseFiled()));
     }
 }

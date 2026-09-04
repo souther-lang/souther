@@ -62,7 +62,27 @@ public final class TypeCardinality {
         List<List<TypeSymbol>> components = TypeComponents.of(edges);
         return new Cardinalities(
                 Map.copyOf(pass(components, declared, edges, cuts, source, policy, Set.of())),
-                components, declared, edges, cuts, source, policy);
+                components, declared, edges, cuts, source, policy,
+                everyRuleReached(declared.keySet(), source));
+    }
+
+    /**
+     * Whether the rules of every declaration this count read could be read at all.
+     *
+     * <p>What makes a type have no value is what its rules leave, so a count taken where one of them
+     * was never worked out is a count over fewer rules than the model states. It may still be right;
+     * what it may not do is say so. Asked of the declarations this reading actually reached rather
+     * than of the module it started in — a rule that empties a type can be written on a declaration
+     * of any module the reading walks into.
+     */
+    private static boolean everyRuleReached(Set<TypeSymbol> reached, RuleReadingSource source) {
+        for (TypeSymbol name : reached) {
+            if (name instanceof TypeSymbol.AtModule at
+                    && source.invariants().of(at.key()) instanceof ExpandedClauseResult.Unavailable) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /**
@@ -82,11 +102,14 @@ public final class TypeCardinality {
         private final CardinalityCuts cuts;
         private final RuleReadingSource source;
         private final ReadingPolicy policy;
+        private final boolean everyRuleReached;
 
         private Cardinalities(Map<TypeSymbol, Cardinality> upper, List<List<TypeSymbol>> components,
                               Map<TypeSymbol, Hir.Def> declared,
                               Map<TypeSymbol, Set<TypeSymbol>> edges, CardinalityCuts cuts,
-                              RuleReadingSource source, ReadingPolicy policy) {
+                              RuleReadingSource source, ReadingPolicy policy,
+                              boolean everyRuleReached) {
+            this.everyRuleReached = everyRuleReached;
             this.upper = upper;
             this.components = components;
             this.declared = declared;
@@ -94,6 +117,13 @@ public final class TypeCardinality {
             this.cuts = cuts;
             this.source = source;
             this.policy = policy;
+        }
+
+        /** Whether every rule this count read could be read. A count that was short of one says
+         *  nothing about a type having no value: the rule it did not get may be the rule that
+         *  empties it. */
+        public boolean everyRuleReached() {
+            return everyRuleReached;
         }
 
         /** How many values every declaration reached has at most. */

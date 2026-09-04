@@ -536,20 +536,24 @@ public final class Shapes {
             // Answered either way, because what a reader of this does about a count it has not been
             // given is that reader's: a module whose declarations could not be checked still has
             // everything else about it to report, and going absent here would take that with it.
-            //
-            // Not counted, either, where this module's own clauses could not be expanded. What makes
-            // a type uninhabitable is what its rules leave, so a count taken over the rules that
-            // happened to be readable would say a type is inhabited when what happened is that
-            // nobody read the rule that empties it.
-            if (!reading.present() || !db.ask(new ExpandedDeclarationClauses(name)).present()) {
+            if (!reading.present()) {
                 return Answer.of(new UninhabitableTypes.WithNoValue.NotCounted());
             }
             List<Hir.Def> declarations = lowering.value().settled().defs();
             try {
+                souther.compiler.check.TypeCardinality.Cardinalities counted =
+                        souther.compiler.check.TypeCardinality.solve(
+                                declarations, reading.value(), policy.value());
+                // Not counted where a rule the count read could not be read at all. What makes a
+                // type have no value is what its rules leave, so a count short of one of them may
+                // have missed the rule that empties a type — and would report it as inhabited.
+                // Asked of what the count reached and not of the module it started in: the rule
+                // that empties a type can be written on a declaration of any module it walks into.
+                if (!counted.everyRuleReached()) {
+                    return Answer.of(new UninhabitableTypes.WithNoValue.NotCounted());
+                }
                 return Answer.of(new UninhabitableTypes.WithNoValue.Counted(
-                        UninhabitableTypes.withNoValueOfTheirOwn(declarations,
-                                souther.compiler.check.TypeCardinality.solve(
-                                        declarations, reading.value(), policy.value()))));
+                        UninhabitableTypes.withNoValueOfTheirOwn(declarations, counted)));
             } catch (CompileException e) {
                 // Said here, as what this attempt found, and not handed on in the answer: a reader
                 // of the answer is told there was no count and concludes nothing from it, which is

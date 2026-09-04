@@ -44,14 +44,12 @@ final class Clauses {
     private final Map<Core, Set<BindingId>> readsFields = new IdentityHashMap<>();
 
     /**
-     * @param expandedClauses the clauses of the module being checked, in the
-     *        representation the discharge rules are written at ({@link InliningPolicy#DISCHARGE}). A
-     *        type another module declares is not among them and its clauses are read off its
-     *        declaration, in the settled representation that travels with it (spec
-     *        §invariant-discharge-representation). That is what an imported clause's analysis
-     *        representation is, and it is where one falls outside the fragment this can discharge
-     *        against: an operation the settled form expanded is no longer written as the operation
-     *        a rule is about.
+     * @param expandedClauses where a declaration's clauses are answered from, in the
+     *        representation the discharge rules are written at ({@link InliningPolicy#DISCHARGE}).
+     *        Asked by the declaration's address and answered by the module that wrote it, wherever
+     *        that was: a type this module declares and one it imports are read alike, because what
+     *        a clause is read as is what its own module expanded (spec
+     *        §invariant-discharge-representation).
      */
     Clauses(Symbols symbols,
             ExpandedClauseLookup expandedClauses) {
