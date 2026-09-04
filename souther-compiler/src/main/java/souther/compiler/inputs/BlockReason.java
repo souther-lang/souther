@@ -461,9 +461,9 @@ public sealed interface BlockReason {
      * of them wrote down why.
      *
      * <p>Its own case because it names no reading. The others are one reading's account of where it
-     * gave up, and a question left standing by nobody has no such account to give — answered with
-     * one of them, an author is told which reader fell short of their clause, and the named reader
-     * may be one that has no word for such a rule at all and never claimed it.
+     * gave up on a rule, and here no reading was short of the rule at all — answered with one of
+     * them, an author is told that a reader fell short of their clause, and is sent to lift a
+     * capability that was never the matter.
      *
      * <p><b>Despite the name, the reading may well have taken the rule in.</b> What produces this is
      * a question standing with no reason filed under the rule that raised it, and the case that

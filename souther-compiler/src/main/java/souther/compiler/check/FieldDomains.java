@@ -1038,17 +1038,20 @@ public final class FieldDomains {
      * there is named beside a limit that belongs to its neighbour, which is the misattribution the
      * whole accounting is asked per rule to avoid.
      *
-     * <p>A form this reading has no word for where it recorded nothing of the rule there. What
-     * reaches here is a rule no reading took in, so this reading was short of it however little it
-     * wrote down — and an empty answer would say a question stands with nothing behind it. Not the
-     * name's reasons: those belong to whichever rule left them.
+     * <p>Not the name's other reasons: those belong to whichever rule left them, and a rule answered
+     * from the name is named beside a limit that is its neighbour's.
      *
-     * <p><b>Except for the reasons no rule can be answerable for</b>, which is the one thing the
-     * name is asked. An allowance run down by everything a position admits is a fact about the
-     * answer and not about any rule that paid into it, and {@link ReadingEvidence#stoppedBy} refuses
-     * such a reason rather than filing it under a rule — so a question standing for that reason has
-     * nothing under the rule by construction, and finding nothing there is not the two accounts
-     * coming apart.
+     * <p><b>The name is asked one thing, and it is whether the answer accounts for the question.</b>
+     * An allowance run down by everything a position admits is a fact about the answer and not about
+     * any rule that paid into it ({@link UnreadReason.About#THE_ANSWER}), and
+     * {@link ReadingEvidence#stoppedBy} refuses such a reason rather than filing it under a rule. So
+     * a question standing for that reason has nothing under its rule by construction, and that is
+     * what tells it from the accounting coming apart.
+     *
+     * <p>Asked as itself and not as "not about a rule". A reason is about a rule, about the answer,
+     * or about neither, and the third is a reading that never reached the position — which accounts
+     * for nothing, as its name says. Written as the complement of the first, one of those at the
+     * name would stand in for an account that is not there.
      */
     private RuleAccounting.Why stoppedBy(RuleRef rule, RuleKey at, List<FactSubject> named) {
         List<UnreadReason> why = took.stoppedBy(rule, named);
@@ -1056,7 +1059,7 @@ public final class FieldDomains {
             return new RuleAccounting.Why.TheValueReadingSays(why);
         }
         if (unreadByName.getOrDefault(at, List.of()).stream()
-                .allMatch(each -> each.about() == UnreadReason.About.A_RULE)) {
+                .noneMatch(each -> each.about() == UnreadReason.About.THE_ANSWER)) {
             throw new AStandingQuestionWithNoAccount(rule, named);
         }
         return new RuleAccounting.Why.NothingTookItIn();
