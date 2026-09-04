@@ -101,10 +101,15 @@ class AnObservedValueIsReadByWhatIsReadableAndNotByWhatItCarriesTest {
      * ({@link #aNarrowingIsHowACaseOwnFieldIsReached}), so what refuses this walk is the reading and
      * not the row. Admitted off the value instead, this path would answer for the cards and refuse
      * the rest, and what a model may name would be decided by which rows somebody wrote.
+     *
+     * <p><b>Every element a card, and that is the point of the row.</b> A row holding one of the
+     * other case is refused by that element having no such field, which a walk admitting names off
+     * the value it holds does too — so the row that tells the two apart is the one where every value
+     * carries the name and the reading is the only thing that can refuse it.
      */
     @Test
     void aFieldOnlyOneCaseDeclaresIsNotReadableAtTheSum() {
-        assertNull(read(SPREAD, aCardAndACash(), cardNumber()),
+        assertNull(read(SPREAD, List.of(card(6), card(7)), cardNumber()),
                 "nothing is readable at the sum but what its cases share, so this walk cannot be"
                         + " made at all");
     }

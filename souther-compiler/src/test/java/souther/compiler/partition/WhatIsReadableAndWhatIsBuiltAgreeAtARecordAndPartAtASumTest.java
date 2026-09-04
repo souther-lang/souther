@@ -32,15 +32,22 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * Four questions are asked of one shape, and they are four.
  *
  * <p>What is readable off a value standing here, what a value here is composed out of, which
- * positions a reading has under it, and where a step into a written value lands. At a record all
- * four come to the same fields, which is close enough to take one of them for all four; at a sum
- * whose cases share a spread only the first has anything to say, because those names are readable at
- * every value of the sum and a value there is one of the cases.
+ * positions a reading has under it, and what a written value has under a step. At a record all four
+ * come to the same fields, which is close enough to take one of them for all four; at a sum whose
+ * cases share a spread only the first has anything to say, because those names are readable at every
+ * value of the sum and a value there is one of the cases.
  *
  * <p><b>The agreement at a record is what is checked, not what is implemented.</b> Each of the four
  * reads {@code Shape.Product}'s fields where it needs them, and the four answers are held together
  * here rather than by one of them being the others' answer. Written the other way round, a question
  * that learned a new case would take the three it does not own along with it.
+ *
+ * <p><b>Four and not five.</b> How an observed value is read down a path is the relation the written
+ * one is most often mistaken for, and it is not one of these: it consumes a value, answers with as
+ * many standings as it finds, and can find none, so there is no equality to hold between it and a
+ * map of fields. What it owes is stated where it lives
+ * ({@link AnObservedValueIsReadByWhatIsReadableAndNotByWhatItCarriesTest}) — that a field is
+ * admitted by what is readable at the position and never by what the value in hand carries.
  */
 class WhatIsReadableAndWhatIsBuiltAgreeAtARecordAndPartAtASumTest {
 
@@ -78,7 +85,7 @@ class WhatIsReadableAndWhatIsBuiltAgreeAtARecordAndPartAtASumTest {
         assertEquals(inOrder(readable), inOrder(decomposedUnder(record)),
                 "and the reading has those same positions under it");
         assertEquals(inOrder(readable), inOrder(stepped(record, readable)),
-                "and a step into a written value lands on each of them");
+                "and a written value has one of them under each step");
     }
 
     /**
