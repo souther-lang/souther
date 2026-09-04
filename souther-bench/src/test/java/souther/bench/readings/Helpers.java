@@ -21,4 +21,16 @@ public final class Helpers {
         return position instanceof Written.Position.Built.OfOne one
                 && one.element() instanceof Written.Position.Leaf;
     }
+
+    /**
+     * On the way to an authority rather than to a reading, which is the other thing a helper is.
+     *
+     * <p>Here because the two are the same shape from a walk: something between the stage and what
+     * is at the end. What is at the end of this one answers, so nothing here has a question of its
+     * own to be given — and a check that asked every place on a way to name its question would be
+     * made green by inventing one.
+     */
+    public static String spellingOf(Written.Names names, String name) {
+        return Opaque.spelling(names, name);
+    }
 }

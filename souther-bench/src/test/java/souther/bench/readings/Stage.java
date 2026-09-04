@@ -67,6 +67,11 @@ public final class Stage {
         return Opaque.spelling(names, name);
     }
 
+    /** Asks an authority with a helper in between, which answers all the same. */
+    public static String asksAnAuthorityThroughAHelper(Written.Names names, String name) {
+        return Helpers.spellingOf(names, name);
+    }
+
     /** Asks the operation beside it, which answers something else and reaches the declarations. */
     public static boolean asksTheQuestionBesideIt(Written.Names names, String name) {
         return Opaque.somethingElse(names, name);

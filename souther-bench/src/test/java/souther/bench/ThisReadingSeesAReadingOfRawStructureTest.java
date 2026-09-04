@@ -156,27 +156,60 @@ class ThisReadingSeesAReadingOfRawStructureTest {
     }
 
     /**
-     * What has to be answered for is the operations the stage calls that reach structure.
+     * Both boundaries are met on a way from the stage, and a helper on one is not mistaken for a
+     * boundary.
      *
-     * <p>Derived, so that an operation beside one already answered for cannot arrive under its
-     * name. Both boundaries of the model are here and the helpers are not: a helper is on the way
-     * to a reading rather than an answer to it, and the stage calls it directly.
+     * <p>The distinction the walk cannot make and must not be asked to. `Helpers` sits between the
+     * stage and a reading exactly as an authority does, and is not one — it is written as a helper
+     * and the model says so. What is met is recorded; what answers is the table's to say.
      */
     @Test
-    void whatHasToBeAnsweredForIsWhatTheStageCallsThatReachesStructure() throws IOException {
-        assertEquals(List.of(
-                        "souther.bench.readings.Helpers#holdsALeaf",
-                        "souther.bench.readings.Helpers#isARecord",
-                        "souther.bench.readings.Opaque#somethingElse",
-                        "souther.bench.readings.Opaque#spelling",
-                        "souther.bench.readings.Transparent#answering",
-                        // An accessor of a declaration is a reading of one, so calling it is
-                        // arriving at raw structure like any other way of doing so. The lookup
-                        // beside it is not here: it is answered by whatever implements it, and
-                        // what a call names is an interface with no code of its own.
-                        "souther.bench.readings.Written$Declared$Record#holdsAnything"),
-                PositionReadings.of(model()).answering().stream().sorted().toList(),
-                "every operation the stage calls that would arrive at raw structure on its own");
+    void everyBoundaryOfTheModelIsMetAndAHelperIsNotOne() throws IOException {
+        PositionReadings.Reading read = PositionReadings.of(model());
+
+        assertEquals(List.of("souther.bench.readings.Opaque",
+                        "souther.bench.readings.Transparent"),
+                read.encountered().stream().sorted().toList(),
+                "the places the walk met that the table names, which is both of them and nothing"
+                        + " else: a helper is met too and is not named, so it is not here");
+    }
+
+    /**
+     * A helper between the stage and an authority changes nothing.
+     *
+     * <p>The way a rule about owners turns into a list of whatever is on the way. Put something
+     * ordinary between the two and a check that asked every step to name its question would call
+     * the helper unanswered and the authority unmet — and the way to green would be to call the
+     * helper an owner. What is on the way is walked through; what answers is met at the end of it.
+     */
+    @Test
+    void aHelperBetweenTheStageAndAnAuthorityChangesNothing() throws IOException {
+        PositionReadings.Reading read = PositionReadings.of(model());
+
+        assertFalse(read.named().contains("asksAnAuthorityThroughAHelper"),
+                "the authority answers however many steps away it is: " + read.named());
+        assertTrue(read.encountered().contains("souther.bench.readings.Opaque"),
+                "and is met on that way, so nothing calls it a boundary that is not there");
+    }
+
+    /**
+     * An authority the walk never meets is not among those it met.
+     *
+     * <p>Which is what a boundary that has gone looks like, and what the rule beside this one reads
+     * to say so. Named by an operation nothing is written under, this stands nowhere.
+     */
+    @Test
+    void anAuthorityStandingNowhereIsNotMet() throws IOException {
+        PositionReadings.Over over = model();
+        List<Authority> withOneMore = new ArrayList<>(over.authorities());
+        withOneMore.add(new Authority("a question nothing in the model asks any more",
+                "souther.bench.readings.Opaque#spellingAsItWasCalled", Traversal.OPAQUE));
+        PositionReadings.Over stale = new PositionReadings.Over(over.classes(), over.stage(),
+                over.declaration(), over.lookup(), over.compound(), over.held(), withOneMore);
+
+        assertFalse(PositionReadings.of(stale).encountered()
+                        .contains("souther.bench.readings.Opaque#spellingAsItWasCalled"),
+                "nothing of that name is there to be met");
     }
 
     /**

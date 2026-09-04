@@ -70,9 +70,6 @@ class PartitionReadsAPositionRatherThanReinterpretingItTest {
                     "souther.compiler.check.TypeView", Traversal.OPAQUE),
             new Authority("what the rules written on a record leave its fields able to hold",
                     "souther.compiler.check.FieldDomains", Traversal.OPAQUE),
-            new Authority("which ends a declaration writes on the values of a type, and how much"
-                            + " they say it holds",
-                    "souther.compiler.check.DeclaredBounds", Traversal.OPAQUE),
             new Authority("which conjuncts are written on each of the names a value wears",
                     "souther.compiler.check.DeclaredClauses", Traversal.OPAQUE),
             new Authority("what carries the values of a type, and in what order",
@@ -83,12 +80,8 @@ class PartitionReadsAPositionRatherThanReinterpretingItTest {
                     "souther.compiler.check.NumericMeasures", Traversal.OPAQUE),
             new Authority("what reaches each position of a behavior's inputs, read once",
                     "souther.compiler.inputs.InputDomain", Traversal.OPAQUE),
-            new Authority("what a name in the tree denotes where the reader stands",
-                    "souther.compiler.inputs.InputReads", Traversal.OPAQUE),
             new Authority("which number of an input an expression names",
                     "souther.compiler.inputs.InputNumber", Traversal.OPAQUE),
-            new Authority("which number a comparison draws which line on",
-                    "souther.compiler.inputs.ComparedNumber", Traversal.OPAQUE),
             new Authority("whether an operation and a position make one term of a number taken of"
                             + " a value",
                     "souther.compiler.inputs.NumericTerm$TakenOf", Traversal.OPAQUE),
@@ -104,12 +97,9 @@ class PartitionReadsAPositionRatherThanReinterpretingItTest {
             new Authority("how a type is written where an author reads it",
                     "souther.compiler.types.Type#show", Traversal.OPAQUE),
 
-            // Owners all the same, walked through. Neither can stand as a boundary: what one
-            // answers with is composed by a reading the caller wrote, and the other hands its
-            // decision to whichever term it is about — so a stop at either would leave the walk
-            // this checks on the far side of it.
-            new Authority("what affine form an expression composes",
-                    "souther.compiler.check.AffineForms", Traversal.TRANSPARENT),
+            // An owner all the same, walked through. It cannot stand as a boundary: it hands its
+            // decision to whichever term it is about, so a stop here would leave the place that
+            // makes it on the far side of the check.
             new Authority("what a term about a number comes to at another position",
                     "souther.compiler.inputs.NumericTerm", Traversal.TRANSPARENT));
 
@@ -147,37 +137,28 @@ class PartitionReadsAPositionRatherThanReinterpretingItTest {
     }
 
     /**
-     * The table names exactly the operations that have to be answered for.
+     * Every authority the table names is standing on a way from the stage to a reading.
      *
-     * <p>Both ways round, and derived rather than judged. What needs an answer is worked out by
-     * running the same walk with nothing answering: every operation the stage calls that would
-     * arrive at raw structure on its own. An operation missing from the table has nobody saying
-     * what question it answers; an entry that answers for nothing is a rule about a boundary that
-     * is not there.
+     * <p>The other half of the rule above, and the one that keeps the table honest. That one says
+     * no way arrives at raw structure with nothing answering; this one says each place the table
+     * credits with answering is somewhere a way actually goes. An entry standing nowhere is a rule
+     * about a boundary that is not there — the reader that needed it has gone, and the entry with
+     * it.
      *
-     * <p>Which is also what keeps a boundary the size of its question. Named by its class, an
-     * authority answers for whatever else that class comes to hold — a second operation beside it,
-     * about something else, reaching the declarations under a question that was never about them.
-     * Named by the operation, that second one arrives here instead.
+     * <p>Where an authority stands is what the table decides, and no walk can decide it: an
+     * ordinary helper on the same way is on the way and not an answer to it, and the two are the
+     * same shape from here. So what is checked is that a named place is met, never that a met place
+     * is named — which is what would make calling a helper an authority the way to go green.
      */
     @Test
-    void theTableNamesTheOperationsThatHaveToBeAnsweredFor() throws IOException {
-        PositionReadings.Over over = thisCompiler();
-        PositionReadings.Reading read = PositionReadings.of(over);
-
-        List<String> unanswered = read.answering().stream()
-                .filter(each -> AUTHORITIES.stream().noneMatch(one -> one.answersFor(each)))
-                .sorted().toList();
-        List<String> answersForNothing = AUTHORITIES.stream()
-                .filter(one -> read.answering().stream().noneMatch(one::answersFor))
-                .map(Authority::owns).sorted().toList();
-
-        assertEquals(List.of(), unanswered,
-                "an operation the stage calls that reaches raw structure and nothing says what"
-                        + " question it answers");
-        assertEquals(List.of(), answersForNothing,
-                "an entry answering for nothing the stage calls, which is a rule about a boundary"
-                        + " that is not there");
+    void everyAuthorityIsStandingSomewhereOnTheWay() throws IOException {
+        PositionReadings.Reading read = PositionReadings.of(thisCompiler());
+        assertEquals(List.of(), AUTHORITIES.stream()
+                        .map(Authority::owns)
+                        .filter(each -> !read.encountered().contains(each))
+                        .sorted().toList(),
+                "an authority the walk never met, which is a rule about a boundary that nothing"
+                        + " arrives at");
     }
 
     /**

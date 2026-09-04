@@ -106,17 +106,17 @@ final class PositionReadings {
      * @param observers the methods whose own code reads raw structure
      * @param inTheStage every compiled method of the stage
      * @param reached   what the stage calls, one step out
-     * @param answering the operations the stage calls that would reach raw structure if nothing
-     *                  answered for them, which is what an authority has to be named for. Derived,
-     *                  so that an operation beside one already answered for cannot arrive under its
-     *                  name — a class answers for what it was named for and nothing else
+     * @param encountered the authorities the walk met on a way from the stage to a reading. Where
+     *                  an authority stands is what the table decides and reachability cannot: a
+     *                  helper on the same way is on the way and not an answer to it. What is
+     *                  checked is that each one the table names is standing somewhere
      * @param madeOfNonRecords the cases of the compound sum whose components this cannot read,
      *                  because they are not records. What holds another type would be invisible
      * @param bypassing the stage's methods that reach raw structure with no authority between
      * @param bypasses  the same, each with the path that gets there, for a reader to go and look
      */
     record Reading(Set<String> observers, Set<String> inTheStage, Set<String> reached,
-                   Set<String> answering, List<String> madeOfNonRecords,
+                   Set<String> encountered, List<String> madeOfNonRecords,
                    List<String> bypassing, List<String> bypasses) {
 
         /** Which methods those are, by name alone, which is what a claim about them is written in. */
@@ -162,9 +162,10 @@ final class PositionReadings {
         // Backwards from every reading of raw structure, stopping where an authority answers. A
         // method inside one is not carrying the reading outwards — it is making the answer.
         Map<String, Step> through = new LinkedHashMap<>();
+        Set<String> encountered = new LinkedHashSet<>();
         Deque<String> queue = new ArrayDeque<>();
         for (String at : observers) {
-            if (!stops(over, at)
+            if (!standing(over, at, encountered)
                     && through.putIfAbsent(at, new Step.Reading(why.get(at))) == null) {
                 queue.add(at);
             }
@@ -173,7 +174,7 @@ final class PositionReadings {
             String at = queue.poll();
             for (String caller
                     : callersOf.getOrDefault(at.substring(0, at.indexOf('(')), Set.of())) {
-                if (stops(over, caller)
+                if (standing(over, caller, encountered)
                         || through.putIfAbsent(caller, new Step.Through(at)) != null) {
                     continue;
                 }
@@ -191,49 +192,9 @@ final class PositionReadings {
         }
         bypassing.sort(null);
         bypasses.sort(null);
-        return new Reading(observers, stage, reached, answering(over, observers, callersOf, reached),
+        return new Reading(observers, stage, reached, encountered,
                 madeOfNonRecords(models, descendantsOf(models, over.compound())),
                 bypassing, bypasses);
-    }
-
-    /**
-     * The operations the stage calls that reach raw structure when nothing answers for them.
-     *
-     * <p>Derived rather than judged, which is what keeps a boundary the size of its question. Named
-     * by a class, an authority answers for whatever else that class comes to hold; named by the
-     * operation the stage calls, it answers for that one, and an operation beside it arrives here
-     * instead of under a question that was never about it.
-     *
-     * <p>The walk that finds these is the same one, with nothing answering: what is left is every
-     * way the stage would arrive at raw structure, and the first step of each is an operation
-     * somebody has to be able to point at.
-     */
-    private static Set<String> answering(Over over, Set<String> observers,
-                                         Map<String, Set<String>> callersOf, Set<String> reached) {
-        Set<String> reaches = new LinkedHashSet<>(observers);
-        Deque<String> queue = new ArrayDeque<>(reaches);
-        while (!queue.isEmpty()) {
-            String at = queue.poll();
-            for (String caller
-                    : callersOf.getOrDefault(at.substring(0, at.indexOf('(')), Set.of())) {
-                if (reaches.add(caller)) {
-                    queue.add(caller);
-                }
-            }
-        }
-        Set<String> named = new LinkedHashSet<>();
-        for (String at : reaches) {
-            named.add(at.substring(0, at.indexOf('(')));
-        }
-        Set<String> out = new LinkedHashSet<>();
-        for (String each : reached) {
-            // What the stage calls of its own is the population, not an answer to it: a method
-            // held to the rule cannot be what excuses another from it.
-            if (named.contains(each) && !each.startsWith(over.stage())) {
-                out.add(each);
-            }
-        }
-        return out;
     }
 
     /**
@@ -261,9 +222,27 @@ final class PositionReadings {
         return out;
     }
 
-    private static boolean stops(Over over, String at) {
-        return over.authorities().stream()
-                .anyMatch(each -> each.traversal() == Traversal.OPAQUE && each.answersFor(at));
+    /**
+     * Whether the walk stops here, noting any authority it met on the way.
+     *
+     * <p>Met on a way from the stage to a reading is what makes an authority one that is standing
+     * somewhere, and it is the walk that knows. Worked out from what the stage calls instead, an
+     * ordinary helper on the same way is indistinguishable from the place that answers — and the
+     * way to make such a check green is to call the helper an authority, which is what a table of
+     * owners must not reward.
+     *
+     * <p>One that carries on is met all the same. It owns the question and says so; what it does
+     * not do is finish before the caller's own code runs, which is why the walk goes past it.
+     */
+    private static boolean standing(Over over, String at, Set<String> encountered) {
+        boolean stops = false;
+        for (Authority each : over.authorities()) {
+            if (each.answersFor(at)) {
+                encountered.add(each.owns());
+                stops |= each.traversal() == Traversal.OPAQUE;
+            }
+        }
+        return stops;
     }
 
     /**
