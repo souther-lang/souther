@@ -2,12 +2,18 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.check.DeclaredBounds;
+import souther.compiler.check.FieldDomains;
+import souther.compiler.check.RuleKey;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
+import souther.compiler.numeric.Count;
 import souther.compiler.query.Adequacy;
-import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.Compilation;
-import souther.compiler.query.ItemAssessment;
+import souther.compiler.types.Type;
+import souther.compiler.types.TypeKey;
+import souther.compiler.types.TypeSymbols;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -123,25 +129,40 @@ class AModelWithNoRoomIsAnsweredBeforeAFigureOfThisCompilersTest {
     }
 
     /**
-     * A search that met a figure of this compiler's still says so.
+     * What the rules leave the list, at each of the three states the row can put its cap in.
      *
-     * <p>The control against reading too much into the rules. Where the row has not fixed the cap
-     * the rules leave the list holding whatever a larger one would allow, nothing is proved, and
-     * what this compiler has to say is what it did. A refusal made from the cap alone rather than
-     * from the cap the row fixed would take these with it and leave the figure unreachable.
+     * <p><b>The control the refusal above rests on, held where the count is nameable.</b> What is
+     * refused turns on the cap the row has fixed, and the account has no way to say which of its
+     * searches was asked with which cap — so a reading of it either picks its subjects out of how a
+     * class is spelled or says something weaker than it means. Both were tried here and both were
+     * wrong about which searches they were about.
      *
-     * <p>Asked of every search the account holds and not of a chosen few. Which of them are about
-     * a position inside the list is a question the account does not answer, and picking them out of
-     * how a class is spelled is how a reading of this model came to be about the wrong ones.
+     * <p>So it is asked of the reading itself. Nothing settled leaves the list capped in no way,
+     * which is what keeps a rule naming an unchosen field from proving anything; a cap of nought
+     * leaves no room and a cap of one leaves room for what is placed. The refusal reads that
+     * middle number and nothing else, so these three are the whole of what it can come to.
      */
     @Test
-    void aSearchThatMetTheFigureStillSaysSo() {
-        assertTrue(everySearch().stream()
-                        .anyMatch(each -> each instanceof ItemAssessment.Attempt.Stopped stopped
-                                && stopped.stoppedBy().written()
-                                        .contains(CompositionBudget.ASSIGNMENTS_A_SEARCH_COMPOSES)),
-                "a search of this behavior meets the assignments a search composes: "
-                        + everySearch());
+    void whatTheRulesLeaveTheListFollowsTheCapTheRowFixed() {
+        assertEquals(Integer.MAX_VALUE, roomInTheList(Map.of()).most(),
+                "nothing has chosen the cap, so the rules cap the list in no way");
+        assertEquals(0, roomInTheList(Map.of(RuleKey.of("cap"), Count.of(0))).most(),
+                "a cap of nought leaves no room for a value to be placed in it");
+        assertEquals(1, roomInTheList(Map.of(RuleKey.of("cap"), Count.of(1))).most(),
+                "and a cap of one leaves room for the one being placed");
+    }
+
+    /** How many the rules let {@code xs} hold, read with {@code settled} fixed as the row fixes it. */
+    private static DeclaredBounds.CountRange roomInTheList(Map<RuleKey, Count> settled) {
+        RuleReadingSource rules = RuleReadings.of(measured(), "example.placing");
+        assertNotNull(rules, "the model under test compiles");
+        FieldDomains read = FieldDomains.of(
+                TypeSymbols.declared(new TypeKey("example.placing", "Box")), rules,
+                souther.compiler.query.ReadAs.THE_COMPILATION_DOES, settled);
+        return Partitions.heldRange(
+                new Type.ListOf(new Type.Ref(
+                        TypeSymbols.declared(new TypeKey("example.placing", "Awkward")))),
+                rules, read.heldAt(RuleKey.of("xs")));
     }
 
     /**
@@ -165,19 +186,6 @@ class AModelWithNoRoomIsAnsweredBeforeAFigureOfThisCompilersTest {
         return filling.composed().unresolved();
     }
 
-    /** Every search this behavior's account holds, whatever point or role it was for. */
-    private static List<ItemAssessment.Attempt> everySearch() {
-        List<ItemAssessment.Attempt> out = new ArrayList<>();
-        for (BorderAssessment border : lines("placing")) {
-            for (PointRole role : PointRole.values()) {
-                if (border.at(role) instanceof ItemAssessment.Owed owed) {
-                    out.addAll(owed.searches().each());
-                }
-            }
-        }
-        return out;
-    }
-
     /** The rows the behavior was offered, as they are written out. */
     private static List<String> rowsOf(String behavior) {
         Adequacy.Filling filling = measured().db()
@@ -187,17 +195,20 @@ class AModelWithNoRoomIsAnsweredBeforeAFigureOfThisCompilersTest {
                 .map(row -> row.inputs().get(0).text()).toList();
     }
 
-    /** The lines a behavior draws. */
-    private static List<BorderAssessment> lines(String behavior) {
-        Map<String, List<BorderAssessment>> read =
-                Adequacy.readingsOf(measured().db(), "example.placing");
-        assertNotNull(read, "the model under test compiles");
-        List<BorderAssessment> lines = read.get(behavior);
-        assertNotNull(lines, "the behavior was measured");
-        return lines;
-    }
+    /**
+     * The one model here, measured once.
+     *
+     * <p>Every answer below is about the same model, so measuring it per question is the same work
+     * done over: the source is compiled, the report asked for and every question answered each
+     * time. Held because what the assertions read back is what one measurement came to, which is
+     * also what an author gets — two of them agreeing is not something this is about.
+     */
+    private static Compilation measured;
 
-    private static Compilation measured() {
+    private static synchronized Compilation measured() {
+        if (measured != null) {
+            return measured;
+        }
         Compilation compilation = Compilation.ofSource(CAPPED, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
@@ -205,6 +216,7 @@ class AModelWithNoRoomIsAnsweredBeforeAFigureOfThisCompilersTest {
                         .flatMap(List::stream)
                         .map(each -> each.diagnostic().code()).toList(),
                 "the model under test compiles");
-        return compilation;
+        measured = compilation;
+        return measured;
     }
 }

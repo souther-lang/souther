@@ -3764,7 +3764,7 @@ public final class Generator {
         // Nothing of a population is short here. What a proposal holds back is a figure of this
         // compiler's over what it builds, and every value of the kind it does build is one it would
         // offer.
-        HeldBack held = heldBack(subject, p, plan, under);
+        HeldBack held = heldBack(subject, plan, under);
         return whatTheSearchCameTo(held.offer(), Set.of(), held.plan(), product);
     }
 
@@ -3900,7 +3900,7 @@ public final class Generator {
      * second time here, the two readings are of one row and are free to come apart the first time
      * either is given something the other is not.
      */
-    private static HeldBack heldBack(MeasuredInput subject, int p, ConstructionPlan plan,
+    private static HeldBack heldBack(MeasuredInput subject, ConstructionPlan plan,
                                      FieldDomains rules) {
         // Every budget that held a position back, and not the first or the strongest. Two positions
         // stopped by two budgets are two things this compiler declined to do, and a reader asking
