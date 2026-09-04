@@ -210,7 +210,7 @@ public final class InvariantChecker {
      * §invariant-discharge-representation). Where the declaration was written decides which
      * representation there is of it, and nothing else does.
      */
-    public record Source(Hir.Expr body, AnalysisInvariants invariants,
+    public record Source(Hir.Expr body, ExpandedClauseLookup invariants,
                          Map<ValueName.Behavior, StatedContract> contracts) {
 
         public Source {
@@ -256,13 +256,13 @@ public final class InvariantChecker {
     private final List<Diagnostic> warnings = new ArrayList<>();
 
     private InvariantChecker(Symbols symbols,
-                             AnalysisInvariants dischargeInvariants,
+                             ExpandedClauseLookup dischargeInvariants,
                              ReadingPolicy policy) {
         this(symbols, dischargeInvariants, Map.of(), policy);
     }
 
     private InvariantChecker(Symbols symbols,
-                             AnalysisInvariants dischargeInvariants,
+                             ExpandedClauseLookup dischargeInvariants,
                              Map<ValueName.Behavior, StatedContract> contracts,
                              ReadingPolicy policy) {
         this.engine = new PathEngine(symbols, dischargeInvariants, contracts, policy);
@@ -2511,7 +2511,7 @@ public final class InvariantChecker {
      * is not something the body is and is not caught ({@link #gaveUp}). A {@code null} body is one
      * the analysis representation could not be built or typed for, and is not analyzed at all.
      */
-    static Findings analyze(Core body, AnalysisInvariants invariants,
+    static Findings analyze(Core body, ExpandedClauseLookup invariants,
                             Map<ValueName.Behavior, StatedContract> contracts,
                             Scope params, Symbols symbols, ReadingPolicy policy) {
         InvariantChecker c = new InvariantChecker(symbols, invariants, contracts, policy);

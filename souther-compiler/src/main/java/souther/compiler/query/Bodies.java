@@ -1,6 +1,5 @@
 package souther.compiler.query;
 
-import souther.compiler.check.AnalysisInvariants;
 import souther.compiler.check.ReadingPolicy;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.ast.Ast;
@@ -1932,8 +1931,6 @@ public final class Bodies {
             Answer<Map<String, DataChecker.Constructs>> constructs =
                     db.ask(new RecursiveHelperConstructs(module));
             Answer<Hir.FnDef> discharge = db.ask(new BodyForInvariantDischarge(module, behavior));
-            Answer<AnalysisInvariants> dischargeInvariants =
-                    db.ask(new Shapes.InvariantsForDischarge(module));
             // What the behaviors this body reaches state about their answers, and only those: a
             // relation declared by a behavior it does not call is no part of what it is checked
             // against, and depending on one would re-check this body whenever that one was edited.
@@ -1945,15 +1942,19 @@ public final class Bodies {
                 return Answer.absent();
             }
             // The invariant-discharge analysis reads its own representation of the body and of the
-            // invariants (spec §invariant-discharge). Where either is not available the check is
+            // invariants (spec §invariant-discharge). Where the body's is not available the check is
             // skipped rather than run against the emitted tree, whose operations are no longer
-            // operations — so the source is made where both arrived and nowhere else. An empty
-            // representation cannot stand for a missing one: they are the same value and opposite
-            // facts, a module stating nothing and a module nothing could be read of.
+            // operations.
+            //
+            // The clauses are not a second thing to wait for. They are asked for one declaration at a
+            // time, wherever it was written, and a declaration whose module could not be expanded
+            // answers nothing rather than answering wrongly — so there is no representation here to
+            // arrive late, and nothing this body reads turns on a declaration beside the ones it
+            // names.
             InvariantChecker.Source dischargeSource =
-                    discharge.present() && dischargeInvariants.present()
+                    discharge.present()
                     ? new InvariantChecker.Source(discharge.value().writtenBody(),
-                            dischargeInvariants.value(),
+                            Shapes.expandedClauses(db),
                             contracts.present() ? contracts.value() : Map.of())
                     : null;
             List<Diagnostic> warnings = new ArrayList<>();

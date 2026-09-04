@@ -1233,7 +1233,7 @@ public final class TypeOps {
      */
     public static List<Hir.InvariantClause> analysisInvariants(
             TypeSymbol.AtModule named, Hir.Data data, Symbols symbols,
-            AnalysisInvariants form) {
+            ExpandedClauseLookup form) {
         List<Hir.InvariantClause> invs = new ArrayList<>();
         for (Declared one : declaredForAnalysis(named, data, symbols, form)) {
             invs.add(one.clause());
@@ -1272,20 +1272,44 @@ public final class TypeOps {
     }
 
     /**
-     * The same in the representation a static analysis reads, which {@code form} answers for a
-     * declaration of its own module and which is the settled form for every other.
+     * The same in the representation a static analysis reads, wherever the declaration was written.
      *
-     * <p>{@code named} is what the walk reached this declaration by, and a spread whose name is not a
-     * declaration's leaves it null — there is nothing to look the analysis form up under, and the
-     * clauses written on it are what there is.
+     * <p>Every clause comes from {@code form}, which is asked by the declaration's address and by
+     * nothing else. There is no arm here for a declaration of another module, because there is
+     * nothing to tell it by: what a clause of one is read as is what its own module expanded, which
+     * is what the lookup answers (spec §invariant-discharge-representation).
+     *
+     * <p>{@code named} is what the walk reached this declaration by. A spread whose name is not a
+     * module's declaration leaves it null and contributes nothing: no module wrote it, so there is
+     * no expansion of it to read and no address to ask under. The declaration's own tree is not read
+     * instead — it is the representation this is not.
      */
     public static List<Declared> declaredForAnalysis(
-            TypeSymbol.AtModule named, Hir.Data data, Symbols symbols, AnalysisInvariants form) {
+            TypeSymbol.AtModule named, Hir.Data data, Symbols symbols, ExpandedClauseLookup form) {
         if (form == null) {
             throw new IllegalArgumentException(
-                    "reading a declaration's clauses as an analysis takes the representation it reads");
+                    "reading a declaration's clauses as an analysis takes somewhere to read them from");
         }
-        return declared(named, data, symbols, form::clausesOf);
+        return declared(named, data, symbols, (at, _) -> at == null ? List.of() : expanded(at, form));
+    }
+
+    /**
+     * What {@code form} answers for {@code named}, and no clauses where it answers nothing.
+     *
+     * <p>Nothing back is a module whose own expansion could not be worked out — one that does not
+     * compile, or whose imports form a cycle. That is an ordinary absence and not a disagreement:
+     * the module is being told what is wrong with it, and turning its failure into this compiler
+     * contradicting itself would answer a broken file with a crash.
+     *
+     * <p>The other absence is not reachable here. A module whose expansion did come out has an
+     * answer for every declaration it wrote, empty where the declaration wrote no clause, and a
+     * declaration missing from one is refused where the expansion is read rather than here — where
+     * it could only be told from the first by asking the module again.
+     */
+    private static List<Hir.InvariantClause> expanded(
+            TypeSymbol.AtModule named, ExpandedClauseLookup form) {
+        ExpandedClauses clauses = form.of(named.key());
+        return clauses == null ? List.of() : clauses.clauses();
     }
 
     /** What a clause of a declaration is, in whichever representation {@code clauses} answers. Not

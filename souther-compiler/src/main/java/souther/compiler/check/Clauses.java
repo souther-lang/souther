@@ -31,7 +31,7 @@ import java.util.Set;
 final class Clauses {
 
     private final Symbols symbols;
-    private final AnalysisInvariants inTheAnalysisRepresentation;
+    private final ExpandedClauseLookup inTheAnalysisRepresentation;
     private final Map<Hir.Data, Map<String, Type>> fields = new HashMap<>();
     private final Map<TypeSymbol.AtModule, Map<String, BindingId>> bindings =
             new HashMap<>();
@@ -54,14 +54,14 @@ final class Clauses {
      *        a rule is about.
      */
     Clauses(Symbols symbols,
-            AnalysisInvariants inTheAnalysisRepresentation) {
+            ExpandedClauseLookup inTheAnalysisRepresentation) {
         this.symbols = symbols;
         this.inTheAnalysisRepresentation = inTheAnalysisRepresentation;
     }
 
     /** The representation this reads a declaration's clauses in, for a reader that has to hand it
      *  on rather than ask for one of its own. */
-    AnalysisInvariants analysisRepresentation() {
+    ExpandedClauseLookup analysisRepresentation() {
         return inTheAnalysisRepresentation;
     }
 

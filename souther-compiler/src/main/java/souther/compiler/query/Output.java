@@ -17,7 +17,7 @@ import souther.compiler.execute.ProgramExecution;
 import souther.compiler.execute.WrittenValue;
 import souther.compiler.ast.Ast;
 import souther.compiler.ast.Hir;
-import souther.compiler.check.AnalysisInvariants;
+import souther.compiler.check.ExpandedClauseLookup;
 import souther.compiler.check.BehaviorRequirement;
 import souther.compiler.check.DataChecker;
 import souther.compiler.check.Lower;
@@ -128,7 +128,7 @@ public final class Output {
                       Map<String, List<BehaviorRequirement>> requirements,
                       Bodies.Elaborated checked,
                       Map<ValueName.Behavior, souther.compiler.core.Composition> compositions,
-                      AnalysisInvariants dischargeClauses,
+                      ExpandedClauseLookup dischargeClauses,
                       Map<souther.compiler.types.TypeSymbol.AtModule,
                               souther.compiler.core.ValueShape> shapes,
                       Map<ValueName.Behavior, EnsuresEnforcement> checks,
@@ -158,8 +158,6 @@ public final class Output {
                     db.ask(new Bodies.Requirements(name));
             // A derived decoder maps a clause onto the Raoh constraint that says the same thing, and it
             // is written against the operations an author wrote — which the lowered module no longer has.
-            Answer<AnalysisInvariants> dischargeClauses =
-                    db.ask(new Shapes.InvariantsForDischarge(name));
             // Where each behavior of this module has its clause checked. A decision of the
             // language's, so it is asked for rather than made here: the emitter and the checked
             // program are two readers of it, and each making it from the contracts and the injected
@@ -180,7 +178,7 @@ public final class Output {
             if (!checked.present() || !compositions.present()
                     || !lowering.present() || !scope.present() || !imported.present()
                     || !signatures.present() || !injected.present() || !callees.present()
-                    || !prepared.present() || !requirements.present() || !dischargeClauses.present()
+                    || !prepared.present() || !requirements.present()
                     || !checks.present() || !standing.present() || !shapes.present()) {
                 return null;
             }
@@ -188,7 +186,7 @@ public final class Output {
                     prepared.value().importedFrom(), signatures.value(), imported.value(),
                     injected.value(),
                     callees.value(), requirements.value(), checked.value(), compositions.value(),
-                    dischargeClauses.value(), shapes.value(), checks.value(),
+                    Shapes.expandedClauses(db), shapes.value(), checks.value(),
                     Set.copyOf(prepared.value().operandMethods().values()), standing.value());
         }
 

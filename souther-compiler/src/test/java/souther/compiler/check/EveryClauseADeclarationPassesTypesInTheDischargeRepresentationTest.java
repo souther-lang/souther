@@ -106,8 +106,7 @@ class EveryClauseADeclarationPassesTypesInTheDischargeRepresentationTest {
 
             String module = compilation.modules().get(0);
             Symbols symbols = Scopes.derived(compilation.db(), module).value();
-            AnalysisInvariants declared =
-                    compilation.db().ask(new Shapes.InvariantsForDischarge(module)).value();
+            ExpandedClauseLookup declared = RuleReadings.declaredBy(compilation.db(), module);
             Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
             assertNotNull(symbols);
             assertNotNull(declared);

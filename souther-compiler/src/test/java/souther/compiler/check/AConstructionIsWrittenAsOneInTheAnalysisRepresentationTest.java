@@ -75,8 +75,9 @@ class AConstructionIsWrittenAsOneInTheAnalysisRepresentationTest {
             if (!(def instanceof Hir.Data data) || data.invariants().isEmpty()) {
                 continue;
             }
-            List<Hir.InvariantClause> read = rules.invariants().clausesOf(data.declares(), data);
-            assertNotNull(read, data.declares() + " is read in this module's own representation");
+            ExpandedClauses expanded = rules.invariants().of(data.declares().key());
+            assertNotNull(expanded, data.declares() + " is read in the representation its module expanded");
+            List<Hir.InvariantClause> read = expanded.clauses();
             Hir.Def again = NewtypeDesugar.rewriteInvariantsOf(
                     new Hir.Data(data.written(), data.declares(), data.newtype(), data.includes(),
                             data.fields(), read, data.pos()),

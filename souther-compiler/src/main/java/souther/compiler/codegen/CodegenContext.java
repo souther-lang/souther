@@ -1,6 +1,6 @@
 package souther.compiler.codegen;
 
-import souther.compiler.check.AnalysisInvariants;
+import souther.compiler.check.ExpandedClauseLookup;
 import souther.compiler.check.AtomSpace;
 import souther.compiler.check.ReqSig;
 import souther.compiler.core.EnsuresEnforcement;
@@ -103,7 +103,7 @@ final class CodegenContext {
      * whose representation never arrived are the same empty map and opposite facts, and a decoder
      * built from the second would silently constrain nothing.
      */
-    private AnalysisInvariants dischargeInvariants;
+    private ExpandedClauseLookup dischargeInvariants;
 
     /**
      * Where each behavior's declared relation is checked, as it was decided before emission.
@@ -130,11 +130,11 @@ final class CodegenContext {
         return EnsuresEnforcement.in(ensuresChecks, pkg, behavior);
     }
 
-    void setDischargeInvariants(AnalysisInvariants clauses) {
+    void setDischargeInvariants(ExpandedClauseLookup clauses) {
         this.dischargeInvariants = clauses;
     }
 
-    AnalysisInvariants dischargeInvariants() {
+    ExpandedClauseLookup dischargeInvariants() {
         if (dischargeInvariants == null) {
             throw new IllegalStateException(
                     "the analysis representation of " + pkg + "'s clauses was never handed over");
