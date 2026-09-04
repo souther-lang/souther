@@ -55,16 +55,21 @@ final class TermRealizations {
          * two alike. Which of them a figure came to be here by is what {@link Stopped} is told
          * apart by, and it is not this.
          */
-        record Built(List<FixtureTemplate> values,
-                     java.util.Set<CompositionBudget> heldBack) implements Realization {
+        record Built(List<FixtureTemplate> values, java.util.Set<CompositionBudget> heldBack,
+                     java.util.Set<CompositionRepertoire> notAllOf) implements Realization {
 
             public Built {
                 values = List.copyOf(values);
                 heldBack = java.util.Set.copyOf(heldBack);
+                notAllOf = java.util.Set.copyOf(notAllOf);
                 if (values.isEmpty()) {
                     throw new IllegalArgumentException(
                             "a realization that built nothing is one that built none, and says why");
                 }
+            }
+
+            Built(List<FixtureTemplate> values, java.util.Set<CompositionBudget> heldBack) {
+                this(values, heldBack, java.util.Set.of());
             }
 
             static Built whole(List<FixtureTemplate> values) {
@@ -91,13 +96,46 @@ final class TermRealizations {
          * composed is {@link Built#heldBack()}: what it stopped is the rest of the offer, and the
          * point it was composed for has a value at it either way.
          */
-        record Stopped(java.util.Set<CompositionBudget> by) implements Realization {
+        record Stopped(java.util.Set<CompositionBudget> by,
+                       java.util.Set<CompositionRepertoire> notAllOf) implements Realization {
 
             public Stopped {
                 by = java.util.Set.copyOf(by);
+                notAllOf = java.util.Set.copyOf(notAllOf);
                 if (by.isEmpty()) {
                     throw new IllegalArgumentException(
                             "a composing this compiler stopped says which budget stopped it");
+                }
+            }
+
+            Stopped(java.util.Set<CompositionBudget> by) {
+                this(by, java.util.Set.of());
+            }
+        }
+
+        /**
+         * Nothing was composed, and what this walked was some of what there is to walk.
+         *
+         * <p>Apart from {@link None}, and the difference is what a reader may conclude. Nothing was
+         * refused by a figure, so there is no number to raise; and nothing here looked at every
+         * value the point has, so an emptiness this came to establishes nothing about the model.
+         * Told as {@code None}, a reader acts on a search that never wrote most of what it was
+         * searching.
+         *
+         * <p>Apart from {@link Stopped} for the same reason in the other direction. A figure is
+         * somebody's to raise and reaches what the search was holding; what reaches the rest of one
+         * of these is somebody writing the rest, which is not work an author of a model can do.
+         *
+         * @param detail what this walk found, or null where it has nothing to add
+         */
+        record Unexhausted(java.util.Set<CompositionRepertoire> notAllOf, String detail)
+                implements Realization {
+
+            public Unexhausted {
+                notAllOf = java.util.Set.copyOf(notAllOf);
+                if (notAllOf.isEmpty()) {
+                    throw new IllegalArgumentException(
+                            "a walk that says it saw some of them says some of what");
                 }
             }
         }

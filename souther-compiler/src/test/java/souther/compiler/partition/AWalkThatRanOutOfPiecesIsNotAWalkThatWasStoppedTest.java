@@ -2,23 +2,26 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.partition.ContainersAddingUp.Repertoire;
+import souther.compiler.numeric.NumericDomain;
+import souther.compiler.partition.ContainersAddingUp.Ends;
 import souther.compiler.partition.ContainersAddingUp.Spending;
 import souther.compiler.partition.ContainersAddingUp.WhatWasLeft;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * The two ends a bounded walk has, and what each of them leaves.
  *
  * <p>A walk that was handed a piece its consumer had no room for stopped at a figure: raise it and
- * that piece gets tried. A walk that ran out of pieces stopped at nothing, and whether anything is
- * left of that kind is a fact about where the pieces came from — so a repertoire that was some of
- * them leaves work nobody did, and one that was all of them leaves none.
+ * that piece gets tried. A walk that ran out of pieces stopped at nothing, and a figure recorded
+ * there is one that took nothing away from anybody.
  *
  * <p><b>Both, because the walk that decides them cannot tell them apart afterwards.</b> The number
  * of pieces handed over and the figure are the same two numbers whichever end the walk came to, and
@@ -33,7 +36,7 @@ class AWalkThatRanOutOfPiecesIsNotAWalkThatWasStoppedTest {
 
     /** The figure the consumer below has room up to, which it reads rather than holding a copy. */
     private static final CompositionBudget FIGURE =
-            CompositionBudget.DECOMPOSITIONS_OF_A_TOTAL_OFFERED;
+            CompositionBudget.SHAPES_OF_A_TOTAL_OFFERED;
 
     /** As many pieces as {@link #FIGURE} leaves room for, and no piece refused for anything else. */
     private static final class AsManyAsTheFigure implements Spending<Integer> {
@@ -55,61 +58,34 @@ class AWalkThatRanOutOfPiecesIsNotAWalkThatWasStoppedTest {
         }
     }
 
-    /** Every piece of everything there is, taken: nothing refused and nothing left over. */
+    /** Every piece taken and none left: nothing refused, so no figure is anybody's to raise. */
     @Test
-    void aWalkThroughEverythingThereIsLeavesNothing() {
+    void aWalkThatRanOutOfPiecesRecordsNoFigure() {
         WhatWasLeft left = new WhatWasLeft();
 
         Traversal walked = ContainersAddingUp.asFarAs(upTo(FIGURE.maximum()),
-                new AsManyAsTheFigure(), Repertoire.ALL_THERE_ARE, left);
+                new AsManyAsTheFigure(), left);
 
         assertEquals(Traversal.EXHAUSTED, walked, "the pieces ran out before the figure did");
         assertEquals(Set.of(), left.refused(),
                 "so no piece was in front of the walk for the figure to have no room for");
-        assertEquals(Set.of(), left.heldBack(),
-                "and the pieces were everything of their kind, so nothing of it went undone");
-    }
-
-    /**
-     * The same walk over some of them, which leaves the kind of work it never saw.
-     *
-     * <p>The one difference is where the pieces came from. A consumer answering this would be
-     * answering for a caller it cannot see, and the walk would be recording the arrangement it was
-     * set up in rather than what it did.
-     */
-    @Test
-    void aWalkThroughSomeOfThemLeavesWhatItNeverSaw() {
-        WhatWasLeft left = new WhatWasLeft();
-
-        Traversal walked = ContainersAddingUp.asFarAs(upTo(FIGURE.maximum()),
-                new AsManyAsTheFigure(), Repertoire.SOME_OF_THEM, left);
-
-        assertEquals(Traversal.EXHAUSTED, walked, "the pieces ran out before the figure did");
-        assertEquals(Set.of(), left.refused(),
-                "nothing was refused, so nothing here is a composing this compiler stopped");
-        assertEquals(Set.of(FIGURE), left.heldBack(),
-                "and the offer is short of what a piece of that kind would have added, which is"
-                        + " what a reader deciding whether everything was tried is owed");
     }
 
     /**
      * One piece past the figure, which is the figure refusing something that was there.
      *
-     * <p>The piece was in front of the walk, so raising the figure tries it. Nothing is recorded of
-     * a walk running out, because this one did not: the pieces were still coming.
+     * <p>The piece was in front of the walk, so raising the figure tries it.
      */
     @Test
     void aPieceThereWasNoRoomForIsTheFigureDecliningToGoOn() {
         WhatWasLeft left = new WhatWasLeft();
 
         Traversal walked = ContainersAddingUp.asFarAs(upTo(FIGURE.maximum() + 1),
-                new AsManyAsTheFigure(), Repertoire.ALL_THERE_ARE, left);
+                new AsManyAsTheFigure(), left);
 
         assertEquals(Traversal.STOPPED, walked, "a piece was in front of it and was not done");
         assertEquals(Set.of(FIGURE), left.refused(),
                 "which is the figure declining to go on, and is what a reader raises");
-        assertEquals(Set.of(FIGURE), left.heldBack(),
-                "and it is one of the things the offer leaves out, as everything refused is");
     }
 
     /**
@@ -125,21 +101,53 @@ class AWalkThatRanOutOfPiecesIsNotAWalkThatWasStoppedTest {
         List<FixtureTemplate> filling = distinct(offered.figure().maximum());
 
         assertEquals(Traversal.EXHAUSTED,
-                ContainersAddingUp.asFarAs(filling, offered, Repertoire.ALL_THERE_ARE, left),
+                ContainersAddingUp.asFarAs(filling, offered, left),
                 "as many containers as are offered is what is offered");
         assertEquals(Traversal.EXHAUSTED,
-                ContainersAddingUp.asFarAs(List.of(filling.get(0)), offered,
-                        Repertoire.ALL_THERE_ARE, left),
+                ContainersAddingUp.asFarAs(List.of(filling.get(0)), offered, left),
                 "and one already offered is nothing this had to make room for");
-        assertEquals(Set.of(), left.heldBack(),
-                "so nothing was held back, whatever the offer is full of");
+        assertEquals(Set.of(), left.refused(),
+                "so nothing was refused, whatever the offer is full of");
 
         assertEquals(Traversal.STOPPED,
-                ContainersAddingUp.asFarAs(distinct(offered.figure().maximum() + 1), offered,
-                        Repertoire.ALL_THERE_ARE, left),
+                ContainersAddingUp.asFarAs(distinct(offered.figure().maximum() + 1), offered, left),
                 "and one that is not already offered is a container there is no room for");
         assertEquals(Set.of(CompositionBudget.SHAPES_OF_A_TOTAL_OFFERED), left.refused(),
                 "which is the figure over how many are offered, declining to offer another");
+    }
+
+    /**
+     * Whether any arrangement of a given many reaches the total, which is what a claim of having
+     * written every arrangement rests on.
+     *
+     * <p>The elements start at nought and run to two, so two of them reach four and no more. What
+     * this is for is the counts where the shapes this compiler writes are every arrangement there
+     * is by there being none — and a total past the ends is one no arrangement comes to, whichever
+     * way the difference is spread.
+     */
+    @Test
+    void aTotalPastWhereEveryElementCanReachIsReachedByNoArrangement() {
+        Ends ends = new Ends(BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.valueOf(2),
+                NumericDomain.Bounds.OPEN);
+
+        assertTrue(ends.reaches(BigDecimal.valueOf(4), 2),
+                "two elements of two come to four, so an arrangement of two reaches it");
+        assertFalse(ends.reaches(BigDecimal.valueOf(5), 2),
+                "and nothing two of them do comes to five, so there is no arrangement to have"
+                        + " written");
+        assertTrue(ends.reaches(BigDecimal.valueOf(5), 3),
+                "a third element reaches it, which is a count of its own");
+    }
+
+    /** An order open the way an element would have to move puts nothing in the way of a total. */
+    @Test
+    void anOrderOpenTheWayAnElementMovesReachesAnything() {
+        Ends open = new Ends(BigDecimal.ZERO, BigDecimal.ZERO, null, NumericDomain.Bounds.OPEN);
+
+        assertTrue(open.reaches(BigDecimal.valueOf(1_000_000), 1),
+                "nothing names a value this element cannot be moved up to");
+        assertFalse(open.reaches(BigDecimal.valueOf(-1), 1),
+                "and the end it would move down to is named, and is where it starts");
     }
 
     /** The whole numbers below {@code many}, which is a piece of nothing in particular. */

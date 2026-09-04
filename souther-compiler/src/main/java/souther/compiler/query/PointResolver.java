@@ -136,6 +136,12 @@ public final class PointResolver {
                         case ItemAssessment.Attempt.Stopped(var why, var _, var _, var _) ->
                                 walked.put(reading,
                                         new SearchCoverage.ReadingSearch.Attempted(why));
+                        // And a search that ran to the end of what this compiler writes. This walk
+                        // records of it what it records of the one above — a search ran and no row
+                        // came of it — and what it writes some of travels on the point's account.
+                        case ItemAssessment.Attempt.Unexhausted(var why, var _, var _, var _) ->
+                                walked.put(reading,
+                                        new SearchCoverage.ReadingSearch.Attempted(why));
                         // And a search whose answer was about less than the point had. What this
                         // walk records of it is the same as of the two above — a search ran and no
                         // row came of it — and the figure that made the answer short travels on the

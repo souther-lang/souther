@@ -84,25 +84,20 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/check/ReadingPolicy;Ljava/util/Set;)"
                             + "Lsouther/compiler/partition/Witnesses$Built;",
                     "stops at the pairings a map is built from at once, and says which"),
-            // A total's three, one consumer each. The figure is asked for twice per consumer and
-            // for two questions: whether there is room for the piece in front of it, and — where
-            // the walk finds there was not — which figure to say so under. Held apart, a consumer
-            // could report having run out of one figure while making room by another.
+            // A total's two, one consumer each. The figure is asked for twice per consumer and for
+            // two questions: whether there is room for the piece in front of it, and — where the
+            // walk finds there was not — which figure to say so under. Held apart, a consumer could
+            // report having run out of one figure while making room by another.
+            //
+            // Two and not three, because the ways a difference is spread are not held to a figure.
+            // What is written of them is that this compiler writes some of them, which is no number
+            // to raise and travels as a CompositionRepertoire rather than from here.
             Map.entry("souther.compiler.partition.ContainersAddingUp$HowManyElements#take("
                             + "Ljava/lang/Integer;)Lsouther/compiler/partition/Taking$Taken;",
                     "has no room for a count of more elements than a row carries"),
             Map.entry("souther.compiler.partition.ContainersAddingUp$HowManyElements#figure()"
                             + "Lsouther/compiler/partition/CompositionBudget;",
                     "says which figure that was, which is what the walk hands over"),
-            Map.entry("souther.compiler.partition.ContainersAddingUp$HowItIsSpread#take("
-                            + "Lsouther/compiler/partition/ContainersAddingUp$Spread;)"
-                            + "Lsouther/compiler/partition/Taking$Taken;",
-                    "has no room for a shape past as many as one total is spread in"),
-            Map.entry("souther.compiler.partition.ContainersAddingUp$HowItIsSpread#figure()"
-                            + "Lsouther/compiler/partition/CompositionBudget;",
-                    "says which figure that was — and it is the one the walk hands over where it"
-                            + " ran out of the shapes there are to try, which are not all the ways"
-                            + " a difference is spread"),
             Map.entry("souther.compiler.partition.ContainersAddingUp$WhatIsOffered#take("
                             + "Lsouther/compiler/partition/FixtureTemplate;)"
                             + "Lsouther/compiler/partition/Taking$Taken;",

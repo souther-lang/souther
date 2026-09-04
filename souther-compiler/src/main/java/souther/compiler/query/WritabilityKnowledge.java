@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.partition.CompositionBudget;
+import souther.compiler.partition.CompositionRepertoire;
 import souther.compiler.publish.CanonicalSelection;
 import souther.compiler.publish.PublicationOrders;
 
@@ -89,18 +90,26 @@ public sealed interface WritabilityKnowledge {
         public static Prevented of(Collection<EstablishmentGap> gaps) {
             Set<Incompleteness.Code> observed = EnumSet.noneOf(Incompleteness.Code.class);
             Set<CompositionBudget> budgets = EnumSet.noneOf(CompositionBudget.class);
+            // Beside the figures and not among them. Two composings that came to nothing for two
+            // kinds of reason are one composing gap, which is what a reader of a gap is told; what
+            // each of them would take to close stays its own, and a fold that put them in one set
+            // would have to lose one of the two.
+            Set<CompositionRepertoire> repertoires = EnumSet.noneOf(CompositionRepertoire.class);
             for (EstablishmentGap each : gaps) {
                 switch (each) {
                     case EstablishmentGap.Observation it -> observed.addAll(it.causes().written());
-                    case EstablishmentGap.Composition it -> budgets.addAll(it.budgets().written());
+                    case EstablishmentGap.Composition it -> {
+                        budgets.addAll(it.budgets().written());
+                        repertoires.addAll(it.repertoires().written());
+                    }
                 }
             }
             List<EstablishmentGap> kinds = new ArrayList<>();
             if (!observed.isEmpty()) {
                 kinds.add(EstablishmentGap.Observation.of(observed));
             }
-            if (!budgets.isEmpty()) {
-                kinds.add(EstablishmentGap.Composition.of(budgets));
+            if (!budgets.isEmpty() || !repertoires.isEmpty()) {
+                kinds.add(EstablishmentGap.Composition.of(budgets, repertoires));
             }
             return new Prevented(PublicationOrders.ESTABLISHMENT_GAPS.keep(kinds));
         }

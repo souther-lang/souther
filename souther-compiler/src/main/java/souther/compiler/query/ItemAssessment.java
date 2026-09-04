@@ -408,8 +408,9 @@ public sealed interface ItemAssessment {
      * had in hand.
      */
     sealed interface Attempt
-            permits Attempt.Certified, Attempt.Unverified, Attempt.Stopped, Attempt.Limited,
-                    Attempt.Unplanned, Attempt.Unresolved, Attempt.Unavailable {
+            permits Attempt.Certified, Attempt.Unverified, Attempt.Stopped,
+                    Attempt.Unexhausted, Attempt.Limited, Attempt.Unplanned, Attempt.Unresolved,
+                    Attempt.Unavailable {
 
         /**
          * What a search of the region came to, whichever way it came out.
@@ -426,7 +427,7 @@ public sealed interface ItemAssessment {
          * nobody could run — outside a hierarchy it belongs in.
          */
         sealed interface Searched
-                permits Certified, Unverified, Stopped, Limited, Unresolved {
+                permits Certified, Unverified, Stopped, Unexhausted, Limited, Unresolved {
 
             /** What the way to the point took in and what it could not, which is what says how much
              *  the outcome beside it is worth. */
@@ -500,7 +501,8 @@ public sealed interface ItemAssessment {
          * <p><b>Nothing here says a row cannot be written.</b> What each of these licenses is that
          * the question is open — which is what tells it from a point nothing ever promised.
          */
-        sealed interface Prevented permits Unverified, Stopped, Limited, Unplanned {
+        sealed interface Prevented permits Unverified, Stopped, Unexhausted, Limited,
+                Unplanned {
 
             /** Which figure of this compiler's the point is open on, in the words the account
              *  reads. */
@@ -589,6 +591,40 @@ public sealed interface ItemAssessment {
             @Override
             public EstablishmentGap by() {
                 return stoppedBy;
+            }
+        }
+
+        /**
+         * The search ran to the end of what this compiler writes, which is not the end of what
+         * there is.
+         *
+         * <p><b>Beside {@link Stopped} and not a shape of it.</b> That one was holding a candidate
+         * a figure had no room for: its word is the figures' to say, it is checked against them at
+         * both ends, and what a reader does about it is raise one. Nothing was refused here and
+         * there is no number in it — what reaches the rest of what this walks is somebody writing
+         * the rest, which is not work an author of a model can do. Held as one, a reader is sent to
+         * raise something that would change nothing.
+         *
+         * <p>What it licenses is what {@link Stopped} licenses and nothing more: the question is
+         * open, and open because this compiler did not look at everything. Which is why the word is
+         * the same word and the gap is not.
+         */
+        record Unexhausted(Generator.UnresolvedCombination why,
+                           souther.compiler.partition.WayToTheBorder way,
+                           List<souther.compiler.partition.ReachabilityGap.Uncomposed> uncomposed,
+                           EstablishmentGap.Composition writesSomeOf)
+                implements Attempt, Searched, Prevented {
+
+            public Unexhausted {
+                uncomposed = List.copyOf(uncomposed);
+                Objects.requireNonNull(why, "a search that came to nothing says so in its own word");
+                Objects.requireNonNull(writesSomeOf, "a search that saw some of them says some of"
+                        + " what");
+            }
+
+            @Override
+            public EstablishmentGap by() {
+                return writesSomeOf;
             }
         }
 
@@ -750,6 +786,13 @@ public sealed interface ItemAssessment {
                 // A search a budget ended walked as far as it walked, and what it could not compose
                 // against on the way is the first thing that would explain what it came back with.
                 case Stopped it -> {
+                    way = it.way();
+                    uncomposed = it.uncomposed();
+                }
+                // And one that ran to the end of what this compiler writes. It walked the way like
+                // any other and settled nothing, so what it could not compose against is owed to a
+                // reader for the reason it is owed above.
+                case Unexhausted it -> {
                     way = it.way();
                     uncomposed = it.uncomposed();
                 }

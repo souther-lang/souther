@@ -201,16 +201,20 @@ class APointBelowWhatThisPlansIsOpenOnAFigureTest {
      */
     @Test
     void anOfferStillHoldingValuesLeavesThePlansFigureUnsaid() {
-        ItemAssessment.Attempt.Stopped stopped = assertInstanceOf(
-                ItemAssessment.Attempt.Stopped.class, onlyPreventedOf(BOTH, "both"),
-                "the edge offered less than it had, which is a search that never had the whole of"
-                        + " what there was to try");
+        ItemAssessment.Attempt.Unexhausted some = assertInstanceOf(
+                ItemAssessment.Attempt.Unexhausted.class, onlyPreventedOf(BOTH, "both"),
+                "the edge offered less than there is, which is a search that never had the whole of"
+                        + " what there was to try — and not one a figure stopped");
+        EstablishmentGap.Composition why = assertInstanceOf(
+                EstablishmentGap.Composition.class, some.by());
 
-        assertEquals(List.of(CompositionBudget.DECOMPOSITIONS_OF_A_TOTAL_OFFERED),
-                assertInstanceOf(EstablishmentGap.Composition.class, stopped.by())
-                        .budgets().written(),
-                "so the point is open on what the edge held back, and the plan's own figure waits"
-                        + " until there is nothing left to offer");
+        assertEquals(List.of(CompositionRepertoire.WAYS_A_TOTAL_IS_SPREAD),
+                why.repertoires().written(),
+                "so the point is open on what the edge writes some of, and the plan's own figure"
+                        + " waits until there is nothing left to offer");
+        assertEquals(List.of(), why.budgets().written(),
+                "and no figure is named, because none refused anything: a reader told to raise one"
+                        + " would raise it and get the same offer back");
     }
 
     /** The one search of this behavior the account reads as this compiler's own limit. */

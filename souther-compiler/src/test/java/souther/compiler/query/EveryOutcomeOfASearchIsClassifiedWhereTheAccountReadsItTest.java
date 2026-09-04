@@ -6,6 +6,7 @@ import souther.compiler.diag.Citation;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.partition.CompositionBudget;
+import souther.compiler.partition.CompositionRepertoire;
 import souther.compiler.partition.Generator;
 import souther.compiler.partition.OnTheWay;
 import souther.compiler.partition.WayToTheBorder;
@@ -45,8 +46,8 @@ class EveryOutcomeOfASearchIsClassifiedWhereTheAccountReadsItTest {
     /** One of each outcome, by the leaf that names it. */
     private static Map<Class<?>, ItemAssessment.Attempt> oneOfEach() {
         Map<Class<?>, ItemAssessment.Attempt> out = new LinkedHashMap<>();
-        for (ItemAssessment.Attempt each : List.of(certified(), unverified(), stopped(), limited(),
-                unplanned(), unresolved(), unavailable())) {
+        for (ItemAssessment.Attempt each : List.of(certified(), unverified(), stopped(),
+                unexhausted(), limited(), unplanned(), unresolved(), unavailable())) {
             out.put(each.getClass(), each);
         }
         return out;
@@ -227,6 +228,23 @@ class EveryOutcomeOfASearchIsClassifiedWhereTheAccountReadsItTest {
                 new Generator.UnresolvedCombination(List.of("p.x = 11"),
                         Generator.UnresolvedCombination.Reason.wordFor(Set.of(budget))),
                 WAY, List.of(), EstablishmentGap.Composition.of(EnumSet.of(budget)));
+    }
+
+    /**
+     * A search that ran to the end of what this compiler writes, which is not the end of what there
+     * is.
+     *
+     * <p>Written with no figure at all, which is the half of this the one above cannot have. Given
+     * a budget as well, the representative would be a stop by another name and would say nothing
+     * about the case this arm exists for: a point left open by work nobody has done rather than by
+     * a number somebody could raise.
+     */
+    private static ItemAssessment.Attempt unexhausted() {
+        return new ItemAssessment.Attempt.Unexhausted(
+                new Generator.UnresolvedCombination(List.of("List.sum(p.xs) = 7"),
+                        Generator.UnresolvedCombination.Reason.SEARCH_LIMIT),
+                WAY, List.of(), EstablishmentGap.Composition.of(List.of(),
+                        EnumSet.of(CompositionRepertoire.WAYS_A_TOTAL_IS_SPREAD)));
     }
 
     /**

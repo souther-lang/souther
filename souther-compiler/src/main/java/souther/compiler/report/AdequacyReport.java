@@ -15,6 +15,7 @@ import souther.compiler.partition.AuthoredLine;
 import souther.compiler.partition.BorderObligationPoint;
 import souther.compiler.partition.ClosureGap;
 import souther.compiler.partition.CompositionBudget;
+import souther.compiler.partition.CompositionRepertoire;
 import souther.compiler.partition.DomainPoint;
 import souther.compiler.partition.FarEnd;
 import souther.compiler.partition.Generator;
@@ -1985,9 +1986,19 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 // this was, so what is written is what both of them establish: nothing was
                 // composed, and a figure of this compiler's is why. Which way it happened is said
                 // per search, where the outcome that knows is still in hand.
-                case EstablishmentGap.Composition(var budgets) ->
-                        "nothing was composed for it, and a figure of this compiler's is why: "
-                                + said(budgets);
+                // Two sentences and not one list, because what a reader does about them differs. A
+                // figure is a number to raise and reaching it is why the search went no further; a
+                // population this writes some of is work nobody has done, and no number anybody
+                // raises reaches the rest of it. Run together, an author reads the second as
+                // something to raise and finds that raising it changes nothing.
+                case EstablishmentGap.Composition(var budgets, var repertoires) ->
+                        "nothing was composed for it"
+                                + (budgets.isEmpty() ? ""
+                                        : ", and a figure of this compiler's is why: "
+                                                + said(budgets))
+                                + (repertoires.isEmpty() ? ""
+                                        : ", and this compiler writes some of "
+                                                + writes(repertoires) + " rather than all of them");
             });
         }
         return String.join(", and ", out);
@@ -2072,6 +2083,15 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                  ItemAssessment.Attempt.Unavailable _ -> "";
             case ItemAssessment.Attempt.Stopped it ->
                     " — this compiler stopped at " + said(it.stoppedBy().budgets()) + ": "
+                            + it.why().said().orElseGet(() -> whyUnresolved(it.why()))
+                            + whatTheRegionLeftOut(it.unaccountedFor(), names, declaredIn);
+            // Said as what this compiler writes rather than as a number it stopped at, because
+            // there is no number: an author told to raise one would raise it and get the same
+            // offer. What would change this is somebody writing the rest of what it walks, and the
+            // sentence says so.
+            case ItemAssessment.Attempt.Unexhausted it ->
+                    " — this compiler writes some of " + writes(it.writesSomeOf().repertoires())
+                            + " rather than all of them: "
                             + it.why().said().orElseGet(() -> whyUnresolved(it.why()))
                             + whatTheRegionLeftOut(it.unaccountedFor(), names, declaredIn);
             // Both halves, because neither says what the other does. The word is what the search
@@ -2159,6 +2179,24 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
     }
 
     /**
+     * What a population this compiler writes some of is called where a reader meets one.
+     *
+     * <p>Its own sentence and not one of the figures'. Nothing here is a number, so what a reader
+     * is told is what this compiler writes rather than how much of it — and a population added
+     * arrives here as a compile error rather than as a name nobody wrote a sentence for.
+     */
+    private static String writes(CanonicalSelection<CompositionRepertoire> repertoires) {
+        List<String> out = new ArrayList<>();
+        for (CompositionRepertoire each : repertoires.written()) {
+            out.add(switch (each) {
+                case WAYS_A_TOTAL_IS_SPREAD ->
+                        "the ways a total may be spread over what adds up to it";
+            });
+        }
+        return String.join(", ", out);
+    }
+
+    /**
      * What a budget of this compiler's is called where a reader meets one.
      *
      * <p>Its own words and not the constant's name. What the compiler calls a figure is a name for
@@ -2176,8 +2214,6 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 case ELEMENTS_A_TOTAL_IS_SPREAD_OVER ->
                         "how many elements a total is spread over";
                 case SHAPES_OF_A_TOTAL_OFFERED -> "how many containers are offered for one total";
-                case DECOMPOSITIONS_OF_A_TOTAL_OFFERED ->
-                        "how many ways a total is decomposed";
                 case WAYS_DOWN_TO_A_TOTAL_TRIED ->
                         "how many ways down to what a total adds up are tried";
                 case PLACES_A_PAIR_IS_TRIED_AT -> "how many places a pair is tried at";

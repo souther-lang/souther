@@ -133,67 +133,55 @@ final class ContainersAddingUp {
         WhatIsOffered offered = new WhatIsOffered();
         Makings makings = new Makings(total.at(), ends, holding, view, elements, ways, ruleSource,
                 policy);
-        asFarAs(countsAdmitted(howMany), new HowManyElements(makings, offered, left),
-                Repertoire.ALL_THERE_ARE, left);
+        // Every count the rules leave, which are all the counts there are: what the container may
+        // hold is what the rules say, so a walk that runs out of them has run out of the population
+        // and not only of what this compiler writes.
+        asFarAs(countsAdmitted(howMany), new HowManyElements(makings, offered, left), left);
         List<FixtureTemplate> built = offered.built();
         if (!built.isEmpty()) {
-            return new TermRealizations.Realization.Built(built, left.heldBack());
+            return new TermRealizations.Realization.Built(built, left.refused(), left.notAllOf());
         }
-        // Nothing was composed, so what a figure stopped is the composing itself and not the rest of
-        // an offer. Where none of them refused anything, this is a total nothing here writes a
-        // container for — and what a reader is then owed is which of the ways to one were walked,
-        // since a figure having stopped the walk is exactly what says the ways were not all tried.
-        return left.refused().isEmpty()
-                ? new TermRealizations.Realization.None(
-                        Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
-                        ways.said(occurrences(target)))
-                : new TermRealizations.Realization.Stopped(left.refused());
-    }
-
-    /**
-     * Whether the pieces a walk was given are all there are of them.
-     *
-     * <p>The source's answer and not the consumer's. What a consumer knows is what it did with the
-     * piece in front of it; whether the list it is being handed stands for everything of its kind is
-     * a fact about where the list came from, and a consumer answering it would be answering for a
-     * caller it cannot see.
-     */
-    enum Repertoire {
-
-        /** Everything of that kind was handed over, so a walk that ran out left nothing. */
-        ALL_THERE_ARE,
-
-        /** Some of them, so a walk that ran out has still not been everywhere it could have gone. */
-        SOME_OF_THEM
+        // Nothing was composed, and what a reader may make of that is what these two say. A figure
+        // that refused a candidate is why nothing came of it and is somebody's to raise; a
+        // population this walks some of leaves an emptiness nothing established, and neither is the
+        // other. Where there is neither, what this looked at was everything it could have.
+        if (!left.refused().isEmpty()) {
+            return new TermRealizations.Realization.Stopped(left.refused(), left.notAllOf());
+        }
+        if (!left.notAllOf().isEmpty()) {
+            return new TermRealizations.Realization.Unexhausted(left.notAllOf(),
+                    ways.said(occurrences(target)));
+        }
+        return new TermRealizations.Realization.None(
+                Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
+                ways.said(occurrences(target)));
     }
 
     /**
      * What the walks over one total left behind, which is two facts and not one.
      *
-     * <p>A figure that refused a piece and a repertoire that was never all of them are different
-     * things to know. The first is somebody's to raise and is why nothing was composed where nothing
-     * was; the second is a walk having gone everywhere it knows how to go, which says nothing about
-     * whether that was everywhere — and a reader told that every value was refused, on an offer that
-     * was never the whole of what there is, has been handed a sentence to act on that nothing here
-     * established.
+     * <p>A figure that refused a piece and a population this walks some of are different things to
+     * know, and they are held in different vocabularies so that nothing downstream can put them in
+     * one set. The first is somebody's to raise; raising anything reaches none of the second.
      *
-     * <p><b>{@link #heldBack()} is worked out from them and is held nowhere.</b> Kept as a third
-     * set, it would be written twice at every refusal and could be made to disagree with the two it
-     * is the union of.
+     * <p>Both leave an offer that is not the whole of what there is, which is the one thing they
+     * have in common and the reason both travel. A reader told every value was refused, on an offer
+     * that was never everything, has been handed a sentence to act on that nothing here established.
      */
     static final class WhatWasLeft {
 
         private final Set<CompositionBudget> refused = EnumSet.noneOf(CompositionBudget.class);
-        private final Set<CompositionBudget> unoffered = EnumSet.noneOf(CompositionBudget.class);
+        private final Set<CompositionRepertoire> notAllOf =
+                EnumSet.noneOf(CompositionRepertoire.class);
 
         /** A piece was in front of a walk and this figure left no room for it. */
         void refused(CompositionBudget figure) {
             refused.add(figure);
         }
 
-        /** A walk under this figure went everywhere it knows how to, which was not everywhere. */
-        void unoffered(CompositionBudget figure) {
-            unoffered.add(figure);
+        /** A walk over this population went everywhere it knows how to, which was not everywhere. */
+        void notAllOf(CompositionRepertoire population) {
+            notAllOf.add(population);
         }
 
         /** The figures that refused a piece, which are the ones a composing was stopped by. */
@@ -201,12 +189,9 @@ final class ContainersAddingUp {
             return Set.copyOf(refused);
         }
 
-        /** Everything an offer made under these walks leaves out, however it came to be left out. */
-        Set<CompositionBudget> heldBack() {
-            Set<CompositionBudget> both = EnumSet.noneOf(CompositionBudget.class);
-            both.addAll(refused);
-            both.addAll(unoffered);
-            return Set.copyOf(both);
+        /** The populations an offer made under these walks holds some of and not all of. */
+        Set<CompositionRepertoire> notAllOf() {
+            return Set.copyOf(notAllOf);
         }
     }
 
@@ -229,24 +214,24 @@ final class ContainersAddingUp {
     }
 
     /**
-     * Every piece to the consumer, and what the walk was left with when it ended.
+     * Every piece to the consumer, and the figure where the walk was left holding one.
      *
-     * <p><b>The one place a figure is recorded, and the two ends it records are not the same.</b> A
-     * piece the consumer would not do is a piece this was holding, which is the figure declining to
-     * go on; a walk that ran out of pieces declined nothing, and whether anything is left of that
-     * kind is what {@code repertoire} says. Worked out anywhere else, either record is a reading of
-     * how the search was set up — an unbounded container always has counts above the figure, so a
-     * walk that asked whether it had them said a figure had been reached before trying anything.
+     * <p><b>The one place a figure is recorded.</b> A piece the consumer would not do is a piece
+     * this was holding, which is what makes the figure a search declining to go on rather than a
+     * property of how the search was set up. Worked out anywhere else, the record is a reading of
+     * the arrangement — an unbounded container always has counts above the figure, so a walk that
+     * asked whether it had them said a figure had been reached before trying anything.
      *
-     * <p>A walk that refused a piece is not one that ran out, so nothing is written of it under the
-     * second. What the offer leaves out is the two together and is worked out where it is read.
+     * <p>Nothing is said here about whether the pieces were the whole of their kind. That is not
+     * something a walk over them can see, and it is not a figure: what it takes to reach the rest
+     * of a population is somebody writing the rest, so it is claimed and shown where the pieces are
+     * chosen ({@link CompositionRepertoire}).
      *
      * <p>What a caller does with {@link Traversal#SATISFIED} is its own. It is not this walk that
-     * left something: a consumer that has what it came for says so, and where that is because a walk
-     * further in stopped, that walk has already recorded what it ended with here.
+     * left something: a consumer that has what it came for says so, and where that is because a
+     * walk further in stopped, that walk has already recorded its figure here.
      */
-    static <T> Traversal asFarAs(Iterable<T> pieces, Spending<T> doing, Repertoire repertoire,
-                                 WhatWasLeft left) {
+    static <T> Traversal asFarAs(Iterable<T> pieces, Spending<T> doing, WhatWasLeft left) {
         for (T each : pieces) {
             switch (doing.take(each)) {
                 case NOT_TAKEN -> {
@@ -259,9 +244,6 @@ final class ContainersAddingUp {
                 case AND_MORE -> { }
             }
         }
-        if (repertoire == Repertoire.SOME_OF_THEM) {
-            left.unoffered(doing.figure());
-        }
         return Traversal.EXHAUSTED;
     }
 
@@ -272,6 +254,10 @@ final class ContainersAddingUp {
      * is handed a count and answers whether it has room for one that size — so the count that is
      * refused is a count the rules admit, and cutting the list to the figure first would leave
      * nothing for it to refuse.
+     *
+     * <p>Which is also what ends this where the rules cap nothing. A range the rules leave open at
+     * the top runs to the largest count there is, and what stops the walk before then is the
+     * consumer having no room, as it is at every other length.
      */
     private static Iterable<Integer> countsAdmitted(DeclaredBounds.CountRange howMany) {
         int from = Math.max(howMany.least(), 0);
@@ -281,7 +267,7 @@ final class ContainersAddingUp {
 
             @Override
             public boolean hasNext() {
-                return at >= from && at <= howMany.most();
+                return at <= howMany.most();
             }
 
             @Override
@@ -337,72 +323,31 @@ final class ContainersAddingUp {
             if (many > figure().maximum()) {
                 return Taken.NOT_TAKEN;
             }
-            // The shapes this count is spread as, and what came of walking them. A walk that ran
-            // out of shapes to spread this count as says nothing about the next count: another one
-            // has decompositions of its own, and what this one left is recorded where it was left.
-            // Only a walk that has what it came for ends this one.
-            return asFarAs(List.of(Spread.values()),
-                    new HowItIsSpread(makings, many, offered, left), arrangementsOf(many), left)
-                    == Traversal.SATISFIED ? Taken.AND_DONE : Taken.AND_MORE;
-        }
-
-        /**
-         * Whether the shapes a difference is spread in are all the ways this many elements take it.
-         *
-         * <p>One element takes the whole of the difference and no element takes none of it, so a
-         * count of one or of nought has the one arrangement and both shapes are it. Past that they
-         * are two of the many: what a third would put where is a value neither of these writes, and
-         * a walk that ran out of them has been everywhere it knows how to go and not everywhere.
-         */
-        private static Repertoire arrangementsOf(int many) {
-            return many <= 1 ? Repertoire.ALL_THERE_ARE : Repertoire.SOME_OF_THEM;
-        }
-
-        @Override
-        public CompositionBudget figure() {
-            return CompositionBudget.ELEMENTS_A_TOTAL_IS_SPREAD_OVER;
-        }
-    }
-
-    /**
-     * The shapes one count of elements is spread as, offered as far as the figure goes.
-     *
-     * <p>One count's, so the figure is what a decomposition of this many is offered in. A shape that
-     * reaches no decomposition of them is a shape that was tried and came to nothing, which is this
-     * walk carrying on rather than a figure of anybody's.
-     */
-    private static final class HowItIsSpread implements Spending<Spread> {
-
-        private final Makings makings;
-        private final int many;
-        private final WhatIsOffered offered;
-        private final WhatWasLeft left;
-        private int tried;
-
-        HowItIsSpread(Makings makings, int many, WhatIsOffered offered, WhatWasLeft left) {
-            this.makings = makings;
-            this.many = many;
-            this.offered = offered;
-            this.left = left;
-        }
-
-        @Override
-        public Taken take(Spread how) {
-            if (tried == figure().maximum()) {
-                return Taken.NOT_TAKEN;
+            // Said of the shapes this count is spread in, before any of them is walked, because it
+            // is about which arrangements there are rather than about what came of trying two of
+            // them. Nothing bounds this loop but the shapes there are to write, so a shape is never
+            // refused here and no figure of this compiler's is reached by spreading.
+            if (!coversEveryArrangement(many)) {
+                left.notAllOf(CompositionRepertoire.WAYS_A_TOTAL_IS_SPREAD);
             }
-            tried++;
-            List<BigDecimal> split = splitting(makings.total(), many, makings.ends(), how,
-                    makings.elements());
-            if (split == null) {
-                return Taken.AND_MORE;
+            for (Spread how : Spread.values()) {
+                List<BigDecimal> split = splitting(makings.total(), many, makings.ends(), how,
+                        makings.elements());
+                if (split == null) {
+                    continue;
+                }
+                // Every way down at this count, and the whole container by one of them. Which case
+                // an element is is a fact about the value, so a container whose elements are of
+                // several would be offering a shape nothing asked for; what the walk owes is to
+                // offer each case and to say the rest were never made.
+                //
+                // An offer with no room for another container has none at any count, so this is the
+                // end of the counts as well and not only of the shapes.
+                if (asFarAs(containers(split), offered, left) == Traversal.STOPPED) {
+                    return Taken.AND_DONE;
+                }
             }
-            // Every way down at this count, and the whole container by one of them. Which case an
-            // element is is a fact about the value, so a container whose elements are of several
-            // would be offering a shape nothing asked for; what the walk owes is to offer each case
-            // and to say the rest were never made.
-            return asFarAs(containers(split), offered, Repertoire.ALL_THERE_ARE, left)
-                    == Traversal.EXHAUSTED ? Taken.AND_MORE : Taken.AND_DONE;
+            return Taken.AND_MORE;
         }
 
         /**
@@ -420,9 +365,32 @@ final class ContainersAddingUp {
                     .iterator();
         }
 
+        /**
+         * Whether the shapes written here are every arrangement of this many elements there is.
+         *
+         * <p><b>Shown, or not said.</b> An offer that claims to hold every way of reaching the
+         * total is a claim about all the arrangements, and two shapes are two of the many — so this
+         * answers for the counts where the many are provably not more than two, and every other
+         * count is one this walks some of.
+         *
+         * <p>Two showings, and both are arithmetic on what the elements stand on. A count of one
+         * takes the whole of the difference and a count of nought takes none of it, so there is the
+         * one arrangement either way and both shapes are it. And where every element moved as far
+         * as its order allows still does not reach the total, no arrangement of that many does —
+         * the shapes cover the arrangements by there being none of them.
+         *
+         * <p>Which way it errs is the whole point. A count whose arrangements this does happen to
+         * cover is walked as one it does not, and an offer says it holds less than it does; the
+         * other way round, a reader is told every value was refused by a walk that never wrote most
+         * of them.
+         */
+        private boolean coversEveryArrangement(int many) {
+            return many <= 1 || !makings.ends().reaches(makings.total(), many);
+        }
+
         @Override
         public CompositionBudget figure() {
-            return CompositionBudget.DECOMPOSITIONS_OF_A_TOTAL_OFFERED;
+            return CompositionBudget.ELEMENTS_A_TOTAL_IS_SPREAD_OVER;
         }
     }
 
@@ -876,8 +844,34 @@ final class ContainersAddingUp {
      *               has no value beside
      * @param upTo   the same at the other end
      */
-    private record Ends(BigDecimal from, BigDecimal downTo, BigDecimal upTo,
-                        NumericDomain.Bounds runs) {
+    record Ends(BigDecimal from, BigDecimal downTo, BigDecimal upTo,
+                NumericDomain.Bounds runs) {
+
+        /**
+         * Whether {@code many} elements standing on these ends can come to {@code total} at all.
+         *
+         * <p>Arithmetic on the ends and nothing else. Every element starts at {@link #from} and may
+         * be moved as far as the end it is moving toward, so the furthest {@code many} of them
+         * reach together is that distance taken {@code many} times — and a total past it is one no
+         * arrangement of that many comes to, whatever the arrangement.
+         *
+         * <p>True where the end it would be moving toward names no value, since an order open that
+         * way puts nothing in the way of reaching any total. And true wherever the sums allow it
+         * without asking whether the values between are the carrier's: what this is asked for is
+         * whether there is nothing to reach, so admitting a total the carrier turns out to refuse
+         * costs a claim of completeness nobody had to make, and denying one it admits would be a
+         * claim of completeness nothing showed.
+         */
+        boolean reaches(BigDecimal total, int many) {
+            BigDecimal owed = total.subtract(from.multiply(BigDecimal.valueOf(many)));
+            if (owed.signum() == 0) {
+                return true;
+            }
+            BigDecimal end = owed.signum() > 0 ? upTo : downTo;
+            return end == null
+                    || owed.abs().compareTo(
+                            end.subtract(from).abs().multiply(BigDecimal.valueOf(many))) <= 0;
+        }
 
         static Ends of(NumericDomain.Bounds runs, Carrier elements) {
             // A value of the carrier that the rules leave, which is the one reader of that question.

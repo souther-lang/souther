@@ -453,8 +453,7 @@ public final class Generator {
                         case ELEMENTS_A_PROPOSAL_HOLDS, CHARACTERS_A_PROPOSAL_HOLDS,
                              PLACES_A_PAIR_IS_TRIED_AT -> NOTHING_COMPOSES_ONE;
                         case PAIRINGS_BUILT_AT_ONCE, ELEMENTS_A_TOTAL_IS_SPREAD_OVER,
-                             SHAPES_OF_A_TOTAL_OFFERED, DECOMPOSITIONS_OF_A_TOTAL_OFFERED,
-                             WAYS_DOWN_TO_A_TOTAL_TRIED,
+                             SHAPES_OF_A_TOTAL_OFFERED, WAYS_DOWN_TO_A_TOTAL_TRIED,
                              STEPS_A_SEARCH_MAY_TAKE, ASSIGNMENTS_A_SEARCH_COMPOSES,
                              VALUES_OF_AN_UNBOUNDED_PROGRESSION_TRIED,
                              LEVELS_A_SIDE_IS_ASKED_AT -> SEARCH_LIMIT;
@@ -2376,6 +2375,41 @@ public final class Generator {
         }
 
         /**
+         * No row came of it, and what this compiler writes of a population is why.
+         *
+         * <p>Beside {@link Stopped} and never one of its shapes. That one was holding a candidate a
+         * figure had no room for, and its word is read off the figures; nothing was refused here,
+         * and there is no number to read a word off or for a reader to raise. Written as a
+         * {@code Stopped} with an empty set of figures, every reader of one would be reading a stop
+         * that never happened.
+         *
+         * <p>The word is the same word all the same. What a reader concludes is that the point is
+         * open because this compiler did not look at everything, which is true of both; what closes
+         * it differs, and that is what travels here.
+         */
+        record Unexhausted(UnresolvedCombination why, java.util.Set<CompositionRepertoire> writes,
+                           List<ReachabilityGap.Uncomposed> unrepresented)
+                implements BoundaryAttempt {
+
+            public Unexhausted {
+                unrepresented = List.copyOf(unrepresented);
+                writes = java.util.Set.copyOf(writes);
+                if (writes.isEmpty()) {
+                    throw new IllegalArgumentException(
+                            "a search that says it saw some of them says some of what");
+                }
+            }
+
+            /** One at the label given, of a search that has something to say about what it saw. */
+            static Unexhausted at(String label, String detail,
+                                  java.util.Set<CompositionRepertoire> writes,
+                                  List<ReachabilityGap.Uncomposed> unrepresented) {
+                return new Unexhausted(new UnresolvedCombination(List.of(label),
+                        UnresolvedCombination.Reason.SEARCH_LIMIT, detail), writes, unrepresented);
+            }
+        }
+
+        /**
          * A search that came to its own answer, over less than the point had.
          *
          * <p><b>Beside {@link Stopped} rather than one of its shapes.</b> A stopped search has no
@@ -2488,6 +2522,9 @@ public final class Generator {
         // two and says nothing about which figure; kept as the word, a refusal that turned out to
         // be this compiler stopping could not say what stopping it cost.
         Map<TermPath, java.util.Set<CompositionBudget>> heldBack = new LinkedHashMap<>();
+        // Beside it and not in it. What one edge did not offer is two facts of two kinds, and a
+        // reader that had them in one map would have to know which of them it could raise.
+        Map<TermPath, java.util.Set<CompositionRepertoire>> writesSomeOf = new LinkedHashMap<>();
         // Where every position of this row stands: the item's, and the ones the way to it bounds.
         // One map, because a row is one row — walked as two, the second was chosen from what the
         // declarations leave and the first from what reaches the border, and only one of them was
@@ -2541,6 +2578,7 @@ public final class Generator {
                 settled.put(at, edge.settledAt());
             }
             heldBack.put(at, edge.stoppedBy());
+            writesSomeOf.put(at, edge.notAllOf());
         }
         List<FixtureTemplate> inputs = new ArrayList<>();
         for (int p = 0; p < subject.parameters().size() && p < subject.types().size(); p++) {
@@ -2578,11 +2616,13 @@ public final class Generator {
             Outcome answered = switch (tried) {
                 // Neither is a search that came back empty over an offer. One named a figure that
                 // stopped it, and one never ran.
-                case Outcome.Built _, Outcome.Stopped _, Outcome.Unplanned _ -> tried;
+                case Outcome.Built _, Outcome.Stopped _, Outcome.Unexhausted _,
+                     Outcome.Unplanned _ -> tried;
                 case Outcome.Unresolved(UnresolvedCombination.Reason word, String said) -> {
                     UnresolvedCombination.Reason itsWord =
                             nothingStoodWhereItWasBuilt(uncertified[0], word);
                     yield whatTheSearchCameTo(whatTheEdgeHeldBack(heldBack, here, itsWord),
+                            whatTheEdgeHeldBack(writesSomeOf, here, itsWord),
                             Set.of(), new Outcome.Unresolved(itsWord, said));
                 }
                 // Taken apart into what the search itself came to and what the plan was short of,
@@ -2594,6 +2634,7 @@ public final class Generator {
                     UnresolvedCombination.Reason itsWord =
                             nothingStoodWhereItWasBuilt(uncertified[0], word);
                     yield whatTheSearchCameTo(whatTheEdgeHeldBack(heldBack, here, itsWord),
+                            whatTheEdgeHeldBack(writesSomeOf, here, itsWord),
                             planCut, new Outcome.Unresolved(itsWord, said));
                 }
             };
@@ -2604,6 +2645,9 @@ public final class Generator {
                                 where.unrepresented());
                 case Outcome.Stopped(Set<CompositionBudget> by, String said) ->
                         BoundaryAttempt.Stopped.at(label, said, by, where.unrepresented());
+                case Outcome.Unexhausted(Set<CompositionRepertoire> writes, String said) ->
+                        BoundaryAttempt.Unexhausted.at(label, said, writes,
+                                where.unrepresented());
                 case Outcome.Limited(UnresolvedCombination.Reason word, String said,
                                      Set<CompositionBudget> by) ->
                         BoundaryAttempt.Limited.at(label, word, said, by, where.unrepresented());
@@ -3556,6 +3600,9 @@ public final class Generator {
                 case Outcome.Stopped stopped -> {
                     return Attempt.no(stopped.why(), stopped.detail());
                 }
+                case Outcome.Unexhausted some -> {
+                    return Attempt.no(some.why(), some.detail());
+                }
                 case Outcome.Limited(UnresolvedCombination.Reason why, String detail,
                                      java.util.Set<CompositionBudget> _) -> {
                     return Attempt.no(why, detail);
@@ -3689,7 +3736,7 @@ public final class Generator {
             // offered at a position the plan stopped short of is whole values of a type it declined
             // to look inside, and none being available is that decision and not a fact about the
             // model.
-            return whatTheSearchCameTo(Set.of(), choices.missingUnderAFigure(),
+            return whatTheSearchCameTo(Set.of(), Set.of(), choices.missingUnderAFigure(),
                     new Outcome.Unresolved(UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
                             choices.missingAt()));
         }
@@ -3730,8 +3777,11 @@ public final class Generator {
                     UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE, null);
             // What each of them was short of, handed over unmerged and unranked. Which of the two
             // a reader is owed is one decision and it is made in one place.
+            // Nothing of a population is short here. What a proposal holds back is a figure of this
+            // compiler's over what it builds, and every value of the kind it does build is one it
+            // would offer.
             case HeldBack.Short(Set<CompositionBudget> offer, Set<CompositionBudget> plans) ->
-                    whatTheSearchCameTo(offer, plans, product);
+                    whatTheSearchCameTo(offer, Set.of(), plans, product);
         };
     }
 
@@ -3748,6 +3798,7 @@ public final class Generator {
      * being told about this compiler's bookkeeping.
      */
     private static Outcome whatTheSearchCameTo(Set<CompositionBudget> offerCut,
+                                               Set<CompositionRepertoire> offerWritesSomeOf,
                                                Set<CompositionBudget> planCut, Outcome came) {
         return switch (came) {
             case Outcome.Unresolved(UnresolvedCombination.Reason why, String detail) -> {
@@ -3757,16 +3808,24 @@ public final class Generator {
                 // the plan being short is not yet anything a reader is owed: raise the offer's
                 // figure and the search may compose a row without the plan changing at all. Said
                 // together, an author is sent to raise a figure that would change nothing.
+                //
+                // Which holds however the offer came to be short of everything, and the two ways it
+                // does are not joined either. One is a figure to raise and one is work nobody has
+                // done, so what outranks the plan is that the offer is incomplete, and what a
+                // reader is then told is which of the two made it so.
                 if (!offerCut.isEmpty()) {
                     yield new Outcome.Stopped(offerCut, detail);
+                }
+                if (!offerWritesSomeOf.isEmpty()) {
+                    yield new Outcome.Unexhausted(offerWritesSomeOf, detail);
                 }
                 yield planCut.isEmpty() ? came : new Outcome.Limited(why, detail, planCut);
             }
             // A search a figure stopped already names one, and nothing here turns that into a
             // second account of the same emptiness. A row stands whatever the plan gave up on, and
             // a value nothing planned had no search for this to be about.
-            case Outcome.Built _, Outcome.Stopped _, Outcome.Limited _, Outcome.Unplanned _ ->
-                    came;
+            case Outcome.Built _, Outcome.Stopped _, Outcome.Unexhausted _, Outcome.Limited _,
+                 Outcome.Unplanned _ -> came;
         };
     }
 
@@ -3783,8 +3842,8 @@ public final class Generator {
      * parameter, and which of their edges the refusal was about is not something this knows; taken
      * from whichever came first, the reason named the wrong position's search.
      */
-    private static Set<CompositionBudget> whatTheEdgeHeldBack(
-            Map<TermPath, Set<CompositionBudget>> heldBack,
+    private static <T> Set<T> whatTheEdgeHeldBack(
+            Map<TermPath, Set<T>> heldBack,
             Map<TermPath, List<FixtureTemplate>> here, UnresolvedCombination.Reason why) {
         if (here.size() != 1 || why != UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED) {
             return Set.of();
@@ -4376,6 +4435,37 @@ public final class Generator {
         }
 
         /**
+         * A search that ran through everything this compiler writes, which is not everything there
+         * is.
+         *
+         * <p><b>Beside {@link Stopped} and never a shape of it.</b> A stopped search was holding a
+         * candidate a figure had no room for, and raising the figure tries it. Nothing was refused
+         * here: what this compiler writes ran out, and what reaches the rest is somebody writing
+         * more of it. Held as one, a reader is sent to raise a number that changes nothing.
+         *
+         * <p>The word is the same word, and that is not the two being one thing. What a reader
+         * concludes is alike — the point is open because this compiler did not look at everything —
+         * and what closes it is not, which is why the populations travel rather than the word alone.
+         */
+        record Unexhausted(Set<CompositionRepertoire> notAllOf, String detail)
+                implements Outcome {
+
+            public Unexhausted {
+                notAllOf = Set.copyOf(notAllOf);
+                if (notAllOf.isEmpty()) {
+                    throw new IllegalArgumentException(
+                            "a search that says it saw some of them says some of what");
+                }
+            }
+
+            /** The word such a search comes back with, which says the point is open on this
+             *  compiler and names nothing to raise. */
+            UnresolvedCombination.Reason why() {
+                return UnresolvedCombination.Reason.SEARCH_LIMIT;
+            }
+        }
+
+        /**
          * No search was run: the value could not be planned.
          *
          * <p>No word, because a word here is a search's answer and none was made. The one thing
@@ -4590,6 +4680,25 @@ public final class Generator {
             return switch (came) {
                 case TermRealizations.Realization.Built built -> built.heldBack();
                 case TermRealizations.Realization.Stopped stopped -> stopped.by();
+                case TermRealizations.Realization.Unexhausted _,
+                     TermRealizations.Realization.None _ -> java.util.Set.of();
+            };
+        }
+
+        /**
+         * What this edge holds some of rather than all of, and empty where it holds all of what
+         * there is.
+         *
+         * <p>Beside {@link #stoppedBy()} and never folded into it. Both say the edge is not
+         * everything there is, and only one of them is a number somebody could raise — so a reader
+         * handed one set would raise what it could of it and read the rest as work it had already
+         * asked for.
+         */
+        java.util.Set<CompositionRepertoire> notAllOf() {
+            return switch (came) {
+                case TermRealizations.Realization.Built built -> built.notAllOf();
+                case TermRealizations.Realization.Stopped stopped -> stopped.notAllOf();
+                case TermRealizations.Realization.Unexhausted some -> some.notAllOf();
                 case TermRealizations.Realization.None _ -> java.util.Set.of();
             };
         }
@@ -4602,7 +4711,12 @@ public final class Generator {
          * would be telling them apart by what the sentence does not say.
          */
         String detail() {
-            return came instanceof TermRealizations.Realization.None none ? none.detail() : null;
+            return switch (came) {
+                case TermRealizations.Realization.None none -> none.detail();
+                case TermRealizations.Realization.Unexhausted some -> some.detail();
+                case TermRealizations.Realization.Built _,
+                     TermRealizations.Realization.Stopped _ -> null;
+            };
         }
 
         /** What to report where no value was offered here at all. */
@@ -4611,6 +4725,12 @@ public final class Generator {
                 case TermRealizations.Realization.None none -> none.why();
                 case TermRealizations.Realization.Stopped stopped ->
                         UnresolvedCombination.Reason.wordFor(stopped.by());
+                // The same word a figure comes back with, and for the same reason a reader has: the
+                // point is open because this compiler did not look at everything, not because the
+                // model answered. What differs is what would close it, which is the sentence beside
+                // the word and not the word.
+                case TermRealizations.Realization.Unexhausted _ ->
+                        UnresolvedCombination.Reason.SEARCH_LIMIT;
                 case TermRealizations.Realization.Built _ -> throw new IllegalStateException(
                         "an edge that offered values asked why it offered none");
             };
@@ -4622,10 +4742,17 @@ public final class Generator {
          * <p>Not always that they were refused. Where the values are some of the values and the rest
          * were never built, the search stopping is the more of the two facts, and the one a reader
          * would act on: another value of this edge may be the one that builds.
+         *
+         * <p>Which holds however the rest came to be unbuilt. A figure that refused one and a
+         * population this writes some of leave the same thing untried, and a reader told every value
+         * was refused would be acting on a walk that never wrote most of them.
          */
         UnresolvedCombination.Reason refused() {
-            return stoppedBy().isEmpty() ? UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED
-                    : UnresolvedCombination.Reason.wordFor(stoppedBy());
+            if (!stoppedBy().isEmpty()) {
+                return UnresolvedCombination.Reason.wordFor(stoppedBy());
+            }
+            return notAllOf().isEmpty() ? UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED
+                    : UnresolvedCombination.Reason.SEARCH_LIMIT;
         }
     }
 

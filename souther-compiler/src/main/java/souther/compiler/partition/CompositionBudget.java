@@ -32,12 +32,12 @@ package souther.compiler.partition;
  * leaves the point unestablished, and one that had produced something leaves an offer that is some
  * of what there was — so the same member appears on both sides and is neither of them.
  *
- * <p><b>Every figure is written down here, and none is the size of the walk it bounds.</b> What a
- * walk has to offer and how many of them it may take are two decisions somebody makes separately:
- * writing a third way of doing something is work, and letting the walk go on to it is a number. Set
- * to the size of the walk, a figure is reached on every run and on none — it says what this compiler
- * is made of rather than what one search declined — and a reader handed it is told to raise
- * something that stopped nothing.
+ * <p><b>Every figure is written down here, and none is the size of the walk it bounds.</b> A figure
+ * set to how many pieces a walk has is reached on every run and on none: it says what this compiler
+ * is made of rather than what one search declined, and a reader handed it is told to raise something
+ * that stopped nothing. What such a number was saying belongs to
+ * {@link CompositionRepertoire}, which is a population this compiler offers some of and is not a
+ * number anybody raises.
  */
 public enum CompositionBudget {
 
@@ -69,18 +69,6 @@ public enum CompositionBudget {
      *  charging one to the other leaves a case never tried because an earlier one planned and built
      *  nothing. What multiplies here is the cases of every sum the way down crosses. */
     WAYS_DOWN_TO_A_TOTAL_TRIED(8),
-
-    /**
-     * How many ways the difference between a starting point and a total is spread over the elements
-     * this walks to.
-     *
-     * <p>Written down, and not the number of them there are to walk to. The shapes a decomposition
-     * takes are what somebody implemented and this is how far along them a search goes, and a third
-     * shape written is a value that gets offered only when somebody also decides it is worth the
-     * walk. Read off the shapes instead, the two would be one edit — and this would be a figure
-     * every total reached, naming what this compiler has rather than what one search left.
-     */
-    DECOMPOSITIONS_OF_A_TOTAL_OFFERED(2),
 
     /** How many places along a line a pair is tried at. What a range cannot say is that one of its
      *  values is missing, so what stepping past this walks over is holes, and there are as many of

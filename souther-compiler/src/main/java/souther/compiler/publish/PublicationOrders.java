@@ -5,6 +5,7 @@ import souther.compiler.diag.Citation;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.RunSensitivity;
 import souther.compiler.partition.CompositionBudget;
+import souther.compiler.partition.CompositionRepertoire;
 import souther.compiler.partition.ReadingGap;
 import souther.compiler.query.EstablishmentGap;
 import souther.compiler.query.ItemAssessment;
@@ -232,7 +233,6 @@ public final class PublicationOrders {
                     CompositionBudget.PAIRINGS_BUILT_AT_ONCE,
                     CompositionBudget.ELEMENTS_A_TOTAL_IS_SPREAD_OVER,
                     CompositionBudget.SHAPES_OF_A_TOTAL_OFFERED,
-                    CompositionBudget.DECOMPOSITIONS_OF_A_TOTAL_OFFERED,
                     CompositionBudget.WAYS_DOWN_TO_A_TOTAL_TRIED,
                     CompositionBudget.VALUES_OF_AN_UNBOUNDED_PROGRESSION_TRIED,
                     CompositionBudget.PLACES_A_PAIR_IS_TRIED_AT,
@@ -242,6 +242,17 @@ public final class PublicationOrders {
                     CompositionBudget.TIMES_THE_RULES_ARE_ASKED_AGAIN,
                     CompositionBudget.STEPS_A_SEARCH_MAY_TAKE,
                     CompositionBudget.DEPTH_A_CONSTRUCTION_PLAN_DESCENDS));
+
+    /**
+     * What this compiler writes some of rather than all of, in the order a reader meets them.
+     *
+     * <p>Its own order and not the figures'. Reaching a figure and writing some of a population are
+     * different things to be told — one is a number to raise and the other is work nobody has done
+     * — so an order over the two together would be arranging a sentence out of two vocabularies.
+     */
+    public static final CanonicalSelection.Order<CompositionRepertoire> COMPOSITION_REPERTOIRES =
+            CanonicalSelection.Order.overValues(
+                    List.of(CompositionRepertoire.WAYS_A_TOTAL_IS_SPREAD));
 
     /**
      * What stopped this compiler showing a row can be written, by how far it had got.

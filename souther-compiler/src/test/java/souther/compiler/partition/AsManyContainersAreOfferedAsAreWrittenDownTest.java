@@ -83,12 +83,13 @@ class AsManyContainersAreOfferedAsAreWrittenDownTest {
         TermRealizations.Realization.Built built =
                 assertInstanceOf(TermRealizations.Realization.Built.class, offering());
 
-        assertEquals(Set.of(CompositionBudget.SHAPES_OF_A_TOTAL_OFFERED,
-                        CompositionBudget.DECOMPOSITIONS_OF_A_TOTAL_OFFERED),
-                built.heldBack(),
-                "the walk had a fifth container and no room for it, and offered two of the ways a"
-                        + " count of two is spread — and a reader told every container had been"
-                        + " refused would act on a walk that never made them");
+        assertEquals(Set.of(CompositionBudget.SHAPES_OF_A_TOTAL_OFFERED), built.heldBack(),
+                "the walk had a fifth container and no room for it, which is the figure a reader"
+                        + " raises — and the counts above the one it reached were never asked for,"
+                        + " so no figure over them took anything away");
+        assertEquals(Set.of(CompositionRepertoire.WAYS_A_TOTAL_IS_SPREAD), built.notAllOf(),
+                "and the ways a count of more than one element is spread are two of the many,"
+                        + " which is not a number anybody raises and is said apart from one");
         assertEquals(Generator.UnresolvedCombination.Reason.SEARCH_LIMIT,
                 Generator.UnresolvedCombination.Reason.wordFor(built.heldBack()),
                 "and the word such a walk has always come back with is the one it comes back with");
