@@ -113,6 +113,15 @@ final class Predicates {
             return;
         }
         Core e = Conditions.asSizeComparison(raw);
+        // A clause under a binding states what the clause states, read where its names mean
+        // something — the same rule the obligations of this clause are read under, and applied here
+        // because the two are read out of one clause. Stopping here alone, a quantifier an author
+        // stated through a helper was owed by the one reading and unknown to the other, which is a
+        // guarantee assembled from a clause read to two depths.
+        if (e instanceof Core.LetIn li) {
+            quantifiedBy(li.body(), terms.inside(li, at), positive, out, parts);
+            return;
+        }
         if (e instanceof Core.Binary b
                 && ConditionJoin.of(b.op()).map(join -> join.under(positive)).orElse(null)
                         == ConditionJoin.BOTH) {
@@ -144,14 +153,36 @@ final class Predicates {
         out.add(new Quantified(container, carried.through(), over.step()));
     }
 
-    /** Whether {@code e} is, or names, one of {@code values}. */
-    static boolean names(Core e, Set<Core> values) {
-        if (values.contains(e)) {
+    /**
+     * Whether {@code e} is, or names, one of the values {@code handed} stands for.
+     *
+     * <p>Asked of what each part of {@code e} denotes and not of the tree it is written as. The
+     * values a site hands over stand in the clause, and a binding may stand between: an expansion
+     * leaves {@code let $n = <value> in ...}, and what is written where the value was is a read of
+     * the binder. Matched by the node, the clause a helper states came out naming none of them,
+     * while the same clause written out named one — so a value no guard can be written about was
+     * owed a guard for having been reached through a helper.
+     *
+     * <p>Which is the identity question every other reader here asks by subject, and it is asked the
+     * same way: a binding is entered as what it was given ({@link Terms#inside}), so a read of the
+     * binder is the value it was given, and the two spellings name the same thing.
+     */
+    private boolean names(Core e, Set<FactSubject> handed, Denotations at) {
+        if (handed.contains(terms.subjectOf(e, at))) {
             return true;
         }
         boolean[] found = {false};
-        Core.forEachChild(e, child -> found[0] = found[0] || names(child, values));
+        Core.forEachChild(e, child -> found[0] = found[0] || names(child, handed, at));
         return found[0];
+    }
+
+    /** What each of {@code values} is, where the site that hands them over stands. */
+    private Set<FactSubject> handedOver(Set<Core> values, Denotations at) {
+        Set<FactSubject> out = new java.util.LinkedHashSet<>();
+        for (Core value : values) {
+            out.add(terms.subjectOf(value, at));
+        }
+        return out;
     }
 
     /**
@@ -663,8 +694,10 @@ final class Predicates {
      * clause may be read against. */
     Owed obligations(Core inv, Known k, Denotations at, Set<Core> unnamed,
                      boolean decidesFalse) {
-        return obligations(inv, at, unnamed, true, decidesFalse, Discharge.spending(k), null,
-                PartsToRead.ALL);
+        // What each handed-over value is, worked out once and where the site stands. Read again
+        // further down, a value under a binding would be asked about at names the site never had.
+        return obligations(inv, at, handedOver(unnamed, at), true, decidesFalse,
+                Discharge.spending(k), null, PartsToRead.ALL);
     }
 
     /**
@@ -674,7 +707,7 @@ final class Predicates {
      * name is one thing, and the date a day after it is another — so the one that answers is the one
      * taken. Reading a predicate never takes a reading away.
      */
-    private Owed obligations(Core rawInv, Denotations at, Set<Core> unnamed,
+    private Owed obligations(Core rawInv, Denotations at, Set<FactSubject> unnamed,
                              boolean positive, boolean decidesFalse, Discharge discharge,
                              PerPart per, PartsToRead parts) {
         // A clause of one conjunct is that conjunct, so a caller leaving it out leaves out the
@@ -695,7 +728,7 @@ final class Predicates {
 
     /** What {@code inv} owes, read as it stands. Its parts are read through {@link #obligations},
      * which is where each of them is taken as the comparison it states. */
-    private Owed read(Core inv, Denotations at, Set<Core> unnamed,
+    private Owed read(Core inv, Denotations at, Set<FactSubject> unnamed,
                       boolean positive, boolean decidesFalse, Discharge discharge,
                       PerPart per, PartsToRead parts) {
         // A clause under a binding states what the clause states, read where its names mean
@@ -757,7 +790,7 @@ final class Predicates {
     /** What a clause that states no comparison owes: it may fold, and it may be a predicate a guard
      *  settles by name. Stated as itself, because a condition that is not a comparison is the one
      *  value it names. */
-    private Owed owedBy(Core inv, Denotations at, Set<Core> unnamed, boolean positive,
+    private Owed owedBy(Core inv, Denotations at, Set<FactSubject> unnamed, boolean positive,
                         boolean decidesFalse) {
         Boolean folded = decidedAt(inv);
         Owed decided = decidedBy(folded, positive, decidesFalse);
@@ -768,7 +801,7 @@ final class Predicates {
 
     /** What a clause owes where it states {@code stated}, with {@code inv} the expression the caller
      *  was handed and so the one a report about the clause names. */
-    private Owed owedBy(StatedComparison stated, Core inv, Denotations at, Set<Core> unnamed,
+    private Owed owedBy(StatedComparison stated, Core inv, Denotations at, Set<FactSubject> unnamed,
                         boolean positive, boolean decidesFalse, Discharge discharge) {
         Boolean folded = decidedAt(stated);
         Owed decided = decidedBy(folded, positive, decidesFalse);
@@ -804,11 +837,11 @@ final class Predicates {
      * this reading composed stands nowhere and would name a comparison nobody can be shown.
      */
     private Owed owing(Core where, Fold fold, NumericConstraint numeric, Piecewise piecewise,
-                       Conditions.Polar polar, Set<Core> unnamed, Denotations at) {
+                       Conditions.Polar polar, Set<FactSubject> unnamed, Denotations at) {
         // A predicate over a value no guard could be written about is not a predicate a guard will
         // settle, so it is not owed as one — where the domain can say something of that value it has
         // already said it above, and where it cannot the run-time check stands for the clause.
-        List<FactSubject> keys = !unnamed.isEmpty() && names(polar.expr(), unnamed)
+        List<FactSubject> keys = !unnamed.isEmpty() && names(polar.expr(), unnamed, at)
                 ? List.of() : factKeys(polar.expr(), at);
         boolean stated = polar.positive();
         Fact fact = keys.isEmpty() ? null : new Fact(stated ? keys : firstOnly(keys), stated);

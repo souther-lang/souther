@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -78,9 +79,26 @@ class ARuleReachedThroughAHelperIsReadAsTheOneWrittenOutTest {
                         let holds (p: (Int) -> Bool, n: Int) = p(n)
                         """,
                         "holds(atLeastOne, value)"),
-                new Spelling("through a helper naming nothing about the value",
-                        "let alwaysSo (n: Int) = 2 >= 1",
-                        "alwaysSo(value) && value >= 1"));
+                // The rule under two bindings, one of which the body never reads. What a name means
+                // is what it was given, and a name nothing reads means nothing to this check — so
+                // entering it changes what is known about the rule not at all, and the reading below
+                // is the same reading.
+                new Spelling("through a helper given more than it reads",
+                        "let atLeastOne (n: Int, ignored: Int) = n >= 1",
+                        "atLeastOne(value, 0)"),
+                // And the helper inside the comparison rather than around it, which is a binding
+                // standing where a value goes rather than where a clause does. What the shape of a
+                // clause is made of stops at the comparison, so nothing above this reaches the
+                // binding — it is the naming of the operand that has to go inside it.
+                new Spelling("through a helper standing in the operand",
+                        "let itself (n: Int) = n",
+                        "value >= itself(1)"),
+                new Spelling("through a helper of a helper in the operand",
+                        """
+                        let itself (n: Int) = n
+                        let alsoItself (n: Int) = itself(n)
+                        """,
+                        "value >= alsoItself(1)"));
     }
 
     /** The module, with {@code guard} deciding what is known where the construction stands. */
@@ -120,6 +138,36 @@ class ARuleReachedThroughAHelperIsReadAsTheOneWrittenOutTest {
     void aConstructionTheGuardsAllowIsBuilt(Spelling spelling) {
         assertDoesNotThrow(() -> Compiler.compile(module(spelling, "n >= 1")),
                 "the rule holds of every value that reaches the construction");
+    }
+
+    /**
+     * A value no guard can be written about is owed nothing, whichever way the rule reaches it.
+     *
+     * <p>The other direction, and the one entering a binding can get wrong. What a behavior answers
+     * is a value this check can point at and no author can write a guard about, so a clause read
+     * against it is left to the run-time check rather than owed. Which value a site handed over is
+     * asked by what the clause names — and a binding stands between the clause and the value, so an
+     * answer taken from the tree finds none of them and owes a guard nobody can write.
+     */
+    @ParameterizedTest
+    @MethodSource("spellings")
+    void aValueNoGuardCanNameIsOwedNothing(Spelling spelling) {
+        assertEquals(List.<Object>of(), List.copyOf(Compiler.compileWithWarnings("""
+                module demo
+
+                %s
+
+                data Pos = Int
+                    invariant %s
+
+                behavior step : (n: Int) -> Int
+
+                behavior go : (n: Int) -> Pos
+                    constructs Pos
+                    depends on step
+                let go (n, step) = Pos(step(n))
+                """.formatted(spelling.helpers(), spelling.clause())).warnings()),
+                "nothing is owed of a value no guard could settle");
     }
 
     /**

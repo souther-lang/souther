@@ -131,7 +131,6 @@ class ATermsHashIsTakenFromValuesAndNotFromIdentitiesTest {
                 interned.part(one, 0),
                 interned.choice(one, one, one),
                 interned.closure(1, one),
-                interned.let(one, one),
                 interned.built(data, List.of("f"), List.of(one)),
                 interned.called(new ValueName.Helper("m", "f"), List.of(one)),
                 evaluated,

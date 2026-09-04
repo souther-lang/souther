@@ -2102,15 +2102,18 @@ final class Terms {
                 yield named(naming(b.body(), at, inner, depth + 1, leaf),
                         body -> interned.closure(b.params().size(), body));
             }
-            case Core.LetIn li -> {
-                Naming value = naming(li.value(), at, bound, depth, leaf);
-                if (value instanceof Naming.Unnamed absent) {
-                    yield absent;
-                }
-                Map<BindingId, Term> inner = binding(bound, List.of(li.binder()), depth);
-                yield named(naming(li.body(), at, inner, depth + 1, leaf),
-                        body -> interned.let(value.term(), body));
-            }
+            // A binding is named by what its body is named, read inside it. What a name means is the
+            // environment's answer (ADR-0106), and {@link #inside} is where that is settled — so
+            // `id(lo)`, which an expansion leaves as a binding over a read of it, is the term `lo`
+            // is, and a rule written through a helper is about the position the same rule written
+            // out is about.
+            //
+            // Named as a shape of its own instead, the binding was a term nothing else equalled:
+            // the very defect the environment already avoids one level down (#676), reappearing
+            // where the expression is named rather than where the fact is filed. The parameter's
+            // reads went through the de Bruijn map below, which is what a closure needs — a lambda's
+            // parameter stands for no value — and what a binding does not.
+            case Core.LetIn li -> naming(li.body(), inside(li, at), bound, depth, leaf);
             // A construction is a pure function of its fields, and a closure that builds one is what a
             // mapping usually is. The fields are held in declaration order, so two sites writing them
             // in different orders — or one of them through a spread — write one term.

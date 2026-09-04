@@ -7,10 +7,15 @@ import souther.compiler.query.Scopes;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeSymbols;
+import souther.compiler.values.UnreadReason;
 
+import java.util.Arrays;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -78,6 +83,56 @@ class WhatAStandingQuestionIsAccountedForByTest {
                     || x == "A"
             """;
 
+    /**
+     * A rule relating two positions, written out and reached through a helper standing in one of
+     * its operands.
+     *
+     * <p>What the reading recognised is what tells a relation from a form it has no word for, so
+     * a binding it did not go inside turned {@code hi >= lo} into a shape nothing reads — and an
+     * author was sent after the form of a rule whose form was never the matter. Here because it is
+     * the account rather than the verdict that moves: both spellings leave the position open either
+     * way, and only the reason says which.
+     */
+    private static final String A_RELATION_WRITTEN_OUT = """
+            module demo
+
+            data N =
+                { lo: Int
+                , hi: Int
+                }
+                invariant hi >= lo
+            """;
+
+    private static final String THE_SAME_RELATION_THROUGH_A_HELPER = """
+            module demo
+
+            let itself (n: Int) = n
+
+            data N =
+                { lo: Int
+                , hi: Int
+                }
+                invariant hi >= itself(lo)
+            """;
+
+    @Test
+    void aRelationIsOneWhicheverSideReachesItThroughAHelper() {
+        assertEquals(souther.compiler.values.UnreadReason.RELATES_TWO_POSITIONS,
+                whyWider(A_RELATION_WRITTEN_OUT, "lo"),
+                "both sides are recognised, so the rule relates two positions");
+        assertEquals(whyWider(A_RELATION_WRITTEN_OUT, "lo"),
+                whyWider(THE_SAME_RELATION_THROUGH_A_HELPER, "lo"),
+                "and a binding standing in an operand is not a form nothing reads");
+    }
+
+    /** What the values reading was left short by at one name. */
+    private static souther.compiler.values.UnreadReason whyWider(String source, String field) {
+        return ((souther.compiler.values.AdmissibleSet.Widening.RuleUnread)
+                ((souther.compiler.values.AdmissibleSet.Completeness.Wider)
+                        read(source).admits(RuleKey.of(field)).completeness())
+                        .why().iterator().next()).why();
+    }
+
     @Test
     void aFormNoReadingTakesApartIsTheReadingsOwnAccount() {
         assertEquals(Map.of("invariant N #1 at range.max", "TheValueReadingSays"),
@@ -101,6 +156,32 @@ class WhatAStandingQuestionIsAccountedForByTest {
     void anAnswerBeyondTheAllowanceIsAccountedForByNoReading() {
         assertEquals(Map.of("invariant N (r) at y", "NothingTookItIn"),
                 whyStanding(AN_ANSWER_BEYOND_THE_ALLOWANCE));
+    }
+
+    /**
+     * And what may stand in for a rule's own account is the answer, and nothing else.
+     *
+     * <p>The negative control on the refusal. A reason is about a rule, about the answer, or about
+     * neither, and only the second is an account of a question the rule left standing: the third is
+     * a reading that never reached the position, which accounts for nothing — as its name says.
+     *
+     * <p>Enumerated from {@link UnreadReason} rather than listed, so a reason added to either of the
+     * other two cannot quietly become an account by being written where this one is not looking.
+     * Asked of the classification because that is what the refusal asks: written as "not about a
+     * rule", one of the third kind at the name would stand in for an account that is not there.
+     */
+    @Test
+    void onlyAReasonAboutTheAnswerStandsInForARulesOwnAccount() {
+        assertEquals(Set.of(UnreadReason.EXACT_VALUES_TOO_COSTLY),
+                Arrays.stream(UnreadReason.values())
+                        .filter(each -> each.about() == UnreadReason.About.THE_ANSWER)
+                        .collect(Collectors.toCollection(LinkedHashSet::new)),
+                "what may account for a standing question without naming a rule");
+        assertEquals(Set.of(UnreadReason.NOT_REACHED, UnreadReason.NOT_REACHED_PAST_DEPTH_LIMIT),
+                Arrays.stream(UnreadReason.values())
+                        .filter(each -> each.about() == UnreadReason.About.NEITHER)
+                        .collect(Collectors.toCollection(LinkedHashSet::new)),
+                "and what accounts for nothing, which the refusal must not take for the above");
     }
 
     /** What became of every question of every rule that nothing answered. */
