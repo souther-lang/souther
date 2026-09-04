@@ -548,7 +548,6 @@ public final class Analyzer {
             return List.of();
         }
         Adequacy.Of adequacy = compilation.adequacy(module);
-        LineIndex lines = new LineIndex(graph.text(uri));
         List<CodeLens> out = new ArrayList<>();
         for (Hir.BehaviorDef behavior : written.behaviors()) {
             // A module's declarations need not all be in this document, and a line number from
@@ -767,7 +766,6 @@ public final class Analyzer {
         if (written == null) {
             return List.of();
         }
-        LineIndex lines = new LineIndex(text);
         for (Hir.BehaviorDef behavior : written.behaviors()) {
             if (!isWrittenIn(behavior, uri, graph)
                     || !overlaps(pointRange(behavior.pos()), requested)) {

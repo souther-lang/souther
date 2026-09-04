@@ -147,7 +147,6 @@ public final class GuardThresholds {
                             souther.compiler.check.ElementBindings elements,
                             souther.compiler.check.PathReachability.Answers arrives) {
         InputDomain inputs = read.domain();
-        Symbols symbols = read.symbols();
         List<LineEvidence> found = new ArrayList<>();
         RulesWithNoLine.Gathered withoutALine = new RulesWithNoLine.Gathered();
         List<LineDrawn> between = new ArrayList<>();
