@@ -23,6 +23,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -72,8 +73,16 @@ class WhatADotMayNameIsOneAnswerForEveryReaderOfItTest {
     private static final Compilation COMPILATION = compiled();
 
     private final Symbols symbols = Scopes.derived(COMPILATION.db(), "demo").value();
-    private final FieldTypes world =
-            ExampleExecutions.of(COMPILATION.db(), "demo").fieldTypes();
+
+    /**
+     * The surface is read against the declarations as this text resolves them, and not against what
+     * the check settled.
+     *
+     * <p>Because the surface is what a check goes on. A reading held to an accepted program would be
+     * a reading of what this answer already decided, so a change here that stopped a model compiling
+     * would come back as a setup that could not be built rather than as the surface that moved.
+     */
+    private final FieldTypes world = new ResolvedFieldTypes(symbols);
     private final FieldRead read = new FieldRead(symbols, world);
 
     // --- what one position makes readable -------------------------------------------------------
@@ -158,7 +167,12 @@ class WhatADotMayNameIsOneAnswerForEveryReaderOfItTest {
      */
     @Test
     void thePeopleWhoCrossADotAnswerTheSameThing() {
-        Type declared = new DeclaredTypeEvidence(symbols, world, definitions())
+        // Held to what the check settled, because these are readers of an accepted program and that
+        // is the world they are handed.
+        assertNotNull(ExampleExecutions.of(COMPILATION.db(), "demo"),
+                "the model under test is accepted, or these readers have no program to read");
+        FieldTypes checked = ExampleExecutions.of(COMPILATION.db(), "demo").fieldTypes();
+        Type declared = new DeclaredTypeEvidence(symbols, checked, definitions())
                 .declaredTypeOf(bodyOf("taken"));
         assertEquals(Type.STRING, declared,
                 "the walk over the declarations says `held.deal.id` is a `String`");
