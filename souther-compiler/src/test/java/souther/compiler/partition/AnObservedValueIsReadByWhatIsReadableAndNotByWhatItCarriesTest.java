@@ -139,14 +139,25 @@ class AnObservedValueIsReadByWhatIsReadableAndNotByWhatItCarriesTest {
     }
 
     /**
-     * The two models come back with the same values.
+     * The two models come back with the same values, each having answered with the row's own first.
      *
      * <p>Which is the whole of what the sum was supposed not to change: a total read through a name
      * the cases share is the same run of numbers as one read off the element, and every question
      * about the line follows from the run.
+     *
+     * <p><b>Each held to the number in the row before they are put beside each other.</b> Two walks
+     * that both came back with nothing are equal, so a comparison alone would go on passing over the
+     * defect this is about — the model with the amount on the element is the shape that always
+     * worked and is not the answer either of them is checked against.
      */
     @Test
     void aSpreadNameReadsLikeOneDeclaredOnTheElement() {
+        List<ObservedValue> written = List.of(new ObservedValue.Integer(6));
+
+        assertEquals(written, read(SPREAD, List.of(card(6)), amount()),
+                "the run holds the number the row wrote at the name the cases spread");
+        assertEquals(written, read(ON_THE_ELEMENT, List.of(onTheElement(6)), amount()),
+                "and the same number where the element declares it");
         assertEquals(read(ON_THE_ELEMENT, List.of(onTheElement(6)), amount()),
                 read(SPREAD, List.of(card(6)), amount()),
                 "the cases spreading the name change nothing about what a run of it holds");

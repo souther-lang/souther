@@ -11,7 +11,6 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 
 /**
  * A total whose values are read through a name every case of a sum spreads is measured from a run of
@@ -128,21 +127,30 @@ class ATotalReadThroughANameEveryCaseSpreadsIsMeasuredFromARunTest {
     }
 
     /**
-     * And nothing about the line is left undecided.
+     * And no point of the line is one this compiler could not look at, whatever the points are.
      *
      * <p>The other half of what a point that was not met can be. An owed point says the model has
-     * nothing there; an undecided one says this compiler could not look — and the walk that could not
-     * look is what put every point of this line into the second while a row sat on one of them.
+     * nothing there; an undecided one says this compiler could not look — and the walk that could
+     * not look is what put every point of this line into the second while a row sat on one of them.
+     *
+     * <p>Said of the mark and not of the sentence. Which of the two a point is is what the mark
+     * carries, and a check written against the words would go green the day either sentence is
+     * reworded, over a line every point of which had gone back to being undecidable. And said of
+     * whatever the border holds rather than of the three above: this is the property the line has,
+     * where the list is what this model happens to owe.
      */
     @Test
     void noPointOfTheLineIsLeftUndecided() {
         String report = report(SPREAD);
 
-        assertFalse(report.contains("the walk reached no value there to read"),
-                () -> "the run is read through the name the cases spread: " + report);
-        assertFalse(report.contains("undecided whether a row is at"),
-                () -> "so no point of the line is one this compiler could not look at: " + report);
+        assertEquals(List.of(), borderGapsIn(report).stream()
+                        .filter(each -> each.startsWith(UNDECIDED)).toList(),
+                () -> "every point the line is short of is one the model owes a row at: " + report);
     }
+
+    /** How a report marks a point it could not be told about, beside {@code !} for one that is
+     *  owed. */
+    private static final String UNDECIDED = "?";
 
     /**
      * And the model that puts the amount on the element comes to the same thing.
