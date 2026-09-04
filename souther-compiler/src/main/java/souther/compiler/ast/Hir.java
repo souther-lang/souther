@@ -223,6 +223,7 @@ public interface Hir {
         }
 
         /** Where the name is written, or where a synthesized one is anchored. */
+        @Override
         default SourcePos pos() {
             return name().pos();
         }
@@ -496,6 +497,7 @@ public interface Hir {
         }
 
         /** Where the entry is written. */
+        @Override
         public SourcePos pos() {
             return written.pos();
         }
@@ -517,6 +519,7 @@ public interface Hir {
             return written().canonical();
         }
 
+        @Override
         SourcePos pos();
     }
 
@@ -568,6 +571,7 @@ public interface Hir {
         }
 
         /** Where the name is written. */
+        @Override
         public SourcePos pos() {
             return written.pos();
         }
@@ -896,6 +900,7 @@ public interface Hir {
             return written().authored() ? written().pos() : null;
         }
 
+        @Override
         SourcePos pos();
     }
 
@@ -985,6 +990,7 @@ public interface Hir {
         }
 
         /** Where the name is written. */
+        @Override
         public SourcePos pos() {
             return written.pos();
         }
@@ -1184,6 +1190,7 @@ public interface Hir {
         }
 
         /** Where the field name is written. */
+        @Override
         public SourcePos pos() {
             return written.pos();
         }
@@ -1858,6 +1865,7 @@ public interface Hir {
         }
 
         /** Where the name is written. */
+        @Override
         default SourcePos pos() {
             return written().pos();
         }

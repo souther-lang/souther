@@ -406,13 +406,18 @@
                                      spelling;
                                      StringSplitter — its remedy is Guava's `Splitter`, and what is
                                      left splits on a delimiter, where dropping what follows the
-                                     last one is the reading wanted. -->
+                                     last one is the reading wanted;
+                                     UnnecessaryParentheses — what is left is `"$p" + (n++)`, where
+                                     the parentheses are how the increment is seen;
+                                     BooleanLiteral — what is left stands where an `Object` goes,
+                                     and `false` there is not `Boolean.FALSE` but a value a ternary
+                                     will promote to a number. -->
                                 <!-- Errors, because each is cheap to answer and silent to miss:
-                                     ObjectToString, DuplicateBranches, UnusedVariable, UnusedMethod
-                                     and SameNameButDifferent. The last is not against writing one
-                                     name for one distinction at two levels — it is against a use
-                                     that does not say which of them it means. -->
-                                <arg>-Xplugin:ErrorProne -Xep:UnicodeInCode:OFF -Xep:BadInstanceof:OFF -Xep:ReferenceEquality:OFF -Xep:StringSplitter:OFF -Xep:RemoveUnusedImports:ERROR -Xep:ObjectToString:ERROR -Xep:DuplicateBranches:ERROR -Xep:UnusedVariable:ERROR -Xep:UnusedMethod:ERROR -Xep:SameNameButDifferent:ERROR ${nullaway.args}</arg>
+                                     ObjectToString, DuplicateBranches, UnusedVariable, UnusedMethod,
+                                     SameNameButDifferent and MissingOverride. The name check is not
+                                     against writing one name for one distinction at two levels — it
+                                     is against a use that does not say which of them it means. -->
+                                <arg>-Xplugin:ErrorProne -Xep:UnicodeInCode:OFF -Xep:BadInstanceof:OFF -Xep:ReferenceEquality:OFF -Xep:StringSplitter:OFF -Xep:UnnecessaryParentheses:OFF -Xep:BooleanLiteral:OFF -Xep:RemoveUnusedImports:ERROR -Xep:ObjectToString:ERROR -Xep:DuplicateBranches:ERROR -Xep:UnusedVariable:ERROR -Xep:UnusedMethod:ERROR -Xep:SameNameButDifferent:ERROR -Xep:MissingOverride:ERROR ${nullaway.args}</arg>
                             </compilerArgs>
                             <annotationProcessorPaths>
                                 <path>

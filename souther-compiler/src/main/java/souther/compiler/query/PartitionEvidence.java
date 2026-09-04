@@ -168,6 +168,7 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
          * whether anything worked either of those out are the question's own answers, and a reader
          * that needs one of them asks the question rather than a projection of it made here.
          */
+        @Override
         public StandingQuestion asked() {
             return asked;
         }

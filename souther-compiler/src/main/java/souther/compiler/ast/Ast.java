@@ -316,6 +316,7 @@ public interface Ast {
         }
 
         /** Where the entry is written. */
+        @Override
         public SourcePos pos() {
             return written.pos();
         }
@@ -337,6 +338,7 @@ public interface Ast {
             return written().canonical();
         }
 
+        @Override
         SourcePos pos();
     }
 
@@ -384,6 +386,7 @@ public interface Ast {
         }
 
         /** Where the name is written. */
+        @Override
         public SourcePos pos() {
             return written.pos();
         }
@@ -661,6 +664,7 @@ public interface Ast {
             return written().authored() ? written().pos() : null;
         }
 
+        @Override
         SourcePos pos();
     }
 
@@ -733,6 +737,7 @@ public interface Ast {
         }
 
         /** Where the name is written. */
+        @Override
         public SourcePos pos() {
             return written.pos();
         }
@@ -806,6 +811,7 @@ public interface Ast {
         }
 
         /** Where the field name is written. */
+        @Override
         public SourcePos pos() {
             return written.pos();
         }

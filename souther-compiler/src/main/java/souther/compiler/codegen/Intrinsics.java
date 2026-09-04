@@ -127,6 +127,7 @@ final class Intrinsics {
             return argOrder.clone();
         }
 
+        @Override
         public void emit(BodyGen g, Kernel kernel, Core.Call call) {
             KernelSignature declared = g.kernelSignature(kernel);
             pushArguments(g, declared, call, this);
@@ -149,6 +150,7 @@ final class Intrinsics {
      */
     record TakesAFunction(ClassDesc owner, String method, int container,
                           Function<Type, List<Type>> paramTypes) implements Emit {
+        @Override
         public void emit(BodyGen g, Kernel kernel, Core.Call call) {
             KernelSignature declared = g.kernelSignature(kernel);
             pushArguments(g, declared, call, this);
@@ -175,6 +177,7 @@ final class Intrinsics {
      */
     record JdkVirtual(ClassDesc owner, String method, MethodTypeDesc desc, int[] argOrder)
             implements Emit {
+        @Override
         public void emit(BodyGen g, Kernel kernel, Core.Call call) {
             for (int src : argOrder) {
                 g.genExpr(call.args().get(src));
@@ -198,6 +201,7 @@ final class Intrinsics {
      * bottom, and the answer came from the position the call was written in.
      */
     record NumericFold(String intMethod, String decimalMethod) implements Emit {
+        @Override
         public void emit(BodyGen g, Kernel kernel, Core.Call call) {
             Type result = call.type();
             if (result != Type.INT && result != Type.DECIMAL) {
