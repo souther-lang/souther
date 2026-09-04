@@ -145,25 +145,68 @@ class EveryTestAboutTheRepositorysPopulationSaysSoTest {
                         + " for a reason other than the one it states");
     }
 
-    /** Every compiled test, with the classes each names in its constant pool. */
-    private static Map<String, Set<String>> referencesByClass() {
-        Map<String, Set<String>> out = new LinkedHashMap<>();
+    /**
+     * The compiled tests this walk is over, by binary name.
+     *
+     * <p><b>Only the ones a source still writes.</b> Nothing here removes a class file, and the
+     * build is not run with {@code clean}, so a test renamed or deleted leaves its old one behind.
+     * Read as a test, it would be held to a tag its author cannot add to a source that no longer
+     * exists — and if the rename is what added the tag, the check would name a class nobody can
+     * find. A class file with no source is what a previous build left, and is passed over.
+     *
+     * <p><b>And a name can be more than one class.</b> Packages are written under more than one
+     * module here — {@code souther.compiler.inputs} holds a fixtures class in two of them — so a
+     * name does not settle which class file it is. Kept as one, the second would replace the first
+     * and whichever lost would be neither held to the tag nor read for one. All of them are kept
+     * instead, and what a name reaches or carries is what any of them does: which one a reference
+     * meant is what this cannot say, and asking for the tag where either would want it is the side
+     * of that to be wrong on.
+     */
+    private static Map<String, List<Path>> compiled;
+
+    private static Map<String, List<Path>> compiledTests() {
+        if (compiled != null) {
+            return compiled;
+        }
+        Map<String, List<Path>> out = new LinkedHashMap<>();
         for (Path module : REPOSITORY.modules()) {
             Path where = testClassesOf(module);
             if (!Files.isDirectory(where)) {
                 continue;
             }
-            for (Path compiled : classesUnder(where)) {
-                ClassModel model = parse(compiled);
-                Set<String> named = new LinkedHashSet<>();
-                for (PoolEntry entry : model.constantPool()) {
+            for (Path each : classesUnder(where)) {
+                String name = parse(each).thisClass().asInternalName();
+                if (!Files.isRegularFile(sourceOf(module, name))) {
+                    continue;
+                }
+                out.computeIfAbsent(name, one -> new ArrayList<>()).add(each);
+            }
+        }
+        compiled = out;
+        return out;
+    }
+
+    /** Where the source of one compiled test would be, its nesting read off the name. */
+    private static Path sourceOf(Path module, String internalName) {
+        String outer = internalName.contains("$")
+                ? internalName.substring(0, internalName.indexOf('$')) : internalName;
+        return module.resolve("src").resolve("test").resolve("java").resolve(outer + ".java");
+    }
+
+    /** Every compiled test, with the classes each names in its constant pool. */
+    private static Map<String, Set<String>> referencesByClass() {
+        Map<String, Set<String>> out = new LinkedHashMap<>();
+        compiledTests().forEach((name, every) -> {
+            Set<String> named = new LinkedHashSet<>();
+            for (Path each : every) {
+                for (PoolEntry entry : parse(each).constantPool()) {
                     if (entry instanceof ClassEntry it) {
                         named.add(it.asInternalName());
                     }
                 }
-                out.put(model.thisClass().asInternalName(), named);
             }
-        }
+            out.put(name, named);
+        });
         return out;
     }
 
@@ -184,15 +227,29 @@ class EveryTestAboutTheRepositorysPopulationSaysSoTest {
         return reaching;
     }
 
-    /** The tags one compiled test carries, as they are written at the class. */
+    /**
+     * The tags one compiled test runs under, which are its own and the ones it is written inside.
+     *
+     * <p>A tag on a class covers the {@code @Nested} classes in it — that is what decides which run
+     * they land in, and it is not written at them. Read off the class alone, a nested test inside a
+     * tagged one comes back untagged here while surefire leaves it out, and the author is told to
+     * add a tag that is already deciding its run.
+     */
     private static Set<String> tags(String internalName) {
-        for (Path module : REPOSITORY.modules()) {
-            Path compiled = testClassesOf(module).resolve(internalName + ".class");
-            if (Files.isRegularFile(compiled)) {
-                return tagsOf(parse(compiled));
+        Map<String, List<Path>> tests = compiledTests();
+        Set<String> out = new LinkedHashSet<>();
+        for (String each = internalName; each != null; each = enclosing(each)) {
+            for (Path where : tests.getOrDefault(each, List.of())) {
+                out.addAll(tagsOf(parse(where)));
             }
         }
-        return Set.of();
+        return out;
+    }
+
+    /** The class one is written inside, or null where it is written at the top of its file. */
+    private static String enclosing(String internalName) {
+        int nested = internalName.lastIndexOf('$');
+        return nested < 0 ? null : internalName.substring(0, nested);
     }
 
     private static Set<String> tagsOf(ClassModel model) {
