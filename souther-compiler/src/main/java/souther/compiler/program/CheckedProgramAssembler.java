@@ -517,7 +517,7 @@ final class CheckedProgramAssembler {
     /**
      * What the module declares.
      *
-     * <p>Each of the three forms is materialised from the answer this compiler already has for it,
+     * <p>Each of the four forms is materialised from the answer this compiler already has for it,
      * and neither walk is written again here. A product's fields are
      * {@link TypeOps#fieldTypes}, which flattens what an include brought in; a sum's cases are
      * {@link AtomSpace#subjectAtoms}, which descends a case that is itself a sum and reaches one
@@ -534,7 +534,7 @@ final class CheckedProgramAssembler {
      * on its own and one a sum's case list declares reach {@code defs} by different routes, so
      * where either stands among them is how the front end put them there rather than something the
      * language decided. The two orders that are decided are inside a declaration —
-     * {@link CheckedData.Product#fields} and {@link CheckedData.Sum#cases} — and those are the
+     * {@link CheckedData.WithFields#fields} and {@link CheckedData.Sum#cases} — and those are the
      * ones said out loud.
      */
     private static List<CheckedData> dataOf(Hir.Module declarations, Symbols symbols,
@@ -547,7 +547,7 @@ final class CheckedProgramAssembler {
     }
 
     /**
-     * One declaration, in whichever of the three forms it was written.
+     * One declaration, in whichever of the four forms it was written.
      *
      * <p>One reading for both worlds. A module's declaration and the language's are the same kind
      * of thing — they resolve and type alike and a value of either lays out alike — and this is
@@ -556,7 +556,7 @@ final class CheckedProgramAssembler {
     private static CheckedData declaredAs(Hir.Def def, Symbols symbols,
                                           Map<TypeSymbol.AtModule, ValueShape> shapes) {
         return switch (def) {
-            case Hir.Data product -> productOf(product, shapes);
+            case Hir.Data data -> checkedDataOf(data, shapes);
             case Hir.SumData sum -> new CheckedData.Sum(sum.declares(),
                     AtomSpace.subjectAtoms(Type.ref(sum.declares()), symbols));
             case Hir.UnitData unit -> new CheckedData.Unit(unit.declares());
@@ -564,24 +564,30 @@ final class CheckedProgramAssembler {
     }
 
     /**
-     * One product, as the check answered what a value of it is made of.
+     * One data built field by field, as the check answered what a value of it is made of and as the
+     * author wrote it.
      *
      * <p>Handed over and not rebuilt. The fields, the binding each is read through and the clauses
      * that must hold of a value are one answer of the checker's, and the JVM emits a construction
      * from that same answer — so what an output outside this compiler reads and what the bytecode
      * refuses a value by cannot come apart.
+     *
+     * <p>Which of the two arms it is, is what the author wrote. A newtype and a one-field product
+     * reach here with the same shape, and the shape is what the language says does not decide
+     * between them (spec §newtype), so it is read off the declaration — the same answer a derived
+     * codec is generated from.
      */
-    private static CheckedData productOf(Hir.Data product,
-                                         Map<TypeSymbol.AtModule, ValueShape> shapes) {
-        ValueShape shape = shapes.get(product.declares());
+    private static CheckedData checkedDataOf(Hir.Data data,
+                                             Map<TypeSymbol.AtModule, ValueShape> shapes) {
+        ValueShape shape = shapes.get(data.declares());
         if (shape == null) {
             // The module was taken as checked, and a declaration of it has no answer for what a
             // value of it is. Handing over a product with no clauses would be saying that anything
             // its fields admit is one of it, which is the opposite of what the author wrote.
-            throw new IllegalStateException("`" + product.declares() + "` was taken as checked and"
+            throw new IllegalStateException("`" + data.declares() + "` was taken as checked and"
                     + " the check said nothing about what a value of it is");
         }
-        return new CheckedData.Product(shape);
+        return data.newtype() ? new CheckedData.Newtype(shape) : new CheckedData.Product(shape);
     }
 
     /**

@@ -249,7 +249,7 @@ public final class CheckedProgram {
      * <p>What this is total over is the identities this compile resolved, and not every value the
      * Java type admits. An identity is minted where a declaration world says one is at an address,
      * so an address nothing declares is a mistake at the reader — refused here, for the reason
-     * {@link CheckedData.Product#positionOf} refuses a name that is no field.
+     * {@link CheckedData.WithFields#positionOf} refuses a name that is no field.
      *
      * @throws IllegalArgumentException where nothing this compile read declares {@code name}
      */
