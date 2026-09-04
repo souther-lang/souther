@@ -157,6 +157,11 @@ class WhatAClauseWouldExpandToIsCountedByTheFoldThatReadsItTest {
         }
     }
 
+    /** What a compilation grants a reading to build with, which these are not about. */
+    private static souther.compiler.regex.PatternPlan.Budget allowed() {
+        return souther.compiler.values.AsACompilationAllows.admittedValues();
+    }
+
     /**
      * A limit that bounds nothing is refused where it is written.
      *
@@ -170,9 +175,12 @@ class WhatAClauseWouldExpandToIsCountedByTheFoldThatReadsItTest {
      */
     @Test
     void aLimitThatBoundsNothingIsRefused() {
-        assertThrows(IllegalArgumentException.class, () -> new ReadingPolicy(0, 2));
-        assertThrows(IllegalArgumentException.class, () -> new ReadingPolicy(-1, 2));
-        assertThrows(IllegalArgumentException.class, () -> new ReadingPolicy(64, -1));
-        assertEquals(0, new ReadingPolicy(64, 0).scalePlacesLimit());
+        assertThrows(IllegalArgumentException.class, () -> new ReadingPolicy(0, 2, allowed()));
+        assertThrows(IllegalArgumentException.class, () -> new ReadingPolicy(-1, 2, allowed()));
+        assertThrows(IllegalArgumentException.class, () -> new ReadingPolicy(64, -1, allowed()));
+        // And the third figure, which is an allowance a reading is granted rather than a number it
+        // compares anything against: a reading with none is one nothing bounds what it builds.
+        assertThrows(IllegalArgumentException.class, () -> new ReadingPolicy(64, 2, null));
+        assertEquals(0, new ReadingPolicy(64, 0, allowed()).scalePlacesLimit());
     }
 }

@@ -3,6 +3,9 @@ package souther.compiler.values;
 import souther.compiler.regex.Meter;
 import souther.compiler.regex.PatternPlan;
 
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -51,11 +54,6 @@ public final class Allowance<A> {
             throw new IllegalArgumentException("an allowance allows something");
         }
         return new Allowance<>(budget);
-    }
-
-    /** The same, at what one answer of a declaration is allowed. */
-    public static <A> Allowance<A> ofAdmittedValues() {
-        return of(PatternPlan.Budget.OF_ADMITTED_VALUES);
     }
 
     /**
@@ -166,9 +164,57 @@ public final class Allowance<A> {
      * <p>One per position and kept, so a plan worked out twice is worked out once — which is what
      * lets a caller ask early without the position paying twice, and what makes when it was asked
      * no part of what it cost.
+     *
+     * <p>Not handed out. What a position may build is asked for through the readings that answer
+     * for it and through {@link #realizeAll}; a caller holding this holds the position's whole
+     * allowance and can spend it on anything, one plan at a time, which is every arrangement above
+     * undone from outside.
      */
-    public Realizer realizer(A atom) {
+    Realizer realizer(A atom) {
         return realizers.computeIfAbsent(atom, _ -> new Realizer(meter(atom)));
+    }
+
+    /**
+     * What every one of {@code plans} admits at {@code atom}, built as one answer.
+     *
+     * <p>For a reading about to publish what a position's rules leave to readers that build
+     * nothing. What crosses that boundary is a set and never the plan that names one — handed the
+     * plan, a reader would be making the machine itself, under whatever allowance it happened to
+     * have, and the position's answer and the reader's would be two answers to one question.
+     *
+     * <p><b>All of them or none of them ({@link Realizations}).</b> Asked one at a time, a caller
+     * would publish the ones the allowance reached and stop, and which of a position's rules a
+     * reader hears about would follow the order they were walked in. Which is why this takes the
+     * whole list rather than being a loop somebody writes: there is no way to spell a partial
+     * answer here.
+     *
+     * <p>A position given up on builds nothing further. Its answer is already a set this compiler
+     * widened, and what a plan of it admits exactly is not a question the position has an allowance
+     * left to answer.
+     */
+    public Realizations realizeAll(A atom, Collection<AdmittedPlan> plans) {
+        if (isSpent(atom)) {
+            return new Realizations.NotBuilt();
+        }
+        // In the order the plans themselves settle and not the order a caller gathered them in
+        // ({@link PlanOrder}). What is being built is the same whichever way round, and what it
+        // costs is not: the small ones first is the difference between a meet answered out of a set
+        // in hand and a product nobody needed. A caller that walked its parts another way round
+        // would spend a different number on the same rules.
+        List<AdmittedPlan> order = new ArrayList<>(plans);
+        order.sort(Comparator.comparing(PlanOrder::of));
+        Map<AdmittedPlan, ValueSet> out = new LinkedHashMap<>();
+        for (AdmittedPlan each : order) {
+            // The first refusal stops the rest. What is left to build is for an answer this is not
+            // going to give, and it would come out of the same allowance the position's own reading
+            // draws on.
+            Realization made = at(atom).of(each);
+            if (!(made instanceof Realization.Exact it)) {
+                return new Realizations.NotBuilt();
+            }
+            out.put(each, it.set());
+        }
+        return new Realizations.Exact(out);
     }
 
     /**

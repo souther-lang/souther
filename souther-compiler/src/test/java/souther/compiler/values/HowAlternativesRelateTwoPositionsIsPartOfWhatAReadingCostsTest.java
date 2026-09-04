@@ -31,7 +31,7 @@ class HowAlternativesRelateTwoPositionsIsPartOfWhatAReadingCostsTest {
         PatternRead said = PatternParser.read(regex);
         return ValueSet.matching(PatternPlan.of(
                 assertInstanceOf(PatternRead.Read.class, said, regex).syntax())
-                .compile(PatternPlan.Budget.OF_ADMITTED_VALUES));
+                .compile(PatternPlan.Budget.OF_ADMITTED_VALUES.meter()));
     }
 
     /** One alternative: {@code left} holds one language and {@code right} holds the other. */
@@ -55,7 +55,7 @@ class HowAlternativesRelateTwoPositionsIsPartOfWhatAReadingCostsTest {
     /** The same positions, the same sets, and the pairs the other way round. */
     @Test
     void twoWaysOfRelatingTheSameSetsAreTwoReadings() {
-        Allowance<String> by = Allowance.ofAdmittedValues();
+        Allowance<String> by = AsACompilationAllows.forAdmittedValues();
         AdmissibleValues<String> straight = related(false, by);
         AdmissibleValues<String> crossed = related(true, by);
 
@@ -79,7 +79,7 @@ class HowAlternativesRelateTwoPositionsIsPartOfWhatAReadingCostsTest {
         int spent = -1;
         for (List<Integer> order : List.of(List.of(0, 1, 2), List.of(0, 2, 1), List.of(1, 0, 2),
                 List.of(1, 2, 0), List.of(2, 0, 1), List.of(2, 1, 0))) {
-            Allowance<String> by = Allowance.ofAdmittedValues();
+            Allowance<String> by = AsACompilationAllows.forAdmittedValues();
             List<AdmissibleValues<String>> read = List.of(related(false, by), related(true, by),
                     AdmissibleValues.at("left", ValueSet.just(Value.text("x"))));
             AdmissibleValues<String> made =

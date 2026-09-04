@@ -38,7 +38,7 @@ class WhatOneAnswerIsAllowedIsSpentOnceTest {
     private static Language language(String regex) {
         PatternRead read = PatternParser.read(regex);
         Language made = PatternPlan.of(assertInstanceOf(PatternRead.Read.class, read, regex)
-                .syntax()).compile(PatternPlan.Budget.OF_ADMITTED_VALUES);
+                .syntax()).compile(PatternPlan.Budget.OF_ADMITTED_VALUES.meter());
         assertNotNull(made, regex);
         return made;
     }

@@ -1863,7 +1863,7 @@ public final class Partitions {
      */
     private static String writtenFor(souther.compiler.regex.PatternSyntax syntax) {
         souther.compiler.regex.Language language = souther.compiler.regex.PatternPlan.of(syntax)
-                .compile(souther.compiler.regex.PatternPlan.Budget.OF_A_WITNESS);
+                .compile(souther.compiler.regex.PatternPlan.Budget.OF_A_WITNESS.meter());
         return language == null ? null : language.someWritten();
     }
 

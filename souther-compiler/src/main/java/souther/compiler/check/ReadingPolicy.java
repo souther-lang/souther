@@ -38,9 +38,17 @@ import java.util.List;
  * readings of the same declaration, and the two would answer a position differently while each
  * stayed sound. So this arrives from the query graph, and the analysis takes it.
  */
-public record ReadingPolicy(int dnfExpansionLimit, int scalePlacesLimit) {
+public record ReadingPolicy(int dnfExpansionLimit, int scalePlacesLimit,
+                            souther.compiler.regex.PatternPlan.Budget admittedValues) {
 
     public ReadingPolicy {
+        // A reading builds machines to say what a position admits, and how much it may build is a
+        // resource bound like the two above. Held here rather than picked up where the building
+        // happens, so that what a declaration can be answered about exactly is the compilation's
+        // and not a constant whichever reader got there first reached for.
+        if (admittedValues == null) {
+            throw new IllegalArgumentException("a reading is allowed something to build with");
+        }
         // A guardrail is a positive number a count can be compared against, and a limit outside
         // that is one no reading is bounded by. Refused here rather than left to whoever writes it:
         // this is a resource bound, and a bound that admits everything is the absence of one.
@@ -89,5 +97,20 @@ public record ReadingPolicy(int dnfExpansionLimit, int scalePlacesLimit) {
     /** Whether a declaration that expands to {@code cost} alternatives may hold them apart. */
     boolean holdsApart(long cost) {
         return cost <= dnfExpansionLimit;
+    }
+
+    /**
+     * A fresh allowance for the positions of one answer, at what this compilation allows.
+     *
+     * <p>The allowance and not the number. What a reader here needs is somewhere to charge what it
+     * builds, and every arrangement that makes when a question was asked no part of what it cost is
+     * inside {@link souther.compiler.values.Allowance} — handed the figure instead, a reader could
+     * make one of its own for each question it happened to ask, and a position would be allowed its
+     * machine once per asker.
+     *
+     * @param <A> what a position is called
+     */
+    public <A> souther.compiler.values.Allowance<A> allowanceForAdmittedValues() {
+        return souther.compiler.values.Allowance.of(admittedValues);
     }
 }

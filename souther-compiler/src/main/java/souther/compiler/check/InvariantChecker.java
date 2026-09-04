@@ -22,9 +22,9 @@ import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
-import souther.compiler.values.AdmittedPlan;
 import souther.compiler.values.TextExtent;
 import souther.compiler.values.TextExtents;
+import souther.compiler.values.ValueSet;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -246,13 +246,17 @@ public final class InvariantChecker {
     /** Whether an evaluation can answer, which is what decides that a continuation is reached. */
     private final PathCompletion completion;
     /**
-     * Where the strings each plan admits stop, worked out once per plan.
+     * Where the strings each set holds stop, worked out once per set.
      *
      * <p>A declaration is read again for every conjunct whose contribution to an end has to be
      * worked out by asking what the rules leave without it, and each of those readings meets the
-     * same plans. What a plan admits does not turn on which reading is asking.
+     * same sets. Where a set stops does not turn on which reading is asking.
+     *
+     * <p>What is kept is a reading of an answer and not the answer itself. A set is what a position
+     * admits and was built where positions are answered for; this is what walking it comes to, which
+     * is this report's own question and is paid for out of this report's own allowance.
      */
-    private final Map<AdmittedPlan, TextExtent> extents = new LinkedHashMap<>();
+    private final Map<ValueSet, TextExtent> extents = new LinkedHashMap<>();
     private final List<CompileException> errors = new ArrayList<>();
     private final List<Diagnostic> warnings = new ArrayList<>();
 
@@ -766,7 +770,7 @@ public final class InvariantChecker {
             // one position may not spend what a plain one at another was going to need, or which of
             // the two went unanswered would turn on the order they were written in.
             souther.compiler.values.Allowance<FactSubject> allowed =
-                    souther.compiler.values.Allowance.ofAdmittedValues();
+                    policy.allowanceForAdmittedValues();
             Map<RuleRef, Map<Core, ReadByClauses.OfAPart>> adoptedBy = new LinkedHashMap<>();
             Map<RuleRef, ReadByClauses.OfARule> narrowedBy = new LinkedHashMap<>();
             // One reader for this value's positions, used over however many clauses reach it, and
@@ -2107,9 +2111,21 @@ public final class InvariantChecker {
             // admits is not every string; it is not known, and a run read off what the reading left
             // would be a run of a set the rule does not have. Whether it states where the values
             // stop is undecided, which is not the same as its stating that they stop nowhere.
-            byPosition.put(position, stated instanceof StringRestriction.Admitting admitting
-                    ? placed(admitting.plan(), value, from, clause, part, out)
-                    : new Run.Undecided(((StringRestriction.NotKnown) stated).why()));
+            switch (stated) {
+                case AdmittedStrings.Admitting it ->
+                        byPosition.put(position, placed(it.set(), value, from, clause, part, out));
+                case AdmittedStrings.NotKnown it ->
+                        byPosition.put(position, new Run.Undecided(it.why()));
+                // And a rule of a position that published none of its sets says nothing here. Such
+                // a position is one whose own answer the reading did not build, which the reading
+                // has already written down against the position ({@link StringPublication}) — said
+                // again from this side, one shortfall would reach a reader as two, one of them
+                // filed against a rule that is not why. A position published nothing about while
+                // its answer stands is refused where the publishing happens, so nothing arrives
+                // here that this silence would be hiding.
+                case AdmittedStrings.NotPublished _ -> {
+                }
+            }
         });
         return new RunsRead(byPosition);
     }
@@ -2129,9 +2145,9 @@ public final class InvariantChecker {
      * with no end above them has said where none of them stop — and it is a run all the same, which
      * is why what is asked of it is which of its ends the rule placed.
      */
-    private Run placed(AdmittedPlan plan, NumberAt<RuleKey> value, RuleRef.Invariant from,
+    private Run placed(ValueSet set, NumberAt<RuleKey> value, RuleRef.Invariant from,
                        Core clause, int part, List<Direct> out) {
-        switch (extentOf(plan)) {
+        switch (extentOf(set)) {
             // A run holding one string is the rule naming a value rather than bounding a range, and
             // a value it names is a distinction of the position rather than an edge on it.
             case TextExtent.One run when run.holdsOneValue() -> {
@@ -2164,16 +2180,21 @@ public final class InvariantChecker {
     }
 
     /**
-     * Where the strings {@code plan} admits stop, worked out once for the plan.
+     * Where the strings {@code set} holds stop, worked out once for the set.
      *
-     * <p>The same plan comes back as often as the declaration is read, and it is read again for
+     * <p>The same set comes back as often as the declaration is read, and it comes back again for
      * every conjunct whose contribution to an end is worked out by asking what the rules leave
-     * without it. What a plan admits does not turn on which of those readings is asking, so it is
+     * without it. Where a set stops does not turn on which of those readings is asking, so it is
      * answered once — the allowance each answer is made under is the same, which is what makes the
      * second asking the same question rather than a cheaper one.
+     *
+     * <p>Kept under the set and not under a plan for one. Two rules whose strings came out the same
+     * are one question here, and a plan is what would be built rather than what was — filed under
+     * one, a hit would have to stand for two plans meaning the same thing, and this reading's
+     * answer would depend on something no reader can see.
      */
-    private TextExtent extentOf(AdmittedPlan plan) {
-        return extents.computeIfAbsent(plan, TextExtents::of);
+    private TextExtent extentOf(ValueSet set) {
+        return extents.computeIfAbsent(set, TextExtents::of);
     }
 
     /**
@@ -2249,6 +2270,7 @@ public final class InvariantChecker {
         List<BlockReason.RuleReadingStopped> stoppedAt(FactSubject position) {
             return byPosition.get(position) instanceof Run.Undecided it ? it.why() : List.of();
         }
+
     }
 
     /**

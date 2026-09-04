@@ -38,12 +38,12 @@ class EveryPairOfShapesIsOneSetTest {
     private static final String POSITION = "value";
 
     /** What puts the sets together, and what it is allowed to build doing it. */
-    private final Allowance<String> sets = Allowance.ofAdmittedValues();
+    private final Allowance<String> sets = AsACompilationAllows.forAdmittedValues();
 
     private static Language language(String regex) {
         PatternRead read = PatternParser.read(regex);
         Language made = PatternPlan.of(assertInstanceOf(PatternRead.Read.class, read, regex)
-                .syntax()).compile(PatternPlan.Budget.OF_ADMITTED_VALUES);
+                .syntax()).compile(PatternPlan.Budget.OF_ADMITTED_VALUES.meter());
         assertNotNull(made, regex);
         return made;
     }

@@ -33,50 +33,45 @@ import souther.compiler.regex.PatternPlan;
 public final class TextExtents {
 
     /**
-     * Where what {@code plan} admits begins and ends, or why it names no run.
+     * Where the strings {@code set} holds begin and end, or why they name no run.
      *
-     * <p>The way in, and the plan rather than the set on purpose. Which strings a rule leaves is a
-     * machine somebody has to pay for; a caller here is asking where the values stop, which is a
-     * question a report asks, and paying for it out of what a position's own answer is allowed
-     * would let a diagnostic decide what the model is read to admit. So the plan is built again
-     * under this question's own allowance, and what the position's answer cost is untouched.
+     * <p>The way in, and a set that somebody has already built rather than a plan for one. Which
+     * strings a rule leaves is what the position's own reading answers, under the position's own
+     * allowance; a caller here is asking where those strings stop, which is a question a report
+     * asks of an answer it was handed. Given the plan, this would be making the machine a second
+     * time — and whether the model is read to admit anything at a position would have two answers,
+     * one of them a diagnostic's.
      *
-     * <p>Its own allowance per plan, spent whole here: a caller with several rules pays for each of
-     * them on its own, so that one expensive rule does not take the line another rule drew.
+     * <p>What it does spend is its own. Turning a set into the machine this walk needs, and the
+     * machines the walk makes of it, are the cost of the question being asked here — so they come
+     * out of an allowance of this question's ({@link PatternPlan.Budget#OF_AN_ORDERED_EXTENT}) and
+     * never out of what the position's answer is bounded by. A whole one per set: a caller with
+     * several rules pays for each of them on its own, so that one expensive rule does not take the
+     * line another rule drew.
      *
      * <p>What a run is and what a caller should do about it are two questions, and only the first is
      * answered here. A run holding one string and a run holding every string are runs; whether
      * either is a boundary somebody is owed a row at is read off the run by whoever draws lines.
      */
-    public static TextExtent of(AdmittedPlan plan) {
+    public static TextExtent of(ValueSet set) {
         Meter meter = PatternPlan.Budget.OF_AN_ORDERED_EXTENT.meter();
-        Language admitted = admitted(plan, meter);
+        Language admitted = languageOf(set, meter);
         return admitted == null
                 ? new TextExtent.NotBuilt(stopped(meter)) : of(admitted, meter);
     }
 
     /**
-     * The strings {@code plan} admits, or null past what {@code meter} allows.
+     * The strings {@code set} holds, or null past what {@code meter} allows.
      *
      * <p>Every set of values a rule about a string can leave is a set of strings, so every one of
      * them is a language: the ones a pattern named, the ones written out, everything but the ones
-     * written out, all of them, and none. Which of those a plan came to is how the answer is held
-     * and not what the rule said — so the question below is asked of a language whichever it was,
-     * and the shape a set happens to be written in decides nothing.
+     * written out, all of them, and none. Which of those the answer came to is how it is held and
+     * not what the rule said — so the question below is asked of a language whichever it was, and
+     * the shape a set happens to be written in decides nothing.
      *
      * <p>Which is what keeps the run out of that decision. Read off the shape, a rule naming one
      * string would have no geometry while a pattern accepting that same string had one, and where
      * the values stop would turn on how the answer got written down.
-     */
-    private static Language admitted(AdmittedPlan plan, Meter meter) {
-        return switch (new Realizer(meter).of(plan)) {
-            case Realization.Exact it -> languageOf(it.set(), meter);
-            case Realization.OverTheMachineLimit _, Realization.OverTheAnswerLimit _ -> null;
-        };
-    }
-
-    /**
-     * The same for a set already worked out.
      *
      * <p>Which strings a set of values holds is {@link Sets}', asked here rather than picked out
      * again: a set stands at one position and a position holds values of its type, so what a set

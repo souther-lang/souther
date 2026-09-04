@@ -296,8 +296,8 @@ public final class PatternPlan {
     }
 
     /**
-     * The language this plan comes to, or null where building it would cost more than
-     * {@code budget} allows.
+     * The language this plan comes to, spending {@code meter}, or null where building it would
+     * cost more than the meter has left.
      *
      * <p>Null and never a smaller language. What a plan says is which strings the answer is about,
      * and a language of fewer states is a different set — handed one, a reader would be measuring a
@@ -305,14 +305,12 @@ public final class PatternPlan {
      *
      * <p>Everything is built here, the intermediate machines among them. A caller holding what comes
      * back may ask it anything, because the asking is what has already been paid for.
-     */
-    public Language compile(Budget budget) {
-        return compile(new Meter(budget.mostStates(), budget.mostBuilt()));
-    }
-
-    /**
-     * The same, spending {@code meter} — for a caller building more than this plan out of one
-     * allowance.
+     *
+     * <p>A meter and never a budget. A budget is an allowance somebody was granted and a meter is
+     * what is left of one, so a caller here is spending an allowance that exists rather than
+     * minting itself a fresh one at the moment of asking — which is what makes what a question
+     * costs a fact about the question and not about how many times it was asked. Whose allowance
+     * each of them is, is written where the budgets are ({@link Budget}).
      *
      * <p>What is counted is what was made, and it is counted where it is made ({@link Meter}). This
      * used to work out what each step would cost from the sizes of its operands, which is a guess

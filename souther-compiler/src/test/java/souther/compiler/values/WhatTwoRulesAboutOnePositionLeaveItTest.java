@@ -27,7 +27,7 @@ class WhatTwoRulesAboutOnePositionLeaveItTest {
     private static final Value B = Value.text("B");
     private static final Value C = Value.text("C");
 
-    private final Allowance<String> sets = Allowance.ofAdmittedValues();
+    private final Allowance<String> sets = AsACompilationAllows.forAdmittedValues();
 
     /** What both leave, read as the set it is. */
     private ValueSet met(ValueSet one, ValueSet other) {

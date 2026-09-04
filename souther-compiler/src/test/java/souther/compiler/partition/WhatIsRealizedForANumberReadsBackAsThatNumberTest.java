@@ -51,7 +51,8 @@ class WhatIsRealizedForANumberReadsBackAsThatNumberTest {
     private static final Symbols SYMBOLS = Symbols.none(DefaultStdlib.get());
 
     private static final RuleReadingSource RULES = RuleReadings.ofNoClauseFiled(SYMBOLS);
-    private static final ReadingPolicy POLICY = new ReadingPolicy(64, 12);
+    private static final ReadingPolicy POLICY = new ReadingPolicy(64, 12,
+            souther.compiler.values.AsACompilationAllows.admittedValues());
     private static final TermPath AT = TermPath.of("x");
 
     /** The two orders an hour of a time stands on: seconds of a day at the position, a count by one

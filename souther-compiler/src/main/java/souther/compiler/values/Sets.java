@@ -53,11 +53,20 @@ public final class Sets {
             throw new IllegalArgumentException(
                     "a language is put together where there is an allowance for it");
         }
-        // Nothing here builds, so the meter is never asked and what it allows does not matter.
-        ValueSet made = met ? metUnder(one, other, PatternPlan.Budget.OF_ADMITTED_VALUES.meter())
-                : joinedUnder(one, other, PatternPlan.Budget.OF_ADMITTED_VALUES.meter());
-        return made;
+        return met ? metUnder(one, other, NOTHING_MAY_BE_BUILT.meter())
+                : joinedUnder(one, other, NOTHING_MAY_BE_BUILT.meter());
     }
+
+    /**
+     * A meter for the pairs that make nothing, which refuses the first state anybody asks it for.
+     *
+     * <p>The table below takes one because a pair with a language in it builds; the pairs above
+     * have none and reach no case that does. Which is a fact about the pairs and not a promise
+     * anybody keeps, so it is stated as a meter that cannot pay for a machine: the day a language
+     * reaches here the build is refused where it happens, rather than made out of an allowance
+     * nobody granted and charged to no position.
+     */
+    private static final PatternPlan.Budget NOTHING_MAY_BE_BUILT = new PatternPlan.Budget(1, 1);
 
     /**
      * The values both admit, or null where making them ran past what {@code meter} allows.

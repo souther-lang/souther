@@ -73,7 +73,8 @@ class AContainerAddingUpIsFilledThroughTheCasesOfWhatItHoldsTest {
             behavior readArticles : (ns: List<Entry>) -> Page
             """;
 
-    private static final ReadingPolicy POLICY = new ReadingPolicy(64, 12);
+    private static final ReadingPolicy POLICY = new ReadingPolicy(64, 12,
+            souther.compiler.values.AsACompilationAllows.admittedValues());
 
     /**
      * A total two counts reach, so that both a container of one and a container of two are among

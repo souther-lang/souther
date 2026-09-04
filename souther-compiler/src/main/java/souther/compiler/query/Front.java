@@ -147,12 +147,19 @@ public final class Front {
          * what a scale the reading cannot read as one number already gets — which side of nought it
          * is on, and no grid.
          *
+         * <p>And what the values a position admits may be built out of, which is the third figure
+         * of the same kind. What it bounds is written where it is declared
+         * ({@link souther.compiler.regex.PatternPlan.Budget#OF_ADMITTED_VALUES}); what is settled
+         * here is that a compilation grants it, so that no reader anywhere makes itself an
+         * allowance at the moment it wants a machine.
+         *
          * <p>Held here rather than beside the policy it makes, so that reading a declaration cannot
          * reach it: what governs a reading is handed to it, and a default it could pick up is a
          * default two readings of one declaration can differ by.
          */
         static final souther.compiler.check.ReadingPolicy STANDARD =
-                new souther.compiler.check.ReadingPolicy(64, 1000);
+                new souther.compiler.check.ReadingPolicy(64, 1000,
+                        souther.compiler.regex.PatternPlan.Budget.OF_ADMITTED_VALUES);
     }
 
     /**
