@@ -426,10 +426,14 @@
                                      Error Prone's annotations on the compile path. -->
                                 <!-- Errors, because each is cheap to answer and silent to miss:
                                      ObjectToString, DuplicateBranches, UnusedVariable, UnusedMethod,
-                                     SameNameButDifferent and MissingOverride. The name check is not
+                                     SameNameButDifferent, MissingOverride and StringCaseLocaleUsage.
+                                     The last is not style: a case fold with no locale is the
+                                     platform's, and on a Turkish one `INFO` lowercases to `ınfo`,
+                                     which a search misses and a snapshot writes down. The name
+                                     check is not
                                      against writing one name for one distinction at two levels — it
                                      is against a use that does not say which of them it means. -->
-                                <arg>-Xplugin:ErrorProne -Xep:UnicodeInCode:OFF -Xep:BadInstanceof:OFF -Xep:ReferenceEquality:OFF -Xep:StringSplitter:OFF -Xep:UnnecessaryParentheses:OFF -Xep:BooleanLiteral:OFF -Xep:IdentityHashMapUsage:OFF -Xep:ClassInitializationDeadlock:OFF -Xep:ArrayRecordComponent:OFF -Xep:ImmutableEnumChecker:OFF -Xep:RemoveUnusedImports:ERROR -Xep:ObjectToString:ERROR -Xep:DuplicateBranches:ERROR -Xep:UnusedVariable:ERROR -Xep:UnusedMethod:ERROR -Xep:SameNameButDifferent:ERROR -Xep:MissingOverride:ERROR ${nullaway.args}</arg>
+                                <arg>-Xplugin:ErrorProne -Xep:UnicodeInCode:OFF -Xep:BadInstanceof:OFF -Xep:ReferenceEquality:OFF -Xep:StringSplitter:OFF -Xep:UnnecessaryParentheses:OFF -Xep:BooleanLiteral:OFF -Xep:IdentityHashMapUsage:OFF -Xep:ClassInitializationDeadlock:OFF -Xep:ArrayRecordComponent:OFF -Xep:ImmutableEnumChecker:OFF -Xep:RemoveUnusedImports:ERROR -Xep:ObjectToString:ERROR -Xep:DuplicateBranches:ERROR -Xep:UnusedVariable:ERROR -Xep:UnusedMethod:ERROR -Xep:SameNameButDifferent:ERROR -Xep:MissingOverride:ERROR -Xep:StringCaseLocaleUsage:ERROR ${nullaway.args}</arg>
                             </compilerArgs>
                             <annotationProcessorPaths>
                                 <path>

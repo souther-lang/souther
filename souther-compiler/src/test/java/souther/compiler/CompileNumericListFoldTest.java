@@ -161,7 +161,7 @@ class CompileNumericListFoldTest {
                 let run (i) = Out { name = sum([]) }
                 """));
         assertTrue(e.getMessage().contains("String"), e.getMessage());
-        assertTrue(!e.getMessage().toLowerCase().contains("annotate"),
+        assertTrue(!e.getMessage().toLowerCase(Locale.ROOT).contains("annotate"),
                 "the position is annotated; annotating it again changes nothing: " + e.getMessage());
     }
 
@@ -181,7 +181,7 @@ class CompileNumericListFoldTest {
                 let run (i) = Out { total = sum([]) }
                 """));
         assertTrue(e.getMessage().contains("Hours"), e.getMessage());
-        assertTrue(!e.getMessage().toLowerCase().contains("annotate"),
+        assertTrue(!e.getMessage().toLowerCase(Locale.ROOT).contains("annotate"),
                 "the position is annotated; annotating it again changes nothing: " + e.getMessage());
     }
 

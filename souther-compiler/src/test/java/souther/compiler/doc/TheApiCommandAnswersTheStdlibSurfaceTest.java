@@ -7,6 +7,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Locale;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -104,7 +105,7 @@ class TheApiCommandAnswersTheStdlibSurfaceTest {
 
         assertEquals(0, answer.code());
         assertTrue(answer.out().lines().anyMatch(l -> l.startsWith("List.fold(")), answer.out());
-        assertTrue(answer.out().lines().allMatch(l -> l.toLowerCase().contains("fold")),
+        assertTrue(answer.out().lines().allMatch(l -> l.toLowerCase(Locale.ROOT).contains("fold")),
                 "every line answers the term:\n" + answer.out());
     }
 
