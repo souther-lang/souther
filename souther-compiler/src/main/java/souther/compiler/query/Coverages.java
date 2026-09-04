@@ -1061,15 +1061,6 @@ final class Coverages {
         };
     }
 
-    /** A search that came to nothing at {@code subject}, which is what a point is written as. */
-    private static ItemAssessment.Attempt nothingComposedOne(
-            String subject, souther.compiler.partition.WayToTheBorder within) {
-        return new ItemAssessment.Attempt.Unresolved(
-                new souther.compiler.partition.Generator.UnresolvedCombination(List.of(subject),
-                        souther.compiler.partition.Generator.UnresolvedCombination.Reason
-                                .NOTHING_COMPOSES_ONE), within);
-    }
-
     /**
      * What a search of the module's own decoders came to, in this measure's words.
      *

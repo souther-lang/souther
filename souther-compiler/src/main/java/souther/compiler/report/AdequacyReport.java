@@ -2275,12 +2275,6 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         };
     }
 
-    /** What an obligation's coverage was left short by, where a reason says. A coverage that came
-     *  to an answer has none, and the note beside the item is what this fills in. */
-    private static String whyNoBoundaryItem(ObligationCoverage coverage) {
-        return coverage.theReasonAsOne().map(why -> ReasonProse.of(why).clause()).orElse("");
-    }
-
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
     /**

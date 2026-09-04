@@ -313,14 +313,6 @@ public record TermPath(String head, List<Step> steps) {
         return ruleKeyUnder(TermPath.of(head));
     }
 
-    private static String spelled(List<Step> steps) {
-        StringBuilder out = new StringBuilder();
-        for (Step step : steps) {
-            spell(out, step, false);
-        }
-        return out.toString();
-    }
-
     /**
      * The same path, with each narrowing saying which kind it is.
      *

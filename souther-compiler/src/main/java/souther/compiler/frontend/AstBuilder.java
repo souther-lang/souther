@@ -1403,16 +1403,6 @@ public final class AstBuilder {
         };
     }
 
-    /** How many bindings {@code patterns} introduce between them — what they cost, counted from
-     *  what the source wrote rather than from the shape {@link #bindPattern} folds them into. */
-    private int bindingsIntroducedBy(List<SyntaxNode> patterns) {
-        int bindings = 0;
-        for (SyntaxNode pat : patterns) {
-            bindings += pat == null ? 0 : bindingsIntroducedBy(pat);
-        }
-        return bindings;
-    }
-
     /**
      * How many bindings one pattern introduces.
      *

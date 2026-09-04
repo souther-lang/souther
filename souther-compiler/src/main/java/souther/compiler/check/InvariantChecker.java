@@ -882,13 +882,6 @@ public final class InvariantChecker {
         return counted == null ? null : counted.atom();
     }
 
-    /** The same over a whole reading, for the readers that take the map. */
-    private static Map<RuleKey, FactSubject> heldAtomsOf(Map<RuleKey, FieldDomains.Counted> held) {
-        Map<RuleKey, FactSubject> out = new LinkedHashMap<>();
-        held.forEach((path, counted) -> out.put(path, counted.atom()));
-        return out;
-    }
-
     /** How many alternatives a reading came to, a reading that admits nothing holding none. */
     private static int heldApart(AdmissibleValues<FactSubject> values) {
         return values.held() instanceof AdmissibleValues.Held.Alternatives<FactSubject> it
@@ -3470,12 +3463,7 @@ public final class InvariantChecker {
     }
 
     /** What a construction came out as where it is being read on a branch rather than said. */
-    private record Reported(Hir.Data type, SourcePos pos, Judgment judgment, boolean attempted) {
-
-        Verdict verdict() {
-            return judgment.verdict();
-        }
-    }
+    private record Reported(Hir.Data type, SourcePos pos, Judgment judgment, boolean attempted) {}
 
     /**
      * Which construction a reading found: the one in the body as it was written. A reading is that

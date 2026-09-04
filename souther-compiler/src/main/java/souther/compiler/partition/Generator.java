@@ -6,12 +6,9 @@ import souther.compiler.coverage.ControlClaim;
 import souther.compiler.coverage.ControlPointId;
 import souther.compiler.check.ReadingPolicy;
 import souther.compiler.check.RuleReadingSource;
-import souther.compiler.ast.Hir;
 import souther.compiler.check.RuleKey;
 import souther.compiler.check.FieldDomains;
 import souther.compiler.check.Shape;
-import souther.compiler.check.Symbols;
-import souther.compiler.check.TypeOps;
 import souther.compiler.check.TypeView;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.reading.PathAccess;
@@ -1471,11 +1468,6 @@ public final class Generator {
         RowId id = new RowId(composed.size());
         composed.put(id, new ComposedRow(inputs));
         return id;
-    }
-
-    /** What a row is written as, which is what tells one line of a file from another. */
-    private static List<String> writtenAs(GeneratedRow row) {
-        return row.inputs().stream().map(FixtureTemplate::text).toList();
     }
 
     /** The arms a list of claims names, by the numbers the plan gave them. Shared with the groups
@@ -2999,23 +2991,6 @@ public final class Generator {
     }
 
     /**
-     * Which one class each ordered axis fell in for one row, or -1 where the row named no single
-     * one — because it could not be read there, or because its values fell in more than one.
-     *
-     * <p>Where a row sits, which is what a cell to be filled beside it is worked out from. A row
-     * whose list holds elements either side of a line sits in no one cell at that position, and
-     * choosing one of them would place the next row against an element this picked.
-     */
-    private static int[] whereIn(Map<AxisId, Classification> row, List<Axis> axes) {
-        List<int[]> reached = reachedIn(row, axes);
-        int[] at = new int[axes.size()];
-        for (int i = 0; i < axes.size(); i++) {
-            at[i] = reached.get(i).length == 1 ? reached.get(i)[0] : -1;
-        }
-        return at;
-    }
-
-    /**
      * Which classes each ordered axis fell in for one row, empty where the row did not say.
      *
      * <p>More than one where the position is inside a sequence: a row whose list holds elements
@@ -3443,16 +3418,9 @@ public final class Generator {
      * later one at every position is a row further from what the model says it is about. The walk
      * stops at {@link #MAX_TUPLES}, and stopping is reported as having stopped rather than as
      * everything having been refused.
-     */
-    private static Attempt build(MeasuredInput.MeasuredAxes axes, int[] where,
-                                 CandidateCheck check) {
-        return build(axes, where, check, Map.of());
-    }
-
-    /**
-     * The same, with the parameters {@code given} names written as it says instead of composed.
      *
-     * <p>Which is what makes a value the model already states an origin of the search rather than a
+     * <p>The parameters {@code given} names are written as it says instead of composed, which is
+     * what makes a value the model already states an origin of the search rather than a
      * rewrite of its answer. Composed first and rewritten after, a row the baseline could have been
      * written for came back as one nothing composed — a representative chosen from the classes
      * alone breaks a rule relating two positions while the model's own value does not — and a row
@@ -4616,17 +4584,6 @@ public final class Generator {
             };
         }
 
-        /**
-         * What to report where every value offered here was refused.
-         *
-         * <p>Not always that they were refused. Where the values are some of the values and the rest
-         * were never built, the search stopping is the more of the two facts, and the one a reader
-         * would act on: another value of this edge may be the one that builds.
-         */
-        UnresolvedCombination.Reason refused() {
-            return stoppedBy().isEmpty() ? UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED
-                    : UnresolvedCombination.Reason.wordFor(stoppedBy());
-        }
     }
 
     /**

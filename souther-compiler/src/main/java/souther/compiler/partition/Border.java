@@ -1000,12 +1000,6 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<DomainPoint, Poin
         }
     }
 
-    /** Where a side starts: the point against the line on that side, or the line where there is
-     *  none. */
-    private static Level levelOf(Demand against, Level line) {
-        return against.criterion() instanceof Criterion.AtTheLevel at ? at.at() : line;
-    }
-
     /**
      * A level as a place on the order it is a level of.
      *

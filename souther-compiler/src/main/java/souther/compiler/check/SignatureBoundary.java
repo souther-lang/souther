@@ -283,13 +283,5 @@ final class SignatureBoundary {
                     (region == null ? builder.at(pos) : builder.at(region)).build());
         }
 
-        /** What the subject is called, then whatever the rule adds. Every one of these messages
-         *  names the parameter or the behavior first. */
-        private Object[] args(Object[] rest) {
-            Object[] args = new Object[rest.length + 1];
-            args[0] = name;
-            System.arraycopy(rest, 0, args, 1, rest.length);
-            return args;
-        }
     }
 }

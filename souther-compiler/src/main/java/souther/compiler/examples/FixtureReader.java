@@ -446,38 +446,6 @@ public final class FixtureReader {
                 + expected.pos());
     }
 
-    /** {@code Map.empty} / {@code Set.empty}, which say which collection they are, against {@code []},
-     *  which does not and takes the position's answer. */
-    private static Asserted emptyAt(Type position, String named) {
-        if (named != null) {
-            return named.startsWith("Map.") ? new Asserted.Entries(true, List.of())
-                    : new Asserted.Elements(Asserted.Container.SET, List.of());
-        }
-        return NeutralForm.open(position) instanceof Type.MapOf
-                ? new Asserted.Entries(false, List.of())
-                : new Asserted.Elements(Asserted.Container.UNSTATED, List.of());
-    }
-
-    /**
-     * A construction's own invariant, over the value it states.
-     *
-     * <p>The same two stages a newtype goes through, for the same reason. Whether every field states
-     * what this type declares it to be is asked of what the row wrote; only where it does is there a
-     * value of this type to ask the invariant about, and only there can building one read nothing as
-     * something else. A row whose field states another type is not a value whose invariant failed —
-     * it is the disagreement it reports, and asking a rule about a value nobody wrote would answer
-     * for a value nobody wrote.
-     */
-    private void admitsItself(Asserted.Built whole, Hir.NewData nd, TypeSymbol built) {
-        if (TypeOps.settledInvariants(declared(built), symbols).isEmpty()
-                || !states(whole, Type.ref(built))) {
-            return;
-        }
-        decode(FixtureShape.of(Type.ref(built), symbols),
-                neutral.shaped(raw(nd, Position.at(Type.ref(built)), Admission.HELD),
-                        Position.at(Type.ref(built))));
-    }
-
     /**
      * The type an application constructs, or null where what it applies is not a type.
      *
@@ -604,14 +572,6 @@ public final class FixtureReader {
             }
         }
         return true;
-    }
-
-    /** Whether a type is one whose values have no parts, so a value of it is settled by the one value
-     *  standing there and a decoder for it reads no position but its own. */
-    private static boolean scalar(Type type) {
-        Type open = NeutralForm.open(type);
-        return open instanceof Type.Prim
-                || (open instanceof Type.Ref r && r.name().isPrimitive());
     }
 
     /**

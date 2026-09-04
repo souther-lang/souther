@@ -68,16 +68,8 @@ final class BodyGen {
         return ctx.cd(typeName);
     }
 
-    private ClassDesc matchCaseClass(TypeSymbol caseName) {
-        return ctx.matchCaseClass(caseName);
-    }
-
     private Map<String, Type> fieldTypes(Hir.Data data) {
         return ctx.fieldTypes(data);
-    }
-
-    private Type successType(Hir.RetType ret) {
-        return ctx.successType(ret);
     }
 
     private ClassDesc jvmType(Type type) {
