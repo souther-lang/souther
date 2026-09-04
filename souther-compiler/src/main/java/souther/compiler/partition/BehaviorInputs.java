@@ -81,9 +81,10 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, RuleRead
      * and a row writes one of the cases, so a walk asking where a value is written reaches nothing
      * at a name every reading of the model may use.
      *
-     * <p>Empty where none readable is there, and never null: a caller asking what is covered at a
-     * position is answered with what was written, and a list of none is nothing written there —
-     * which an empty list is.
+     * <p>Empty where the walk was taken and no value stands there, and null where it could not be
+     * taken at all. A caller asking what is covered at a position is answered with what was
+     * written, and a list of none is nothing written there — which an empty list is, and which the
+     * walk not having been made is not.
      *
      * <p>The one walk into a row's values, done with the declared types beside them. A field of a
      * record is reached through the names the record is written under: {@code data SlotN = Slot} is
