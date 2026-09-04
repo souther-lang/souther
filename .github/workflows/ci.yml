@@ -14,10 +14,14 @@ permissions:
   contents: read
 
 jobs:
-  # What a pull request waits on: everything except the tests whose subjects are the models,
-  # sources and specification this repository carries. Those are the job below.
+  # What a pull request waits on: everything except the tests whose subjects are the models this
+  # repository carries. Those are the job below.
+  #
+  # A pull request and nothing else. The job below runs everything this one runs and the population
+  # besides, so on a push the two together would build the reactor twice over and answer the same
+  # question the second time.
   build:
-    if: github.event_name == 'pull_request' || github.event_name == 'push'
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
