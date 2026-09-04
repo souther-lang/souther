@@ -35,6 +35,7 @@ import souther.compiler.report.UnifiedDiff;
 import souther.lsp.LspServer;
 import souther.cli.init.InitCommand;
 
+import java.io.Console;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -998,9 +999,12 @@ public final class Main {
             return switch (color) {
                 case "always" -> true;
                 case "never" -> false;
-                // A console exists whether or not the output is a terminal, so the console is
-                // asked which it is: colour written into a pipe is escape codes in a file.
-                default -> System.console().isTerminal() && System.getenv("NO_COLOR") == null;
+                // Two things have to hold, and the check below knows only the second. A runtime
+                // built without a console provider answers none at all, so the null stands; and
+                // where there is one it exists whether or not the output is a terminal, so it is
+                // asked which — colour written into a pipe is escape codes in a file.
+                default -> System.console() instanceof Console c && c.isTerminal()
+                        && System.getenv("NO_COLOR") == null;
             };
         }
 

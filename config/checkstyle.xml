@@ -4,15 +4,33 @@
     "https://checkstyle.org/dtds/configuration_1_3.dtd">
 
 <!--
-  One rule, run by the pre-commit hook in .githooks and by nothing else.
+  The half of CI a parser can answer, run by the pre-commit hook in .githooks and by nothing else.
 
-  Unused imports are already an error in CI: the `lint` profile in the root pom raises Error
-  Prone's RemoveUnusedImports to ERROR. That check needs `clean` and a full Error Prone run, which
-  is half a minute a commit cannot pay, so a finding first reaches the author after the push. This
-  file is the same rule asked of a parser instead of a compiler, cheaply enough to answer before
-  the commit is written.
+  Every rule here is one CI already fails on. The `lint` profile in the root pom hands javac Error
+  Prone with `-Werror`, so a finding of any check it leaves on stops that build; the checks below
+  are the ones whose question needs a parse tree and nothing more. That run needs `clean` and
+  costs twenty minutes, so a finding first reaches the author long after the push. This is the
+  same question asked of a parser, cheaply enough to answer before the commit is written.
 
-  processJavadoc is what keeps the two answers the same. Error Prone reads documentation, so an
+  What each mirrors:
+
+    UnusedImports          RemoveUnusedImports
+    UnusedLocalVariable    UnusedVariable
+    EqualsHashCode         EqualsHashCode
+    FallThrough            FallThrough
+    ModifierOrder          ModifierOrder
+    ArrayTypeStyle         MixedArrayDimensions
+
+  Nothing else Error Prone reports can be asked here. Whether two branches are the same, whether a
+  name means two things, whether an override says so, whether a call prints an object rather than
+  its contents — each needs the types, which is a compile.
+
+  Two of these are stricter than what they mirror, in the direction this codebase already writes.
+  Error Prone lets an unused local stand if its name begins with `unused`; here the name for one
+  is `_`. And the case-fold rule is a search through text rather than a reading of types, so it
+  would also find a `toLowerCase()` on something that is not a string — which nothing here has.
+
+  processJavadoc is what keeps the import answers the same. Error Prone reads documentation, so an
   import only a {@link} mentions is used; Checkstyle does not read it unless asked, and unasked it
   would stop commits CI would have accepted.
 -->
@@ -24,6 +42,18 @@
     <module name="TreeWalker">
         <module name="UnusedImports">
             <property name="processJavadoc" value="true"/>
+        </module>
+        <module name="UnusedLocalVariable"/>
+        <module name="EqualsHashCode"/>
+        <module name="FallThrough"/>
+        <module name="ModifierOrder"/>
+        <module name="ArrayTypeStyle"/>
+        <module name="RegexpSinglelineJava">
+            <property name="format" value="\.to(Lower|Upper)Case\(\s*\)"/>
+            <property name="ignoreComments" value="true"/>
+            <property name="message"
+                      value="a case fold with no locale is the platform's, and on a Turkish one
+                             `INFO` lowercases to `ınfo`: pass Locale.ROOT"/>
         </module>
     </module>
 </module>

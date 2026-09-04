@@ -17,10 +17,11 @@ the edit changes a signature or a compile-time constant.
 
 ## Commit hook
 
-`.githooks/pre-commit` runs Checkstyle's `UnusedImports` over the staged Java
-files and refuses the commit on a finding. It is the cheap half of what CI's
-Error Prone run says, moved to where the import was written. A clone turns it on
-once:
+`.githooks/pre-commit` runs Checkstyle over the staged Java files and refuses the
+commit on a finding. Every rule it runs is one CI already fails on — the ones
+whose question needs a parse tree and nothing more, listed in
+`config/checkstyle.xml`. It is the cheap half of what CI's Error Prone run says,
+moved to where the code was written. A clone turns it on once:
 
     git config core.hooksPath .githooks
 
