@@ -301,11 +301,11 @@ class ARowIsComposedForAPointOnATotalTest {
             if (at instanceof ItemAssessment.Owed owed
                     && owed.searches().only() instanceof ItemAssessment.Attempt.Unexhausted some) {
                 said.add(some.why().reason().toString());
-                budgets.add(some.writesSomeOf().repertoires().written());
+                budgets.add(some.notAllOf().written());
             }
         }
 
-        assertEquals(List.of("SEARCH_LIMIT"), said,
+        assertEquals(List.of("THE_SEARCH_LEFT_SOMETHING_UNTRIED"), said,
                 "two of the ways it may be spread were made and the rest were not, so what a reader"
                         + " is told is that this did not look at everything");
         assertEquals(List.of(List.of(CompositionRepertoire.WAYS_A_TOTAL_IS_SPREAD)), budgets,

@@ -12,10 +12,15 @@ import java.util.List;
 /**
  * What stopped this compiler establishing that a row can be written at a point.
  *
- * <p>Not a reason a row cannot be written. Every case here is a budget of this compiler's own
- * reached on the way to an answer, so what it licenses is that the question is open — and a reader
- * that turned one of these into a statement about the model would be reporting a policy as a
- * property of what somebody wrote.
+ * <p>Not a reason a row cannot be written. Every case here is something of this compiler's own met
+ * on the way to an answer — a figure it holds its work to, or a population it writes some of — so
+ * what it licenses is that the question is open, and a reader that turned one of these into a
+ * statement about the model would be reporting a policy as a property of what somebody wrote.
+ *
+ * <p><b>Which of the two is not a kind of gap.</b> A reader of a gap is being told the same thing
+ * either way: nothing here settled the point. What differs is what would settle it — raising a
+ * number, or somebody writing the rest of what this walks — and that is a vocabulary the gap
+ * carries rather than a case it is.
  *
  * <p><b>Made where the establishing stopped, and never worked out afterwards.</b> The outcome a
  * search comes back with says that nothing came of it; which budget ran out is known only where it
@@ -79,14 +84,15 @@ public sealed interface EstablishmentGap {
      * as the point having been left open by this compiler rather than by the model.
      *
      * <p>Which covers each way that happens. A figure may end the search before it had tried what
-     * it held; a figure may leave the search running over less than the point had; and a figure may
-     * leave nothing for a search to run over at all. The first comes back with the budgets' own
-     * word, the second with a word of its own, and the third with a word saying no search was made
-     * — and in every one of them what is written here is that the question is open on a figure
-     * somebody could raise.
+     * it held; the search may run to the end of a population this compiler writes some of; a figure
+     * may leave the search running over less than the point had; and a figure may leave nothing for
+     * a search to run over at all. The first comes back with the budgets' own word, the second with
+     * that word and no number in it, the third with a word of its own, and the last with a word
+     * saying no search was made — and in every one of them what is written here is that the
+     * question is open on something of this compiler's rather than on anything the model settles.
      *
-     * <p>As many figures as were reached, because no two of them are the same piece of work.
-     * Ranked, the one a reader was told about would be whichever was met first.
+     * <p>As many of each as were met, because no two of them are the same piece of work. Ranked,
+     * the one a reader was told about would be whichever was met first.
      */
     record Composition(CanonicalSelection<CompositionBudget> budgets,
                        CanonicalSelection<CompositionRepertoire> repertoires)

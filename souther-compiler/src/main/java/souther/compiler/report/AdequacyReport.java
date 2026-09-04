@@ -1998,7 +1998,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                                                 + said(budgets))
                                 + (repertoires.isEmpty() ? ""
                                         : ", and this compiler writes some of "
-                                                + writes(repertoires) + " rather than all of them");
+                                                + writes(repertoires)
+                                                + " rather than all of them");
             });
         }
         return String.join(", and ", out);
@@ -2081,8 +2082,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         return switch (attempt) {
             case ItemAssessment.Attempt.Certified _, ItemAssessment.Attempt.Unverified _,
                  ItemAssessment.Attempt.Unavailable _ -> "";
+            // And what it separately writes some of, where it does. Both are things the offer is
+            // short of and only one is a number, so the second is said in its own clause rather
+            // than folded into the figures or left out because a figure was there to name.
             case ItemAssessment.Attempt.Stopped it ->
-                    " — this compiler stopped at " + said(it.stoppedBy().budgets()) + ": "
+                    " — this compiler stopped at " + said(it.stoppedBy())
+                            + andWritesSomeOf(it.notAllOf()) + ": "
                             + it.why().said().orElseGet(() -> whyUnresolved(it.why()))
                             + whatTheRegionLeftOut(it.unaccountedFor(), names, declaredIn);
             // Said as what this compiler writes rather than as a number it stopped at, because
@@ -2090,7 +2095,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             // offer. What would change this is somebody writing the rest of what it walks, and the
             // sentence says so.
             case ItemAssessment.Attempt.Unexhausted it ->
-                    " — this compiler writes some of " + writes(it.writesSomeOf().repertoires())
+                    " — this compiler writes some of " + writes(it.notAllOf())
                             + " rather than all of them: "
                             + it.why().said().orElseGet(() -> whyUnresolved(it.why()))
                             + whatTheRegionLeftOut(it.unaccountedFor(), names, declaredIn);
@@ -2100,14 +2105,14 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             // for; said as the figure alone, they go looking for a search that stopped.
             case ItemAssessment.Attempt.Limited it ->
                     " — as far as this compiler plans, which stops at "
-                            + said(it.limitedBy().budgets()) + ": "
+                            + said(it.limitedBy()) + ": "
                             + it.why().said().orElseGet(() -> whyUnresolved(it.why()))
                             + whatTheRegionLeftOut(it.unaccountedFor(), names, declaredIn);
             // No search to report on, which is what this says instead of saying what one found. The
             // figure is what an author would raise to get one made at all.
             case ItemAssessment.Attempt.Unplanned it ->
                     " — nothing was planned for it, because this compiler stops at "
-                            + said(it.limitedBy().budgets())
+                            + said(it.limitedBy())
                             + whatTheRegionLeftOut(it.unaccountedFor(), names, declaredIn);
             case ItemAssessment.Attempt.Unresolved it ->
                     (it.why().reason().provesInfeasible() ? " — " : " — nothing composed one: ")
@@ -2176,6 +2181,19 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                                         + said(by) + ")";
                     };
         };
+    }
+
+    /**
+     * What a search that met a figure also walked in part, said after the figure, or nothing.
+     *
+     * <p>Beside the figure and never among them. What a reader does about the two differs, and a
+     * stop that also wrote some of a population is a point where raising the figure is worth doing
+     * and is not the whole of what is missing.
+     */
+    private static String andWritesSomeOf(
+            CanonicalSelection<CompositionRepertoire> repertoires) {
+        return repertoires.isEmpty() ? ""
+                : ", and writes some of " + writes(repertoires) + " rather than all of them";
     }
 
     /**
@@ -2268,7 +2286,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         return switch (why.reason()) {
             case NOTHING_COMPOSES_ONE -> "nothing here could build a representative for " + at;
             case ALL_CANDIDATES_REJECTED -> "every value tried at " + at + " was refused";
-            case SEARCH_LIMIT -> "the search stopped before reaching " + at;
+            // Not "stopped", which is one of the two ways a search leaves something untried and is
+            // the only one with a number in it. Said as a stop, a walk that went to the end of what
+            // this compiler writes is reported as one that halted, and an author looks for the
+            // figure that halted it.
+            case THE_SEARCH_LEFT_SOMETHING_UNTRIED ->
+                    "the search left something untried before reaching " + at;
             // What is missing here, and not what cannot exist. The combinations are there and this
             // declined to walk them, so a reader is told the offer was not made rather than that
             // nothing reaches the arm — and told that raising the row budget is not what lifts it.

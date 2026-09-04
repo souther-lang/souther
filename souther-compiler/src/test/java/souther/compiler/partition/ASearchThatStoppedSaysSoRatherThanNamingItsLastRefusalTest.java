@@ -92,7 +92,7 @@ class ASearchThatStoppedSaysSoRatherThanNamingItsLastRefusalTest {
         Model model = Model.of(TWO_FREE, "shippingFee");
         FillResult filled = fill(model, _ -> missed(model));
 
-        assertEquals(Generator.UnresolvedCombination.Reason.SEARCH_LIMIT,
+        assertEquals(Generator.UnresolvedCombination.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED,
                 reasonFor(filled, List.of("member=Premium", "delivery=Express")),
                 "a fourth set of values, and no run left to watch it at: " + filled.unresolved());
     }

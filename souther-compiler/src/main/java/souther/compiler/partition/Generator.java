@@ -279,8 +279,21 @@ public final class Generator {
             NOTHING_COMPOSES_ONE,
             /** Every value tried was refused at construction. */
             ALL_CANDIDATES_REJECTED,
-            /** The search stopped before it got here. */
-            SEARCH_LIMIT,
+            /**
+             * The search left something untried.
+             *
+             * <p>Not that it stopped. A figure with no room for the candidate in front of it leaves
+             * something untried, and so does a walk that ran to the end of a population this
+             * compiler writes some of — the second stopped nothing and there is no number in it, and
+             * a word saying a search halted would send a reader looking for one. What was left, and
+             * whether raising anything reaches it, is what travels beside this
+             * ({@link CompositionBudget}, {@link CompositionRepertoire}).
+             *
+             * <p>What it licenses is one thing either way, which is why it is one word: nothing here
+             * was shown about the model, so a reader may not act on it as they may act on
+             * {@link #THE_RULES_LEAVE_NOTHING_THERE}.
+             */
+            THE_SEARCH_LEFT_SOMETHING_UNTRIED,
             /**
              * The rules leave no value here, and the whole of what they leave was walked.
              *
@@ -323,7 +336,7 @@ public final class Generator {
              * class here may be one already sitting in the file, which is a specific piece of work
              * handed to somebody who has done it.
              *
-             * <p>Told apart from {@link #SEARCH_LIMIT} because they are different pieces of news
+             * <p>Told apart from {@link #THE_SEARCH_LEFT_SOMETHING_UNTRIED} because they are different pieces of news
              * and only one of them is about this search: that one says the budget ran out with the
              * class still owed, this says the class was never a thing to look for.
              */
@@ -332,7 +345,7 @@ public final class Generator {
              * The group of decisions this belongs to was wider than the walk offers, so no
              * combination of it was looked in.
              *
-             * <p>Told apart from {@link #SEARCH_LIMIT} for the reason {@link
+             * <p>Told apart from {@link #THE_SEARCH_LEFT_SOMETHING_UNTRIED} for the reason {@link
              * #THE_POSITION_WAS_WITHHELD} is: that one says the budget ran out while walking, and
              * this says the walk never started. Raising the row budget changes the first and not
              * the second.
@@ -420,7 +433,7 @@ public final class Generator {
                     case THE_RULES_LEAVE_NOTHING_THERE, ONE_POSITION_CANNOT_BE_BOTH -> true;
                     // Every one of these is this compiler falling short, and none of them is the
                     // model saying anything: another value of the same classes may well build.
-                    case NOTHING_COMPOSES_ONE, ALL_CANDIDATES_REJECTED, SEARCH_LIMIT,
+                    case NOTHING_COMPOSES_ONE, ALL_CANDIDATES_REJECTED, THE_SEARCH_LEFT_SOMETHING_UNTRIED,
                          NOTHING_TO_BUILD_AGAINST, NO_VALUES_WERE_ASKED_FOR, LINKAGE_FAILED,
                          NO_CERTIFIED_WITNESS, THE_GROUP_WAS_NOT_OFFERED,
                          THE_POSITION_WAS_WITHHELD, THE_ROWS_WERE_NOT_READ,
@@ -456,7 +469,7 @@ public final class Generator {
                              SHAPES_OF_A_TOTAL_OFFERED, WAYS_DOWN_TO_A_TOTAL_TRIED,
                              STEPS_A_SEARCH_MAY_TAKE, ASSIGNMENTS_A_SEARCH_COMPOSES,
                              VALUES_OF_AN_UNBOUNDED_PROGRESSION_TRIED,
-                             LEVELS_A_SIDE_IS_ASKED_AT -> SEARCH_LIMIT;
+                             LEVELS_A_SIDE_IS_ASKED_AT -> THE_SEARCH_LEFT_SOMETHING_UNTRIED;
                         // Reaching these stops no composing, so no search comes back from one of
                         // them and there is no word to give. Asked for one all the same, this says
                         // so rather than lending a word from a budget that does stop something.
@@ -494,7 +507,7 @@ public final class Generator {
             public Realization.Unknown.Reason asAWalksAnswer() {
                 return switch (this) {
                     case NOTHING_COMPOSES_ONE -> Realization.Unknown.Reason.NOTHING_COMPOSED_ONE;
-                    case SEARCH_LIMIT -> Realization.Unknown.Reason.THE_SEARCH_RAN_OUT;
+                    case THE_SEARCH_LEFT_SOMETHING_UNTRIED -> Realization.Unknown.Reason.THE_SEARCH_RAN_OUT;
                     // What a walk of a coverage item comes back with is what it did, and these are
                     // what somebody else did: the model settling the point, a candidate refused, a
                     // module with no classes, a position held back, a group never offered.
@@ -1052,7 +1065,7 @@ public final class Generator {
                     Axis axis = axes.get(owed.get(cut)[0]);
                     UnresolvedCombination why = new UnresolvedCombination(
                             List.of(label(axis, owed.get(cut)[1])),
-                            UnresolvedCombination.Reason.SEARCH_LIMIT);
+                            UnresolvedCombination.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED);
                     attempts.add(new ClassAttempt.Unresolved(axis.id(),
                             axis.classes().get(owed.get(cut)[1]).id(), why));
                     unresolved.add(why);
@@ -1146,7 +1159,7 @@ public final class Generator {
                         // The search stopped, which is this run's news and not the model's. Said as
                         // that, whatever the candidates it did try came to.
                         noRow(unresolved, failed, probe, new UnresolvedCombination(none.classes(),
-                                UnresolvedCombination.Reason.SEARCH_LIMIT));
+                                UnresolvedCombination.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED));
                         continue;
                     }
                     case Witness.Certified made -> {
@@ -1208,7 +1221,7 @@ public final class Generator {
                 armAnswers.put(asked, new ArmDisposition.Built(row));
             } else if (cutOff.contains(probe)) {
                 why.add(new UnresolvedCombination(List.of(),
-                        UnresolvedCombination.Reason.SEARCH_LIMIT));
+                        UnresolvedCombination.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED));
                 armAnswers.put(asked, new ArmDisposition.Unresolved(why));
             } else if (!why.isEmpty()) {
                 armAnswers.put(asked, new ArmDisposition.Unresolved(why));
@@ -1581,7 +1594,7 @@ public final class Generator {
             // it did build came to: the refusal of the sixty-fourth is a fact about that candidate,
             // and offered as the class's answer it stands for a space the search never entered.
             case Completeness.Nothing.SEARCH_STOPPED -> new UnresolvedCombination(List.of(label),
-                    UnresolvedCombination.Reason.SEARCH_LIMIT);
+                    UnresolvedCombination.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED);
             case Completeness.Nothing.LOOKED_EVERYWHERE -> last == null
                     ? new UnresolvedCombination(List.of(label),
                             UnresolvedCombination.Reason.NO_CANDIDATE_WAS_OFFERED)
@@ -2341,12 +2354,14 @@ public final class Generator {
          * so that the two cannot part.
          */
         record Stopped(UnresolvedCombination why, java.util.Set<CompositionBudget> by,
+                       java.util.Set<CompositionRepertoire> notAllOf,
                        List<ReachabilityGap.Uncomposed> unrepresented)
                 implements BoundaryAttempt {
 
             public Stopped {
                 unrepresented = List.copyOf(unrepresented);
                 by = java.util.Set.copyOf(by);
+                notAllOf = java.util.Set.copyOf(notAllOf);
                 if (by.isEmpty()) {
                     throw new IllegalArgumentException(
                             "a search this compiler stopped says which budget stopped it");
@@ -2363,14 +2378,17 @@ public final class Generator {
             /** One at the label given, in the word its budgets come back with. */
             static Stopped at(String label, java.util.Set<CompositionBudget> by,
                               List<ReachabilityGap.Uncomposed> unrepresented) {
-                return at(label, null, by, unrepresented);
+                return at(label, null, by, java.util.Set.of(), unrepresented);
             }
 
-            /** The same, of a search that has something to say about where it stopped. */
+            /** The same, of a search that has something to say about where it stopped, and that
+             *  separately walked some of a population. */
             static Stopped at(String label, String detail, java.util.Set<CompositionBudget> by,
+                              java.util.Set<CompositionRepertoire> notAllOf,
                               List<ReachabilityGap.Uncomposed> unrepresented) {
                 return new Stopped(new UnresolvedCombination(List.of(label),
-                        UnresolvedCombination.Reason.wordFor(by), detail), by, unrepresented);
+                        UnresolvedCombination.Reason.wordFor(by), detail), by, notAllOf,
+                        unrepresented);
             }
         }
 
@@ -2405,7 +2423,7 @@ public final class Generator {
                                   java.util.Set<CompositionRepertoire> writes,
                                   List<ReachabilityGap.Uncomposed> unrepresented) {
                 return new Unexhausted(new UnresolvedCombination(List.of(label),
-                        UnresolvedCombination.Reason.SEARCH_LIMIT, detail), writes, unrepresented);
+                        UnresolvedCombination.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED, detail), writes, unrepresented);
             }
         }
 
@@ -2643,8 +2661,10 @@ public final class Generator {
                         new BoundaryAttempt.Unresolved(
                                 new UnresolvedCombination(List.of(label), word, said),
                                 where.unrepresented());
-                case Outcome.Stopped(Set<CompositionBudget> by, String said) ->
-                        BoundaryAttempt.Stopped.at(label, said, by, where.unrepresented());
+                case Outcome.Stopped(Set<CompositionBudget> by,
+                                     Set<CompositionRepertoire> writes, String said) ->
+                        BoundaryAttempt.Stopped.at(label, said, by, writes,
+                                where.unrepresented());
                 case Outcome.Unexhausted(Set<CompositionRepertoire> writes, String said) ->
                         BoundaryAttempt.Unexhausted.at(label, said, writes,
                                 where.unrepresented());
@@ -3757,16 +3777,30 @@ public final class Generator {
         // can be written at, and a search still holding assignments it never composed has not
         // established that.
         Set<CompositionBudget> stopped = EnumSet.noneOf(CompositionBudget.class);
+        Set<CompositionRepertoire> writes = EnumSet.noneOf(CompositionRepertoire.class);
         for (Outcome each : List.of(product, conditioned)) {
             // Both passes' budgets and not one of them. Neither pass outranks the other here: each
             // stopped where it stopped, and a reader wanting to know what would let this go further
             // is owed every budget that would.
-            if (each instanceof Outcome.Stopped(Set<CompositionBudget> by, String _)) {
+            //
+            // And what either of them walked in part, which is the same reckoning in the other
+            // vocabulary: a pass that wrote some of a population has not shown that nothing else is
+            // there, whether or not the other pass met a figure.
+            if (each instanceof Outcome.Stopped(Set<CompositionBudget> by,
+                    Set<CompositionRepertoire> notAllOf, String _)) {
                 stopped.addAll(by);
+                writes.addAll(notAllOf);
+            }
+            if (each instanceof Outcome.Unexhausted(Set<CompositionRepertoire> notAllOf,
+                    String _)) {
+                writes.addAll(notAllOf);
             }
         }
         if (!stopped.isEmpty()) {
-            return new Outcome.Stopped(stopped, null);
+            return new Outcome.Stopped(stopped, writes, null);
+        }
+        if (!writes.isEmpty()) {
+            return new Outcome.Unexhausted(writes, null);
         }
         // Every value that was offered was refused, which is only the whole story where every value
         // the rules allow was offered. A position that read a count past what a row is built to carry,
@@ -3813,8 +3847,12 @@ public final class Generator {
                 // does are not joined either. One is a figure to raise and one is work nobody has
                 // done, so what outranks the plan is that the offer is incomplete, and what a
                 // reader is then told is which of the two made it so.
+                // And the two together where both are, since neither is the other's absence: a
+                // figure refused a candidate and a population was walked in part, and a reader owed
+                // one of them is owed the other. Kept as the stop alone, the second is lost at the
+                // one boundary that had it.
                 if (!offerCut.isEmpty()) {
-                    yield new Outcome.Stopped(offerCut, detail);
+                    yield new Outcome.Stopped(offerCut, offerWritesSomeOf, detail);
                 }
                 if (!offerWritesSomeOf.isEmpty()) {
                     yield new Outcome.Unexhausted(offerWritesSomeOf, detail);
@@ -4418,14 +4456,21 @@ public final class Generator {
          * <p>No word of its own, because the word such a search comes back with is the budgets' to
          * say and is read off them wherever it is wanted. Kept here as well, the two could part.
          */
-        record Stopped(Set<CompositionBudget> by, String detail) implements Outcome {
+        record Stopped(Set<CompositionBudget> by, Set<CompositionRepertoire> notAllOf,
+                       String detail) implements Outcome {
 
             public Stopped {
                 by = Set.copyOf(by);
+                notAllOf = Set.copyOf(notAllOf);
                 if (by.isEmpty()) {
                     throw new IllegalArgumentException(
                             "a search this compiler stopped says which figure stopped it");
                 }
+            }
+
+            /** One where nothing was separately known about a population this writes some of. */
+            Stopped(Set<CompositionBudget> by, String detail) {
+                this(by, Set.of(), detail);
             }
 
             /** The word a search these stopped comes back with. */
@@ -4461,7 +4506,7 @@ public final class Generator {
             /** The word such a search comes back with, which says the point is open on this
              *  compiler and names nothing to raise. */
             UnresolvedCombination.Reason why() {
-                return UnresolvedCombination.Reason.SEARCH_LIMIT;
+                return UnresolvedCombination.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED;
             }
         }
 
@@ -4730,7 +4775,7 @@ public final class Generator {
                 // model answered. What differs is what would close it, which is the sentence beside
                 // the word and not the word.
                 case TermRealizations.Realization.Unexhausted _ ->
-                        UnresolvedCombination.Reason.SEARCH_LIMIT;
+                        UnresolvedCombination.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED;
                 case TermRealizations.Realization.Built _ -> throw new IllegalStateException(
                         "an edge that offered values asked why it offered none");
             };
@@ -4752,7 +4797,7 @@ public final class Generator {
                 return UnresolvedCombination.Reason.wordFor(stoppedBy());
             }
             return notAllOf().isEmpty() ? UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED
-                    : UnresolvedCombination.Reason.SEARCH_LIMIT;
+                    : UnresolvedCombination.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED;
         }
     }
 

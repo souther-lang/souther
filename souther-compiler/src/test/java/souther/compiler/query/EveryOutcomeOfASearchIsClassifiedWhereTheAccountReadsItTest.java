@@ -10,6 +10,7 @@ import souther.compiler.partition.CompositionRepertoire;
 import souther.compiler.partition.Generator;
 import souther.compiler.partition.OnTheWay;
 import souther.compiler.partition.WayToTheBorder;
+import souther.compiler.publish.PublicationOrders;
 import souther.compiler.source.SourceId;
 
 import java.util.ArrayList;
@@ -227,7 +228,8 @@ class EveryOutcomeOfASearchIsClassifiedWhereTheAccountReadsItTest {
         return new ItemAssessment.Attempt.Stopped(
                 new Generator.UnresolvedCombination(List.of("p.x = 11"),
                         Generator.UnresolvedCombination.Reason.wordFor(Set.of(budget))),
-                WAY, List.of(), EstablishmentGap.Composition.of(EnumSet.of(budget)));
+                WAY, List.of(), PublicationOrders.COMPOSITION_BUDGETS.keep(EnumSet.of(budget)),
+                PublicationOrders.COMPOSITION_REPERTOIRES.keep(List.of()));
     }
 
     /**
@@ -242,8 +244,8 @@ class EveryOutcomeOfASearchIsClassifiedWhereTheAccountReadsItTest {
     private static ItemAssessment.Attempt unexhausted() {
         return new ItemAssessment.Attempt.Unexhausted(
                 new Generator.UnresolvedCombination(List.of("List.sum(p.xs) = 7"),
-                        Generator.UnresolvedCombination.Reason.SEARCH_LIMIT),
-                WAY, List.of(), EstablishmentGap.Composition.of(List.of(),
+                        Generator.UnresolvedCombination.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED),
+                WAY, List.of(), PublicationOrders.COMPOSITION_REPERTOIRES.keep(
                         EnumSet.of(CompositionRepertoire.WAYS_A_TOTAL_IS_SPREAD)));
     }
 
@@ -259,7 +261,7 @@ class EveryOutcomeOfASearchIsClassifiedWhereTheAccountReadsItTest {
         return new ItemAssessment.Attempt.Limited(
                 new Generator.UnresolvedCombination(List.of("p.x = 11"),
                         Generator.UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED),
-                WAY, List.of(), EstablishmentGap.Composition.of(
+                WAY, List.of(), PublicationOrders.COMPOSITION_BUDGETS.keep(
                         EnumSet.of(CompositionBudget.DEPTH_A_CONSTRUCTION_PLAN_DESCENDS)));
     }
 
@@ -275,7 +277,7 @@ class EveryOutcomeOfASearchIsClassifiedWhereTheAccountReadsItTest {
                 new Generator.UnresolvedCombination(List.of("p.x = 11"),
                         Generator.UnresolvedCombination.Reason
                                 .NO_READING_OF_THE_LINE_COULD_BE_SEARCHED),
-                WAY, List.of(), EstablishmentGap.Composition.of(
+                WAY, List.of(), PublicationOrders.COMPOSITION_BUDGETS.keep(
                         EnumSet.of(CompositionBudget.DEPTH_A_CONSTRUCTION_PLAN_DESCENDS)));
     }
 

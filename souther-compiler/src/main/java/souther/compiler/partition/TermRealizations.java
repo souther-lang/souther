@@ -87,10 +87,9 @@ final class TermRealizations {
          *
          * <p><b>So a figure is here only where a candidate was in front of the walk and this figure
          * left no room for it.</b> Raise it and that candidate gets tried — which is what makes the
-         * word one an author can act on. A figure a walk merely ran under, having gone everywhere it
-         * knows how to go, stopped nothing and belongs to no arm of this: what it leaves out is
-         * {@link Built#heldBack()} where something was built, and where nothing was, nothing here
-         * declined to look and the answer is {@link None}.
+         * word one an author can act on. A population this compiler walks some of stopped nothing
+         * and is never a figure: it travels beside them ({@code notAllOf}) where a figure was met as
+         * well, and where none was it is {@link Unexhausted} rather than anything here.
          *
          * <p>Never where a value was built. A budget that cut an offering short after something was
          * composed is {@link Built#heldBack()}: what it stopped is the rest of the offer, and the
@@ -210,7 +209,9 @@ final class TermRealizations {
      *
      * <p>A target that exists and a target nothing writes at are two different sentences, and both
      * of them are said here. {@link RealizationTarget} answers the first for every number there is;
-     * a {@link Realization.None} or a {@link Realization.Stopped} is the second.
+     * the second is a {@link Realization.None}, a {@link Realization.Stopped} or a
+     * {@link Realization.Unexhausted}, which differ in what a reader may do about it and not in
+     * whether a value was written.
      */
     static Realization at(Type sourceType, TermOrders orders,
                           Place answer, souther.compiler.inputs.SearchRegion within,

@@ -90,7 +90,7 @@ class AsManyContainersAreOfferedAsAreWrittenDownTest {
         assertEquals(Set.of(CompositionRepertoire.WAYS_A_TOTAL_IS_SPREAD), built.notAllOf(),
                 "and the ways a count of more than one element is spread are two of the many,"
                         + " which is not a number anybody raises and is said apart from one");
-        assertEquals(Generator.UnresolvedCombination.Reason.SEARCH_LIMIT,
+        assertEquals(Generator.UnresolvedCombination.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED,
                 Generator.UnresolvedCombination.Reason.wordFor(built.heldBack()),
                 "and the word such a walk has always come back with is the one it comes back with");
     }

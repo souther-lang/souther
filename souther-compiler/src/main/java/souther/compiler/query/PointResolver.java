@@ -133,7 +133,7 @@ public final class PointResolver {
                         // the one above. What offering a row is short of is the same either way,
                         // and which figure ended it is the point's own to say rather than this
                         // walk's: what is recorded here is that a search ran and produced no row.
-                        case ItemAssessment.Attempt.Stopped(var why, var _, var _, var _) ->
+                        case ItemAssessment.Attempt.Stopped(var why, var _, var _, var _, var _) ->
                                 walked.put(reading,
                                         new SearchCoverage.ReadingSearch.Attempted(why));
                         // And a search that ran to the end of what this compiler writes. This walk
