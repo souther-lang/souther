@@ -1879,7 +1879,7 @@ public final class Bodies {
         Set<String> names = new HashSet<>();
         for (Hir.Var req : spec.value().dependsOn()) {
             // Reported where it is written; it names no parameter for a body to be held to.
-            if (req.answered() instanceof Hir.Var.Denoting named) {
+            if (req instanceof Hir.Var.Denoting named) {
                 names.add(named.denotes().name());
             }
         }

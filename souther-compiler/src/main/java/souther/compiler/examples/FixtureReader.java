@@ -784,7 +784,7 @@ public final class FixtureReader {
     /** The case a bare name stands for: the type it denotes where it denotes one — a unit case, or a
      * case written bare — and otherwise the case the value or binding it names constructs. */
     private TypeSymbol namedCase(Hir.Var name, Set<String> followed, List<TypeSymbol> worn) {
-        if (!(name.answered() instanceof Hir.Var.Denoting v)) {
+        if (!(name instanceof Hir.Var.Denoting v)) {
             // it names nothing, so it stands for no case; reported where it is written
             return null;
         }
@@ -1402,7 +1402,7 @@ public final class FixtureReader {
     }
 
     private Stated statedByName(Hir.Var name) {
-        if (!(name.answered() instanceof Hir.Var.Denoting v)) {
+        if (!(name instanceof Hir.Var.Denoting v)) {
             // it names nothing, and the reading that follows says so where it is written
             return ELSEWHERE;
         }
@@ -1486,7 +1486,7 @@ public final class FixtureReader {
      * again here: a binding in force is the value it holds, whatever else bears its spelling.
      */
     private Object named(Hir.Var name, Position at, Admission admission) {
-        if (!(name.answered() instanceof Hir.Var.Denoting v)) {
+        if (!(name instanceof Hir.Var.Denoting v)) {
             throw new FixtureException("`" + name.name() + "` is not a value a fixture can name");
         }
         return switch (v.denotes()) {
@@ -1717,7 +1717,7 @@ public final class FixtureReader {
         // `...base` copies the fields of a value, and the fields written after it replace what it
         // brought.
         for (Hir.Var spreadName : nd.spreads()) {
-            if (!(spreadName.answered() instanceof Hir.Var.Denoting ref)) {
+            if (!(spreadName instanceof Hir.Var.Denoting ref)) {
                 throw new FixtureException("`" + spreadName.name()
                         + "` is not a value a fixture can spread");
             }

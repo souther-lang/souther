@@ -194,7 +194,7 @@ public final class HelperNames {
 
     /** {@code name} written qualified where it denotes a helper {@code which} accepts. */
     private static Hir.Var qualified(Hir.Var name, Predicate<ValueName.Helper> which) {
-        return name.answered() instanceof Hir.Var.Denoting named
+        return name instanceof Hir.Var.Denoting named
                 && foreign(named.denotes(), which)
                 ? Hir.Var.respelled(qualifiedName(named.denotes()), ofModule(named.denotes()),
                         name.pos(), name.region())

@@ -423,7 +423,21 @@
                                      the same. Nothing else here catches one; the way to ask again
                                      is to turn the check back on for a run and read what it says,
                                      which is how the comparisons above were read. -->
-                                <arg>-Xplugin:ErrorProne -Xep:UnicodeInCode:OFF -Xep:ReferenceEquality:OFF -Xep:RemoveUnusedImports:ERROR ${nullaway.args}</arg>
+                                <!-- BadInstanceof is off. It reports an `instanceof` whose operand
+                                     already has the type asked for, which it reads as a null check
+                                     wearing a type test, and it was right about a whole family of
+                                     them: a name was asked `name.answered() instanceof Denoting`,
+                                     which projects the two forms of a name down to the answered one
+                                     or null and then narrows that back. Those now ask the name.
+
+                                     What is left is a call whose result is bound and null-checked
+                                     in one condition. Inside an expression there is no other
+                                     spelling — a declaration is a statement, and the condition is
+                                     not — so the check would be asking for the question to be
+                                     asked somewhere it cannot be. That those methods answer an
+                                     absence with null is a thing to fix in the methods, not at the
+                                     conditions reading them, and it is not what this reports. -->
+                                <arg>-Xplugin:ErrorProne -Xep:UnicodeInCode:OFF -Xep:BadInstanceof:OFF -Xep:ReferenceEquality:OFF -Xep:RemoveUnusedImports:ERROR ${nullaway.args}</arg>
                             </compilerArgs>
                             <annotationProcessorPaths>
                                 <path>

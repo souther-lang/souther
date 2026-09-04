@@ -585,7 +585,7 @@ final class HelperParams {
             }
             // the value the attempt built is in force over the success arm, at the type it was built as
             Scope built = ic.construct() instanceof Hir.NewData nd
-                    && nd.typeName().answered() instanceof Hir.Name.Denoting names
+                    && nd.typeName() instanceof Hir.Name.Denoting names
                     ? env.with(ic.binder(), Type.ref(names.type())) : env;
             List<Reading> arms = new ArrayList<>();
             arms.add(new Reading(ic.then(), built));
@@ -1033,7 +1033,7 @@ final class HelperParams {
 
         /** Each field of a construction, asked for the type that field holds. */
         private void visitInits(Hir.NewData nd, Scope env, BindingId target) {
-            Hir.Data data = nd.typeName().answered() instanceof Hir.Name.Denoting names
+            Hir.Data data = nd.typeName() instanceof Hir.Name.Denoting names
                     && symbols.declaredNode(names.type()) instanceof Hir.Data d
                     ? d : null;
             for (Hir.FieldInit init : nd.inits()) {

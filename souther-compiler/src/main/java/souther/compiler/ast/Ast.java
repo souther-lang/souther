@@ -923,11 +923,12 @@ public interface Ast {
                     region);
         }
 
-        /** The type the source wrote on this binding, or null when it wrote none. An annotation is an
-         * ordinary type (a function type belongs only in a helper's parameter), so this is the one
-         * place that narrows {@code declaredType}, and a carrier from inlining never reads as one. */
+        /** The type the source wrote on this binding, or null when it wrote none. What the source
+         * wrote and what a later pass put there are both held in {@code declaredType}, and
+         * {@code annotated} is what tells them apart: a carrier from inlining is not an annotation
+         * and is not answered here. */
         public RetType annotation() {
-            return annotated && declaredType instanceof RetType rt ? rt : null;
+            return annotated ? declaredType : null;
         }
     }
 

@@ -323,7 +323,7 @@ public final class TypeCardinality {
             case Hir.UnitData _ -> { }
             // A case naming nothing names no declaration for this to have read.
  	    case Hir.SumData sum -> sum.cases().forEach(each -> {
-                if (each.answered() instanceof Hir.Name.Denoting names) {
+                if (each instanceof Hir.Name.Denoting names) {
                     named.add(names.type());
                 }
             });

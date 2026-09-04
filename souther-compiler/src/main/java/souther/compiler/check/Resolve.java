@@ -1769,7 +1769,7 @@ public final class Resolve {
      * synthesized by an earlier pass rather than written, so there is nothing to point at, and a
      * name nothing answered is an absence rather than a declaration to record. */
     private Hir.Name answered(Hir.Name n) {
-        if (!(n.answered() instanceof Hir.Name.Denoting names)) {
+        if (!(n instanceof Hir.Name.Denoting names)) {
             failed++;
         } else if (n.pos() != null) {
             denotations.add(new TypeUse(n.name(), names.type()));

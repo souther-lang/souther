@@ -248,7 +248,7 @@ public final class MatchElaborator {
      * for.
      */
     private static TypeSymbol names(Hir.Name arm) {
-        if (!(arm.answered() instanceof Hir.Name.Denoting named)) {
+        if (!(arm instanceof Hir.Name.Denoting named)) {
             throw new Unanswerable(arm.pos());
         }
         return named.type();

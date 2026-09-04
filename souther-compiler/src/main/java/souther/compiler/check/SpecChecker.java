@@ -143,7 +143,7 @@ public final class SpecChecker {
                 continue;
             }
             for (Hir.Var required : spec.dependsOn()) {
-                if (!(required.answered() instanceof Hir.Var.Denoting named)) {
+                if (!(required instanceof Hir.Var.Denoting named)) {
                     continue;
                 }
                 ValueName.Behavior reached = behaviorReached(required);

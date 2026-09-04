@@ -366,7 +366,7 @@ public final class TypeChecker {
                 for (Hir.Var req : spec.dependsOn()) {
                     // A name nothing answered is no name for another to be a duplicate of, and it
                     // was reported where it is written.
-                    if (req.answered() instanceof Hir.Var.Denoting named) {
+                    if (req instanceof Hir.Var.Denoting named) {
                         // The bare name, and deliberately not the declaration. Two dependencies are
                         // two behaviors whatever modules declared them, and the clause is still
                         // refused when they go by one spelling: what it decides is the implementing

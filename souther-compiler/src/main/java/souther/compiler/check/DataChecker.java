@@ -70,7 +70,7 @@ public final class DataChecker {
 
     private static void collectConstChecks(Hir.Expr e, Symbols symbols, List<ConstCheck> out) {
         if (e instanceof Hir.NewData nd
-                && nd.typeName().answered() instanceof Hir.Name.Denoting built
+                && nd.typeName() instanceof Hir.Name.Denoting built
                 && built.type() instanceof TypeSymbol.AtModule constructed
                 && symbols.declaredNode(constructed) instanceof Hir.Data nt
                 && nt.newtype() && isInvariantBearing(constructed, symbols)) {
@@ -203,7 +203,7 @@ public final class DataChecker {
                 // it compares against a limit rather than setting one.
                 // A construction naming nothing builds no type to record; it is reported where the
                 // name is written, and the fields written under it are still walked.
-                if (nd.typeName().answered() instanceof Hir.Name.Denoting built) {
+                if (nd.typeName() instanceof Hir.Name.Denoting built) {
                     Map<TypeSymbol, String> side =
                             built.type() instanceof TypeSymbol.AtModule made && nd.wasCarried(made)
                                     ? out.carried() : out.originated();
@@ -346,7 +346,7 @@ public final class DataChecker {
         for (Hir.Name caseName : s.cases()) {
             // A case naming nothing is no step of a cycle, and it is reported on the declaration
             // that writes it — which may be another module's, and not one this check was handed.
-            if (!(caseName.answered() instanceof Hir.Name.Denoting names)) {
+            if (!(caseName instanceof Hir.Name.Denoting names)) {
                 continue;
             }
             if (target.equals(names.type())) {
