@@ -292,11 +292,11 @@ sealed interface StatedByClauses {
 
     /** The reading of one value's positions, made once and used over however many clauses reach it.
      *  Built per clause, this walk paid for a pair of readers at every clause of every value. */
-    static Reading readingOf(Terms terms, Denotations at, Map<FactSubject, Type> byName,
+    static Reading readingOf(Terms terms, Map<FactSubject, Type> byName,
                              Symbols symbols, Alternatives alternatives,
                              souther.compiler.values.Allowance<FactSubject> allowed) {
-        return new Reading(AdmissibleReading.of(terms, at, byName, symbols, alternatives, allowed),
-                OrderedReading.of(terms, at, byName, symbols), terms, at, byName, alternatives);
+        return new Reading(AdmissibleReading.of(terms, byName, symbols, alternatives, allowed),
+                OrderedReading.of(terms, byName, symbols), terms, byName, alternatives);
     }
 
 
@@ -312,9 +312,15 @@ sealed interface StatedByClauses {
      * value there is. That is the same reconstruction {@code Predicates.Assumed} keeps a field of
      * its own to avoid, and the one this accounting was written against.
      */
-    record Reading(AdmissibleReading values, OrderedReading ordered, Terms terms, Denotations at,
+    record Reading(AdmissibleReading values, OrderedReading ordered, Terms terms,
                    Map<FactSubject, Type> byName, Alternatives alternatives)
-            implements ClauseReading<StatedByClauses> {
+            implements ClauseReading<StatedByClauses, Denotations> {
+
+        /** What a binding under a clause is entered as, for a fold over this reading. The one
+         *  answer there is, asked of the one place that gives it (ADR-0106). */
+        ClauseScope<Denotations> scope() {
+            return terms::inside;
+        }
 
         @Override
         public StatedByClauses nothingSaid() {
@@ -331,10 +337,10 @@ sealed interface StatedByClauses {
          * than one.
          */
         @Override
-        public StatedByClauses leaf(Core e, boolean positive) {
-            souther.compiler.values.PlannedValues<FactSubject> said = values.leaf(e, positive);
-            OrderedIntervals<FactSubject> range = ordered.leaf(e, positive);
-            Set<FactSubject> mentions = mentioned(e);
+        public StatedByClauses leaf(Core e, boolean positive, Denotations at) {
+            souther.compiler.values.PlannedValues<FactSubject> said = values.leaf(e, positive, at);
+            OrderedIntervals<FactSubject> range = ordered.leaf(e, positive, at);
+            Set<FactSubject> mentions = mentioned(e, at);
             return new Said(said, range,
                     // Each language says whether it gave up on the leaf. The reading of values
                     // carries it; the reading of order has nothing to hand back but its ranges, and
@@ -344,7 +350,7 @@ sealed interface StatedByClauses {
                     // And what the leaf states about the strings at a position, where it is a rule
                     // about them. Asked of the reading that recognises one, so this is where the
                     // answer enters and the connectives below are what compose it.
-                    values.stringRuleIn(e, said),
+                    values.stringRuleIn(e, said, at),
                     Map.of());
         }
 
@@ -354,19 +360,19 @@ sealed interface StatedByClauses {
          * <p>A fact about the clause and not about either language, which is why it is read here
          * and once. A position names itself, and nothing under it is a position of its own.
          */
-        private Set<FactSubject> mentioned(Core e) {
+        private Set<FactSubject> mentioned(Core e, Denotations at) {
             Set<FactSubject> found = new LinkedHashSet<>();
-            gather(e, found);
+            gather(e, found, at);
             return found;
         }
 
-        private void gather(Core e, Set<FactSubject> found) {
+        private void gather(Core e, Set<FactSubject> found, Denotations at) {
             FactSubject here = terms.subjectOf(e, at);
             if (here != null && byName.containsKey(here)) {
                 found.add(here);
                 return;
             }
-            Core.forEachChild(e, child -> gather(child, found));
+            Core.forEachChild(e, child -> gather(child, found, at));
         }
 
         @Override
@@ -874,10 +880,12 @@ sealed interface StatedByClauses {
         private final Map<K, java.util.List<Core>> byPart = new java.util.LinkedHashMap<>();
         private final Map<K, StatedByClauses> trees = new java.util.LinkedHashMap<>();
 
-        /** One clause read, with the parts of it noted in the order the reading reached them. */
-        StatedByClauses read(Reading reader, K key, Core clause) {
+        /** One clause read from {@code at}, with the parts of it noted in the order the reading
+         *  reached them. */
+        StatedByClauses read(Reading reader, Denotations at, K key, Core clause) {
             java.util.List<Core> parts = new java.util.ArrayList<>();
-            StatedByClauses one = reader.read(clause, true, (part, _) -> parts.add(part));
+            StatedByClauses one = reader.read(clause, true, at, reader.scope(),
+                    (part, _) -> parts.add(part));
             byClause.put(key, clause);
             byPart.put(key, parts);
             trees.put(key, one);

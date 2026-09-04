@@ -772,7 +772,7 @@ public final class InvariantChecker {
             // One reader for this value's positions, used over however many clauses reach it, and
             // the one that decides the choices in what they came to.
             StatedByClauses.Reading reader = StatedByClauses
-                    .readingOf(c.terms, at, positions, symbols, alternatives, allowed);
+                    .readingOf(c.terms, positions, symbols, alternatives, allowed);
             // What each clause said and what each part of it said, kept as they were read and
             // asked afterwards. Which branch of a choice anybody can take turns on clauses not yet
             // read and on machines nobody has made at this point, and every one of these questions
@@ -786,7 +786,7 @@ public final class InvariantChecker {
             // where its clauses landed in a table.
             StatedByClauses.Asked<Written> asked = new StatedByClauses.Asked<>();
             for (Written each : written) {
-                asked.read(reader, each, each.clause());
+                asked.read(reader, at, each, each.clause());
             }
             // And now that every rule about this value has been said, what its positions admit is
             // worked out — and with it what each clause and each part of it took in, since a branch

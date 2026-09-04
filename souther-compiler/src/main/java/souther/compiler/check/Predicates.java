@@ -698,6 +698,16 @@ final class Predicates {
     private Owed read(Core inv, Denotations at, Set<Core> unnamed,
                       boolean positive, boolean decidesFalse, Discharge discharge,
                       PerPart per, PartsToRead parts) {
+        // A clause under a binding states what the clause states, read where its names mean
+        // something. Almost every binding here is one a helper's expansion made, so a rule stated
+        // through a helper is one of these — and read as it stands it is a shape stating no
+        // comparison, which is why a construction the guards refute was only ever refuted where the
+        // author had written the rule out. What the binder means is not worked out here: it is the
+        // environment's answer, and this asks for it (ADR-0106).
+        if (inv instanceof Core.LetIn li) {
+            return obligations(li.body(), terms.inside(li, at), unnamed, positive, decidesFalse,
+                    discharge, per, parts);
+        }
         if (inv instanceof Core.Binary b
                 && ConditionJoin.of(b.op()).map(join -> join.under(positive)).orElse(null)
                         == ConditionJoin.BOTH) {
