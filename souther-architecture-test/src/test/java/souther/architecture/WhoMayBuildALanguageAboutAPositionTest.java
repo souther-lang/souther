@@ -57,6 +57,8 @@ class WhoMayBuildALanguageAboutAPositionTest {
 
     private static final String POLICY = "souther/compiler/check/ReadingPolicy";
 
+    private static final String ALLOWANCE = "souther/compiler/values/Allowance";
+
     private static final RepositoryLayout REPOSITORY = RepositoryLayout.ofWorkingDirectory();
 
     /**
@@ -104,6 +106,30 @@ class WhoMayBuildALanguageAboutAPositionTest {
             "souther/compiler/inputs/ReadQuantities allowanceForAdmittedValues x1");
 
     /**
+     * Who may make an allowance at all, which is the way round the rows above do not close.
+     *
+     * <p>A reader that writes the figure out where it stands names no budget of this compiler's and
+     * asks the policy for nothing, so neither of the counts above moves — and it has a meter at
+     * every position all the same. What it cannot do is make one without saying so here.
+     *
+     * <p>{@code ReadingPolicy} and nobody else, because that is where a compilation's grant becomes
+     * something a reading may spend. Two makers is two answers to how much a position may build,
+     * and the second of them is one nothing granted.
+     */
+    private static final List<String> MAKING_AN_ALLOWANCE =
+            List.of("souther/compiler/check/ReadingPolicy");
+
+    /**
+     * And who may write a figure out at all.
+     *
+     * <p>The last way round: a budget made where it is wanted is a grant nobody made, and the three
+     * constants would be three defaults somebody could go past without touching. Only the class
+     * that declares them makes one, so what a compilation chooses ({@code Front.Reading}) is chosen
+     * out of what is written down rather than out of a number typed at the call.
+     */
+    private static final List<String> MAKING_A_BUDGET = List.of();
+
+    /**
      * What writing one value out of a pattern may cost.
      *
      * <p>Its own because it bounds a different question: a caller here is offering a string for a
@@ -149,6 +175,30 @@ class WhoMayBuildALanguageAboutAPositionTest {
         assertEquals(OF_WHAT_A_RULE_LEAVES, namingTheBudget("OF_WHAT_A_RULE_LEAVES"),
                 "the second figure a reading builds against, granted where the first is: a namer"
                         + " elsewhere is a reader allowing itself what a compilation was to allow");
+    }
+
+    @Test
+    void everyPlaceThatMakesAnAllowanceIsWrittenDownHere() {
+        assertEquals(MAKING_AN_ALLOWANCE, makingAnAllowance(),
+                "an allowance is what a compilation's grant becomes, so it is made where the grant"
+                        + " is held: one made anywhere else is a meter at every position that"
+                        + " nobody granted and no figure of this compiler's names");
+    }
+
+    @Test
+    void andEveryPlaceThatWritesAFigureOut() {
+        assertEquals(MAKING_A_BUDGET, makingABudget(),
+                "a figure is declared where the figures are and chosen where a compilation chooses"
+                        + " them: one written at the place it is wanted is a grant nobody made");
+        // What the row above says is that nobody outside writes one, which an empty answer says
+        // whether or not this walk can see one being written. So the same question is asked with
+        // the class that does write them left in.
+        assertTrue(found(entry -> entry instanceof MemberRefEntry member
+                        && member.owner().name().stringValue().equals(BUDGET)
+                        && member.name().stringValue().equals("<init>"), false)
+                        .contains(BUDGET),
+                "the figures are written out where they are declared, so a walk that cannot find"
+                        + " that is finding nothing at all");
     }
 
     @Test
@@ -247,6 +297,21 @@ class WhoMayBuildALanguageAboutAPositionTest {
         return out;
     }
 
+    /** Every class that makes an allowance out of a figure. */
+    private static List<String> makingAnAllowance() {
+        return found(entry -> entry instanceof MemberRefEntry member
+                && member.owner().name().stringValue().equals(ALLOWANCE)
+                && (member.name().stringValue().equals("of")
+                        || member.name().stringValue().equals("besides")));
+    }
+
+    /** Every class that writes a figure out, which is the class that declares them and no other. */
+    private static List<String> makingABudget() {
+        return found(entry -> entry instanceof MemberRefEntry member
+                && member.owner().name().stringValue().equals(BUDGET)
+                && member.name().stringValue().equals("<init>"));
+    }
+
     /** Every class that asks a plan for the machine it names. */
     private static List<String> callingCompile() {
         return found(entry -> entry instanceof MemberRefEntry member
@@ -255,6 +320,11 @@ class WhoMayBuildALanguageAboutAPositionTest {
     }
 
     private static List<String> found(java.util.function.Predicate<PoolEntry> reaching) {
+        return found(reaching, true);
+    }
+
+    private static List<String> found(java.util.function.Predicate<PoolEntry> reaching,
+                                      boolean butNotTheOwner) {
         Set<String> out = new TreeSet<>();
         for (Path module : REPOSITORY.modules()) {
             for (Path each : classesUnder(module)) {
@@ -262,7 +332,7 @@ class WhoMayBuildALanguageAboutAPositionTest {
                 // What a class names of itself is not a reader of anything. The plan declares the
                 // budgets and the meter they make, so a row for it would be this walk reporting the
                 // owner as its own caller.
-                if (reader.equals(PLAN) || reader.startsWith(PLAN + "$")) {
+                if (butNotTheOwner && (reader.equals(PLAN) || reader.startsWith(PLAN + "$"))) {
                     continue;
                 }
                 for (PoolEntry entry : constantPoolOf(each)) {
