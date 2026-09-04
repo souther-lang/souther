@@ -1722,21 +1722,20 @@ public final class TypeOps {
             case "Instant" -> Type.INSTANT;
             // 制約違反 is no longer a writable case: an invariant violation aborts (spec §algebraic-types,
             // §violation-destination).
-            case "List" -> Type.list(typeArg(ref, symbols, "list", 4, "List needs a type argument, e.g. List<Int>"));
+            case "List" -> Type.list(typeArg(ref, "list", 4));
             case "Set" -> {
                 // a set holds no duplicates, which is a question about equality of its elements
-                Type element = typeArg(ref, symbols, "set", 3,
-                        "Set needs a type argument, e.g. Set<String>");
+                Type element = typeArg(ref, "set", 3);
                 requireEquality(element, ref, false);
                 yield Type.set(element);
             }
-            case "Option" -> Type.option(typeArg(ref, symbols, "option", 6, "Option needs a type argument"));
+            case "Option" -> Type.option(typeArg(ref, "option", 6));
             case "Map" -> {
                 // The key is not restricted here: a map that stays inside a behavior body renders
                 // nothing, so it may be keyed by any value (`List.groupBy` already builds such maps).
                 // What a key must satisfy is the boundary — see #isBoundaryMapKey, checked where a
                 // type is a data field or a behavior's input/output.
-                Type value = typeArg(ref, symbols, "map", 3, "Map needs a value type, e.g. Map<String, Int>");
+                Type value = typeArg(ref, "map", 3);
                 Type key = ref.tupleElems() == null
                         ? Type.STRING : resolveTerm(ref.tupleElems().get(0));
                 requireEquality(key, ref, true);
@@ -1829,8 +1828,7 @@ public final class TypeOps {
     }
 
     /** The single type argument of a built-in constructor, or the error that says it is missing. */
-    private static Type typeArg(Reference ref, NameSense symbols, String key, int width,
-                                String message) {
+    private static Type typeArg(Reference ref, String key, int width) {
         if (ref.arg() == null) {
             throw CompileException.of(Diagnostic.at(ref.pos(), width)
                     .say(switch (key) {

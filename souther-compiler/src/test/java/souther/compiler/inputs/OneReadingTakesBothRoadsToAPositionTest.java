@@ -46,7 +46,7 @@ class OneReadingTakesBothRoadsToAPositionTest {
     private static TermPath fourLinksDown(InputDomain read) {
         TermPath at = TermPath.of("c");
         for (int i = 0; i < 4; i++) {
-            at = at.refine(caseOf(read, "Cons")).then(i == 3 ? "head" : "tail");
+            at = at.refine(caseOf("Cons")).then(i == 3 ? "head" : "tail");
         }
         return at;
     }
@@ -64,8 +64,8 @@ class OneReadingTakesBothRoadsToAPositionTest {
         InputDomain read = reading(fourLinksDown(readingOf(CHAIN, "read", InputDemand.NONE)));
 
         assertNotNull(read.at(fourLinksDown(read)), () -> spelled(read));
-        assertNull(read.at(TermPath.of("c").refine(caseOf(read, "Cons")).then("tail")
-                        .refine(caseOf(read, "Cons")).then("head")),
+        assertNull(read.at(TermPath.of("c").refine(caseOf("Cons")).then("tail")
+                        .refine(caseOf("Cons")).then("head")),
                 () -> "one link down is on the way to it and nothing named it: " + spelled(read));
     }
 
@@ -111,7 +111,7 @@ class OneReadingTakesBothRoadsToAPositionTest {
     private static TermPath sibling(InputDomain read) {
         TermPath at = TermPath.of("c");
         for (int i = 0; i < 4; i++) {
-            at = at.refine(caseOf(read, "Cons")).then("tail");
+            at = at.refine(caseOf("Cons")).then("tail");
         }
         return at;
     }
@@ -128,7 +128,7 @@ class OneReadingTakesBothRoadsToAPositionTest {
 
     /** The narrowing to one leaf, spelled the way the checker's resolution of an arm spells it: a
      *  leaf is a case that covers itself, so selecting it narrows to that one distinction. */
-    private static Refinement caseOf(InputDomain read, String name) {
+    private static Refinement caseOf(String name) {
         souther.compiler.types.TypeSymbol leaf = souther.compiler.types.TypeSymbols.declared(
                 new souther.compiler.types.TypeKey("g", name));
         return Refinement.of(souther.compiler.types.ResolvedCase.of(

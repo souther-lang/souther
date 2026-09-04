@@ -46,8 +46,6 @@ class WhichRuleHoldsAnEndIsAskedOfTheRuleAndNotOfWhereItIsReadTest {
 
     private final RuleReadingSource rules = rules();
 
-    private final Symbols symbols = rules.symbols();
-
     private static RuleReadingSource rules() {
         Compilation compilation = Compilation.ofSource(SOURCE, "Main");
         compilation.answerEverything();

@@ -935,7 +935,7 @@ public final class Formatter {
         for (SyntaxToken t : idents(list.get())) {
             names.add(tokenMember(places.under(run, t.kind(),
                     Opening.breaks(TokenDoc.Break.MAY),
-                    new Written.Run(nameStart(t), nameEnd(t))), t, t, token(t)));
+                    new Written.Run(nameStart(t), nameEnd(t))), token(t)));
         }
         return TokenDoc.node(n.kind(), concat(d, GAP, TokenDoc.at(run,
                 delimited(run, SyntaxKind.NAME_LIST, LPAREN, withEndComments(run, names),
@@ -1294,7 +1294,7 @@ public final class Formatter {
         Place place = places.under(run, from.kind(),
                 first ? Opening.NONE : Opening.breaks(TokenDoc.Break.MAY),
                 new Written.Run(nameStart(from), nameEnd(to)));
-        return tokenMember(place, from, to, dottedName(idents));
+        return tokenMember(place, dottedName(idents));
     }
 
     /** The {@code : T} a node wrote, or nothing — a helper's return type, a local binding's annotation. */
@@ -1761,11 +1761,11 @@ public final class Formatter {
                 nest(INDENT, TokenDoc.at(then, concat(expr(parts.get(1), then), TokenDoc.endsTheLineOf(then)))),
                 SOFT_GAP, TokenDoc.token(SyntaxKind.ELSE_KW, "else"),
                 departures instanceof TokenDoc.Nil
-                        ? otherwise(n, at, parts.get(2))
+                        ? otherwise(at, parts.get(2))
                         : departures)));
     }
 
-    private TokenDoc otherwise(SyntaxNode n, Place at, SyntaxNode part) {
+    private TokenDoc otherwise(Place at, SyntaxNode part) {
         Place branch = places.under(at, part.kind(), Opening.breaks(TokenDoc.Break.MAY),
                 Written.of(part));
         return nest(INDENT, TokenDoc.at(branch, concat(expr(part, branch), TokenDoc.endsTheLineOf(branch))));
@@ -2663,9 +2663,9 @@ public final class Formatter {
         }
     }
 
-    /** A member the grammar wrote as an identifier: the same shape as one written as a node, held
-     * against where the identifier is. */
-    private Member tokenMember(Place place, SyntaxToken above, SyntaxToken end, TokenDoc d) {
+    /** A member the grammar wrote as an identifier: the same shape as one written as a node. Where
+     * the identifier is, the place already says. */
+    private Member tokenMember(Place place, TokenDoc d) {
         return new Member(TokenDoc.at(place, d), TokenDoc.endsTheLineOf(place));
     }
 

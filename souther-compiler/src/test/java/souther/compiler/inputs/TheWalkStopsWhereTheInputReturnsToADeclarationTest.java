@@ -134,7 +134,7 @@ class TheWalkStopsWhereTheInputReturnsToADeclarationTest {
     @Test
     void anExpressionStopsAtTheOperandsOfItsOperator() {
         InputDomain read = reading(THROUGH_A_CASE, "read");
-        TermPath left = TermPath.of("x").refine(toLeaf(named(read, "Add"))).then("l");
+        TermPath left = TermPath.of("x").refine(toLeaf(named("Add"))).then("l");
 
         assertNotNull(read.at(left), () -> spelled(read));
         assertEquals("x", returnedAt(read, left).openedAt().toString(),
@@ -169,7 +169,7 @@ class TheWalkStopsWhereTheInputReturnsToADeclarationTest {
     void theReturningOccurrenceIsStillRead() {
         InputDomain read = reading(THROUGH_A_CASE, "read");
         Position left = read.at(
-                TermPath.of("x").refine(toLeaf(named(read, "Add"))).then("l"));
+                TermPath.of("x").refine(toLeaf(named("Add"))).then("l"));
 
         assertEquals(2, left.obligationCases().size(),
                 "the sum there divides into its cases whichever time round it is");
@@ -190,7 +190,7 @@ class TheWalkStopsWhereTheInputReturnsToADeclarationTest {
     }
 
     /** The declaration {@code name} stands for in the model under test. */
-    private static souther.compiler.types.TypeSymbol named(InputDomain read, String name) {
+    private static souther.compiler.types.TypeSymbol named(String name) {
         return souther.compiler.types.TypeSymbols.declared(
                 new souther.compiler.types.TypeKey("g", name));
     }
