@@ -402,7 +402,7 @@ public sealed interface ItemAssessment {
      *
      * <p><b>The outcomes, and the things that may be true of one.</b> The outcomes are what
      * happened and are exclusive, so a reader asking which of them this is asks an exhaustive
-     * switch. What may be true of one — that a row came of it, that a search ran, that a figure of
+     * switch. What may be true of one — that a row came of it, that a search ran, that something of
      * this compiler's left the point unestablished — cuts across them: a row that was built and not
      * read back is both a row somebody may have and a point this compiler left open, and neither of
      * those is the other's special case. Written as one hierarchy, one of the three had to be the
@@ -484,15 +484,17 @@ public sealed interface ItemAssessment {
         }
 
         /**
-         * An attempt whose showing cannot establish the point, because of a figure of this
+         * An attempt whose showing cannot establish the point, because of something of this
          * compiler's.
          *
-         * <p>Across the outcomes rather than one of them, because what a figure costs depends on
-         * how far the attempt had got. Before anything was composed, there is no row and the point
-         * is left with nothing; after, there is a row and what is missing is the reading that would
-         * have placed it; and a plan short of the value's positions leaves an answer that is about
-         * less than the point had. All of them are this compiler's own limit and none of them is
-         * anything the model said, which is the one question an account puts to them.
+         * <p>Across the outcomes rather than one of them, because what it costs depends on how far
+         * the attempt had got. Before anything was composed, there is no row and the point is left
+         * with nothing; after, there is a row and what is missing is the reading that would have
+         * placed it; a walk that went to the end of what this compiler writes leaves an offer that
+         * was never the whole of what there is; and a plan short of the value's positions leaves an
+         * answer that is about less than the point had. All of them are this compiler's own and
+         * none of them is anything the model said, which is the one question an account puts to
+         * them.
          *
          * <p><b>The one thing they share, and the reason it is said here and not further down.</b>
          * These outcomes have different histories — one search stopped, one ran to the end of what

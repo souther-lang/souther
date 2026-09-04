@@ -10,7 +10,7 @@ import java.util.Collection;
 import java.util.List;
 
 /**
- * What stopped this compiler establishing that a row can be written at a point.
+ * What of this compiler's left the point short of established, where a row can be written at it.
  *
  * <p>Not a reason a row cannot be written. Every case here is something of this compiler's own met
  * on the way to an answer — a figure it holds its work to, or a population it writes some of — so
@@ -30,7 +30,7 @@ import java.util.List;
  * nothing like each other. So a producer that falls short hands this over, and one that has nothing
  * to hand over says so by there being no gap rather than by a gap nobody made.
  *
- * <p>Two cases, and what tells them apart is how far this compiler had got when it stopped. An
+ * <p>Two cases, and what tells them apart is how far this compiler had got. An
  * observation is of a value that exists and did not come back whole; a composing is of a value that
  * was never built. They leave the same question open and they are different work to close: one
  * takes keeping more of what is built, the other takes building more of what the rules leave.
@@ -65,7 +65,10 @@ public sealed interface EstablishmentGap {
     }
 
     /**
-     * A figure of this compiler's is why no value composed for the point settles it.
+     * Something of this compiler's is why no value composed for the point settles it.
+     *
+     * <p>A figure it holds its work to, a population it writes some of, or both. Which of them it
+     * was is what each field says, and neither is read off the other's absence.
      *
      * <p><b>Not that the figure is why nothing was composed.</b> Where a search ran over a plan
      * short of the point, raising the figure may well leave every candidate refused as before —

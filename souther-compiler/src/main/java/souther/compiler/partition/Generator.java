@@ -4705,7 +4705,7 @@ public final class Generator {
      * same question building it asked, and the reading is what answers it both times — kept here,
      * an answer would travel from the one to the other and the two would be free to part.
      */
-    private record Edge(TermRealizations.Realization came, Place settledAt) {
+    record Edge(TermRealizations.Realization came, Place settledAt) {
 
         static Edge none(UnresolvedCombination.Reason why) {
             return new Edge(new TermRealizations.Realization.None(why), null);
