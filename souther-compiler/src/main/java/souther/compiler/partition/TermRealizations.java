@@ -49,17 +49,28 @@ final class TermRealizations {
          * <p>Two halves of one answer, as {@link Witnesses.Sized} keeps them. A caller reading only
          * the first says every value was refused where some were never built, which is a different
          * thing to tell an author.
+         *
+         * <p><b>Everything the offer leaves out, and not only what a figure refused.</b> A walk that
+         * went everywhere it knows how to go and a walk a figure turned back both leave values a
+         * reader was not shown, and the reader deciding whether every value was refused needs the
+         * two alike. Which of them a figure came to be here by is what {@link Stopped} is told
+         * apart by, and it is not this.
          */
-        record Built(List<FixtureTemplate> values,
-                     java.util.Set<CompositionBudget> heldBack) implements Realization {
+        record Built(List<FixtureTemplate> values, java.util.Set<CompositionBudget> heldBack,
+                     java.util.Set<CompositionRepertoire> notAllOf) implements Realization {
 
             public Built {
                 values = List.copyOf(values);
                 heldBack = java.util.Set.copyOf(heldBack);
+                notAllOf = java.util.Set.copyOf(notAllOf);
                 if (values.isEmpty()) {
                     throw new IllegalArgumentException(
                             "a realization that built nothing is one that built none, and says why");
                 }
+            }
+
+            Built(List<FixtureTemplate> values, java.util.Set<CompositionBudget> heldBack) {
+                this(values, heldBack, java.util.Set.of());
             }
 
             static Built whole(List<FixtureTemplate> values) {
@@ -75,23 +86,67 @@ final class TermRealizations {
          * policy running out leaves the question of whether a value exists open in a way somebody
          * could act on by raising it.
          *
+         * <p><b>So a figure is here only where a candidate was in front of the walk and this figure
+         * left no room for it.</b> Raise it and that candidate gets tried — which is what makes the
+         * word one an author can act on. A population this compiler walks some of stopped nothing
+         * and is never a figure: it travels beside them ({@code notAllOf}) where a figure was met as
+         * well, and where none was it is {@link Unexhausted} rather than anything here.
+         *
          * <p>Never where a value was built. A budget that cut an offering short after something was
          * composed is {@link Built#heldBack()}: what it stopped is the rest of the offer, and the
          * point it was composed for has a value at it either way.
          */
-        record Stopped(java.util.Set<CompositionBudget> by) implements Realization {
+        record Stopped(java.util.Set<CompositionBudget> by,
+                       java.util.Set<CompositionRepertoire> notAllOf) implements Realization {
 
             public Stopped {
                 by = java.util.Set.copyOf(by);
+                notAllOf = java.util.Set.copyOf(notAllOf);
                 if (by.isEmpty()) {
                     throw new IllegalArgumentException(
                             "a composing this compiler stopped says which budget stopped it");
+                }
+            }
+
+            Stopped(java.util.Set<CompositionBudget> by) {
+                this(by, java.util.Set.of());
+            }
+        }
+
+        /**
+         * Nothing was composed, and what this walked was some of what there is to walk.
+         *
+         * <p>Apart from {@link None}, and the difference is what a reader may conclude. Nothing was
+         * refused by a figure, so there is no number to raise; and nothing here looked at every
+         * value the point has, so an emptiness this came to establishes nothing about the model.
+         * Told as {@code None}, a reader acts on a search that never wrote most of what it was
+         * searching.
+         *
+         * <p>Apart from {@link Stopped} for the same reason in the other direction. A figure is
+         * somebody's to raise and reaches what the search was holding; what reaches the rest of one
+         * of these is somebody writing the rest, which is not work an author of a model can do.
+         *
+         * @param detail what this walk found, or null where it has nothing to add
+         */
+        record Unexhausted(java.util.Set<CompositionRepertoire> notAllOf, String detail)
+                implements Realization {
+
+            public Unexhausted {
+                notAllOf = java.util.Set.copyOf(notAllOf);
+                if (notAllOf.isEmpty()) {
+                    throw new IllegalArgumentException(
+                            "a walk that says it saw some of them says some of what");
                 }
             }
         }
 
         /**
          * Nothing here writes a value answering it, and no budget of this compiler's is why.
+         *
+         * <p>Which is a walk that looked everywhere it was going to look and found nothing, and not
+         * one that declined to look. A figure may still have bounded what it offered — the ways a
+         * total is spread are two of the many however far a search runs — and that is a thing to
+         * say about an offer rather than a reason there is none.
          *
          * <p>The word is how a reader downstream treats it and {@code detail} is what happened in
          * this attempt, which is the arrangement {@link Generator.UnresolvedCombination} has. A
@@ -155,7 +210,9 @@ final class TermRealizations {
      *
      * <p>A target that exists and a target nothing writes at are two different sentences, and both
      * of them are said here. {@link RealizationTarget} answers the first for every number there is;
-     * a {@link Realization.None} or a {@link Realization.Stopped} is the second.
+     * the second is a {@link Realization.None}, a {@link Realization.Stopped} or a
+     * {@link Realization.Unexhausted}, which differ in what a reader may do about it and not in
+     * whether a value was written.
      */
     static Realization at(Type sourceType, TermOrders orders,
                           Place answer, souther.compiler.inputs.SearchRegion within,

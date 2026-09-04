@@ -264,9 +264,10 @@ final class AnswerClosure {
     /** What a generation is asked for on behalf of, carrying what it takes to go on asking. */
     private static final Reading GENERATION_READERS = new Reading("GENERATION_READERS", CAPABILITY,
             "the subject a row would be written for carries the means to ask further questions — "
-                    + "the symbols a name is read against, and the reading a quantity over several "
-                    + "positions is asked of. Both are built where they are used and neither is "
-                    + "what a plan says, so what belongs in the subject is what the row is about");
+                    + "the symbols a name is read against, where a declaration's expanded clauses "
+                    + "are answered from, and the reading a quantity over several positions is "
+                    + "asked of. Each is built where it is used and none of them is what a plan "
+                    + "says, so what belongs in the subject is what the row is about");
 
     /**
      * What was raised where a name resolved to nothing.
@@ -458,9 +459,16 @@ final class AnswerClosure {
 
     /** What a generation's subject carries to go on asking with, under the plan that holds it. */
     private static KnownDeclared generationReader(String offender, TypePath.Step... under) {
+        return generationReader(offender, Traversal.Why.SAYS_NOTHING_OF_ITSELF, under);
+    }
+
+    /** The same, where the walk stops for another reason — a capability is closed by nothing at all,
+     *  where a carrier that says nothing of itself could have said something. */
+    private static KnownDeclared generationReader(String offender, Traversal.Why why,
+                                                  TypePath.Step... under) {
         return new KnownDeclared(
                 declared(Q + "Adequacy$Generated", offender, then(A_SUBJECT, under)),
-                GENERATION_READERS, Traversal.Why.SAYS_NOTHING_OF_ITSELF);
+                GENERATION_READERS, why);
     }
 
     /** The machine a language is held as, under the class that denotes a pattern's strings. */
@@ -561,6 +569,15 @@ final class AnswerClosure {
                     part("souther.compiler.partition.BehaviorInputs", "rules"),
                     part("souther.compiler.check.RuleReadingSource", "symbols"),
                     arm("souther.compiler.check.DerivedSymbols")),
+            // Where the clauses of a declaration are answered from, beside the symbols above. It is
+            // a capability and not a table: which declaration is being asked about is the only input
+            // there is, and holding the answers instead would be this reading's copy of what the
+            // declaring module said.
+            generationReader("souther.compiler.check.ExpandedClauseLookup",
+                    Traversal.Why.NOTHING_CLOSES_IT,
+                    part("souther.compiler.partition.MeasuredInput", "written"),
+                    part("souther.compiler.partition.BehaviorInputs", "rules"),
+                    part("souther.compiler.check.RuleReadingSource", "invariants")),
             generationReader("souther.compiler.inputs.ReadQuantities",
                     part("souther.compiler.partition.MeasuredInput", "quantities"),
                     arm("souther.compiler.inputs.ReadQuantities")),

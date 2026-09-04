@@ -1,8 +1,10 @@
 package souther.compiler.query;
 
 import souther.compiler.ast.Hir;
-import souther.compiler.check.AnalysisInvariants;
 import souther.compiler.check.ClauseDischarge;
+import souther.compiler.check.ExpandedClauseLookup;
+import souther.compiler.check.ExpandedClauseResult;
+import souther.compiler.check.ExpandedClauses;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.InvariantSettled;
 import souther.compiler.check.Lower;
@@ -17,6 +19,7 @@ import souther.compiler.check.DerivedSymbols;
 import souther.compiler.check.ResolvedSymbols;
 import souther.compiler.core.ValueShape;
 import souther.compiler.diag.CompileException;
+import souther.compiler.diag.TheCompilerDisagreesWithItself;
 import souther.compiler.types.BindingOwner;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
@@ -538,10 +541,19 @@ public final class Shapes {
             }
             List<Hir.Def> declarations = lowering.value().settled().defs();
             try {
+                souther.compiler.check.TypeCardinality.Cardinalities counted =
+                        souther.compiler.check.TypeCardinality.solve(
+                                declarations, reading.value(), policy.value());
+                // Not counted where a rule the count read could not be read at all. What makes a
+                // type have no value is what its rules leave, so a count short of one of them may
+                // have missed the rule that empties a type — and would report it as inhabited.
+                // Asked of what the count reached and not of the module it started in: the rule
+                // that empties a type can be written on a declaration of any module it walks into.
+                if (!counted.everyRuleReached()) {
+                    return Answer.of(new UninhabitableTypes.WithNoValue.NotCounted());
+                }
                 return Answer.of(new UninhabitableTypes.WithNoValue.Counted(
-                        UninhabitableTypes.withNoValueOfTheirOwn(declarations,
-                                souther.compiler.check.TypeCardinality.solve(
-                                        declarations, reading.value(), policy.value()))));
+                        UninhabitableTypes.withNoValueOfTheirOwn(declarations, counted)));
             } catch (CompileException e) {
                 // Said here, as what this attempt found, and not handed on in the answer: a reader
                 // of the answer is told there was no count and concludes nothing from it, which is
@@ -567,10 +579,20 @@ public final class Shapes {
      */
     public static Answer<RuleReadingSource> ruleReading(Db db, String name) {
         Answer<ResolvedSymbols> scope = Names.resolvedSymbols(db, name);
-        Answer<AnalysisInvariants> clauses = db.ask(new InvariantsForDischarge(name));
-        return scope.present() && clauses.present()
-                ? Answer.of(new RuleReadingSource(scope.value(), clauses.value()))
+        return scope.present()
+                ? Answer.of(new RuleReadingSource(scope.value(), expandedClauses(db)))
                 : Answer.absent();
+    }
+
+    /**
+     * Where a reading of any module's rules gets a declaration's expanded clauses.
+     *
+     * <p>One of these for the whole compilation and not one per reader, because which declaration is
+     * being asked about is the only input there is. A lookup made for a module would be a lookup
+     * that could answer that module's way, which is the arrangement this replaces.
+     */
+    public static ExpandedClauseLookup expandedClauses(Db db) {
+        return named -> db.ask(new ClausesExpandedFor(named)).value();
     }
 
     /**
@@ -584,20 +606,21 @@ public final class Shapes {
      * are. A clause declared here that names an imported definition is this module's clause and stays
      * inside the fragment — the definition is substituted, as it is everywhere the invariant is read.
      *
-     * <p>Answered as {@link AnalysisInvariants} and not as the map it holds, so that a caller with no
-     * answer cannot write an empty one. The two are the same shape and mean opposite things — a
-     * module whose representation could not be built, and one that reads as stating nothing — and
-     * nothing about a map stops a reader confusing them.
+     * <p><b>Not what a reader asks for.</b> Expanding is done a module at a time because that is
+     * what the environment a clause is expanded in belongs to, and that is the whole of why this
+     * key exists. What a reading is answered from is {@link ClausesExpandedFor}, one declaration at
+     * a time: a reader able to name a module here is a reader that could ask for its own module's
+     * answer about somebody else's declaration.
      */
-    public record InvariantsForDischarge(String name)
-            implements Key<AnalysisInvariants> {
+    record ExpandedDeclarationClauses(String name)
+            implements Key<Map<TypeKey, ExpandedClauses>> {
         @Override
         public String module() {
             return name;
         }
 
         @Override
-        public Answer<AnalysisInvariants> compute(Db db) {
+        public Answer<Map<TypeKey, ExpandedClauses>> compute(Db db) {
             Answer<souther.compiler.check.Expandable> expandable = db.ask(new Expandable(name));
             Answer<ResolvedSymbols> scope = Names.resolvedSymbols(db, name);
             if (!expandable.present() || !scope.present()) {
@@ -606,11 +629,93 @@ public final class Shapes {
             Answer<Map<String, Hir.FnDef>> imported = db.ask(new Bodies.ImportedDefinitions(name));
             Map<String, Hir.FnDef> published = imported.present() ? imported.value() : Map.of();
             try {
-                return Answer.of(ClauseHelpers.invariantsForDischarge(
+                return Answer.of(ClauseHelpers.expandedClausesOf(
                         expandable.value(), scope.value(), published));
             } catch (CompileException e) {
                 return Answer.absent(e);
             }
+        }
+    }
+
+    /**
+     * One declaration's clauses in the representation a reading of rules takes, answered by the
+     * module that wrote it.
+     *
+     * <p>The key is the declaration and nothing else. Where the clauses are worked out follows from
+     * the declaration's own address, so two modules asking about one declaration are asking one
+     * question and get one answer — which is what
+     * spec §invariant-discharge-representation requires and what reading them off whatever tree the
+     * asker held did not give.
+     *
+     * <p><b>A present batch answers for every declaration its module wrote.</b> So a declaration
+     * missing from one is this compiler having failed to hand its own reading over, and is refused
+     * rather than read as a declaration stating nothing. A batch that is not there at all is the
+     * other thing — a module that does not compile, or whose imports form a cycle — and is passed
+     * on as the absence it is.
+     */
+    public record ClausesExpandedFor(TypeKey named) implements Key<ExpandedClauseResult> {
+        @Override
+        public String module() {
+            return named.module();
+        }
+
+        @Override
+        public Answer<ExpandedClauseResult> compute(Db db) {
+            // The kind first, and the module that would expand it second. Which kinds have an
+            // `invariant` to write is the HIR's answer and holds whoever declared one, so a sum is
+            // answered before there is any question of an environment to expand in — asked the other
+            // way round, the language's own declarations, which are the only ones no compilation
+            // module wrote, would come back as clauses nobody could work out.
+            Hir.Def declared = declarationOf(db, named);
+            if (declared == null) {
+                return Answer.of(new ExpandedClauseResult.NotDeclared(named));
+            }
+            if (!(declared instanceof Hir.Data)) {
+                return Answer.of(new ExpandedClauseResult.Found(
+                        ClauseHelpers.noClausesToExpand(named)));
+            }
+            Answer<Map<TypeKey, ExpandedClauses>> expanded =
+                    db.ask(new ExpandedDeclarationClauses(named.module()));
+            if (!expanded.present()) {
+                // What the module was told about itself travels with the absence. Flattened to a
+                // bare `absent`, the reports its expansion produced would be dropped here and the
+                // reader would be short of the clauses and of the reason both.
+                return Answer.of(new ExpandedClauseResult.Unavailable(named), expanded.reports());
+            }
+            ExpandedClauses clauses = expanded.value().get(named);
+            if (clauses == null) {
+                throw new NothingWasExpandedFor(named);
+            }
+            return Answer.of(new ExpandedClauseResult.Found(clauses), expanded.reports());
+        }
+
+        /** The declaration {@code named} is, whether a module of this compilation wrote it or the
+         *  language declares it, or null where nothing does. */
+        private static Hir.Def declarationOf(Db db, TypeKey named) {
+            Answer<Hir.Def> mine = db.ask(new Names.ResolvedDeclaration(named));
+            if (mine.present()) {
+                return mine.value();
+            }
+            Answer<souther.compiler.stdlib.Stdlib> library = db.ask(new Front.Library());
+            return library.present() ? library.value().languageDeclaration(named) : null;
+        }
+    }
+
+    /**
+     * Raised where a module's expansion came out and says nothing about a declaration it wrote.
+     *
+     * <p>Not an ordinary limit, and said so by the interface it carries: a reading falls open on
+     * what it has no rule for, and this has to cross that, or a declaration whose clauses were never
+     * expanded is reported as one that was read and found to state little.
+     */
+    public static final class NothingWasExpandedFor extends RuntimeException
+            implements TheCompilerDisagreesWithItself {
+
+        private static final long serialVersionUID = 1L;
+
+        NothingWasExpandedFor(TypeKey named) {
+            super("the expansion of " + named.module() + " says nothing about "
+                    + named.qualified() + ", which it declares");
         }
     }
 

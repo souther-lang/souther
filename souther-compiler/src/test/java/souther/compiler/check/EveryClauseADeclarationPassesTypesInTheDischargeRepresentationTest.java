@@ -106,8 +106,7 @@ class EveryClauseADeclarationPassesTypesInTheDischargeRepresentationTest {
 
             String module = compilation.modules().get(0);
             Symbols symbols = Scopes.derived(compilation.db(), module).value();
-            AnalysisInvariants declared =
-                    compilation.db().ask(new Shapes.InvariantsForDischarge(module)).value();
+            ExpandedClauseLookup declared = RuleReadings.declaredBy(compilation.db(), module);
             Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
             assertNotNull(symbols);
             assertNotNull(declared);
@@ -120,7 +119,8 @@ class EveryClauseADeclarationPassesTypesInTheDischargeRepresentationTest {
                     continue;
                 }
                 TypeSymbol.AtModule named = TypeSymbols.declared(new TypeKey(module, data.name()));
-                for (Hir.InvariantClause clause : clauses.of(named, data)) {
+                for (Hir.InvariantClause clause : clauses.of(named, data).reached().stream()
+                        .map(TypeOps.Declared::clause).toList()) {
                     assertNotNull(clauses.typed(clause.expr(), named, data),
                             "`" + data.name() + "` declares a clause this check could not type:\n"
                                     + source);

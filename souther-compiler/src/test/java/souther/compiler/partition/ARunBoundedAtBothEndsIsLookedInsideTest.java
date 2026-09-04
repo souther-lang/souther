@@ -25,8 +25,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>What the order takes and what a search could name used to be two answers, and on an order whose
  * values fill they disagreed: {@code 3 * n} over decimals reaches every third of one, and the only
  * levels anything offered were the whole multiples of three. A run between one and two holds
- * infinitely many of the first and none of the second, so the point inside it was reported as one
- * the search stopped before reaching — with no search having run at all (issue #903).
+ * infinitely many of the first and none of the second, so the point inside it was reported as one a
+ * search had left something untried before reaching — with no search having run at all.
  *
  * <p>Measured against a run three times as wide, which differs in one thing: whether a whole multiple
  * of the generator happens to fall inside it. That one already worked, and an expectation on it alone

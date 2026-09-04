@@ -1294,11 +1294,11 @@ public final class Adequacy {
          * <p>Some of what it asks for is asked and not read. {@code Db.ask} records the read, so a
          * query whose answer nobody looks at is still an edge: this measure is recomputed when
          * that query's answer moves. Dropping the call would drop the edge, which is a change to
-         * when this is recomputed and not a tidy-up, so the names stay until somebody says which
-         * of the two the edge is — a dependency this measure has, or one a rewrite left behind.
+         * when this is recomputed and not a tidy-up, so the asks stay until somebody says which of
+         * the two each edge is — a dependency this measure has, or one a rewrite left behind.
+         * Written as a call and not a binding, so that what is wanted is on the page.
          */
         @Override
-        @SuppressWarnings("UnusedVariable")
         public Answer<Map<String, PartitionEvidence>> compute(Db db) {
             Answer<CheckSurface> prepared =
                     db.ask(new Shapes.CheckSurface(name));
@@ -1307,26 +1307,18 @@ public final class Adequacy {
             if (!prepared.present() || !scope.present() || !sigs.present()) {
                 return Answer.absent();
             }
-            souther.compiler.query.Bodies.Elaborated checked =
-                    db.ask(new Bodies.Checked(name)).value();
-            Map<String, souther.compiler.core.Core> bodies =
-                    checked == null ? Map.of() : checked.behaviorBodies();
-            souther.compiler.coverage.CoverageSites.Plan plan =
-                    checked == null
-                            ? souther.compiler.coverage.CoverageSites.Plan.NONE : checked.plan();
+            db.ask(new Bodies.Checked(name));
             Level level = levelOf(db);
             Map<String, RowReading> byTarget = db.ask(new RowReadings(name)).value();
             Map<String, InputDomain> readInputs = db.ask(new Inputs(name)).value();
             // What the guards above each place leave, asked once for the module and read by
             // every measure below — the same reason the reading of the input is.
-            Map<String, souther.compiler.check.PathReachability.Answers> arrives =
-                    db.ask(new PathReached(name)).value();
+            db.ask(new PathReached(name));
             // What every line this module's rules drew came to, asked once and read here. Measuring a
             // line takes building values, which is not this measure's work and not work to do twice.
             // What each behavior states about its answer, read into the representation the analysis
             // holds it in. A comparison written there draws a line as a `guard`'s does.
-            Map<String, souther.compiler.check.StatedContract> declared =
-                    db.ask(new Bodies.StatedContracts(name)).value();
+            db.ask(new Bodies.StatedContracts(name));
 
             Map<String, Measure<List<BorderAssessment>>> lines =
                     db.ask(new BoundaryReadings(name)).value();
@@ -2804,7 +2796,6 @@ public final class Adequacy {
          * when this is recomputed.
          */
         @Override
-        @SuppressWarnings("UnusedVariable")
         public Answer<Filling> compute(Db db) {
             Answer<CheckSurface> prepared =
                     db.ask(new Shapes.CheckSurface(name));
@@ -2834,13 +2825,11 @@ public final class Adequacy {
             Map<String, InputDomain> readInputs = db.ask(new Inputs(name)).value();
             // What the guards above each place leave, asked once for the module and read by
             // every measure below — the same reason the reading of the input is.
-            Map<String, souther.compiler.check.PathReachability.Answers> arrives =
-                    db.ask(new PathReached(name)).value();
+            db.ask(new PathReached(name));
             Symbols symbols = scope.value();
 
             // And what each behavior states about its answer, which draws lines of its own.
-            Map<String, souther.compiler.check.StatedContract> declared =
-                    db.ask(new Bodies.StatedContracts(name)).value();
+            db.ask(new Bodies.StatedContracts(name));
 
             List<Finding> findings = db.ask(new Findings(name)).value();
             Map<String, PartitionEvidence> partitions = coverage.value();
@@ -3233,6 +3222,11 @@ public final class Adequacy {
                     // figure ended it is the point's own to say and is said where a reader asks
                     // about the point, not in a list of what this run did not offer.
                     case ItemAssessment.Attempt.Stopped why -> unresolved.add(why.why());
+                    // And a search that ran to the end of what this compiler writes. It came to
+                    // nothing the way the one above did, and what it writes some of is the point's
+                    // own to say, in the same place — a list of what this run did not offer is no
+                    // more the place for that than it is for a figure.
+                    case ItemAssessment.Attempt.Unexhausted why -> unresolved.add(why.why());
                     // And a search whose answer was about less than the point had. It came to
                     // nothing in the same sense the two above did, and which figure made its answer
                     // short is the point's own to say, in the same place.

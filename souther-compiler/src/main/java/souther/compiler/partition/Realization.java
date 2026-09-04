@@ -94,22 +94,32 @@ public sealed interface Realization {
         }
 
         /**
-         * A walk that tried what it had and settled nothing, and the budgets it ran out of.
+         * A walk that tried what it had and settled nothing, and the budgets it met on the way.
          *
          * <p>Beside {@link #nothingComposedOne} for the reason above: which of the two a walk says
          * is the walk's own answer, and this one is what a side comes back with whether or not a
-         * figure was reached.
+         * figure was reached. Which is why it is not named for running out — the figures are said
+         * beside the answer and do not choose it.
          */
-        public static Unknown searchRanOut(java.util.Set<CompositionBudget> stoppedBy) {
-            return new Unknown(Reason.THE_SEARCH_RAN_OUT, stoppedBy);
+        public static Unknown searchLeftSomethingUntried(
+                java.util.Set<CompositionBudget> stoppedBy) {
+            return new Unknown(Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED, stoppedBy);
         }
 
         public enum Reason {
             /** This compiler composed no candidate — a position whose type it cannot write at, a
              *  term that is a measure of a value rather than the value. */
             NOTHING_COMPOSED_ONE,
-            /** Candidates were tried and the search stopped before it settled the question. */
-            THE_SEARCH_RAN_OUT
+            /**
+             * Candidates were tried and something was left untried before the question was
+             * settled.
+             *
+             * <p>Not that the search stopped. A side is never settled by looking, so this is what
+             * one comes back with whether or not a figure of this compiler's was reached — and a
+             * word saying it halted would name a stop that may not have happened. What was left,
+             * and whether raising anything reaches it, is said beside this.
+             */
+            THE_SEARCH_LEFT_SOMETHING_UNTRIED
         }
     }
 }

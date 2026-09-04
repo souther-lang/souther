@@ -47,7 +47,7 @@ class WhatWasWrittenIsFoundByFollowingWhatANameWasGivenTest {
     private final Hir.Binders binders = new Hir.Binders(OWNER);
     private final PathEngine engine =
             new PathEngine(Symbols.none(DefaultStdlib.get()),
-                    RuleReadings.noClauseFiled(Symbols.none(DefaultStdlib.get())),
+                    RuleReadings.noClauseFiled(),
                     Terms.Of.THE_DISCHARGE_TREE,
                     souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
 

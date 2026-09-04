@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import souther.compiler.ast.Hir;
 import souther.compiler.types.Type;
+import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
 
 import java.util.ArrayList;
@@ -53,6 +54,13 @@ public final class TypeCardinality {
     public static Cardinalities solve(List<Hir.Def> declarations, RuleReadingSource source,
                                       ReadingPolicy policy) {
         Symbols symbols = source.symbols();
+        // What this count is short of is worked out from the clauses it actually asked for, which
+        // is why the reading it runs against is wrapped rather than the declarations it walked
+        // being counted afterwards. The two are not the same set: a rule reaches a declaration
+        // through a spread, which the graph below does not follow, so a set taken from the graph
+        // would leave out exactly the rules that arrive from somewhere else.
+        Asked asked = new Asked(source.invariants());
+        source = new RuleReadingSource(symbols, asked);
         Map<TypeSymbol, Hir.Def> declared = reached(declarations, symbols);
         Map<TypeSymbol, Set<TypeSymbol>> edges = new LinkedHashMap<>();
         declared.forEach((name, def) -> edges.put(name, read(def, symbols, declared.keySet())));
@@ -62,7 +70,41 @@ public final class TypeCardinality {
         List<List<TypeSymbol>> components = TypeComponents.of(edges);
         return new Cardinalities(
                 Map.copyOf(pass(components, declared, edges, cuts, source, policy, Set.of())),
-                components, declared, edges, cuts, source, policy);
+                components, declared, edges, cuts, source, policy, asked.everyRuleReached());
+    }
+
+    /**
+     * The reading a count runs against, remembering whether every clause it was asked for could be
+     * given.
+     *
+     * <p>What makes a type have no value is what its rules leave, so a count taken where one of
+     * them was never worked out is a count over fewer rules than the model states. It may still be
+     * right; what it may not do is say so.
+     *
+     * <p>It answers as the reading it wraps and adds nothing to the answer. What it holds is about
+     * the run and not about any declaration, so a caller reads it once the run is over.
+     */
+    private static final class Asked implements ExpandedClauseLookup {
+
+        private final ExpandedClauseLookup reading;
+        private boolean everyRuleReached = true;
+
+        Asked(ExpandedClauseLookup reading) {
+            this.reading = reading;
+        }
+
+        @Override
+        public ExpandedClauseResult of(TypeKey declaration) {
+            ExpandedClauseResult result = reading.of(declaration);
+            if (result instanceof ExpandedClauseResult.Unavailable) {
+                everyRuleReached = false;
+            }
+            return result;
+        }
+
+        boolean everyRuleReached() {
+            return everyRuleReached;
+        }
     }
 
     /**
@@ -82,11 +124,14 @@ public final class TypeCardinality {
         private final CardinalityCuts cuts;
         private final RuleReadingSource source;
         private final ReadingPolicy policy;
+        private final boolean everyRuleReached;
 
         private Cardinalities(Map<TypeSymbol, Cardinality> upper, List<List<TypeSymbol>> components,
                               Map<TypeSymbol, Hir.Def> declared,
                               Map<TypeSymbol, Set<TypeSymbol>> edges, CardinalityCuts cuts,
-                              RuleReadingSource source, ReadingPolicy policy) {
+                              RuleReadingSource source, ReadingPolicy policy,
+                              boolean everyRuleReached) {
+            this.everyRuleReached = everyRuleReached;
             this.upper = upper;
             this.components = components;
             this.declared = declared;
@@ -94,6 +139,13 @@ public final class TypeCardinality {
             this.cuts = cuts;
             this.source = source;
             this.policy = policy;
+        }
+
+        /** Whether every rule this count read could be read. A count that was short of one says
+         *  nothing about a type having no value: the rule it did not get may be the rule that
+         *  empties it. */
+        public boolean everyRuleReached() {
+            return everyRuleReached;
         }
 
         /** How many values every declaration reached has at most. */

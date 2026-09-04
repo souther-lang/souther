@@ -556,7 +556,7 @@ class ABorderIsALineOnWhateverTheRuleCutsTest {
                 """);
 
         assertTrue(report.contains("read as f/a + b: = 2000000"), report);
-        assertFalse(report.contains("the search stopped before reaching a + b = 2000000"),
+        assertFalse(report.contains("the search left something untried before reaching a + b = 2000000"),
                 "one equation with one answer, in a box a million wide:\n" + report);
     }
 

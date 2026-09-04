@@ -698,7 +698,9 @@ public final class GeneratedRows {
             case ALL_CANDIDATES_REJECTED ->
                     "every value tried was refused at construction, which does not make the"
                             + " combination impossible";
-            case SEARCH_LIMIT -> "the search stopped before reaching it";
+            // As above: one of the two ways a search leaves something untried has a number in it
+            // and the other has none, so neither is said as a halt here.
+            case THE_SEARCH_LEFT_SOMETHING_UNTRIED -> "the search left something untried";
             case THE_GROUP_WAS_NOT_OFFERED ->
                     "the decisions that settle it have more combinations together than this offers"
                             + " a row for, so none of them was looked in";

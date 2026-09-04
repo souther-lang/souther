@@ -264,7 +264,7 @@ class ARowNothingRanFillsNoCombinationTest {
             ArmDisposition at = filled.discharge().at(new Generator.ArmOwed(probe));
             assertInstanceOf(ArmDisposition.Unresolved.class, at,
                     "the arm has an entry rather than the silence of one nothing claims: " + probe);
-            assertEquals(List.of(Generator.UnresolvedCombination.Reason.SEARCH_LIMIT),
+            assertEquals(List.of(Generator.UnresolvedCombination.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED),
                     ((ArmDisposition.Unresolved) at).why().stream()
                             .map(Generator.UnresolvedCombination::reason).toList(),
                     "and says the search stopped, nothing having been tried at it");
