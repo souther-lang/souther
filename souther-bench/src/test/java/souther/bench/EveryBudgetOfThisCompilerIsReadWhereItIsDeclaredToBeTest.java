@@ -163,7 +163,7 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/check/Symbols;I"
                             + "Ljava/util/Set;"
                             + "Lsouther/compiler/inputs/Requirements;"
-                            + "Ljava/util/function/ToIntBiFunction;)"
+                            + "Lsouther/compiler/partition/ConstructionPlan$HowManyItHolds;)"
                             + "Lsouther/compiler/partition/ConstructionPlan$NodeResult;",
                     "stops descending where a value is still made of positions, and says which"
                             + " figure — on the position where it stopped, or as the whole plan"

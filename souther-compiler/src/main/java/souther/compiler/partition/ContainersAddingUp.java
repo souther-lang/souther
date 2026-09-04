@@ -719,12 +719,26 @@ final class ContainersAddingUp {
                 }
                 case ConstructionPlan.Result.Beyond(Set<CompositionBudget> by) ->
                         asking.gaveUpAt(by);
-                // Two narrowings at one position, which nothing here writes: every one of them was
-                // stated by this walk, one at a time, at a position the plan named.
-                case ConstructionPlan.Result.Conflict conflict ->
-                        throw new IllegalStateException("`" + conflict.at() + "` would have to be"
-                                + " both " + conflict.one().spelled() + " and "
-                                + conflict.other().spelled() + ", though one narrowing was stated");
+                case ConstructionPlan.Result.Refused(ConstructionPlan.ModelRefusal why) -> {
+                    switch (why) {
+                        // Two narrowings at one position, which nothing here writes: every one of
+                        // them was stated by this walk, one at a time, at a position the plan
+                        // named.
+                        case ConstructionPlan.ModelRefusal.Conflict conflict ->
+                                throw new IllegalStateException("`" + conflict.at() + "` would have"
+                                        + " to be both " + conflict.one().spelled() + " and "
+                                        + conflict.other().spelled()
+                                        + ", though one narrowing was stated");
+                        // A collection on the way down holds nothing, so nothing stands inside it
+                        // and there was never a way to try. Which is what the list beside this one
+                        // already says: a position nothing stands under is a position nothing
+                        // stands under whether the declarations put nothing there or the rules
+                        // leave no room for it, and a walk that never had a way is the same news
+                        // either way.
+                        case ConstructionPlan.ModelRefusal.NoRoom noRoom ->
+                                nothingStandsAt.add(noRoom.at());
+                    }
+                }
             }
         }
         return new Ways(found, asking.stoppedBy(), nothingStandsAt);
@@ -786,7 +800,7 @@ final class ContainersAddingUp {
             asked = left.removeFirst();
             return ConstructionPlan.of(element, at, ruleSource.symbols(),
                     Set.of(asked), Requirements.NONE,
-                    (_, building) -> Partitions.leastHeld(building, ruleSource));
+                    (_, building) -> Partitions.heldRange(building, ruleSource, null));
         }
 
         /** The way the last answer is about. */

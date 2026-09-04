@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.check.DeclaredBounds;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.ast.Hir;
@@ -34,6 +35,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * class beneath it at the same time, and no reader could see that no value is both.
  */
 class AnOptionalsClassesStateWhichNarrowingTheyAreTest {
+
+    /** The rules asking a collection to hold one and capping it in no way. */
+    private static final ConstructionPlan.HowManyItHolds ONE_AT_LEAST =
+            (_, _) -> new DeclaredBounds.CountRange(1, Integer.MAX_VALUE);
+
 
     private static final String FLAGGED = """
             module example.flagged
@@ -131,7 +137,7 @@ class AnOptionalsClassesStateWhichNarrowingTheyAreTest {
         Read read = read(HOLDING);
         return assertInstanceOf(ConstructionPlan.Result.Planned.class,
                 ConstructionPlan.of(read.sig().inputTypes().get(0), TermPath.of("query"),
-                        read.rules().symbols(), Set.of(), required, (_, _) -> 1),
+                        read.rules().symbols(), Set.of(), required, ONE_AT_LEAST),
                 "nothing here asks one position to be two things").plan();
     }
 

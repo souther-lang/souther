@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import souther.test.RepositoryLayout;
 
 import souther.compiler.ast.Hir;
+import souther.compiler.check.DeclaredBounds;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.check.Prepared;
@@ -64,6 +65,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class AConstructionPositionIsNotAnInputPositionTest {
 
+    /** The rules counting nothing, which is what every model here leaves them saying. */
+    private static final ConstructionPlan.HowManyItHolds ANY =
+            (_, _) -> new DeclaredBounds.CountRange(0, Integer.MAX_VALUE);
+
+
     /** Read once: what this asks of it does not change between its checks. */
     private static final RepositoryLayout REPOSITORY = RepositoryLayout.ofWorkingDirectory();
 
@@ -92,7 +98,7 @@ class AConstructionPositionIsNotAnInputPositionTest {
         ConstructionPlan.Result planned = ConstructionPlan.of(read.sig().inputTypes().get(0),
                 TermPath.of(read.spec().params().get(0).name()), read.rules().symbols(), Set.of(),
                 required,
-                (_, _) -> 0);
+                ANY);
         return assertInstanceOf(ConstructionPlan.Result.Planned.class, planned,
                 "nothing here asks one position to be two things").plan();
     }

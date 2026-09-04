@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.ast.Hir;
+import souther.compiler.check.DeclaredBounds;
 import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
@@ -45,6 +46,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * the caller's value is quietly missing from what was built.
  */
 class APlanSaysWhichNarrowingADemandUnderASumIsOwedTest {
+
+    /** The rules counting nothing, which is what every model here leaves them saying. */
+    private static final ConstructionPlan.HowManyItHolds ANY =
+            (_, _) -> new DeclaredBounds.CountRange(0, Integer.MAX_VALUE);
+
 
     /**
      * A list of items whose method is a sum of two cases, both spreading the same amount.
@@ -173,6 +179,79 @@ class APlanSaysWhichNarrowingADemandUnderASumIsOwedTest {
                         .map(ConstructionPlan.Slot::at).toList());
     }
 
+    /**
+     * The same sum with a collection declared after it, so that the walk meets the narrowing first.
+     *
+     * <p>What is asked of both at once: a value under the sum, which nothing has said which case
+     * of, and a value inside the list.
+     */
+    private static final String BESIDE_A_LIST = """
+            module g
+
+            data Common = { amount: Int }
+            data Card = { ...Common, issuer: Int }
+            data Cash = { ...Common, note: Int }
+            data Method = Card | Cash
+            data Item = { method: Method, bag: List<Int> }
+
+            data Query = { item: Item }
+            data Page = { count: Int }
+
+            behavior readArticles : (query: Query) -> Page
+            """;
+
+    /**
+     * A field the model refuses outranks a narrowing owed at the field before it.
+     *
+     * <p>The two are not alike. A refusal is an answer about the value being built and holds
+     * whatever the caller does next; a narrowing owed is a question put to whoever asked for the
+     * value. A caller answered with the question states a narrowing, asks again, and is told there
+     * was never a row — so the walk goes on past the question to find out whether there is one.
+     *
+     * <p>Held because the other way round reads like tidying. The narrowing is the first thing the
+     * walk has in hand and returning it there is one line shorter, and what it costs is a round
+     * trip through the caller that cannot end anywhere.
+     */
+    @Test
+    void aRefusalFurtherAlongOutranksANarrowingOwedBeforeIt() {
+        TermPath bag = TermPath.of("query").then("item").then("bag");
+
+        ConstructionPlan.Result asked = ConstructionPlan.of(typeOf(BESIDE_A_LIST),
+                TermPath.of("query"), symbolsOf(BESIDE_A_LIST),
+                Set.of(TermPath.of("query").then("item").then("method").then("amount"),
+                        bag.element()),
+                Requirements.NONE,
+                (at, _) -> at.equals(bag) ? new DeclaredBounds.CountRange(0, 0)
+                        : new DeclaredBounds.CountRange(0, Integer.MAX_VALUE));
+
+        assertInstanceOf(ConstructionPlan.ModelRefusal.NoRoom.class,
+                assertInstanceOf(ConstructionPlan.Result.Refused.class, asked,
+                        "the list leaves no room, and no narrowing the caller states changes that")
+                        .why(),
+                "so what comes back is the refusal and not the narrowing owed at the field before"
+                        + " it");
+    }
+
+    /**
+     * And where the list has room, the narrowing owed is what comes back.
+     *
+     * <p>The control. Only what the rules leave the list differs between the two, so a walk that
+     * returned the refusal whatever the count was would pass the one above.
+     */
+    @Test
+    void aNarrowingOwedIsWhatComesBackWhereNothingIsRefused() {
+        ConstructionPlan.Result asked = ConstructionPlan.of(typeOf(BESIDE_A_LIST),
+                TermPath.of("query"), symbolsOf(BESIDE_A_LIST),
+                Set.of(TermPath.of("query").then("item").then("method").then("amount"),
+                        TermPath.of("query").then("item").then("bag").element()),
+                Requirements.NONE, ANY);
+
+        assertEquals(TermPath.of("query").then("item").then("method"),
+                assertInstanceOf(ConstructionPlan.Result.Unnarrowed.class, asked,
+                        "nothing is refused, so what the caller is owed is the narrowing").at(),
+                "at the position it is owed at");
+    }
+
     /** The narrowing to one leaf, spelled the way the checker's resolution of an arm spells it: a
      *  leaf is a case that covers itself, so selecting it narrows to that one distinction. */
     private static Refinement caseOf(String leaf) {
@@ -186,7 +265,7 @@ class APlanSaysWhichNarrowingADemandUnderASumIsOwedTest {
 
     private static ConstructionPlan.Result planningOf(String source, Set<TermPath> decided) {
         return ConstructionPlan.of(typeOf(source), TermPath.of("query"), symbolsOf(source),
-                decided, Requirements.NONE, (_, _) -> 0);
+                decided, Requirements.NONE, ANY);
     }
 
     private static Type typeOf(String source) {

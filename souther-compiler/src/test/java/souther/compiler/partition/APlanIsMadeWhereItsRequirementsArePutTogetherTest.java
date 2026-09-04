@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.ast.Hir;
+import souther.compiler.check.DeclaredBounds;
 import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
@@ -45,6 +46,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * the two are merged. The scan below is a tripwire under that.
  */
 class APlanIsMadeWhereItsRequirementsArePutTogetherTest {
+
+    /** The rules counting nothing, which is what every model here leaves them saying. */
+    private static final ConstructionPlan.HowManyItHolds ANY =
+            (_, _) -> new DeclaredBounds.CountRange(0, Integer.MAX_VALUE);
 
     private static final String FILTER = """
             module g
@@ -110,11 +115,13 @@ class APlanIsMadeWhereItsRequirementsArePutTogetherTest {
 
         ConstructionPlan.Result asked = ConstructionPlan.of(typeOf(), TermPath.of("query"),
                 symbols(), Set.of(tag.refine(caseOf("Tag"))),
-                Requirements.NONE.and(tag, caseOf("NoTag")), (_, _) -> 0);
+                Requirements.NONE.and(tag, caseOf("NoTag")), ANY);
 
-        ConstructionPlan.Result.Conflict against =
-                assertInstanceOf(ConstructionPlan.Result.Conflict.class, asked,
-                        "no value at `query.tag` is both a `Tag` and a `NoTag`");
+        ConstructionPlan.ModelRefusal.Conflict against = assertInstanceOf(
+                ConstructionPlan.ModelRefusal.Conflict.class,
+                assertInstanceOf(ConstructionPlan.Result.Refused.class, asked,
+                        "no value at `query.tag` is both a `Tag` and a `NoTag`").why(),
+                "and it is the model settling it, said as the two it would have to be");
         assertEquals(tag, against.at());
         assertEquals(Set.of("Tag", "NoTag"),
                 Set.of(against.one().spelled(), against.other().spelled()),
@@ -139,7 +146,7 @@ class APlanIsMadeWhereItsRequirementsArePutTogetherTest {
 
         IllegalStateException said = assertThrows(IllegalStateException.class,
                 () -> ConstructionPlan.of(typeOf(), TermPath.of("query"), symbols(), Set.of(tag),
-                        Requirements.NONE.and(tag, caseOf("Tag")), (_, _) -> 0));
+                        Requirements.NONE.and(tag, caseOf("Tag")), ANY));
 
         assertTrue(said.getMessage().contains("query.tag") && said.getMessage().contains("Tag"),
                 "the answer names the position said twice: " + said.getMessage());
@@ -175,7 +182,7 @@ class APlanIsMadeWhereItsRequirementsArePutTogetherTest {
                         Set.of(),
                         Requirements.NONE.and(tag, Refinement.of(new Case.Presence(false)))
                                 .and(absent, caseOf("Tag")),
-                        (_, _) -> 0));
+                        ANY));
 
         assertTrue(said.getMessage().contains("query.tag@None"),
                 "the answer names the position that holds no value: " + said.getMessage());
@@ -197,7 +204,7 @@ class APlanIsMadeWhereItsRequirementsArePutTogetherTest {
                 () -> ConstructionPlan.of(heldType(), TermPath.of("query"), heldSymbols(),
                         Set.of(absent.then("value")),
                         Requirements.NONE.and(tag, Refinement.of(new Case.Presence(false))),
-                        (_, _) -> 0));
+                        ANY));
 
         assertTrue(said.getMessage().contains("query.tag@None.value"),
                 "the answer names the value fixed where nothing stands: " + said.getMessage());
@@ -214,7 +221,7 @@ class APlanIsMadeWhereItsRequirementsArePutTogetherTest {
     private static ConstructionPlan planned(Set<TermPath> decided, Requirements additional) {
         return assertInstanceOf(ConstructionPlan.Result.Planned.class,
                 ConstructionPlan.of(typeOf(), TermPath.of("query"), symbols(), decided, additional,
-                        (_, _) -> 0),
+                        ANY),
                 "nothing here asks one position to be two things").plan();
     }
 
