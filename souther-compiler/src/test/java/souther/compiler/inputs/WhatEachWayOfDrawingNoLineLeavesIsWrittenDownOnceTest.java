@@ -165,23 +165,20 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
     }
 
     /**
-     * And every reason that is neither of those, which is what a question is left standing by.
+     * And every reason that is neither of those, which is an answer nothing built.
      *
      * <p>Its own table because the two above are answers about a line: what a rule with none of one
-     * leaves, and what a position nothing was reached at leaves. A rule nothing established an
-     * interpretation of is neither — nothing stopped on it and nothing drew a line it is the
-     * absence of — so it has no {@code leavesShort} to answer and no position to be the account of.
+     * leaves, and what a position nothing was reached at leaves. An answer larger than the
+     * allowance is neither — it names no rule for a line to be missing from, and every rule of the
+     * position did arrive — so it has no {@code leavesShort} to answer and no position to be the
+     * account of.
      *
      * <p>What it does have is a word a document writes, which is why it is here at all: the whole
      * of the coarsening is meant to be reviewable in one place, and a reason with a capability of
      * its own would otherwise be projected where nothing reads the collapse back.
      */
-    private static Map<String, String> theOtherReasonsAboutARule() {
+    private static Map<String, String> theReasonsInNeitherHalf() {
         Map<String, String> table = new LinkedHashMap<>();
-        // Not `UNSUPPORTED_SYNTAX`, which promises a rule was read and could not be used: nothing
-        // engaged with this one. Not `RULES_NOT_READ_AT_ALL` either, which promises the rule was
-        // never arrived at: it was.
-        table.put("NoReadingTookItIn", "RULE_NOT_INTERPRETED_HERE/UNAFFECTED");
         // Here because it is in neither capability, which is the fact rather than an oversight. It
         // is not a rule without a line — it is about no rule — and it is not a position whose rules
         // were never reached, since every one of them arrived and was understood. What was not
@@ -234,7 +231,7 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
                     ReportedReason.of(each).name() + "/" + sensitivityOf(each));
         }
 
-        assertEquals(theOtherReasonsAboutARule(), said);
+        assertEquals(theReasonsInNeitherHalf(), said);
     }
 
     /**
@@ -269,11 +266,8 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
      * those reasons weaken no measurement, so nothing may ask them.
      */
     private static String sensitivityOf(BlockReason reason) {
-        if (reason instanceof BlockReason.ReadingStopReason stopped) {
-            return stopped.runSensitivity().name();
-        }
-        return reason instanceof BlockReason.AboutARule rule
-                ? rule.runSensitivity().name() : "-";
+        return reason instanceof BlockReason.ReadingStopReason stopped
+                ? stopped.runSensitivity().name() : "-";
     }
 
     /**
@@ -320,7 +314,7 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
         java.util.Set<String> written = new java.util.LinkedHashSet<>();
         written.addAll(theRulesWithNoLine().keySet());
         written.addAll(theStopsAtAPosition().keySet());
-        written.addAll(theOtherReasonsAboutARule().keySet());
+        written.addAll(theReasonsInNeitherHalf().keySet());
 
         assertEquals(reasons(BlockReason.class), written,
                 "a reason a document has a word for, and no row saying which word");
@@ -391,8 +385,7 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
                         TermPath.of("c")),
                 new BlockReason.UnsupportedTraversal(BlockReason.Traversal.MAPPING_CONTENT),
                 new BlockReason.ValueRulesNotReached(),
-                new BlockReason.ValueRulesNotReachedPastDepthLimit(),
-                new BlockReason.NoReadingTookItIn());
+                new BlockReason.ValueRulesNotReachedPastDepthLimit());
     }
 
     /** Those of them that are rules with no line, asked of each rather than listed. */
@@ -430,8 +423,9 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
 
         assertEquals(aPosition, words(schema, "notReadReason"),
                 "an entry about a position admits what a position's readings can be short of");
-        assertEquals(projected(everyReasonAboutARule()), words(schema, "questionStoppedReason"),
-                "a question admits what can be short about a rule");
+        assertEquals(projected(everyReasonAQuestionStandsOn()),
+                words(schema, "questionStoppedReason"),
+                "a question admits what can leave it standing");
     }
 
     /**
@@ -511,11 +505,11 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
                 .toList();
     }
 
-    /** And those of them that are a shortfall about a rule, which is what a question stands on. */
-    private static List<BlockReason.AboutARule> everyReasonAboutARule() {
+    /** And those of them a question a rule raised can be left standing by. */
+    private static List<BlockReason.QuestionStandingReason> everyReasonAQuestionStandsOn() {
         return everyReason().stream()
-                .filter(BlockReason.AboutARule.class::isInstance)
-                .map(BlockReason.AboutARule.class::cast).toList();
+                .filter(BlockReason.QuestionStandingReason.class::isInstance)
+                .map(BlockReason.QuestionStandingReason.class::cast).toList();
     }
 
     /** And those of them that name a position and no rule. */

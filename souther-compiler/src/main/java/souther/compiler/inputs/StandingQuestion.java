@@ -50,7 +50,7 @@ public sealed interface StandingQuestion {
      * about the position it stands at answers a different question and belongs to whoever asks that
      * one.
      */
-    List<BlockReason.AboutARule> stopped();
+    List<BlockReason.QuestionStandingReason> stopped();
 
     /**
      * Whether {@code measure} stays open while this stands.
@@ -137,7 +137,7 @@ public sealed interface StandingQuestion {
      *                unaccounted for with nothing to act on
      */
     record Exact(Fact fact, Set<RuleCitation> cited,
-                 List<BlockReason.AboutARule> stopped) implements StandingQuestion {
+                 List<BlockReason.QuestionStandingReason> stopped) implements StandingQuestion {
 
         public Exact {
             if (fact == null) {
@@ -158,7 +158,7 @@ public sealed interface StandingQuestion {
 
         /** One reader's account of it, as that reader produced it. */
         public static Exact of(RuleRef rule, RuleCitation cited, InputQuestion asks,
-                               List<BlockReason.AboutARule> stopped) {
+                               List<BlockReason.QuestionStandingReason> stopped) {
             return new Exact(new Fact(rule, asks), Set.of(cited), stopped);
         }
 
@@ -313,7 +313,7 @@ public sealed interface StandingQuestion {
 
         /** The one reason, as the list every one of these is read through. */
         @Override
-        public List<BlockReason.AboutARule> stopped() {
+        public List<BlockReason.QuestionStandingReason> stopped() {
             return List.of(filed.why());
         }
 
@@ -418,7 +418,7 @@ public sealed interface StandingQuestion {
         }
 
         @Override
-        public List<BlockReason.AboutARule> stopped() {
+        public List<BlockReason.QuestionStandingReason> stopped() {
             return List.of(filed.why());
         }
 

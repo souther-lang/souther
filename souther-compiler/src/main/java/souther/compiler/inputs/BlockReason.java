@@ -73,7 +73,7 @@ public sealed interface BlockReason {
      * remember which arms are the exception, and the day one forgot it would name a rule that
      * nothing was wrong with.
      */
-    sealed interface AnswerRealizationStopped extends ReadingStopReason {
+    sealed interface AnswerRealizationStopped extends QuestionStandingReason {
 
         /** Both are an allowance a reading was granted running out, which is a figure a run may
          *  allow more of. */
@@ -121,26 +121,30 @@ public sealed interface BlockReason {
     }
 
     /**
-     * A shortfall about a rule of the model, whatever became of the reading of it.
+     * A shortfall that leaves a question a rule raised standing.
      *
      * <p>The third capability, and it cuts across the other two the way they cut across each other.
-     * A rule a reading held and gave up on is one of these and is also a stop and also a rule with
-     * no line; a rule no reading claimed is one of these and is neither of those — nothing stopped,
-     * because nothing started, and no reader is answerable for a line it never drew.
+     * A rule a reading gave up on is one of these and is also a rule with no line; an answer the
+     * rules come to that was not built is one of these and is neither of those — it names no rule,
+     * and no reading drew a line it could be the absence of.
      *
-     * <p>What a caller typed here is promised is that there is a rule to name. That is what the
-     * question a rule raises needs and all it needs: {@link souther.compiler.inputs.StandingQuestion}
-     * carries the rule already, and what it is short of is about that rule rather than about the
-     * place it stands at. Typed by {@link RuleReadingStopped} instead, a question no reading claimed
-     * had to be answered with some reading's account of stopping — and every reader downstream that
-     * takes a stop, a line that came to nothing, or a position's verdict would take that answer as
-     * well.
+     * <p><b>Two ways for one question to stand, and both may hold of it at once.</b> The rule the
+     * question is of may be one a reading gave up on, and the answer its position finally admits
+     * may be one nothing built. The two are recorded in different places — the first under the
+     * rule, the second at the position, because no rule is answerable for it — and a rule with a
+     * conjunct nothing reads beside a choice whose meet ran past the allowance stands on both. A
+     * caller handed one of them where two hold is told to rewrite a form, and the position stays as
+     * wide as it was for a reason nothing said.
+     *
+     * <p>What is promised here is that a reading fell short, and not that there is a rule to name.
+     * {@link souther.compiler.inputs.StandingQuestion} carries the rule it is of already: which
+     * rule raised the question and what stopped the answer are two facts, and a type that made the
+     * second promise the first is what sent an answer-level limit out as a rule nobody interpreted.
+     *
+     * <p>Not every stop. A position whose rules were never reached raises no question at all, so
+     * {@link AboutThePosition} is the half of {@link ReadingStopReason} that is not this.
      */
-    sealed interface AboutARule extends BlockReason {
-
-        /** Whether a run that allows more could get past this — see
-         *  {@link ReadingStopReason#runSensitivity()}, which this half is asked alongside. */
-        RunSensitivity runSensitivity();
+    sealed interface QuestionStandingReason extends ReadingStopReason {
     }
 
     /**
@@ -160,11 +164,12 @@ public sealed interface BlockReason {
      * no subject for it.
      *
      * <p><b>The one reason in all three capabilities.</b> A rule this got partway through is a rule
-     * with no line here, it is this compiler having fallen short, and it is about a rule — so it is
-     * the only member of {@link ReadingStopReason} that names a rule, and the only member of
-     * {@link RuleWithoutLineReason} a caller asking about a stop may be handed.
+     * with no line here, it is this compiler having fallen short, and it leaves the question that
+     * rule raised standing — so it is the only member of {@link RuleWithoutLineReason} a caller
+     * asking about a stop may be handed, and the only member of {@link QuestionStandingReason}
+     * that names a rule.
      */
-    sealed interface RuleReadingStopped extends StoppedWithoutALine, AboutARule {
+    sealed interface RuleReadingStopped extends StoppedWithoutALine, QuestionStandingReason {
 
         /**
          * One switch over the ten, and the reason for it being one: a division of these into two
@@ -317,7 +322,33 @@ public sealed interface BlockReason {
             // reading of a position, which this is; asking which rule it was is the other question
             // and has no answer.
             case EXACT_VALUES_TOO_COSTLY -> new ExactValuesTooCostly();
-            default -> ofARuleTheValueReadingLeft(why);
+            // And the rest by the one above, written out rather than defaulted to. A reason added
+            // to the vocabulary is a decision about which of these three it is, and a default takes
+            // that decision by arriving at whichever arm was written last.
+            case RELATES_TWO_POSITIONS, FORM_NOT_READ, ALTERNATIVE_NOT_READ, PATTERN_TOO_COSTLY,
+                 PATTERN_TOO_DEEPLY_NESTED -> ofARuleTheValueReadingLeft(why);
+        };
+    }
+
+    /**
+     * The same, for a caller holding a question a rule raised that nothing answered.
+     *
+     * <p>Two kinds of reason reach a standing question and one does not. A rule this reading gave
+     * up on and an answer it could not build both leave the question where they found it; a reading
+     * that never arrived at the position raises no question for anything to stand on, so one of
+     * those here is a caller answering a question out of a place it never looked.
+     *
+     * <p>Refused rather than dropped, and refused here rather than at each caller. What guarantees
+     * nothing arrives is {@link souther.compiler.check.RuleAccounting.Why.TheValueReadingSays},
+     * which will not hold one; this says the same thing where the type changes, so the guarantee is
+     * not a comment about a constructor two packages away.
+     */
+    static QuestionStandingReason ofAQuestionStandingOn(souther.compiler.values.UnreadReason why) {
+        return switch (of(why)) {
+            case QuestionStandingReason it -> it;
+            case AboutThePosition _ -> throw new IllegalArgumentException(
+                    "a reason about " + why.about() + " leaves no question of a rule standing: "
+                            + why);
         };
     }
 
@@ -487,50 +518,13 @@ public sealed interface BlockReason {
      * allowance, so a rule cheap enough on its own goes unmade beside one that was not — and which
      * of them was which may not be told, because it would send an author to rewrite whichever rule
      * the building reached last. Which is why this carries no rule and is not among the reasons
-     * that do ({@link AboutARule}).
+     * that do ({@link RuleReadingStopped}).
      *
      * <p>Beside {@link ExactValuesTooCostly} rather than the same thing said twice: that one is the
      * position's own answer coming out wider than the rules leave it, and here that answer is what
      * the rules leave and a reader is short of something else.
      */
     record RulesNotHandedOnAsSets() implements AnswerRealizationStopped, StoppedWithoutALine {}
-
-    /**
-     * Every reading was asked about the rule at this position and none of them took it in, and none
-     * of them wrote down why.
-     *
-     * <p>Its own case because it names no reading. The others are one reading's account of where it
-     * gave up on a rule, and here no reading was short of the rule at all — answered with one of
-     * them, an author is told that a reader fell short of their clause, and is sent to lift a
-     * capability that was never the matter.
-     *
-     * <p><b>Despite the name, the reading may well have taken the rule in.</b> What produces this is
-     * a question standing with no reason filed under the rule that raised it, and the case that
-     * reaches it is a reading that read every rule and could not build the exact answer they come to
-     * within its allowance. That loss is about the answer, so no rule is answerable for it and none
-     * is filed. What the name should be is its own question — see the issue on where an answer-level
-     * limit belongs in the published vocabulary.
-     *
-     * <p>Nothing is claimed about which capability would lift it, which is what makes it different
-     * from every case above. What a document writes for it is the same word it writes for a rule
-     * written in a form nothing here reads, because that is the whole of what is known: no reading
-     * of this compiler has a word for the rule.
-     *
-     * <p><b>Not a {@link ReadingStopReason} and not a {@link RuleWithoutLineReason}.</b> Nothing
-     * stopped here, because nothing started; and no reading drew a line this could be the absence
-     * of. So it reaches neither the readers that ask what stopped a derivation nor the account of
-     * the rules a position was left with, and a {@link RuleWithoutALine} cannot be built carrying
-     * it. What is true of it is that there is a rule to name, which is {@link AboutARule}.
-     */
-    record NoReadingTookItIn() implements AboutARule {
-
-        /** Nothing was compared against a figure: no reading claimed the rule, and a run allowed
-         *  more of everything has as many readers as this one. */
-        @Override
-        public RunSensitivity runSensitivity() {
-            return RunSensitivity.UNAFFECTED;
-        }
-    }
 
     /**
      * A rule about the position says how it stands against another position, and what is held here

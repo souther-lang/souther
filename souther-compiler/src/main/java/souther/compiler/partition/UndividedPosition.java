@@ -141,37 +141,17 @@ public record UndividedPosition(TermPath at, Why why) {
          */
         RULES_NOT_READ_AT_ALL,
         /**
-         * The rule was reached, and nothing worked out what it says about the values here.
-         *
-         * <p>Between the two above, and neither of them. {@link #UNSUPPORTED_SYNTAX} says a rule
-         * was read and could not be used — something engaged with it and gave up, and what a
-         * reader may go on to do about it is find the form it is written in. {@link
-         * #RULES_NOT_READ_AT_ALL} says the rule was never arrived at, and what is written under
-         * that hole is whatever it is. This one is a rule that arrived and that nothing here
-         * established an interpretation of for the question it raises.
-         *
-         * <p>Nothing is claimed about which capability would make it interpretable. That is what
-         * separates it from the first: an author sent after a form to rewrite would be looking for
-         * one nothing complained about, and the rule may well have been read in full right here.
-         * What is known is that the rule is here, that a question of it is standing, and that
-         * nothing answered it.
-         *
-         * <p><b>The word promises more than the state it carries.</b> What reaches it is a rule read
-         * from end to end whose exact answer ran past what the reading may build, and "nothing
-         * established an interpretation" is not that. Where an answer-level limit belongs in this
-         * vocabulary is #1335.
-         */
-        RULE_NOT_INTERPRETED_HERE,
-
-        /**
          * The compiler followed the rules about this position, and building the exact set of values
          * they leave between them cost more than it allows itself.
          *
          * <p>Its own word because nothing else here says it. {@link #UNSUPPORTED_SYNTAX} promises a
          * rule was read and could not be used, which sends an author after the form it is written
-         * in; {@link #RULE_NOT_INTERPRETED_HERE} promises nothing established an interpretation.
-         * Here every rule was interpreted and the interpretation is what turned out to be too
-         * large, so both of those would send a reader after something that is not the matter.
+         * in. Here every rule was interpreted and the interpretation is what turned out to be too
+         * large, so that word would send a reader after something that is not the matter.
+         *
+         * <p>Said of a question a rule raised as readily as of a position. A rule read from end to
+         * end whose position's values were not worked out leaves its question standing on this and
+         * on nothing else, and one whose form also defeated a reading leaves it standing on both.
          *
          * <p><b>About the answer and not about a rule.</b> Two rules each cheap on their own can
          * have an answer between them that is not, so nothing here names a rule to go and change.

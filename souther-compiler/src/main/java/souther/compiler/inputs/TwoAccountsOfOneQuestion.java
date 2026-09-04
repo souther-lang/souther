@@ -20,8 +20,8 @@ public final class TwoAccountsOfOneQuestion extends IllegalStateException {
     private static final long serialVersionUID = 1L;
 
     public TwoAccountsOfOneQuestion(StandingQuestion.Exact.Fact question,
-                                    List<BlockReason.AboutARule> one,
-                                    List<BlockReason.AboutARule> other) {
+                                    List<BlockReason.QuestionStandingReason> one,
+                                    List<BlockReason.QuestionStandingReason> other) {
         super("two readings of " + question + " disagree about what the author wrote it short of: "
                 + one + " and " + other);
     }

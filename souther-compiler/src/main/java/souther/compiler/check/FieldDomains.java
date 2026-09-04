@@ -1040,47 +1040,55 @@ public final class FieldDomains {
      * <p>Not the name's other reasons: those belong to whichever rule left them, and a rule answered
      * from the name is named beside a limit that is its neighbour's.
      *
-     * <p><b>The name is asked one thing, and it is whether the answer accounts for the question.</b>
-     * An allowance run down by everything a position admits is a fact about the answer and not about
-     * any rule that paid into it ({@link UnreadReason.About#THE_ANSWER}), and
-     * {@link ReadingEvidence#stoppedBy} refuses such a reason rather than filing it under a rule. So
-     * a question standing for that reason has nothing under its rule by construction, and that is
-     * what tells it from the accounting coming apart.
+     * <p><b>And what the name holds beside it, which is not a fallback.</b> An allowance run down by
+     * everything a position admits is a fact about the answer and not about any rule that paid into
+     * it ({@link UnreadReason.About#THE_ANSWER}), so {@link ReadingEvidence#stoppedBy} refuses such
+     * a reason rather than filing it under a rule and it is read off the name instead. It still
+     * accounts for this question: the rule was read and the values its position may hold were not
+     * worked out, so the question stands whatever else does. Taken only where the rule had nothing
+     * of its own, a rule short in both ways went out short in one — an author rewrites the form and
+     * the position is as wide as it was, for a limit nothing named.
      *
-     * <p>Asked as itself and not as "not about a rule". A reason is about a rule, about the answer,
-     * or about neither, and the third is a reading that never reached the position — which accounts
-     * for nothing, as its name says. Written as the complement of the first, one of those at the
-     * name would stand in for an account that is not there.
+     * <p>The rule's own account first and the name's after it, each said once. That is the order
+     * the two were established in, and it leaves a question short in one way spelled exactly as it
+     * was before there was a second.
+     *
+     * <p>Empty is the accounting coming apart. The rule was met by the walk that asks and by nothing
+     * that reads, and neither the rule nor the position has a word for it.
      */
     private RuleAccounting.Why stoppedBy(RuleRef rule, RuleKey at, List<FactSubject> named) {
         // What a rule is answerable for, as the facts it is answerable for. Asked for the reasons
         // alone here, the written places they were decided at would be gone one call before the
         // account that names the rule, and two facts about two clauses would arrive as one.
         Set<RuleShortfall> why = took.stoppedBy(rule, named);
-        if (!why.isEmpty()) {
-            return new RuleAccounting.Why.TheValueReadingSays(why);
-        }
-        if (unreadByName.getOrDefault(at, List.of()).stream()
-                .noneMatch(FieldDomains::standsInForARulesOwnAccount)) {
+        // And what the answer this question waited on was short of, which is the name's and is
+        // taken beside the rule's rather than where the rule has none of its own.
+        Set<UnreadReason> answered = new LinkedHashSet<>();
+        unreadByName.getOrDefault(at, List.of()).stream()
+                .filter(FieldDomains::standsInForARulesOwnAccount)
+                .forEach(answered::add);
+        if (why.isEmpty() && answered.isEmpty()) {
             throw new AStandingQuestionWithNoAccount(rule, named);
         }
-        return new RuleAccounting.Why.NothingTookItIn();
+        return new RuleAccounting.Why.TheValueReadingSays(why, new AnswerShortfalls(answered));
     }
 
     /**
-     * Whether {@code why} accounts for a question a rule left standing, in place of the rule's own
-     * account of it.
+     * Whether {@code why} accounts for a question a rule left standing without being filed under
+     * the rule.
      *
-     * <p>Named and asked once, because it is the whole of the refusal above: written inline as a
-     * test of the shape a reason is not, a reason of the third kind stood in for an account that is
-     * not there. Its three answers are the three kinds a reason is about, so a reason added to any
-     * of them is decided here rather than by where it happens to be written.
+     * <p>Named and asked once, because it is the whole of what the name is read for above: written
+     * inline as a test of the shape a reason is not, a reason of the third kind would account for a
+     * question out of a place nothing looked at. Its three answers are the three kinds a reason is
+     * about, so a reason added to any of them is decided here rather than by where it happens to be
+     * written.
      *
-     * <p>A reason about the answer does stand in: an allowance run down by everything a position
-     * admits is a fact about what the rules come to and about none of them, so no rule is answerable
-     * for it and none is filed. A reason about a rule does not — it is filed under its rule and
-     * reached before this. A reason about neither accounts for nothing, which is what it says: the
-     * reading never got to the position.
+     * <p>A reason about the answer does: an allowance run down by everything a position admits is a
+     * fact about what the rules come to and about none of them, so no rule is answerable for it and
+     * none is filed — and the question of every rule whose position waited on that answer stands on
+     * it. A reason about a rule does not come this way, being filed under its rule already. A reason
+     * about neither accounts for nothing, which is what it says: the reading never got to the
+     * position, so there is no question of a rule there for it to be an account of.
      */
     static boolean standsInForARulesOwnAccount(UnreadReason why) {
         return switch (why.about()) {

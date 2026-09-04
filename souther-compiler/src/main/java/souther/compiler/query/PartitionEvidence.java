@@ -187,7 +187,7 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
          * ({@link ReportedReason}) — projected here instead, a surface
          * that says more than the document does would have nothing left to say it from.
          */
-        public java.util.List<BlockReason.AboutARule> stopped() {
+        public java.util.List<BlockReason.QuestionStandingReason> stopped() {
             return asked.stopped();
         }
 

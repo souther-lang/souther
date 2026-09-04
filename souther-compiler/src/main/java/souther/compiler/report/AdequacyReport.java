@@ -141,7 +141,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         return ReportMeasurement.statusOf(weakenedBy);
     }
 
-    public static final int SCHEMA_VERSION = 12;
+    public static final int SCHEMA_VERSION = 13;
 
     /**
      * Where the schema this writes documents ships.
@@ -1711,8 +1711,6 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             // there is: nothing observed a rule to name. Which reasons reach which of the two is
             // settled by the authority a reason belongs to, so no reason is written both ways.
             case RULES_NOT_READ_AT_ALL -> "the rules written about it were not reached at all";
-            case RULE_NOT_INTERPRETED_HERE ->
-                    "it was reached, and nothing worked out what it says about the values here";
             case RETURNS_TO_A_DECLARATION_ALREADY_READ ->
                     "the input returns here to a declaration already read above it, and what is"
                             + " under it is not read again";

@@ -111,8 +111,8 @@ class OneIdentityIsFoldedOnceAndKeepsEveryHandleTest {
      *  wrote it short of is untouched. */
     @Test
     void oneQuestionCitedTwoWaysKeepsBothHandlesAndTheAuthorsOrder() {
-        List<BlockReason.AboutARule> stopped = List.of(new BlockReason.UnreadComparisonForm(),
-                new BlockReason.NoReadingTookItIn());
+        List<BlockReason.QuestionStandingReason> stopped = List.of(new BlockReason.UnreadComparisonForm(),
+                new BlockReason.ExactValuesTooCostly());
 
         StandingQuestion both = asked(NAMED, stopped).mergedWith(asked(PLACED, stopped));
 
@@ -123,10 +123,10 @@ class OneIdentityIsFoldedOnceAndKeepsEveryHandleTest {
     /** And two accounts of one question that disagree about that order are not put together. */
     @Test
     void twoAccountsOfOneQuestionCannotDisagreeAboutWhatTheAuthorWrote() {
-        BlockReason.AboutARule form = new BlockReason.UnreadComparisonForm();
-        BlockReason.AboutARule none = new BlockReason.NoReadingTookItIn();
-        StandingQuestion one = asked(NAMED, List.of(form, none));
-        StandingQuestion theOtherWayRound = asked(PLACED, List.of(none, form));
+        BlockReason.QuestionStandingReason form = new BlockReason.UnreadComparisonForm();
+        BlockReason.QuestionStandingReason answer = new BlockReason.ExactValuesTooCostly();
+        StandingQuestion one = asked(NAMED, List.of(form, answer));
+        StandingQuestion theOtherWayRound = asked(PLACED, List.of(answer, form));
 
         assertThrows(TwoAccountsOfOneQuestion.class, () -> one.mergedWith(theOtherWayRound));
     }
@@ -187,7 +187,7 @@ class OneIdentityIsFoldedOnceAndKeepsEveryHandleTest {
     }
 
     private static StandingQuestion asked(RuleCitation cited,
-                                          List<BlockReason.AboutARule> stopped) {
+                                          List<BlockReason.QuestionStandingReason> stopped) {
         return StandingQuestion.Exact.of(comparison(), cited,
                 new InputQuestion.AboutAPosition(TermPath.of("x")), stopped);
     }
