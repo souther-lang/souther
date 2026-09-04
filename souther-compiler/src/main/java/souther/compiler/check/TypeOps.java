@@ -942,18 +942,25 @@ public final class TypeOps {
      * that declares it, in the order that declaration writes them. An include brings a field in
      * without renumbering it, so the two passes agree however either of them reaches it.
      *
-     * <p>{@code declared} is which declaration this is, and is asked of the caller because
-     * {@code data} cannot say: a declaration carries the name it was written under and not the module
-     * that wrote it. Worked out here from that name it would be worked out against whoever is
-     * reading, and a reader of another module's declaration would bind its fields under its own name
-     * — a different binding for the same field, and the clauses carried in with the declaration
-     * resolve against nothing. A caller reading its own declaration passes {@link Symbols#own}; a
-     * caller reading one it reached passes the name it reached it by.
+     * <p>{@code declared} is which declaration this is, and is the caller's to name: a declaration
+     * carries the name it was written under and not the module that wrote it, so worked out here it
+     * would be worked out against whoever is reading, and a reader of another module's declaration
+     * would bind its fields under its own name — a different binding for the same field, and the
+     * clauses carried in with the declaration resolve against nothing. A caller reading its own
+     * declaration passes {@link Symbols#own}; a caller reading one it reached passes the name it
+     * reached it by.
+     *
+     * <p>The body under that name is read here. Naming which declaration this is and holding the
+     * declaration are two things, and only the first is the caller's: a caller made to fetch the
+     * body holds one for a question that was never its own, and can read the record's structure out
+     * of it. A name declaring no record binds no field.
      */
     public static Map<String, BindingId> fieldBindings(TypeSymbol.AtModule declared,
-                                                       Hir.Data data, Symbols symbols) {
+                                                       Symbols symbols) {
         Map<String, BindingId> bindings = new LinkedHashMap<>();
-        walkFields(data, declared, symbols, new LinkedHashSet<>(), bindings);
+        if (symbols.declaredNode(declared.key()) instanceof Hir.Data data) {
+            walkFields(data, declared, symbols, new LinkedHashSet<>(), bindings);
+        }
         return bindings;
     }
 

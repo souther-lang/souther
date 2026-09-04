@@ -11,7 +11,6 @@ import souther.compiler.check.RuleKey;
 import souther.compiler.check.FieldDomains;
 import souther.compiler.check.Shape;
 import souther.compiler.check.Symbols;
-import souther.compiler.check.TypeOps;
 import souther.compiler.check.TypeView;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.reading.PathAccess;
@@ -2250,10 +2249,12 @@ public final class Generator {
      * spread would drop the included ones with it.
      */
     private static List<String> fieldsOf(MeasuredInput subject, TypeSymbol built) {
-        return subject.symbols().declaredNode(built) instanceof Hir.Data data
-                && !data.newtype()
-                ? List.copyOf(TypeOps.fieldTypes(data, subject.symbols()).keySet())
-                : null;
+        // Read where a position's reading is made. A walk from the declaration to its fields is
+        // that reading taken a second time, and the two part at every name one of them reaches
+        // through and the other stops at.
+        return TypeView.of(Type.ref(built), subject.symbols()).shape()
+                        instanceof Shape.Product(TypeSymbol _, Map<String, Type> fields)
+                ? List.copyOf(fields.keySet()) : null;
     }
 
     /**

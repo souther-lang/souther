@@ -3,7 +3,6 @@ package souther.compiler.partition;
 import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.check.ReadingPolicy;
 import souther.compiler.check.RuleReadingSource;
-import souther.compiler.ast.Hir;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.RuleKey;
 import souther.compiler.check.DeclaredBounds;
@@ -11,7 +10,6 @@ import souther.compiler.check.StringPredicates;
 import souther.compiler.check.DeclaredClauses;
 import souther.compiler.inputs.Distinctions;
 import souther.compiler.check.Shape;
-import souther.compiler.check.TypeOps;
 import souther.compiler.check.TypeView;
 import souther.compiler.check.FieldDomains;
 import souther.compiler.check.NarrowedBounds;
@@ -1537,7 +1535,7 @@ public final class Partitions {
                                           ReadingPolicy policy,
                                           java.util.Set<TypeSymbol> expanding,
                                           Map<String, FixtureTemplate> given) {
-        if (expanding.contains(record) || !(ruleSource.symbols().declaredNode(record) instanceof Hir.Data data)) {
+        if (expanding.contains(record)) {
             return List.of();
         }
         Map<String, FixtureTemplate> chosen =
@@ -1560,11 +1558,14 @@ public final class Partitions {
                                                  RuleReadingSource ruleSource, ReadingPolicy policy,
                                                  java.util.Set<TypeSymbol> expanding,
                                                  Map<String, FixtureTemplate> given) {
+        // What the record is made of, read where a position's reading is made. A walk from the
+        // declaration to its fields is that same reading taken a second time, and the two part
+        // wherever one of them reaches through a name the other stops at.
         if (expanding.contains(record)
-                || !(ruleSource.symbols().declaredNode(record) instanceof Hir.Data data)) {
+                || !(TypeView.of(Type.ref(record), ruleSource.symbols()).shape()
+                        instanceof Shape.Product(TypeSymbol _, Map<String, Type> fields))) {
             return null;
         }
-        Map<String, Type> fields = TypeOps.fieldTypes(data, ruleSource.symbols());
         if (fields.isEmpty()) {
             return null;   // a unit has no fields to compose, and is named rather than built
         }

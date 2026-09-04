@@ -1,8 +1,8 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.ReadingPolicy;
-import souther.compiler.ast.Hir;
 import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.Shape;
 import souther.compiler.check.TypeView;
 import souther.compiler.inputs.Case;
 import souther.compiler.inputs.Distinctions;
@@ -225,13 +225,15 @@ final class PartitionClasses {
         // A case of a primitive-headed union is a primitive or one of the language's own, which
         // no module declares and nothing composes field by field: naming it builds it, the same as
         // a unit data. So the two are told apart here, where the declaration is asked for.
-        if (!(leaf instanceof TypeSymbol.AtModule declared)
-                || !(ruleSource.symbols().declaredNode(declared) instanceof Hir.Data data)) {
+        TypeView held = leaf instanceof TypeSymbol.AtModule at
+                ? TypeView.of(Type.ref(at), ruleSource.symbols()) : null;
+        if (!(leaf instanceof TypeSymbol.AtModule declared) || held == null
+                || !(held.isWrapped() || held.shape() instanceof Shape.Product)) {
             return PartitionClass.of(idOfCase(leaf), leaf.name(), is,   // naming it builds it
                     RepresentativeSource.under(writes,
                             RepresentativeSource.of(FixtureTemplate.unitCase(names))));
         }
-        if (data.newtype()) {
+        if (held.isWrapped()) {
             // Values of the case, which is a position of its own: it is read like any other, and
             // what comes back already wears the case's own name. Under the position's names as well,
             // since a case of a `data DecisionN = Decision` is written inside that name too.

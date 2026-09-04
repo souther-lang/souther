@@ -649,7 +649,7 @@ public final class DataChecker {
     static Scope fieldScope(TypeSymbol.AtModule declared, Hir.Data data, Symbols symbols) {
         Map<String, Type> types = TypeOps.fieldTypes(data, symbols);
         Map<BindingId, Scope.Binding> bindings = new LinkedHashMap<>();
-        TypeOps.fieldBindings(declared, data, symbols).forEach((name, binding) ->
+        TypeOps.fieldBindings(declared, symbols).forEach((name, binding) ->
                 bindings.put(binding, new Scope.Binding(name, types.get(name))));
         return Scope.of(bindings);
     }

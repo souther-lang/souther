@@ -42,7 +42,7 @@ public final class ExecutableInvariants {
     public static ValueShape of(Hir.Data data, Symbols symbols, Map<String, Type> helpers) {
         Map<String, Type> types = TypeOps.fieldTypes(data, symbols);
         Map<String, BindingId> bindings =
-                TypeOps.fieldBindings(data.declares(), data, symbols);
+                TypeOps.fieldBindings(data.declares(), symbols);
         List<ValueShape.Field> fields = new ArrayList<>();
         // In the order a value lays its fields out, which is what `fieldTypes` answers. The bindings
         // are a walk of their own and answer in an order of nothing's deciding, so what is read off
