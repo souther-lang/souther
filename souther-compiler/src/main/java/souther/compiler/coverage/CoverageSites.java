@@ -513,7 +513,7 @@ public final class CoverageSites {
      *
      * <p>The walk carries numbers because it is what makes the numbering: what a number means is
      * fixed by every place still to be reached and by what the bodies do, so no address of it can
-     * exist until the walk is over. The numbers become places once, at {@link #issued}, and the
+     * exist until the walk is over. The numbers become places once, at {@link #of}, and the
      * places are what everything downstream is handed.
      */
     private record DraftSite(String behavior, SourceOutcome outcome, Citation at, int raw,

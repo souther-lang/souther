@@ -43,7 +43,8 @@ public final class ResolvedSymbols implements Symbols {
      * of this compilation reaches this stage carrying a declaration it may not have, because
      * {@code Names} reports that one and goes on with the rest, and resolution resolves the module
      * as it was written. So the author holds the file, and what to do about it is the same thing
-     * {@link SyntaxSymbols#of(souther.compiler.ast.Ast.Module)} says one representation earlier.
+     * {@link SyntaxSymbols#of(souther.compiler.ast.Ast.Module, Stdlib)} says one representation
+     * earlier.
      */
     static ResolvedSymbols of(Hir.Module m, Stdlib stdlib) {
         DeclaredNames.Index<Hir.Def> declared = Registry.indexed(m);

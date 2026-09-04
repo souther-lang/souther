@@ -373,7 +373,7 @@ public final class Db {
      * <p>Which source the report is anchored in is read off this rather than stored beside it, so
      * there is one answer and not two that can come apart. A module named but no source is the last
      * fallback, and only a caller holding the module layout can apply it —
-     * {@link Compilation#sourceIdOf(Found)} is where that answer is finished.
+     * {@link Compilation#sourceIdOf} is where that answer is finished.
      *
      * <p>Where the report is said is a further question and not this one. A problem written in more
      * than one file is said in each, which the check that found it states about the regions it

@@ -1934,7 +1934,7 @@ public final class HelperInliner {
          * <p>A prelude helper is copied with the call site stamped over it, so a type error inside its
          * body points at the user's call — {@code filter(xs, x -> x * 2)} — rather than at a line of
          * {@code souther.list} the user never wrote. A module-own helper, and a lambda given to a fn
-         * parameter, keep the positions their bodies have ({@link HelperInliner#keepsItsPositions}).
+         * parameter, keep the positions their bodies have.
          * The caller's argument expressions are spliced in separately and keep their own either way.
          */
         SourcePos at(SourcePos own) {

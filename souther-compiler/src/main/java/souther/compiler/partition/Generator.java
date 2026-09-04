@@ -11,6 +11,7 @@ import souther.compiler.check.RuleKey;
 import souther.compiler.check.FieldDomains;
 import souther.compiler.check.Shape;
 import souther.compiler.check.Symbols;
+import souther.compiler.check.TypeOps;
 import souther.compiler.check.TypeView;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.reading.PathAccess;
@@ -3930,7 +3931,7 @@ public final class Generator {
      * <p>Depth first, so that a position is chosen against a projection that already has the ones
      * before it in it. The projection is the same one the whole search started from — what the
      * record's rules leave each of its fields — asked again with the assignment so far settled into
-     * it, which is what {@link FieldDomains#of(TypeSymbol, Hir.Data, Symbols, Map)} is for.
+     * it, which is what {@link FieldDomains#of} is for.
      *
      * <p>Second, and not instead. What it costs is a reading of the record's rules per position per
      * branch, and the search in front of it answers most rows without any of that; running this one

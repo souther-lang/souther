@@ -37,7 +37,7 @@ public final class Normalized {
          * <p>Answered for every declaration, and that is what makes this a rung a reader can be
          * answered from. A newtype applied to something other than one value is not a construction
          * of it and is left the application it is; what is wrong with it is said by the reading that
-         * refuses it ({@link NewtypeDesugar#refuseMalformedIn}) rather than by this coming back with
+         * refuses it, rather than by this coming back with
          * nothing. Refusing here, this would be a producer whose failure decides what a declaration
          * means to every reader below — which is the shape it is written to stop.
          */

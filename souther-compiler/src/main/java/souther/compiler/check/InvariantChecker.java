@@ -1075,7 +1075,7 @@ public final class InvariantChecker {
         /**
          * A value the construction need not make, so a rule under it refuses no construction.
          *
-         * <p>The same reach {@link #everyRuleRead} has, and for the same reason: a rule four records
+         * <p>The same reach {@link #BY_EVERY_VALUE} has, and for the same reason: a rule four records
          * down the required chain refuses the outermost construction exactly as one on its own
          * fields does.
          *

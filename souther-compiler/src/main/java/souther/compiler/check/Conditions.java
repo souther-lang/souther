@@ -66,8 +66,8 @@ final class Conditions {
      * no arm ruled out.
      *
      * <p><b>What the values a condition names guarantee is not here either, and the walk has it.</b>
-     * {@link Predicates#assumeCond} takes {@link Predicates#sizeFacts} and
-     * {@link Predicates#resultFacts} into what is known before it reads the condition at all: a size
+     * {@link Predicates} takes what a size and what an operation's result are guaranteed to be into
+     * what is known before it reads the condition at all: a size
      * is at or above nought whether the condition holds or not, so those are guarantees about values
      * and not statements the condition makes. An arm read here is read without them, so
      * {@code List.size(xs)} under {@code not List.isEmpty(xs)} comes to "not nought" here where the

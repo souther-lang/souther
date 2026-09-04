@@ -1083,8 +1083,9 @@ public final class Formatter {
      * Whether {@code body} has nothing for the block to write a line for. A body holding only
      * comments is not empty: they are written where a member would be, so the block keeps its lines.
      *
-     * <p>Asked of the attachments rather than through {@link #endLines}, which takes the comments it
-     * reports. A question about what is there has to leave it there for whoever writes it.
+     * <p>Asked of the attachments rather than through the walk that writes the end-of-line
+     * comments, which takes the comments it reports. A question about what is there has to leave it
+     * there for whoever writes it.
      */
     private boolean isEmptyProduct(SyntaxNode body) {
         for (SyntaxNode m : body.childNodes()) {

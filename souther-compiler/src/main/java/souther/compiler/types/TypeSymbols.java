@@ -8,7 +8,7 @@ package souther.compiler.types;
  * so: {@link TypeKey} goes in — the structural address a class file carries and a query is asked
  * with — and a {@link TypeSymbol} comes out, which is the identity the compiler reasons with.
  *
- * <p>One direction, and it is here. {@link TypeSymbol#key()} goes the other way and is public, because
+ * <p>One direction, and it is here. {@link TypeSymbol.AtModule#key()} goes the other way and is public, because
  * a caller holding an identity was handed one already; what is closed is arriving at an identity
  * without having been. That is what made a spelling and an identity interchangeable, which is what
  * issues #464, #696 and #700 each were.

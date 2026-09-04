@@ -1920,7 +1920,7 @@ public interface Hir {
          * Held as two, a pass could put one name's denotation next to another's route and nothing
          * would say so — and three passes did, replacing what a name meant and leaving the route it
          * was reached by. A denotation is changed by replacing the reference, which is
-         * {@link #withReachedAs}.
+         * {@link #denoting(WrittenName, ReachName)}.
          */
         record Denoting(WrittenName written, ReachName reachedAs, Region region) implements Var {
 
