@@ -103,10 +103,13 @@
              this. A fork brings its own compiler and collector threads, and one per core leaves
              nothing for them but the cores the tests are on. -->
         <forkCount>0.5C</forkCount>
-        <!-- The JVM a fork runs on. Named for the same reason the fork count is: a literal in the
-             plugin's configuration is not overridable, and what these flags are worth has to be
-             measurable against the suite as it stands rather than the one they were chosen on. -->
-        <test.jvm.args>-XX:TieredStopAtLevel=1 -XX:+UseSerialGC -Xss4m</test.jvm.args>
+        <!-- How a fork compiles and collects. Named for the same reason the fork count is: a literal
+             in the plugin's configuration is not overridable, and what these are worth has to be
+             measurable against the suite as it stands rather than the one they were chosen on.
+             The stack is not among them — it is written beside this one where the argument is
+             built, because it is what this compiler is supported on rather than a way of running
+             the tests faster, and a run measuring a collector would otherwise drop it. -->
+        <test.jvm.args>-XX:TieredStopAtLevel=1 -XX:+UseSerialGC</test.jvm.args>
         <!-- The tag a test carries when its subjects are enumerated from what this repository
              carries rather than written in the test. Left out of a plain run and asked for by
              emptying this. -->
@@ -243,7 +246,7 @@
                              megabyte, and what is checked here has to be checked on the stack the
                              bound was set for. A test that wants a smaller one makes its own
                              thread. -->
-                        <argLine>${test.jvm.args}</argLine>
+                        <argLine>${test.jvm.args} -Xss4m</argLine>
                         <systemPropertyVariables>
                             <souther.example.step.limit>${test.example.step.limit}</souther.example.step.limit>
                         </systemPropertyVariables>
@@ -372,6 +375,22 @@
              `combine.children` is what keeps the error and warning limits the build above sets:
              without it a profile's list of arguments replaces that list rather than adding to
              it, and a lint run would stop counting at a hundred. -->
+        <!-- Naming a test is asking for it to run, whatever it is about. Without this the tag below
+             is applied on top of `-Dtest=`, and naming a tagged class runs nothing: with
+             `-Dsurefire.failIfNoSpecifiedTests=false`, which is what iterating on one class is
+             done with, that comes back as a green build over no tests at all. -->
+        <profile>
+            <id>a-named-test</id>
+            <activation>
+                <property>
+                    <name>test</name>
+                </property>
+            </activation>
+            <properties>
+                <test.excluded.groups/>
+            </properties>
+        </profile>
+
         <profile>
             <id>lint</id>
             <activation>
