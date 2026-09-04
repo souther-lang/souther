@@ -437,6 +437,19 @@
                                      asked somewhere it cannot be. That those methods answer an
                                      absence with null is a thing to fix in the methods, not at the
                                      conditions reading them, and it is not what this reports. -->
+                                <!-- StringSplitter is off. What it reports is that `String.split`
+                                     drops the empty strings at the end, so `"a,b,,".split(",")`
+                                     answers two, and its remedy is Guava's `Splitter`, which
+                                     nothing here depends on.
+
+                                     Every text this splits on a newline now asks `lines()`, which
+                                     is what "the lines of this" is called and reads a carriage
+                                     return the way a file written elsewhere writes one. What is
+                                     left splits on a delimiter — a path separator, a slash between
+                                     the commands an option belongs to, whitespace between words —
+                                     where a run ending in one is a run with nothing after it, and
+                                     dropping that is the reading wanted. Where it is not, the
+                                     answer is `split(regex, -1)` and not a library. -->
                                 <!-- ObjectToString and DuplicateBranches are errors. Each found a
                                      place written as though it said something and saying nothing:
                                      an exception message that named an end and printed its identity
@@ -445,7 +458,7 @@
                                      were the same number. What they report is cheap to answer and
                                      silent to miss, which is the pairing that earns a build
                                      failure rather than a line in a log. -->
-                                <arg>-Xplugin:ErrorProne -Xep:UnicodeInCode:OFF -Xep:BadInstanceof:OFF -Xep:ReferenceEquality:OFF -Xep:RemoveUnusedImports:ERROR -Xep:ObjectToString:ERROR -Xep:DuplicateBranches:ERROR ${nullaway.args}</arg>
+                                <arg>-Xplugin:ErrorProne -Xep:UnicodeInCode:OFF -Xep:BadInstanceof:OFF -Xep:ReferenceEquality:OFF -Xep:StringSplitter:OFF -Xep:RemoveUnusedImports:ERROR -Xep:ObjectToString:ERROR -Xep:DuplicateBranches:ERROR -Xep:UnusedVariable:ERROR -Xep:UnusedMethod:ERROR ${nullaway.args}</arg>
                             </compilerArgs>
                             <annotationProcessorPaths>
                                 <path>

@@ -678,7 +678,7 @@ class WhatGoesBetweenTwoTokensOnALineTest {
 
     private static Set<String> pairsIn(String block) {
         Set<String> out = new TreeSet<>();
-        for (String line : block.split("\n")) {
+        for (String line : block.lines().toList()) {
             if (!line.isBlank()) {
                 out.add(line.strip());
             }

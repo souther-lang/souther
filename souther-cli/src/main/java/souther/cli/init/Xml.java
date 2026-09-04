@@ -255,7 +255,7 @@ final class Xml {
      * having been pasted in.
      */
     static String unitOf(String xml) {
-        for (String line : xml.split("\n")) {
+        for (String line : xml.lines().toList()) {
             String stripped = line.stripLeading();
             if (stripped.startsWith("<") && !stripped.startsWith("<?") && stripped.length()
                     < line.length()) {

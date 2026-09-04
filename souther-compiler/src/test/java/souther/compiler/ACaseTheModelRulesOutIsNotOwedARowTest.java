@@ -812,7 +812,7 @@ class ACaseTheModelRulesOutIsNotOwedARowTest {
     /** The rows out of a generated block, with the comment marker each is offered behind removed. */
     private static String uncommented(String offered) {
         StringBuilder out = new StringBuilder();
-        for (String line : offered.split("\n")) {
+        for (String line : offered.lines().toList()) {
             if (line.startsWith("// example") || line.startsWith("//     |")) {
                 out.append(line.substring(3)).append('\n');
             }

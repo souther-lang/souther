@@ -1288,7 +1288,17 @@ public final class Adequacy {
             return name;
         }
 
+        /**
+         * The measures of every behavior this module divides.
+         *
+         * <p>Some of what it asks for is asked and not read. {@code Db.ask} records the read, so a
+         * query whose answer nobody looks at is still an edge: this measure is recomputed when
+         * that query's answer moves. Dropping the call would drop the edge, which is a change to
+         * when this is recomputed and not a tidy-up, so the names stay until somebody says which
+         * of the two the edge is — a dependency this measure has, or one a rewrite left behind.
+         */
         @Override
+        @SuppressWarnings("UnusedVariable")
         public Answer<Map<String, PartitionEvidence>> compute(Db db) {
             Answer<CheckSurface> prepared =
                     db.ask(new Shapes.CheckSurface(name));
@@ -1337,8 +1347,8 @@ public final class Adequacy {
                 return switch (BoundaryForMeasurement.of(sigs.value(), readInputs, spec)) {
                     case BoundaryForMeasurement.NotDerived why ->
                             PartitionEvidence.notMeasurable(why, spec.name());
-                    case BoundaryForMeasurement.Derived(Sig sig, InputForMeasurement _) ->
-                            measured(db, name, spec, sig, level, scope.value(),
+                    case BoundaryForMeasurement.Derived(Sig _, InputForMeasurement _) ->
+                            measured(db, name, spec, level,
                                     byTarget, lines.get(spec.name()));
                 };
             });
@@ -1346,8 +1356,8 @@ public final class Adequacy {
 
         /** What one behavior whose boundary was worked out reaches of what its model divides it
          *  into. */
-        private PartitionEvidence measured(Db db, String name, Hir.SpecBehavior spec, Sig sig,
-                                           Level level, Symbols scope,
+        private PartitionEvidence measured(Db db, String name, Hir.SpecBehavior spec,
+                                           Level level,
                                            Map<String, RowReading> byTarget,
                                            Measure<List<BorderAssessment>> lines) {
             // A behavior whose signature and input were both read is one the model divides
@@ -2786,7 +2796,15 @@ public final class Adequacy {
             return name;
         }
 
+        /**
+         * What a search of this module's behaviors filled.
+         *
+         * <p>Two of the queries it asks are asked and not read, for the reason written on
+         * {@link Coverage#compute}: the ask is what records the edge, and taking it out changes
+         * when this is recomputed.
+         */
         @Override
+        @SuppressWarnings("UnusedVariable")
         public Answer<Filling> compute(Db db) {
             Answer<CheckSurface> prepared =
                     db.ask(new Shapes.CheckSurface(name));
@@ -2880,7 +2898,7 @@ public final class Adequacy {
                                 // where a body did not check — and a declaration the check said
                                 // nothing about is a value this cannot reach rather than a fault.
                                 new souther.compiler.check.ResolvedFieldTypes(symbols)),
-                        divided, bodies.get(behavior), plan, numbering,
+                        bodies.get(behavior), plan, numbering,
                         RowReadings.readingFor(byTarget, behavior),
                         constructing(db, name),
                         read,
@@ -3291,7 +3309,7 @@ public final class Adequacy {
                     continue;
                 }
                 for (Hir.ExampleRow row : block.rows()) {
-                    Generator.Baseline named = namesIn(module, spec, row.inputs());
+                    Generator.Baseline named = namesIn(spec, row.inputs());
                     if (!named.isEmpty() && !out.contains(named)) {
                         out.add(named);
                     }
@@ -3306,8 +3324,7 @@ public final class Adequacy {
 
         /** The parameters a row names a module-level value at, which is the only thing a spread can
          *  be written over: a row writing the value out has no name for this to reach it by. */
-        private static Generator.Baseline namesIn(String module, Hir.SpecBehavior spec,
-                                                  List<Hir.Expr> inputs) {
+        private static Generator.Baseline namesIn(Hir.SpecBehavior spec, List<Hir.Expr> inputs) {
             Map<String, Generator.Baseline.Named> at = new LinkedHashMap<>();
             for (int p = 0; p < inputs.size() && p < spec.params().size(); p++) {
                 if (inputs.get(p) instanceof Hir.Var.Denoting denoting
@@ -3385,7 +3402,6 @@ public final class Adequacy {
                 Hir.SpecBehavior spec, Sig sig, RuleReadingSource reading,
                 souther.compiler.partition.GenerationPlan asked,
                 List<Generator.Baseline> baselines,
-                souther.compiler.partition.Partitions.Partitioning partitioning,
                 souther.compiler.core.Core body,
                 souther.compiler.coverage.CoverageSites.Plan plan,
                 Optional<SiteNumbering> numbering, RowReading observed,

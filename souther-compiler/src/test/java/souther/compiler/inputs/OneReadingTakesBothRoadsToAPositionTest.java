@@ -93,7 +93,6 @@ class OneReadingTakesBothRoadsToAPositionTest {
      */
     @Test
     void twoDemandsSharingAPrefixOpenItOnce() {
-        InputDomain read = readingOf(CHAIN, "read", InputDemand.NONE);
         TermPath head = fourLinksDown();
         TermPath tail = sibling();
 
@@ -119,7 +118,6 @@ class OneReadingTakesBothRoadsToAPositionTest {
     /** And the answer does not turn on which order the demands arrived in. */
     @Test
     void theOrderTheDemandsArrivedInDecidesNothing() {
-        InputDomain read = readingOf(CHAIN, "read", InputDemand.NONE);
         TermPath head = fourLinksDown();
         TermPath tail = sibling();
 

@@ -122,7 +122,7 @@ class TwoSurfacesAgreeWhichBehaviorsHaveASectionTest {
     private static String block(String report, String behavior) {
         StringBuilder out = new StringBuilder();
         boolean under = false;
-        for (String line : report.split("\n")) {
+        for (String line : report.lines().toList()) {
             if (line.startsWith("  ") && !line.startsWith("    ") && !line.isBlank()) {
                 under = line.trim().split("\\s+")[0].equals(behavior);
             }
@@ -136,7 +136,7 @@ class TwoSurfacesAgreeWhichBehaviorsHaveASectionTest {
     private static Set<String> inTheText() {
         Set<String> out = new LinkedHashSet<>();
         String name = null;
-        for (String line : report().human(SourceNameResolver.identity()).split("\n")) {
+        for (String line : report().human(SourceNameResolver.identity()).lines().toList()) {
             if (line.startsWith("  ") && !line.startsWith("    ") && !line.isBlank()) {
                 name = line.trim().split("\\s+")[0];
             } else if (name != null && line.startsWith("    partition ")) {

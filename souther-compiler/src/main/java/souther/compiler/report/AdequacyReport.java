@@ -1747,8 +1747,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * one, since that is what tells two questions at one position apart; the position is what is
      * left.
      */
-    private static String subjectOf(PartitionEvidence.Unanswered asked,
-                                    SourceNameResolver names, SourceId declaredIn) {
+    private static String subjectOf(PartitionEvidence.Unanswered asked) {
         return asked.measure() != null ? asked.measure() : asked.at();
     }
 
@@ -2330,7 +2329,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                     && mine.test(asked)) {
                 out.append(String.format("      %s not accounted for: %s — %s %s: %s%n",
                         mark(f), cited(asked.cited(), names, declaredIn),
-                        asked(asked.asked()), subjectOf(asked, names, declaredIn),
+                        asked(asked.asked()), subjectOf(asked),
                         whyStanding(asked).written().stream().map(AdequacyReport::whyUnread)
                                 .collect(Collectors.joining("; "))));
             }
@@ -3475,7 +3474,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             case About.AQuestionNothingAnswered(var asked) ->
                     handle(asked.cited()).said(sources::written, null)
                             + " — " + asked(asked.asked())
-                            + " " + subjectOf(asked, sources::written, null);
+                            + " " + subjectOf(asked);
             case About.ACaseNoRowAppliesItTo(var input, var missing) ->
                     missing.name() + " (in #" + (input.at() + 1) + ")";
             // The point and the line, and no quantity: a body's line is owed once wherever it is

@@ -1017,7 +1017,7 @@ final class CodecGen {
             case DATETIME -> emitTemporalLeaf(code, src, Type.Prim.DATETIME);
             case INSTANT -> emitTemporalLeaf(code, src, Type.Prim.INSTANT);
         }
-        emitInvariantConstraints(code, cdName, inputType, invariants);
+        emitInvariantConstraints(code, inputType, invariants);
         code.aload(1);                                                 // in (bare value)
         code.aload(2);                                                 // path
         code.invokeinterface(CD_RDecoder, "decode", MTD_Rdecode);      // Result
@@ -1065,17 +1065,17 @@ final class CodecGen {
             // needs the map the model declared — the keys converted and canonical — so it goes after.
             emitDecoderObject(code, mp.value(), src);
             code.invokestatic(srcListOwner(src), "map", MTD_mapDec);
-            emitInvariantConstraints(code, cdName, bindType(dec.inner()), invariants,
+            emitInvariantConstraints(code, bindType(dec.inner()), invariants,
                     ConstraintPhase.MAPPED);
             code.invokedynamic(rekeyCallSite(decoderClass, mp.key()));
             code.invokeinterface(CD_RDecoder, "flatMapWithPath", MTD_flatMapWithPath);
-            emitInvariantConstraints(code, cdName, bindType(dec.inner()), invariants,
+            emitInvariantConstraints(code, bindType(dec.inner()), invariants,
                     ConstraintPhase.REFINED);
         } else {
             emitDecoderObject(code, dec.inner(), src);                // Y's decoder (for this source)
             // Y's decoder is a plain Decoder, so no typed constraint applies here; whatever the
             // invariant says is checked through refine (and again by __construct).
-            emitInvariantConstraints(code, cdName, bindType(dec.inner()), invariants);
+            emitInvariantConstraints(code, bindType(dec.inner()), invariants);
         }
         code.aload(1);                                               // in
         code.aload(2);                                               // path
@@ -1341,12 +1341,11 @@ final class CodecGen {
      * the order a failure is reported in — the same order {@code __construct} decides in, so the
      * boundary and an attempted construction name the same clause for the same value.
      */
-    private void emitInvariantConstraints(CodeBuilder code, ClassDesc cdName, Type base,
-                                          Invariants invariants) {
-        emitInvariantConstraints(code, cdName, base, invariants, ConstraintPhase.BOTH);
+    private void emitInvariantConstraints(CodeBuilder code, Type base, Invariants invariants) {
+        emitInvariantConstraints(code, base, invariants, ConstraintPhase.BOTH);
     }
 
-    private void emitInvariantConstraints(CodeBuilder code, ClassDesc cdName, Type base,
+    private void emitInvariantConstraints(CodeBuilder code, Type base,
                                           Invariants invariants, ConstraintPhase phase) {
         for (ClauseEmit clause : invariants.clauses()) {
             if (phase != ConstraintPhase.REFINED) {

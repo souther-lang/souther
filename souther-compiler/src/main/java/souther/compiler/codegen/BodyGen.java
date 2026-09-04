@@ -265,7 +265,7 @@ final class BodyGen {
          * unboxes its arguments from the {@code Object[]} and boxes its result (spec §blocks). */
         private byte[] generateLambdaClass(ClassDesc cd, List<Core.Binder> params, Core body,
                                            List<Type> paramTypes,
-                                           Type resultType, List<Core.Read> captures,
+                                           List<Core.Read> captures,
                                            List<ValueName.Behavior> injectedNames,
                                            Map<ValueName.Behavior, Type> reqSuccess,
                                            Map<ValueName.Behavior, List<Type>> reqParams) {
@@ -2013,17 +2013,16 @@ final class BodyGen {
          * captured free variables (and any injected behaviors it calls) to its constructor. Its
          * parameter and result types are the ones the checker put on the block (issue #81). */
         private void emitLambda(Core.Block block, List<Type> paramTypes) {
-            emitLambda(block.params(), block.body(), paramTypes,
-                    ((Type.FnOf) block.type()).result(), freeVars(block));
+            emitLambda(block.params(), block.body(), paramTypes, freeVars(block));
         }
 
         private void emitLambda(List<Core.Binder> params, Core body, List<Type> paramTypes,
-                                Type resultType, Reaches free) {
+                                Reaches free) {
             List<Core.Read> captures = free.bindings();
             List<ValueName.Behavior> injectedNames = free.injected();
             GeneratedClass.Lambda lambda = new GeneratedClass.Lambda(pkg, ctx.nextLambdaId());
             ClassDesc cd = ctx.cd(lambda);
-            ctx.addSynth(lambda, generateLambdaClass(cd, params, body, paramTypes, resultType,
+            ctx.addSynth(lambda, generateLambdaClass(cd, params, body, paramTypes,
                     captures, injectedNames, reqSuccess, reqParams));
 
             // the same condition generateLambdaClass interned on — it must stay the same one

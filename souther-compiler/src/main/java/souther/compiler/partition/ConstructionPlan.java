@@ -536,7 +536,7 @@ final class ConstructionPlan {
             // change them — a figure is raised, and this is a narrowing the caller has yet to
             // state.
             if (anythingIsAskedUnder(here, decided, required)) {
-                return new NodeResult.Unnarrowed(here, narrowingsAt(settled, symbols, required));
+                return new NodeResult.Unnarrowed(here, narrowingsAt(settled, symbols));
             }
             return new NodeResult.Made(
                     new Slot(here, building, settled.outer(), new Leaf.Open()));
@@ -604,8 +604,7 @@ final class ConstructionPlan {
      * into two values and holds nothing under either, which says, correctly, that stating something
      * here is not what would make the demand reachable.
      */
-    private static List<Refinement> narrowingsAt(Settled settled, Symbols symbols,
-                                                 Requirements required) {
+    private static List<Refinement> narrowingsAt(Settled settled, Symbols symbols) {
         List<Refinement> out = new ArrayList<>();
         for (Case one : Distinctions.ofType(TypeView.of(settled.building(), symbols), symbols)) {
             Refinement narrowing = Refinement.of(one);
