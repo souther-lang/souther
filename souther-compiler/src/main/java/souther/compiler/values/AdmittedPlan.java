@@ -39,6 +39,26 @@ public sealed interface AdmittedPlan {
     /** Nothing at all, which is what refuses a declaration. */
     AdmittedPlan NONE = new Nothing();
 
+    /**
+     * The written things this plan asks machines for, which is where a refusal is answered from.
+     *
+     * <p>Every leaf that names one, and the compositions name none: what a meet of two patterns
+     * asks for is what each of them asks for, and a refusal happens at one of them. Asked of the
+     * plan rather than kept beside it, so a plan put together out of others carries what its parts
+     * ask without anybody adding them up.
+     */
+    default java.util.Set<AuthoredOccurrence> asked() {
+        java.util.Set<AuthoredOccurrence> out =
+                java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+        switch (this) {
+            case Everything _, Nothing _, Of _ -> { }
+            case Pattern it -> out.add(it.occurrence());
+            case Both it -> it.parts().forEach(each -> out.addAll(each.asked()));
+            case Either it -> it.parts().forEach(each -> out.addAll(each.asked()));
+        }
+        return out;
+    }
+
     /** Every value, as a plan. */
     record Everything() implements AdmittedPlan {}
 
@@ -81,12 +101,23 @@ public sealed interface AdmittedPlan {
      * of one language are told apart by building both, which is the question being deferred. So
      * they are two leaves, which is also what they cost.
      *
+     * @param occurrence the written place that asked for it. A machine is refused where it is made,
+     *                   under the allowance of the position it is being built for — and every rule
+     *                   reaching that position pays into the same allowance, so the position cannot
+     *                   say which of them asked. Carried from where the asking is written, a refusal
+     *                   names the pattern somebody wrote instead of every rule that mentions the
+     *                   place it was written about
      * @param plan what would be built, which is the pattern a rule stated or every string less the
      *             pattern a rule denied
      */
-    record Pattern(souther.compiler.regex.PatternPlan plan) implements AdmittedPlan {
+    record Pattern(souther.compiler.values.AuthoredOccurrence occurrence,
+                   souther.compiler.regex.PatternPlan plan) implements AdmittedPlan {
 
         public Pattern {
+            if (occurrence == null) {
+                throw new IllegalArgumentException(
+                        "a pattern leaf is written somewhere, and says where");
+            }
             if (plan == null) {
                 throw new IllegalArgumentException("a pattern leaf names some pattern");
             }

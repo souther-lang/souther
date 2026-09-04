@@ -29,9 +29,16 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class WhatAPositionPublishesAboutItsStringsIsAllOfItOrNoneTest {
 
+    /**
+     * A pattern somebody wrote, with a place of its own.
+     *
+     * <p>One occurrence apiece, because two patterns here are two written things: a machine refused
+     * for either is answered for by the one that asked, and a place shared between them would be a
+     * refusal reported at both.
+     */
     private static AdmittedPlan matching(String regex) {
         PatternRead said = PatternParser.read(regex);
-        return new AdmittedPlan.Pattern(PatternPlan.of(
+        return new AdmittedPlan.Pattern(AuthoredOccurrence.another(), PatternPlan.of(
                 assertInstanceOf(PatternRead.Read.class, said).syntax()));
     }
 

@@ -74,7 +74,7 @@ sealed interface StatedByClauses {
         @Override
         public StatedByClauses from(Core e) {
             Map<Core, Part> out = new java.util.IdentityHashMap<>(parts);
-            out.put(e, new Part(byValues, byOrder, values.standing(), strings));
+            out.put(e, new Part(byValues, byOrder, values.standing(), strings, values.asked()));
             return new Said(values, ordered, byValues, byOrder, strings, out);
         }
     }
@@ -100,7 +100,8 @@ sealed interface StatedByClauses {
      */
     record Part(Adoption<FactSubject> byValues, Adoption<FactSubject> byOrder,
                 Map<FactSubject, java.util.List<souther.compiler.values.UnreadReason>> standing,
-                Map<FactSubject, StringRestriction> aboutStrings) {
+                Map<FactSubject, StringRestriction> aboutStrings,
+                java.util.Set<souther.compiler.values.AuthoredOccurrence> asked) {
 
         /** The same part, in a branch nobody can be in — see {@link Adoption#inADeadBranch}. */
         Part inADeadBranch() {
@@ -109,19 +110,24 @@ sealed interface StatedByClauses {
             //
             // And neither is what it said about the strings at a position. A line drawn from a
             // branch nobody can be in is a line the model does not draw.
-            return new Part(byValues.inADeadBranch(), byOrder.inADeadBranch(), Map.of(), Map.of());
+            // What it asked for is kept. A machine refused for a pattern in a branch nobody can be
+            // in was still asked for by that pattern, and a part that forgot it would leave the
+            // refusal with nothing to be about.
+            return new Part(byValues.inADeadBranch(), byOrder.inADeadBranch(), Map.of(), Map.of(),
+                    asked);
         }
 
         /** This part of the branch that stands, beside the same part of one nobody can be in. */
         Part beside(Part gone) {
             return new Part(byValues.beside(gone.byValues()), byOrder.beside(gone.byOrder()),
-                    standing, aboutStrings);
+                    standing, aboutStrings, both(asked, gone.asked()));
         }
 
         /** The same part of two branches, neither of which anybody can be in. */
         Part bothDead(Part other) {
             return new Part(byValues.bothDead(other.byValues()),
-                    byOrder.bothDead(other.byOrder()), Map.of(), Map.of());
+                    byOrder.bothDead(other.byOrder()), Map.of(), Map.of(),
+                    both(asked, other.asked()));
         }
 
         /** The same part of two branches somebody can be in. */
@@ -141,7 +147,22 @@ sealed interface StatedByClauses {
                         reachedBy(other.byValues()));
             }
             return new Part(byValues.either(other.byValues()), byOrder.either(other.byOrder()),
-                    why, StringRestriction.over(aboutStrings, other.aboutStrings(), false));
+                    why, StringRestriction.over(aboutStrings, other.aboutStrings(), false),
+                    both(asked, other.asked()));
+        }
+
+        /** What either of them asked for, which is what this part asked for. */
+        private static java.util.Set<souther.compiler.values.AuthoredOccurrence> both(
+                java.util.Set<souther.compiler.values.AuthoredOccurrence> these,
+                java.util.Set<souther.compiler.values.AuthoredOccurrence> those) {
+            if (those.isEmpty()) {
+                return these;
+            }
+            java.util.Set<souther.compiler.values.AuthoredOccurrence> out =
+                    java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+            out.addAll(these);
+            out.addAll(those);
+            return out;
         }
 
         /** The positions a rule of this copy reached and did not merely settle: what it
@@ -577,7 +598,7 @@ sealed interface StatedByClauses {
             if (known.emptiness() != Emptiness.UNDECIDED) {
                 return read;
             }
-            return new StatedTogether.Said(read.values().alsoStanding(known.standing()),
+            return new StatedTogether.Said(read.values().alsoStanding(known.asPositionStanding()),
                     read.ordered());
         }
 
@@ -607,10 +628,16 @@ sealed interface StatedByClauses {
             if (made.emptiness() != Emptiness.UNDECIDED) {
                 return Settlement.Sided.settledAs(made.emptiness());
             }
-            Map<FactSubject, java.util.List<souther.compiler.values.UnreadReason>> why =
-                    new java.util.LinkedHashMap<>(made.aboutARule());
-            made.aboutTheAnswer().forEach(why::putIfAbsent);
-            return new Settlement.Sided(Emptiness.UNDECIDED, why, made.unbuilt());
+            // Kept as the two it is. What the answer was short of is a fact about the place and
+            // holds of everything waiting on it; what a pattern asked for and was refused is a fact
+            // about the pattern, and travels to whoever asked rather than to the place they asked
+            // about.
+            Map<FactSubject, java.util.List<souther.compiler.values.UnreadReason>> answered =
+                    new java.util.LinkedHashMap<>();
+            made.aboutTheAnswer().forEach(each -> answered.merge(each.at(),
+                    java.util.List.of(each.why()), ReadByClauses::alsoSaying));
+            return new Settlement.Sided(Emptiness.UNDECIDED, answered, made.aboutARule(),
+                    made.unbuilt());
         }
 
         /**
@@ -731,13 +758,43 @@ sealed interface StatedByClauses {
             read.parts().forEach((each, part) -> parts.put(each, new Part(
                     part.byValues().unbuiltAt(known.unbuilt()),
                     part.byOrder().unbuiltAt(known.unbuilt()),
-                    ReadByClauses.alsoSaying(part.standing(), known.standing()),
-                    part.aboutStrings())));
-            return new Said(read.values().alsoStanding(known.standing()), read.ordered(),
+                    // What the answer was short of, to every part of the branch, because every one
+                    // of them waited on it. What a pattern asked for goes to the part that asked
+                    // and to no other: distributed by the place, a rule that named it was handed a
+                    // limit its neighbour reached.
+                    ReadByClauses.alsoSaying(part.standing(),
+                            routed(known.ruleShortfalls(), part, known.answerStanding())),
+                    part.aboutStrings(), part.asked())));
+            return new Said(read.values().alsoStanding(known.asPositionStanding()), read.ordered(),
+
                     read.byValues().unbuiltAt(known.unbuilt()),
                     read.byOrder().unbuiltAt(known.unbuilt()),
                     read.strings(),
                     parts);
+        }
+
+        /**
+         * What a branch's probe found, as much of it as is this part's.
+         *
+         * <p>The answer's half to every part, because every one of them waited on the answer. The
+         * other half by whether this part asked for the machine that was refused — which is a thing
+         * the shortfall says, and not a thing the position it happened at can say. Every rule
+         * reaching a position pays into one allowance, so a place has as many claimants as it has
+         * rules and names none of them.
+         */
+        private static Map<FactSubject, java.util.List<souther.compiler.values.UnreadReason>>
+                routed(java.util.List<souther.compiler.values.Unbuilt
+                        .RuleShortfall<FactSubject>> shortfalls,
+                       Part part,
+                       Map<FactSubject,
+                               java.util.List<souther.compiler.values.UnreadReason>> answered) {
+            Map<FactSubject, java.util.List<souther.compiler.values.UnreadReason>> out =
+                    new java.util.LinkedHashMap<>(answered);
+            shortfalls.stream()
+                    .filter(each -> part.asked().contains(each.occurrence()))
+                    .forEach(each -> out.merge(each.at(), java.util.List.of(each.why()),
+                            ReadByClauses::alsoSaying));
+            return out;
         }
 
         /**
@@ -763,12 +820,15 @@ sealed interface StatedByClauses {
                     out.put(position, mine);
                 }
             });
-            made.aboutARule().forEach((position, why) -> {
-                if (part.byValues().mentions().contains(position)
-                        || part.byOrder().mentions().contains(position)) {
-                    out.merge(position, why, ReadByClauses::alsoSaying);
-                }
-            });
+            // And what a machine this part asked for was refused for, which is this part's because
+            // this part asked. Taken by whether the part mentions the position, it was every
+            // part's: an allowance is held per position and every rule reaching one pays into it,
+            // so a rule that named the place was handed a limit its neighbour reached — and an
+            // author reading it went to a clause that reads perfectly well.
+            made.aboutARule().stream()
+                    .filter(each -> part.asked().contains(each.occurrence()))
+                    .forEach(each -> out.merge(each.at(),
+                            java.util.List.of(each.why()), ReadByClauses::alsoSaying));
             return out;
         }
 

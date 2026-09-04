@@ -37,8 +37,24 @@ public sealed interface Realization {
      * <p>About what was being built and not about how much was left: the same thing asked for
      * first, out of a full allowance, would have been refused the same way. Where what was being
      * built is one pattern an author wrote, that is a fact about the pattern.
+     *
+     * <p><b>So it names the pattern, and the pattern is the one that asked.</b> Every rule reaching
+     * a position pays into one allowance, so the position is what the spending is arranged by and
+     * is not what any of it is about. Read back from there, this became a fact about every rule
+     * that mentions the place — which sends an author to a clause that reads perfectly well, and
+     * leaves the reason with no place among the parts they wrote.
+     *
+     * @param occurrence the written pattern whose machine was refused
      */
-    record OverTheMachineLimit() implements Realization {}
+    record OverTheMachineLimit(AuthoredOccurrence occurrence) implements Realization {
+
+        public OverTheMachineLimit {
+            if (occurrence == null) {
+                throw new IllegalArgumentException(
+                        "a machine is asked for by something somebody wrote, and this says which");
+            }
+        }
+    }
 
     /**
      * What this answer has built came to more than it may build in all.

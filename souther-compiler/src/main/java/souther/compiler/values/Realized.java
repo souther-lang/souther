@@ -3,7 +3,6 @@ package souther.compiler.values;
 import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 
 /**
@@ -23,16 +22,19 @@ import java.util.Set;
  * name. A store that took either would be a store whose type says less than the model does.
  *
  * @param values what the reading leaves, every position it could not work out widened to every value
- * @param aboutARule what a rule of the model is answerable for, per position
- * @param aboutTheAnswer what the answer is answerable for, per position, naming no rule
+ * @param aboutARule what a rule of the model is answerable for, each saying which written thing
+ *                   asked for what was refused. Not per position: an allowance is held per position
+ *                   and every rule reaching one pays into it, so the place is what the spending was
+ *                   arranged by and is not what any of it is about
+ * @param aboutTheAnswer what the answer is answerable for, naming no rule and nothing written
  */
 public record Realized<A>(AdmissibleValues<A> values,
-                          Map<A, List<UnreadReason>> aboutARule,
-                          Map<A, List<UnreadReason>> aboutTheAnswer) {
+                          List<Unbuilt.RuleShortfall<A>> aboutARule,
+                          List<Unbuilt.AnswerShortfall<A>> aboutTheAnswer) {
 
     public Realized {
-        aboutARule = Map.copyOf(aboutARule);
-        aboutTheAnswer = Map.copyOf(aboutTheAnswer);
+        aboutARule = List.copyOf(aboutARule);
+        aboutTheAnswer = List.copyOf(aboutTheAnswer);
     }
 
     /**
@@ -56,8 +58,9 @@ public record Realized<A>(AdmissibleValues<A> values,
 
     /** Every position whose answer was not built, whichever of the two it is owed to. */
     public Set<A> unbuilt() {
-        Set<A> out = new LinkedHashSet<>(aboutARule.keySet());
-        out.addAll(aboutTheAnswer.keySet());
+        Set<A> out = new LinkedHashSet<>();
+        aboutARule.forEach(each -> out.add(each.at()));
+        aboutTheAnswer.forEach(each -> out.add(each.at()));
         return Collections.unmodifiableSet(out);
     }
 }

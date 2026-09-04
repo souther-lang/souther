@@ -111,7 +111,8 @@ final class Realizer {
         // somebody wrote, so a machine larger than a machine may be is that pattern's size — the
         // same one asked for first, out of a full allowance, would have been refused the same way.
         return meter.stoppedBy() == Meter.Stopped.ONE_MACHINE
-                ? new Realization.OverTheMachineLimit() : new Realization.OverTheAnswerLimit();
+                ? new Realization.OverTheMachineLimit(plan.occurrence())
+                : new Realization.OverTheAnswerLimit();
     }
 
     /**

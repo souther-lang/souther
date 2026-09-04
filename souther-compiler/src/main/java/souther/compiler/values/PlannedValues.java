@@ -460,6 +460,27 @@ public sealed interface PlannedValues<A> {
         };
     }
 
+    /**
+     * The written things this reading asks machines for.
+     *
+     * <p>What a refusal is answered from. A machine is made under a position's allowance, where
+     * every rule reaching the position has paid in, so which reading asked for the one that was
+     * refused is a question the far end cannot answer — and this is what a reading holds so that it
+     * can be answered here instead of guessed from which positions somebody named.
+     */
+    default Set<AuthoredOccurrence> asked() {
+        Settled<A> it = settled();
+        Set<AuthoredOccurrence> out =
+                java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+        it.perPosition().values().forEach(plan -> out.addAll(plan.asked()));
+        switch (it.held()) {
+            case PlannedHeld.Nothing<A> _ -> { }
+            case PlannedHeld.Alternatives<A> boxes -> boxes.boxes().forEach(box ->
+                    box.at().values().forEach(plan -> out.addAll(plan.asked())));
+        }
+        return out;
+    }
+
     private static <A> Realized<A> resolved(Settled<A> of, Allowance<A> by) {
         Unbuilt<A> gaveUp = new Unbuilt<>();
         Map<A, ValueSet> perPosition = realized(of.perPosition(), by, gaveUp);
