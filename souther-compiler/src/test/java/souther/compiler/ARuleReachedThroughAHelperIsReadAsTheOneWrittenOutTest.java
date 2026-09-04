@@ -37,8 +37,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class ARuleReachedThroughAHelperIsReadAsTheOneWrittenOutTest {
 
-    /** One way of writing the rule: the helpers it needs, and the clause itself. */
-    private record Spelling(String name, String helpers, String clause) {
+    /** One way of writing the rule: the helpers it needs, and the clause itself.
+     *
+     *  <p>As visible as the tests it is handed to, which a parameterized one has to be. */
+    record Spelling(String name, String helpers, String clause) {
 
         @Override
         public String toString() {
