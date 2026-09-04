@@ -1015,7 +1015,7 @@ public final class FieldDomains {
         // one conjunct is not an account of the conjunct written beside it.
         if (took.anyLeftStanding(rule, named)) {
             return new RuleAccounting.Outcome.Unaccounted(
-                    stoppedBy(rule, named));
+                    stoppedBy(rule, at, named));
         }
         // The reading that turns this clause into where the values stop, said by the end it placed.
         if (directs.stream()
@@ -1027,7 +1027,7 @@ public final class FieldDomains {
         if (took.tookIn(rule, named)) {
             return new RuleAccounting.Outcome.Accounted(RuleAccounting.Reader.THE_VALUE_READING);
         }
-        return new RuleAccounting.Outcome.Unaccounted(stoppedBy(rule, named));
+        return new RuleAccounting.Outcome.Unaccounted(stoppedBy(rule, at, named));
     }
 
     /**
@@ -1042,16 +1042,45 @@ public final class FieldDomains {
      * reaches here is a rule no reading took in, so this reading was short of it however little it
      * wrote down — and an empty answer would say a question stands with nothing behind it. Not the
      * name's reasons: those belong to whichever rule left them.
+     *
+     * <p><b>Except for the reasons no rule can be answerable for</b>, which is the one thing the
+     * name is asked. An allowance run down by everything a position admits is a fact about the
+     * answer and not about any rule that paid into it, and {@link ReadingEvidence#stoppedBy} refuses
+     * such a reason rather than filing it under a rule — so a question standing for that reason has
+     * nothing under the rule by construction, and finding nothing there is not the two accounts
+     * coming apart.
      */
-    private RuleAccounting.Why stoppedBy(RuleRef rule, List<FactSubject> named) {
+    private RuleAccounting.Why stoppedBy(RuleRef rule, RuleKey at, List<FactSubject> named) {
         List<UnreadReason> why = took.stoppedBy(rule, named);
-        // Nothing recorded, so nothing is answerable for it. A rule reaches the readings that
-        // recognise the names it writes, and one about a name none of them knows — a field
-        // of a value a helper reads, reached through the call — is claimed by none of them and
-        // gave none of them anything to write down. Named as the value reading's, an author is
-        // sent to a reader that never held their clause.
-        return why.isEmpty() ? new RuleAccounting.Why.NothingTookItIn()
-                : new RuleAccounting.Why.TheValueReadingSays(why);
+        if (!why.isEmpty()) {
+            return new RuleAccounting.Why.TheValueReadingSays(why);
+        }
+        if (unreadByName.getOrDefault(at, List.of()).stream()
+                .allMatch(each -> each.about() == UnreadReason.About.A_RULE)) {
+            throw new AStandingQuestionWithNoAccount(rule, named);
+        }
+        return new RuleAccounting.Why.NothingTookItIn();
+    }
+
+    /**
+     * A question left standing that neither a rule nor the answer has an account of.
+     *
+     * <p>Two walks and one clause. A rule reaches this reading, which either adopts it or records
+     * where it gave up; a question stands where nothing adopted it. So a question standing with no
+     * account under the rule and none at the name either is the two coming apart — the rule was met
+     * by the walk that asks and by nothing that reads.
+     *
+     * <p>Not an ordinary limit, so not swallowed. Answered as one, an author is told that this
+     * compiler has no word for their rule, which is a sentence about their model printed because two
+     * of this compiler's accounts disagreed.
+     */
+    static final class AStandingQuestionWithNoAccount extends TheCheckDisagreesWithItself {
+
+        private static final long serialVersionUID = 1L;
+
+        AStandingQuestionWithNoAccount(RuleRef rule, List<FactSubject> named) {
+            super("a question stands that nothing accounts for: " + rule + " at " + named);
+        }
     }
 
     /** Every subject the place at {@code path} answers to. */

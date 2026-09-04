@@ -465,10 +465,12 @@ public sealed interface BlockReason {
      * one of them, an author is told which reader fell short of their clause, and the named reader
      * may be one that has no word for such a rule at all and never claimed it.
      *
-     * <p>What produces it is the accounting, from the two answers coming apart: a rule no reading
-     * adopted, at a position no reading recorded a reason for. A helper that reads a field of a
-     * value the readings do not know the positions of is one — the clause is about that field, and
-     * every reader here passed over it.
+     * <p><b>Despite the name, the reading may well have taken the rule in.</b> What produces this is
+     * a question standing with no reason filed under the rule that raised it, and the case that
+     * reaches it is a reading that read every rule and could not build the exact answer they come to
+     * within its allowance. That loss is about the answer, so no rule is answerable for it and none
+     * is filed. What the name should be is its own question — see the issue on where an answer-level
+     * limit belongs in the published vocabulary.
      *
      * <p>Nothing is claimed about which capability would lift it, which is what makes it different
      * from every case above. What a document writes for it is the same word it writes for a rule
