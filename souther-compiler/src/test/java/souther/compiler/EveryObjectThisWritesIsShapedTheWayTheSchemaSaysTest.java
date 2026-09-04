@@ -326,7 +326,7 @@ class EveryObjectThisWritesIsShapedTheWayTheSchemaSaysTest {
             for (var each : shape.get("properties").properties()) {
                 JsonNode held = node.get(each.getKey());
                 JsonNode want = each.getValue().get("const");
-                if (held == null || want != null && !held.equals(want)) {
+                if (held == null || (want != null && !held.equals(want))) {
                     return false;
                 }
             }

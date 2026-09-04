@@ -340,7 +340,7 @@ public record QuantityArrangement(List<Parting> partings, List<Run> runs) {
      * belonged to no seam at all.
      */
     private static boolean outside(Seam seam, Bound from, Bound to) {
-        return from != null && seam.at().compareTo(from.at()) < 0
-                || to != null && seam.at().compareTo(to.at()) > 0;
+        return (from != null && seam.at().compareTo(from.at()) < 0)
+                || (to != null && seam.at().compareTo(to.at()) > 0);
     }
 }

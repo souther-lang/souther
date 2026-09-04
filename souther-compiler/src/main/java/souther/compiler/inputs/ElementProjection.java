@@ -5,6 +5,7 @@ import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.types.BindingId;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -75,40 +76,36 @@ public record ElementProjection(List<String> steps) {
         }
 
         private List<String> steps(Core e, BindingId element, BindingTrail trail) {
-            switch (e) {
+            return switch (e) {
                 // What a `let` comes to is what its body comes to, and the name it bound is answered
                 // where it is read. Ordinary binding semantics, and what a helper applied to the
                 // element leaves behind once it is spliced in: `amountOf(line).value` is a field of
                 // a binding holding the element, and reading only the field would stop at the
                 // splice.
-                case Core.LetIn let -> {
-                    return steps(let.body(), element, trail);
-                }
+                case Core.LetIn let -> steps(let.body(), element, trail);
                 case Core.Read read -> {
                     if (element.equals(read.binding())) {
-                        return List.of();
+                        yield List.of();
                     }
                     Core through = held.get(read.binding());
-                    return through == null ? null
+                    yield through == null ? null
                             : trail.through(read.binding(),
                                     () -> steps(through, element, trail));
                 }
                 case Core.FieldAccess fa -> {
                     List<String> base = steps(fa.target(), element, trail);
                     if (base == null) {
-                        return null;
+                        yield null;
                     }
                     if (!Location.isStep(fa.target().type(), fa.field(), symbols)) {
-                        return base;
+                        yield base;
                     }
-                    List<String> longer = new java.util.ArrayList<>(base);
+                    List<String> longer = new ArrayList<>(base);
                     longer.add(fa.field());
-                    return List.copyOf(longer);
+                    yield List.copyOf(longer);
                 }
-                case null, default -> {
-                    return null;
-                }
-            }
+                case null, default -> null;
+            };
         }
     }
 

@@ -171,8 +171,8 @@ public sealed interface AffineConstraint<A> {
     private static boolean oneRuleEitherWayRound(AffineConstraint<?> one, AffineConstraint<?> other) {
         Rational mine = valueOf(one);
         Rational theirs = valueOf(other);
-        return one.form().equals(other.form()) && mine.equals(theirs)
-                || one.form().equals(other.form().negated()) && mine.equals(theirs.negated());
+        return (one.form().equals(other.form()) && mine.equals(theirs))
+                || (one.form().equals(other.form().negated()) && mine.equals(theirs.negated()));
     }
 
     private static Rational valueOf(AffineConstraint<?> constraint) {

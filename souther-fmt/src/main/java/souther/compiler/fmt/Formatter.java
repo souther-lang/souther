@@ -1975,10 +1975,8 @@ public final class Formatter {
      * constructor, or a record's fields. */
     private TokenDoc pattern(SyntaxNode n, Place at) {
         places.within(n, at);
-        switch (n.kind()) {
-            case PATTERN_NAME -> {
-                return ident(firstIdent(n));
-            }
+        return switch (n.kind()) {
+            case PATTERN_NAME -> ident(firstIdent(n));
             case PATTERN_TUPLE -> {
                 Place run = places.under(at, n.kind(), Opening.NONE, Written.of(n));
                 List<Member> elems = new ArrayList<>();
@@ -1988,13 +1986,13 @@ public final class Formatter {
                         elems.add(member(elem, pattern(c, elem)));
                     }
                 }
-                return TokenDoc.at(run, delimited(run, SyntaxKind.PATTERN_TUPLE, LPAREN,
+                yield TokenDoc.at(run, delimited(run, SyntaxKind.PATTERN_TUPLE, LPAREN,
                         withEndComments(run, elems), RPAREN));
             }
             case PATTERN_CTOR -> {
                 SyntaxNode inner = patternChild(n);
                 Place ofTheInner = places.under(at, inner.kind(), Opening.NONE, Written.of(inner));
-                return TokenDoc.node(n.kind(), concat(qualifiedName(n, at), GAP, LPAREN, GAP,
+                yield TokenDoc.node(n.kind(), concat(qualifiedName(n, at), GAP, LPAREN, GAP,
                         TokenDoc.at(ofTheInner, pattern(inner, ofTheInner)), GAP, RPAREN));
             }
             case PATTERN_RECORD -> {
@@ -2011,13 +2009,11 @@ public final class Formatter {
                                             token(names.get(1)))
                                     : token(names.get(0)))));
                 }
-                return TokenDoc.at(run, delimited(run, SyntaxKind.PATTERN_RECORD, LBRACE,
+                yield TokenDoc.at(run, delimited(run, SyntaxKind.PATTERN_RECORD, LBRACE,
                         withEndComments(run, fields), RBRACE));
             }
-            default -> {
-                return ident(firstIdent(n));
-            }
-        }
+            default -> ident(firstIdent(n));
+        };
     }
 
     private static boolean isPatternNode(SyntaxKind k) {

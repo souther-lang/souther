@@ -148,11 +148,11 @@ final class BindingEnvironment {
     @Override
     public boolean equals(Object other) {
         return this == other
-                || other instanceof BindingEnvironment that
+                || (other instanceof BindingEnvironment that
                         && callsStand == that.callsStand
                         && roots.equals(that.roots)
                         && bound.equals(that.bound)
-                        && elements.equals(that.elements);
+                        && elements.equals(that.elements));
     }
 
     @Override

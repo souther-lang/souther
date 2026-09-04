@@ -58,8 +58,8 @@ public final class ArmProbe implements RunSite {
     @Override
     public boolean equals(Object other) {
         return this == other
-                || other instanceof ArmProbe that
-                        && raw == that.raw && numbering.equals(that.numbering);
+                || (other instanceof ArmProbe that
+                        && raw == that.raw && numbering.equals(that.numbering));
     }
 
     @Override

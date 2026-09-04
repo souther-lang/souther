@@ -142,30 +142,28 @@ public final class PatternParser {
 
     private PatternSyntax atom() {
         char c = peek();
-        switch (c) {
-            case '(' -> {
-                return group();
-            }
+        return switch (c) {
+            case '(' -> group();
             case '[' -> {
                 take();
-                return new PatternSyntax.Symbols(characterClass());
+                yield new PatternSyntax.Symbols(characterClass());
             }
             case '\\' -> {
                 take();
-                return new PatternSyntax.Symbols(escaped());
+                yield new PatternSyntax.Symbols(escaped());
             }
             case '.' -> {
                 take();
                 // Every symbol but the five Java calls line terminators. Written as a difference
                 // rather than as a rule of its own, so that a negated class beside it — which does
                 // not leave them out — is the same algebra with a different set taken away.
-                return new PatternSyntax.Symbols(CodePoints.EVERYTHING
+                yield new PatternSyntax.Symbols(CodePoints.EVERYTHING
                         .less(CodePoints.LINE_TERMINATORS));
             }
             case '^', '$' -> {
                 boolean end = peek() == '$';
                 take();
-                return new PatternSyntax.Anchor(end);
+                yield new PatternSyntax.Anchor(end);
             }
             // A brace that begins no count. Java refuses it, so a pattern holding one names no
             // language at all — read as an ordinary character it would be this compiler answering
@@ -173,10 +171,8 @@ public final class PatternParser {
             case '{' -> throw new Refused(PatternRead.Unsupported.A_COUNT_THIS_CANNOT_READ);
             case '*', '+', '?' -> throw new Refused(PatternRead.Unsupported.SOMETHING_UNCLOSED);
             case 0 -> throw new Refused(PatternRead.Unsupported.SOMETHING_UNCLOSED);
-            default -> {
-                return new PatternSyntax.Symbols(CodePoints.of(literal()));
-            }
-        }
+            default -> new PatternSyntax.Symbols(CodePoints.of(literal()));
+        };
     }
 
     /** A group, which this reads only where it says nothing about the match. */
@@ -270,25 +266,25 @@ public final class PatternParser {
             throw new Refused(PatternRead.Unsupported.AN_ESCAPE_THIS_DOES_NOT_READ);
         }
         char kind = peek();
-        switch (kind) {
+        return switch (kind) {
             // The shorthands, as Java holds them without a flag to widen them: the digits are the
             // ten ASCII ones, a word character is ASCII with the underscore, and the whitespace is
             // the six Java names.
-            case 'd' -> { take(); return digits(); }
-            case 'D' -> { take(); return digits().not(); }
-            case 'w' -> { take(); return word(); }
-            case 'W' -> { take(); return word().not(); }
-            case 's' -> { take(); return whitespace(); }
-            case 'S' -> { take(); return whitespace().not(); }
-            case 'n' -> { take(); return CodePoints.of('\n'); }
-            case 't' -> { take(); return CodePoints.of('\t'); }
-            case 'r' -> { take(); return CodePoints.of('\r'); }
-            case 'f' -> { take(); return CodePoints.of('\f'); }
-            case 'a' -> { take(); return CodePoints.of(0x07); }
-            case 'e' -> { take(); return CodePoints.of(0x1B); }
-            case '0' -> { take(); return CodePoints.of(octal()); }
-            case 'x' -> { take(); return CodePoints.of(hex()); }
-            case 'u' -> { take(); return CodePoints.of(unicodeEscape()); }
+            case 'd' -> { take(); yield digits(); }
+            case 'D' -> { take(); yield digits().not(); }
+            case 'w' -> { take(); yield word(); }
+            case 'W' -> { take(); yield word().not(); }
+            case 's' -> { take(); yield whitespace(); }
+            case 'S' -> { take(); yield whitespace().not(); }
+            case 'n' -> { take(); yield CodePoints.of('\n'); }
+            case 't' -> { take(); yield CodePoints.of('\t'); }
+            case 'r' -> { take(); yield CodePoints.of('\r'); }
+            case 'f' -> { take(); yield CodePoints.of('\f'); }
+            case 'a' -> { take(); yield CodePoints.of(0x07); }
+            case 'e' -> { take(); yield CodePoints.of(0x1B); }
+            case '0' -> { take(); yield CodePoints.of(octal()); }
+            case 'x' -> { take(); yield CodePoints.of(hex()); }
+            case 'u' -> { take(); yield CodePoints.of(unicodeEscape()); }
             case 'p', 'P' -> throw new Refused(PatternRead.Unsupported.A_CHARACTER_PROPERTY);
             case 'b', 'B', 'A', 'z', 'Z', 'G', 'R' ->
                     throw new Refused(PatternRead.Unsupported.A_BOUNDARY);
@@ -304,9 +300,9 @@ public final class PatternParser {
                 if (Character.isLetter(kind)) {
                     throw new Refused(PatternRead.Unsupported.AN_ESCAPE_THIS_DOES_NOT_READ);
                 }
-                return CodePoints.of(literal());
+                yield CodePoints.of(literal());
             }
-        }
+        };
     }
 
     private static CodePoints digits() {

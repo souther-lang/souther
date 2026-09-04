@@ -164,14 +164,14 @@ final class Handoff {
     Object handOver(CallerApplication.Application application) throws ReflectiveOperationException {
         lock.lock();
         try {
-            switch (phase) {
-                case Phase.Running _ -> phase = new Phase.Asked(application);
+            phase = switch (phase) {
+                case Phase.Running _ -> new Phase.Asked(application);
                 case Phase.Abandoned _ -> throw givenUpOn();
                 // A row hands one application over at a time, and a row that has left is not
                 // handing anything over at all.
                 default -> throw new IllegalStateException(
                         "an application was handed over by a row that is " + phase);
-            }
+            };
             moved.signalAll();
             while (phase instanceof Phase.Asked) {
                 moved.await();
@@ -184,17 +184,15 @@ final class Handoff {
             // and told it would leave the wait and come back to it — with the row working in
             // between, which is the one interval the wait must not have.
             phase = new Phase.Running();
-            switch (threw) {
-                case null -> {
-                    return value;
-                }
+            return switch (threw) {
+                case null -> value;
                 case RuntimeException re -> throw re;
                 case Error e -> throw e;
                 case ReflectiveOperationException roe -> throw roe;
                 // An application ends with one of the three above, so this is the hand-off being
                 // given something that is not an application to apply.
                 default -> throw new IllegalStateException(threw);
-            }
+            };
         } catch (InterruptedException _) {
             Thread.currentThread().interrupt();
             throw new CancellationException(
