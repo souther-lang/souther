@@ -19,6 +19,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
  * Every way a reading comes back without a line, and what each of them leaves behind, in one table.
@@ -461,6 +462,12 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
         if (node.has("enum")) {
             node.get("enum").forEach(each -> out.add(each.asString()));
         }
+        // A surface whose words are exactly another's is written as that one and not as a copy of
+        // it. Read only through `anyOf`, such a surface came back with no words at all and the
+        // vocabularies were held equal by both of them being empty.
+        if (node.has("$ref")) {
+            out.addAll(words(schema, node.get("$ref").asString().substring("#/$defs/".length())));
+        }
         if (node.has("anyOf")) {
             for (JsonNode each : node.get("anyOf")) {
                 if (each.has("const")) {
@@ -503,6 +510,71 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
                 .filter(each -> !(each instanceof BlockReason.RuleWithoutLineReason))
                 .filter(each -> !(each instanceof BlockReason.AboutThePosition))
                 .toList();
+    }
+
+    /**
+     * What a value reading's reason is a fact about decides which capability it arrives in, and the
+     * two agree in both directions.
+     *
+     * <p>Enumerated from the reasons rather than listed. {@link UnreadReason#about()} is the one
+     * place the classification is taken, and what this holds is that the projection into these
+     * reasons keeps it: a reason about a rule reaches one a rule is named for, a reason about the
+     * answer reaches one that names none and still leaves a question standing, and a reason about
+     * neither reaches a stop at a position, which raises no question for anything to stand on.
+     *
+     * <p>Both directions, because one of them alone is satisfiable by a projection that sends
+     * everything to one arm. A reason added to the vocabulary fails here rather than arriving at
+     * whichever arm was nearest.
+     */
+    @Test
+    void whatAReasonIsAboutDecidesWhichCapabilityItArrivesIn() {
+        Map<String, String> arrived = new LinkedHashMap<>();
+        for (UnreadReason why : UnreadReason.values()) {
+            arrived.put(why.name(), capabilityOf(BlockReason.of(why)));
+        }
+
+        Map<String, String> expected = new LinkedHashMap<>();
+        for (UnreadReason why : UnreadReason.values()) {
+            expected.put(why.name(), switch (why.about()) {
+                case A_RULE -> "RuleReadingStopped";
+                case THE_ANSWER -> "AnswerRealizationStopped";
+                case NEITHER -> "AboutThePosition";
+            });
+        }
+
+        assertEquals(expected, arrived);
+    }
+
+    /** Which of the three a reason is, asked of the reason and not of where it was written. */
+    private static String capabilityOf(BlockReason.ReadingStopReason reason) {
+        return switch (reason) {
+            case BlockReason.RuleReadingStopped _ -> "RuleReadingStopped";
+            case BlockReason.AnswerRealizationStopped _ -> "AnswerRealizationStopped";
+            case BlockReason.AboutThePosition _ -> "AboutThePosition";
+        };
+    }
+
+    /**
+     * And a question a rule raised is left standing by the first two of those and by neither of the
+     * third.
+     *
+     * <p>The outlet, asked of every reason there is. A rule this reading gave up on and an answer
+     * it could not build both leave the question where they found it; a reading that never arrived
+     * at the position raises no question, so one of those reaching a question would be an account
+     * taken from a place nothing looked at.
+     */
+    @Test
+    void aQuestionIsLeftStandingByEverythingButAStopAtAPosition() {
+        for (UnreadReason why : UnreadReason.values()) {
+            if (why.about() == UnreadReason.About.NEITHER) {
+                assertThrows(IllegalArgumentException.class,
+                        () -> BlockReason.ofAQuestionStandingOn(why),
+                        () -> why + " reached no rule, so no question of one stands on it");
+            } else {
+                assertEquals(BlockReason.of(why), BlockReason.ofAQuestionStandingOn(why),
+                        () -> why + " leaves a question standing, and says the same thing there");
+            }
+        }
     }
 
     /** And those of them a question a rule raised can be left standing by. */

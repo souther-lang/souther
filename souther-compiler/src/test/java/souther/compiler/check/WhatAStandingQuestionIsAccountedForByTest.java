@@ -18,6 +18,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
  * A question a rule leaves standing is accounted for by a reading or by the answer, and the two are
@@ -147,15 +148,79 @@ class WhatAStandingQuestionIsAccountedForByTest {
     }
 
     /**
-     * And a rule the reading took in whole leaves a question no reading is answerable for.
+     * And a rule the reading took in whole leaves a question the answer accounts for.
      *
-     * <p>Which is the arm that names none of them, standing for the one thing it now stands for. A
-     * reading's own words here would say that something fell short of the rule, and nothing did.
+     * <p>No rule is answerable for it, so nothing is filed under the rule and the account is read
+     * off the position. What it says is the limit itself: an arm meaning no reading claimed the
+     * rule would send an author after a reader that was never short of their clause.
      */
     @Test
-    void anAnswerBeyondTheAllowanceIsAccountedForByNoReading() {
-        assertEquals(Map.of("invariant N (r) at y", "NothingTookItIn"),
-                whyStanding(AN_ANSWER_BEYOND_THE_ALLOWANCE));
+    void anAnswerBeyondTheAllowanceIsWhatTheQuestionStandsOn() {
+        assertEquals(Map.of("invariant N (r) at y",
+                        List.of(UnreadReason.EXACT_VALUES_TOO_COSTLY)),
+                standingOn(AN_ANSWER_BEYOND_THE_ALLOWANCE));
+    }
+
+    /**
+     * And a rule short in both ways stands on both.
+     *
+     * <p>One rule, one position, two limits of its own: a conjunct nothing reads, and a choice
+     * beside it whose meet ran past the allowance. Neither is the other's account — rewriting the
+     * form leaves the answer unbuilt, and allowing more leaves the form unread — and the two are
+     * different words out there and different answers about what a wider run would get past.
+     *
+     * <p>Which is why the account asks the position beside the rule and not instead of it. Taken as
+     * a fallback, this question went out short in the one way its rule had filed, and an author who
+     * did what they were told found the position exactly as wide as before.
+     */
+    @Test
+    void aRuleShortInBothWaysStandsOnBoth() {
+        assertEquals(List.of(UnreadReason.FORM_NOT_READ, UnreadReason.EXACT_VALUES_TOO_COSTLY),
+                standingOn(A_FORM_NO_READING_TAKES_APART_BESIDE_AN_ANSWER_BEYOND_THE_ALLOWANCE)
+                        .get("invariant N (r) at y"));
+    }
+
+    /**
+     * A rule with a conjunct nothing reads, written beside a choice about the same position whose
+     * meet is past what the allowance builds.
+     *
+     * <p>Both limits are this rule's own, which is what makes it the pair rather than a rule
+     * carrying a neighbour's. The conjunct is refused by every reading of clauses; the choice is
+     * read in full and its two patterns meet at about ninety thousand states.
+     */
+    private static final String
+            A_FORM_NO_READING_TAKES_APART_BESIDE_AN_ANSWER_BEYOND_THE_ALLOWANCE = """
+            module demo
+
+            data N = { x: String, y: String }
+                invariant r =
+                    ((String.matches("a{300}", y) && String.matches("b{300}", y)) || x == "A")
+                    && UNREAD_Y
+            """.replace("UNREAD_Y", souther.compiler.ARuleNoReadingTakesIn.about("y"));
+
+    /** And a reason about neither is no account of a question a rule raised. */
+    @Test
+    void aReasonAboutNeitherIsNoAccountOfARulesQuestion() {
+        Arrays.stream(UnreadReason.values())
+                .filter(each -> each.about() == UnreadReason.About.NEITHER)
+                .forEach(each -> assertThrows(IllegalArgumentException.class,
+                        () -> new RuleAccounting.Why.TheValueReadingSays(List.of(each)),
+                        () -> each + " reached no rule, so it accounts for no question of one"));
+    }
+
+    /** What every question of every rule that nothing answered stands on. */
+    private static Map<String, List<UnreadReason>> standingOn(String source) {
+        Map<String, List<UnreadReason>> out = new LinkedHashMap<>();
+        read(source).accounting().values().forEach(accounting ->
+                accounting.answers().forEach((owed, outcome) -> {
+                    if (outcome instanceof RuleAccounting.Outcome.Unaccounted unaccounted
+                            && unaccounted.why()
+                            instanceof RuleAccounting.Why.TheValueReadingSays says) {
+                        out.put(((RuleCitation.Named) accounting.cited()).name() + " at " + owed,
+                                says.why());
+                    }
+                }));
+        return out;
     }
 
     /**
