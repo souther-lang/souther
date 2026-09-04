@@ -396,7 +396,26 @@
                                      to an error so that the next one stops the build it arrived
                                      in. The check reads documentation too, so an import only a
                                      {@link} mentions is not one of these. -->
-                                <arg>-Xplugin:ErrorProne -Xep:UnicodeInCode:OFF -Xep:RemoveUnusedImports:ERROR ${nullaway.args}</arg>
+                                <!-- ReferenceEquality is off. It reports a comparison written `==`
+                                     on a type that overrides `equals`, and this compiler asks that
+                                     question on purpose in several shapes, none of which the check
+                                     can be told about. A rewrite answers `child == node.child() ?
+                                     node : new ...`, where equality would rebuild a tree that
+                                     already means what it means. A primitive type and an emitted
+                                     call target are enum constants held in a field the interface
+                                     declares, so the check sees `Type` and `CallTarget` where the
+                                     comparison is against an enum constant and cannot be wrong. A
+                                     sentinel — a not-found, a failed read, an empty node — is the
+                                     one object it is. And a node's occurrence is what a walk keys
+                                     on: two structurally equal subtrees are two places, and
+                                     `equals` would make them one.
+
+                                     What this costs is the reports it would make about a `==`
+                                     nobody meant. Nothing else here catches one, and the way to
+                                     answer that question again is to turn the check back on for a
+                                     run and read what it says, which is how the sites above were
+                                     read before it went off. -->
+                                <arg>-Xplugin:ErrorProne -Xep:UnicodeInCode:OFF -Xep:ReferenceEquality:OFF -Xep:RemoveUnusedImports:ERROR ${nullaway.args}</arg>
                             </compilerArgs>
                             <annotationProcessorPaths>
                                 <path>
