@@ -2496,15 +2496,15 @@ public final class Adequacy {
     }
 
     /**
-     * What a module's sources saw of one behavior: the rows, and what stopped them being seen.
+     * What a module's sources saw of one behavior.
      *
-     * <p>Both, and carried together, because a measure that reads only the rows cannot tell a case no
-     * row covers from a case a row it never saw covers. The evaluation keeps the two apart on purpose
-     * — a source with no runtime to run against contributes no rows and one reason — and an aggregate
-     * that kept only the rows would answer as if the reason were nothing.
+     * <p>The rows alone, and what stopped them being seen is beside this rather than in it: a
+     * {@link RowReading} holds one of these under a {@link Measurement}, and what that reading went
+     * without is the measurement's. The two have to reach a reader together, because a measure with
+     * only the rows cannot tell a case no row covers from a case a row it never saw covers — which
+     * is why {@link RowReading} is what a measure is handed and this is not.
      *
-     * @param rows           what was observed
-     * @param incompleteness why what was observed is not all there was
+     * @param rows what was observed
      */
     public record Observed(List<RowOutcome> rows) {
 

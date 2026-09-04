@@ -321,10 +321,12 @@ public final class InvariantChecker {
      * is nothing left to get wrong: it says where it was written and what it comes to, and the two
      * were made together ({@link ClausesForDischarge}).
      *
-     * @param clause the conjunct, as written and as this check reads it
-     * @param typing what types the read form here — a declaration's fields, a signature's names —
-     *               answering {@link TypedClause.Stopped} where typing it did not finish
+     * @param conjunct the conjunct, as written and as this check reads it
      * @param locations the names it may read, each standing for itself
+     * @param source what the rule is read against — the symbols that type the form here and the
+     *               invariants it may reach — which is what says where the reading comes from
+     *               rather than leaving each reader to assemble one
+     * @param policy what to do where the reading does not finish
      * @param describing what is being read, for the record a fail-open leaves behind
      */
     static ClauseDischarge capabilityOf(StatedContract.Conjunct conjunct,
@@ -1016,8 +1018,8 @@ public final class InvariantChecker {
      * and places nothing on it: that 9 is where {@code b} stops, and a position whose only limit is
      * another position's is one the model draws no line through. Only what is here may be a line.
      *
-     * @param path     where the coordinate sits, read from the value these are of
-     * @param measured whether the coordinate is a count taken of the position rather than its value
+     * @param at       where the coordinate sits, read from the value these are of, and which of the
+     *                 numbers there this end is on — a count taken of the position, or its value
      * @param from     the rule that placed it, which is what names the line. The clause and not
      *                 the declaration it is on: two clauses of one declaration placing an end at
      *                 one value are two rules a row could be owed to, and held as declarations

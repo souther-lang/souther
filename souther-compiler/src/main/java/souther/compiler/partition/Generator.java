@@ -1304,10 +1304,10 @@ public final class Generator {
      * and what a cell is does not depend on which arm is being looked for in it. The arms it claims
      * are read here for the same reason.
      *
-     * @param tried what came of searching it, or null where nothing has yet. One cell is searched
-     *              once however many arms are looked for in it: the candidates it admits and what
-     *              they did are facts about the cell, and composing them again per arm is the same
-     *              work done twice for the same answer
+     * <p>What came of searching it is held here too, and is null where nothing has yet. One cell is
+     * searched once however many arms are looked for in it: the candidates it admits and what they
+     * did are facts about the cell, and composing them again per arm is the same work done twice for
+     * the same answer.
      */
     private static final class WhereToLook {
 
@@ -4190,7 +4190,7 @@ public final class Generator {
      * it — offered its first class regardless, every row about a class under one case of a sum
      * would ask to be another case as well, and none of them would be composed.
      *
-     * @param at  which axis the row is about, or {@link #NOT_HERE} where it is about none
+     * @return which axis the row is about, or {@link #NOT_HERE} where it is about none
      */
     private static int[] standing(List<Axis> axes, int[] from, int[] anchors) {
         return standing(axes, from, anchors, (_, _) -> true);

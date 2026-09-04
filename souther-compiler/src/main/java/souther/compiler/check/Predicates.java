@@ -924,7 +924,8 @@ final class Predicates {
      * afterwards by comparing the state to what went in: that comparison says whether anything
      * changed, which is a third question and is the answer to neither.
      *
-     * @param read whether any of these domains took the condition in
+     * @param taken     whether any of these domains took the condition in
+     * @param shapeRead whether a rule here read the shape it is written in at all
      */
     record Assumed(Known known, boolean taken, boolean shapeRead) {
 

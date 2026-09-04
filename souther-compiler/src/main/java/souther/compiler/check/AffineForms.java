@@ -37,8 +37,10 @@ import java.util.Map;
  * arithmetic of it comes to, so reading that expression is this walk's and no one else's
  * (ADR-0111).
  *
- * @param <A> what the caller calls an atom
- * @param <E> what the caller carries as it goes inside a binding
+ * <p>Two things are the caller's throughout, and every reading and every walk below is written over
+ * them: {@code A} is what the caller calls an atom, and {@code E} is what it carries as it goes
+ * inside a binding. Neither is declared here — this class holds no state — so each of
+ * {@link Reading} and the walks says them for itself.
  */
 public final class AffineForms {
 

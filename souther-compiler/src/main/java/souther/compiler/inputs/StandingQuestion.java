@@ -244,10 +244,9 @@ public sealed interface StandingQuestion {
      * knows which. Where a measure's own answer is written is {@code MeasureClosure}'s, which asks
      * the question rather than the reason.
      *
-     * @param filed which rule, where it was filed and what stopped the reading, which together are
-     *              the whole of what makes two of these one
-     * @param cited how a reader finds it — a name where the author gave one, a place where they did
-     *              not
+     * <p>What makes two of these one is the whole of which rule it is, where it was filed and what
+     * stopped the reading. How a reader finds it is a separate thing — a name where the author gave
+     * one, a place where they did not — and is not part of that identity.
      */
     sealed interface Unclassified extends StandingQuestion {
 

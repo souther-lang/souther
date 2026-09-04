@@ -288,11 +288,6 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
     }
 
     /**
-     * @param reading   how far the reading of this behavior's rows got, and what it read. The
-     *                  counts a document prints are this measurement's value and are absent where
-     *                  it has none: a source nobody evaluated leaves no row to count, and printing
-     *                  {@code rows 0} for it says the author wrote none (issue #996)
-     * @param signature what those rows establish about the cases of its inputs and its output
      * @param claimed   what the body declared cannot arrive, beside the measures rather than in
      *                  them. The two are joined where this report is written and nowhere else,
      *                  which is what keeps a claim from reaching a denominator
@@ -307,7 +302,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             findings = List.copyOf(findings);
         }
 
-        /** How far the reading of this behavior's rows got, and what it read. */
+        /** How far the reading of this behavior's rows got, and what it read. The counts a document
+         *  prints are this measurement's value and are absent where it has none: a source nobody
+         *  evaluated leaves no row to count, and printing {@code rows 0} for it says the author
+         *  wrote none. */
         public Adequacy.RowReading reading() {
             return evidence.reading();
         }

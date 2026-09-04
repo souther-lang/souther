@@ -153,14 +153,15 @@ final class Coverages {
     }
 
     /**
-     * @param partitioning what the model divides this behavior into, made once by
-     *                   {@link souther.compiler.query.Adequacy.Divided} and read here. Worked out
-     *                   again on the way in, this and the boundaries beside it would be two
-     *                   derivations of one thing and two chances to disagree about it. The lines
-     *                   those rules drew are not here: what a behavior is owed at them is the
-     *                   module's one relation projected to it
-     *                   ({@link souther.compiler.query.Adequacy.BodyBorders}), and the classes
-     *                   measure reads none of it
+     * What the classes measure comes to for one behavior.
+     *
+     * <p>What the model divides this behavior into is made once by
+     * {@link souther.compiler.query.Adequacy.Divided} and read off {@code subject} here. Worked out
+     * again on the way in, this and the boundaries beside it would be two derivations of one thing
+     * and two chances to disagree about it. The lines those rules drew are not part of it: what a
+     * behavior is owed at them is the module's one relation projected to it
+     * ({@link souther.compiler.query.Adequacy.BodyBorders}), and the classes measure reads none of
+     * it.
      */
     static PartitionEvidence of(souther.compiler.partition.MeasuredInput subject,
                                 souther.compiler.query.Adequacy.RowReading observed,
@@ -609,22 +610,20 @@ final class Coverages {
      * it because an earlier branch went the other way. Nothing measures that until the arms are
      * instrumented, so a guard's boundary is unmeasured rather than met or missed.
      *
-     * @param armsAsked whether the build asked for the arms at all. Whether the run then managed to
-     *                  read them is a second question, and {@code observed} answers it — the two fail
-     *                  differently and a measure that took one boolean for both could not say which
-     *                  had happened.
-     * @param probe     null where the module's classes or the runtime are not there to build against
-     * @param reaching  what a row had already satisfied when each comparison ran. Threaded here as
-     *                  well as into {@link #assessBetween} because which shape of quantity a rule
-     *                  cuts says nothing about where a row for it may be written — and a region put
-     *                  into one of the two paths would leave the other searching over everything its
-     *                  position could ever hold. No model was found where it moves an answer down
-     *                  this path, and no test holds it: the points of a line at one position all sit
-     *                  beside the line, and every line tried that the region excludes turned out to
-     *                  be one {@link souther.compiler.check.PathReachability} had already taken the
-     *                  obligation away for. Whether those two always coincide is not established
-     *                  here — they are different readings — so what this says is that a path is not
-     *                  left short of what it is owed, and not that the region is idle here.
+     * <p>Whether the build asked for the arms at all and whether the run then managed to read them
+     * are two questions, and {@code observed} answers the second — the two fail differently, and a
+     * measure that took one answer for both could not say which had happened.
+     *
+     * <p>What a row had already satisfied when each comparison ran is threaded here as well as into
+     * {@link #assessBetween}, because which shape of quantity a rule cuts says nothing about where a
+     * row for it may be written — and a region put into one of the two paths would leave the other
+     * searching over everything its position could ever hold. No model was found where it moves an
+     * answer down this path, and no test holds it: the points of a line at one position all sit
+     * beside the line, and every line tried that the region excludes turned out to be one
+     * {@link souther.compiler.check.PathReachability} had already taken the obligation away for.
+     * Whether those two always coincide is not established here — they are different readings — so
+     * what this says is that a path is not left short of what it is owed, and not that the region is
+     * idle here.
      */
     static List<BorderAssessment> assess(
             List<Border> lines, souther.compiler.partition.MeasuredInput subject,

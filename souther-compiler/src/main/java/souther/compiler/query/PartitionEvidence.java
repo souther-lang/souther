@@ -32,7 +32,7 @@ import java.util.Set;
  * reader holding one of its entries could walk back to the border and the roles beside it; asked
  * for by name, each is one answer with one owner.
  *
- * @param axes         one entry per position the model divides
+ * @param partitioned  one entry per position the model divides
  * @param notDerivable positions no class came back for, each saying whether the model divides them
  *                     no way at all or this could not read what it divides them by. Both used to be
  *                     one list of paths, and the sentence written from it claimed the first about
