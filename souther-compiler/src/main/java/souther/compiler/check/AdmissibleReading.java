@@ -173,7 +173,7 @@ final class AdmissibleReading implements ClauseReading<PlannedValues<FactSubject
      * reading stopped at something other than this reading's own limit.
      */
     private PlannedValues<FactSubject> pattern(Core e, boolean states, Denotations at) {
-        StringPredicates.Stated stated = statedIn(e);
+        StringPredicates.Stated stated = statedIn(e, at);
         FactSubject position = stated == null ? null : positionIn(stated.subject(), at);
         if (position == null) {
             return null;
@@ -276,7 +276,7 @@ final class AdmissibleReading implements ClauseReading<PlannedValues<FactSubject
     private PlannedValues<FactSubject> sided(Core where, Core what, boolean states, Denotations at) {
         FactSubject position = positionIn(where, at);
         Type type = position == null ? null : byName.get(position);
-        Value value = type == null ? null : valueOf(what);
+        Value value = type == null ? null : valueOf(what, at);
         return value == null ? null
                 : PlannedValues.at(position, AdmittedPlan.of(admits(value, states, type)));
     }
@@ -303,7 +303,7 @@ final class AdmissibleReading implements ClauseReading<PlannedValues<FactSubject
      */
     Map<FactSubject, StringRestriction> stringRuleIn(Core e, PlannedValues<FactSubject> said,
                                                     Denotations at) {
-        StringPredicates.Stated stated = statedIn(e);
+        StringPredicates.Stated stated = statedIn(e, at);
         FactSubject position = stated == null ? null : positionIn(stated.subject(), at);
         if (position == null) {
             return Map.of();
@@ -345,11 +345,11 @@ final class AdmissibleReading implements ClauseReading<PlannedValues<FactSubject
      * about. Asked twice of the table, the two would be one question with two derivations — which
      * is the arrangement {@link StringPredicates} exists to stop, one file further down.
      */
-    private StringPredicates.Stated statedIn(Core e) {
+    private StringPredicates.Stated statedIn(Core e, Denotations at) {
         if (asStated.containsKey(e)) {
             return asStated.get(e);
         }
-        StringPredicates.Stated said = StringPredicates.statedByChecked(e, symbols);
+        StringPredicates.Stated said = StringPredicates.statedByChecked(e, symbols, terms, at);
         asStated.put(e, said);
         return said;
     }
@@ -388,11 +388,11 @@ final class AdmissibleReading implements ClauseReading<PlannedValues<FactSubject
      * strings joined — is the value it comes to. A case of an enumeration holds nothing and is not
      * folded to anything; what it is is which declaration it is.
      */
-    private Value valueOf(Core e) {
+    private Value valueOf(Core e, Denotations at) {
         if (e instanceof Core.UnitValue unit) {
             return Value.of(unit.data());
         }
-        Object folded = Terms.folded(e, symbols);
+        Object folded = Terms.folded(e, symbols, at);
         if (folded instanceof String text) {
             return Value.text(text);
         }
@@ -419,6 +419,13 @@ final class AdmissibleReading implements ClauseReading<PlannedValues<FactSubject
     }
 
     private void gather(Core e, Set<FactSubject> found, Denotations at) {
+        // A binding is crossed as a binding: its body is what the clause states, read inside it,
+        // and what it was given is not a part of the clause on its own. Walked as an ordinary node,
+        // an argument a helper never reads was counted among the positions the rule names.
+        if (e instanceof Core.LetIn li) {
+            gather(li.body(), found, terms.inside(li, at));
+            return;
+        }
         FactSubject here = terms.subjectOf(e, at);
         if (here != null && byName.containsKey(here)) {
             found.add(here);

@@ -124,7 +124,7 @@ final class OrderedReading implements ClauseReading<OrderedIntervals<FactSubject
         if (carrier == null) {
             return OrderedIntervals.top();
         }
-        Hir.Expr written = Terms.asWrittenValue(bound);
+        Hir.Expr written = Terms.asWrittenValue(bound, at);
         // Denied, a comparison is the one that leaves what it leaves out. `!(value /= x)` is an
         // equality and is read; `!(value == x)` is a disequality and is not, which is the same
         // answer the disequality gets when it is written directly.

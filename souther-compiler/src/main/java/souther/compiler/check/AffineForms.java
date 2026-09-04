@@ -74,6 +74,7 @@ public final class AffineForms {
          *  name means is settled once and no reader interprets a binder for itself. */
         E inside(Core.LetIn li, E at);
 
+
         /**
          * The value {@code read}'s name denotes, where the name and that value are one value — or
          * null where the name stands for something of its own and reading through it would say of
@@ -385,6 +386,7 @@ public final class AffineForms {
         public E inside(Core.LetIn li, E at) {
             return of.inside(li, at);
         }
+
 
         @Override
         public ReadThrough<E> readThrough(Core.Read read, E at) {

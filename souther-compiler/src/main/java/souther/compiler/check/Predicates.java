@@ -171,6 +171,12 @@ final class Predicates {
         if (handed.contains(terms.subjectOf(e, at))) {
             return true;
         }
+        // A binding is crossed as a binding. Its body is what the clause names, read inside it; what
+        // it was given is reached through the name where the body reads it, and is not a part of the
+        // clause on its own.
+        if (e instanceof Core.LetIn li) {
+            return names(li.body(), handed, terms.inside(li, at));
+        }
         boolean[] found = {false};
         Core.forEachChild(e, child -> found[0] = found[0] || names(child, handed, at));
         return found[0];
@@ -792,7 +798,7 @@ final class Predicates {
      *  value it names. */
     private Owed owedBy(Core inv, Denotations at, Set<FactSubject> unnamed, boolean positive,
                         boolean decidesFalse) {
-        Boolean folded = decidedAt(inv);
+        Boolean folded = decidedAt(inv, at);
         Owed decided = decidedBy(folded, positive, decidesFalse);
         return decided != null ? decided
                 : owing(inv, foldOf(folded), null, null, new Conditions.Polar(inv, positive),
@@ -803,7 +809,7 @@ final class Predicates {
      *  was handed and so the one a report about the clause names. */
     private Owed owedBy(StatedComparison stated, Core inv, Denotations at, Set<FactSubject> unnamed,
                         boolean positive, boolean decidesFalse, Discharge discharge) {
-        Boolean folded = decidedAt(stated);
+        Boolean folded = decidedAt(stated, at);
         Owed decided = decidedBy(folded, positive, decidesFalse);
         if (decided != null) {
             return decided;
@@ -934,8 +940,8 @@ final class Predicates {
     /** Whether {@code inv} is decided outright: the clause, with the construction's own values
      * already standing where it read a field, folded. {@code null} where it does not fold — which is
      * every clause reading anything computed at run time. */
-    Boolean decidedAt(Core inv) {
-        Object folded = Terms.folded(inv, terms.symbols());
+    Boolean decidedAt(Core inv, Denotations at) {
+        Object folded = Terms.folded(inv, terms.symbols(), at);
         return folded instanceof Boolean b ? b : null;
     }
 
@@ -949,9 +955,9 @@ final class Predicates {
      * {@code Int.compare(1, 2) >= 0} folds through nothing the library declares, and the order it
      * states of {@code 1} and {@code 2} is settled here.
      */
-    private Boolean decidedAt(StatedComparison stated) {
-        Object left = Terms.folded(stated.left(), terms.symbols());
-        Object right = Terms.folded(stated.right(), terms.symbols());
+    private Boolean decidedAt(StatedComparison stated, Denotations at) {
+        Object left = Terms.folded(stated.left(), terms.symbols(), at);
+        Object right = Terms.folded(stated.right(), terms.symbols(), at);
         return (left == null || right == null) ? null
                 : ConstEval.stands(stated.claim().statedRelation(), left, right);
     }

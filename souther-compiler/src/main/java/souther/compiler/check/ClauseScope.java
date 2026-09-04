@@ -11,9 +11,15 @@ import souther.compiler.core.Core;
  * carry an account of a binder, and three accounts of one thing agree only until somebody changes
  * one of them.
  *
- * <p>So the fold below finds the scope boundary and asks this; no evaluator sees that a binding was
- * there at all. For a reading carrying {@link Denotations} the answer is {@link Terms#inside}, which
- * is the one place a {@code let} is entered.
+ * <p>So the fold below finds the scope boundary and asks this; no evaluator is handed a binding as
+ * the clause's shape. For a reading carrying {@link Denotations} the answer is {@link Terms#inside},
+ * which is the one place a {@code let} is entered.
+ *
+ * <p><b>A binding nested inside a leaf is still part of that leaf</b>, and this is not where it is
+ * crossed. What crosses it there is each question the leaf language asks about its own inside —
+ * which position an operand is, what written value it is, which positions a part names — and each
+ * of those asks the environment rather than working the binder out. A question there that answers
+ * from the tree alone is one this decision has not reached (ADR-0106).
  *
  * @param <E> what a reading carries as it goes inside a binding
  */

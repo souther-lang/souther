@@ -367,6 +367,11 @@ sealed interface StatedByClauses {
         }
 
         private void gather(Core e, Set<FactSubject> found, Denotations at) {
+            // Crossed as a binding, for the reason {@code AdmissibleReading.gather} gives.
+            if (e instanceof Core.LetIn li) {
+                gather(li.body(), found, terms.inside(li, at));
+                return;
+            }
             FactSubject here = terms.subjectOf(e, at);
             if (here != null && byName.containsKey(here)) {
                 found.add(here);

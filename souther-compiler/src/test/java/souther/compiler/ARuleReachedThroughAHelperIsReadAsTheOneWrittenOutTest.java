@@ -164,17 +164,35 @@ class ARuleReachedThroughAHelperIsReadAsTheOneWrittenOutTest {
     private static final String ITSELF = """
             let itself (n: Int) = n
             let itsSelf (s: String) = s
+            let atLeast (n: Int, floor: Int) = n >= floor
+            let isOne (n: Int, one: Int) = n == one
+            let matching (p: String, s: String) = String.matches(p, s)
+            let atLeastOne (s: String) = String.length(s) >= 1
             """;
 
     private static Stream<org.junit.jupiter.params.provider.Arguments> operands() {
         return Stream.of(
+                // A binding still in the tree, standing inside the comparison.
                 org.junit.jupiter.params.provider.Arguments.of(
                         "Int", "value >= 1", "value >= itself(1)"),
                 org.junit.jupiter.params.provider.Arguments.of(
                         "Int", "value == 1", "value == itself(1)"),
                 org.junit.jupiter.params.provider.Arguments.of(
                         "String", "String.matches(\"[a-z]+\", value)",
-                        "String.matches(itsSelf(\"[a-z]+\"), value)"));
+                        "String.matches(itsSelf(\"[a-z]+\"), value)"),
+                // And a binding the clause's shape has already crossed, leaving a bare read of the
+                // parameter where the value was written. The two are different places for a reader
+                // to meet one, and holding only the first left the second reading nothing.
+                org.junit.jupiter.params.provider.Arguments.of(
+                        "Int", "value >= 1", "atLeast(value, 1)"),
+                org.junit.jupiter.params.provider.Arguments.of(
+                        "Int", "value == 1", "isOne(value, 1)"),
+                org.junit.jupiter.params.provider.Arguments.of(
+                        "String", "String.matches(\"[a-z]+\", value)",
+                        "matching(\"[a-z]+\", value)"),
+                // The rule #1333 was written about, which is a length rather than the value.
+                org.junit.jupiter.params.provider.Arguments.of(
+                        "String", "String.length(value) >= 1", "atLeastOne(value)"));
     }
 
     /** What the one position of a newtype is left, as the declaration's own reading says it. */

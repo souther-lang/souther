@@ -112,10 +112,23 @@ every rule an author stated by naming it rather than writing it out.
 
 The fold now hands an environment downward beside the answer it carries upward. `ClauseExpr.Scoped`
 marks where that environment changes and composes nothing; `ClauseScope` answers what a binding is
-entered as, and for a reading carrying `Denotations` the answer is `Terms.inside`. No evaluator sees
-that a binding was there, and none of them holds an environment of its own any more: a leaf is read
-at where it stands. `Predicates` reads the body of a binding under the same environment, asking the
-same one place for it, though it still recognises the connectives for itself.
+entered as, and for a reading carrying `Denotations` the answer is `Terms.inside`. No clause
+evaluator is handed a binding **as the clause's shape**, and none of them holds an environment of its
+own any more: a leaf is read at where it stands. `Predicates` reads the body of a binding under the
+same environment, asking the same one place for it, though it still recognises the connectives for
+itself.
+
+**A binding nested inside a leaf stays part of that leaf**, and the decision reaches it there rather
+than by taking the shape further in. Every question asked about the inside of a leaf crosses the
+binding through the environment instead of interpreting the binder: which position an operand is
+(`Terms.subjectOf`), what written value it is (`Terms.asWrittenValue`, and `Terms.folded` over it),
+and which positions a part names (the descents in `AdmissibleReading`, `StatedByClauses` and
+`Predicates`). What the shape settles is where the environment changes; what the leaf language reads
+is unchanged by any of it.
+
+So binding transparency is not a property of the clause's topology. It is a property of every
+semantic question a reading asks about what is inside a leaf, and a question that answers from the
+tree alone is one this decision has not been applied to yet.
 
 A helper-expanded clause is therefore read under the same denotation environment as the equivalent
 inline clause. In particular, passing through a helper is no longer a way for a rule to reach an

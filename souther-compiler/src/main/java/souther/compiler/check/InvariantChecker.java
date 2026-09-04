@@ -1586,7 +1586,7 @@ public final class InvariantChecker {
         // either: what it compares the coordinate to is a constant this read perfectly. So it falls
         // out here rather than being filed as a clause that could have moved an edge.
         InvariantBound.Read end = found != null && said instanceof ComparisonClaim.Cut cut
-                ? InvariantBound.at(cut, Terms.asWrittenValue(bound), found.carrier())
+                ? InvariantBound.at(cut, Terms.asWrittenValue(bound, at), found.carrier())
                 : new InvariantBound.Read.NoEnd();
         Coordinate about = found;
         // What the clause is about, asked of the comparison and not of what `end` came to. A
