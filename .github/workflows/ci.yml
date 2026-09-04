@@ -5,7 +5,9 @@ on:
     branches: [ main, develop ]
   pull_request:
   schedule:
-    # Nightly, so a population left behind by a day's merges is found by morning.
+    # Nightly over what is released. A scheduled run is made against the default branch and no
+    # other, so this watches `main` — what a day's merges left behind on `develop` is found by
+    # the run that merge itself starts, below, and not here.
     - cron: '0 18 * * *'
 
 permissions:
