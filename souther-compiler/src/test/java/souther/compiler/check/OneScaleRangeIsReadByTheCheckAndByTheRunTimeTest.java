@@ -67,7 +67,8 @@ class OneScaleRangeIsReadByTheCheckAndByTheRunTimeTest {
     @Test
     void theReadingBudgetIsNotTheRange() {
         ReadingPolicy policy = new ReadingPolicy(64, 1000,
-                souther.compiler.values.AsACompilationAllows.admittedValues());
+                souther.compiler.values.AsACompilationAllows.admittedValues(),
+                souther.compiler.values.AsACompilationAllows.whatARuleLeaves());
         assertEquals(true, policy.laysOutAGridAt(1000));
         assertEquals(false, policy.laysOutAGridAt(1001));
         // Both ends of the range are numbers the run time receives and no reading lays out.

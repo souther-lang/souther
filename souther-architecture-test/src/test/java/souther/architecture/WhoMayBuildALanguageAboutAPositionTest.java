@@ -47,6 +47,8 @@ class WhoMayBuildALanguageAboutAPositionTest {
 
     private static final String PLAN = "souther/compiler/regex/PatternPlan";
 
+    private static final String POLICY = "souther/compiler/check/ReadingPolicy";
+
     private static final RepositoryLayout REPOSITORY = RepositoryLayout.ofWorkingDirectory();
 
     /**
@@ -60,6 +62,32 @@ class WhoMayBuildALanguageAboutAPositionTest {
      */
     private static final List<String> OF_ADMITTED_VALUES =
             List.of("souther/compiler/query/Front$Reading");
+
+    /**
+     * And what handing each of a position's rules on as the set it leaves may cost, granted the
+     * same way and by the same place.
+     *
+     * <p>Its own figure because it bounds a different question: what a position admits is every
+     * rule of it met together, and this is what each of them leaves on its own. Named anywhere
+     * else, a reader could grant itself the second while the first was the one the compilation
+     * meant to bound.
+     */
+    private static final List<String> OF_WHAT_A_RULE_LEAVES =
+            List.of("souther/compiler/query/Front$Reading");
+
+    /**
+     * Who may turn a granted figure into an allowance, which is the other half of the same rule.
+     *
+     * <p>Counting the figures alone leaves a way round: a policy hands out an allowance, and a
+     * reader that asks for a second one has a second meter at every position without ever naming a
+     * budget. So the askers are counted too. One answer is one allowance, and the place a reading
+     * is made is the place that asks — {@code InvariantChecker} where a declaration's positions are
+     * read, and the two input readers that read a declaration's rules for a behavior's inputs.
+     */
+    private static final List<String> ASKING_FOR_AN_ALLOWANCE = List.of(
+            "souther/compiler/check/InvariantChecker",
+            "souther/compiler/inputs/PlacedRules",
+            "souther/compiler/inputs/ReadQuantities");
 
     /**
      * What writing one value out of a pattern may cost.
@@ -100,6 +128,20 @@ class WhoMayBuildALanguageAboutAPositionTest {
         assertEquals(OF_ADMITTED_VALUES, namingTheBudget("OF_ADMITTED_VALUES"),
                 "one allowance per position, granted in one place: a second namer of it is a"
                         + " second answer to how much a position may build");
+    }
+
+    @Test
+    void whatHandingARuleOnMayCostIsNamedTheSameWay() {
+        assertEquals(OF_WHAT_A_RULE_LEAVES, namingTheBudget("OF_WHAT_A_RULE_LEAVES"),
+                "the second figure a reading builds against, granted where the first is: a namer"
+                        + " elsewhere is a reader allowing itself what a compilation was to allow");
+    }
+
+    @Test
+    void everyPlaceThatAsksForAnAllowanceIsWrittenDownHere() {
+        assertEquals(ASKING_FOR_AN_ALLOWANCE, askingForAnAllowance(),
+                "one answer, one allowance: a second asker inside one reading is a second meter at"
+                        + " every position, and no budget is named to give it away");
     }
 
     @Test
@@ -164,6 +206,13 @@ class WhoMayBuildALanguageAboutAPositionTest {
         return found(entry -> entry instanceof MemberRefEntry member
                 && member.owner().name().stringValue().equals(BUDGET)
                 && member.name().stringValue().equals(field));
+    }
+
+    /** Every class that asks the policy for an allowance of either kind. */
+    private static List<String> askingForAnAllowance() {
+        return found(entry -> entry instanceof MemberRefEntry member
+                && member.owner().name().stringValue().equals(POLICY)
+                && member.name().stringValue().startsWith("allowanceFor"));
     }
 
     /** Every class that asks a plan for the machine it names. */

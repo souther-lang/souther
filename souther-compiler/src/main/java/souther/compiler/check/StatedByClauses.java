@@ -902,7 +902,8 @@ sealed interface StatedByClauses {
          * nobody anywhere can be in is not a branch whose rules went unread. Nothing in the second
          * step builds a machine.
          */
-        Answered<K> resolve(Reading reader, souther.compiler.values.Allowance<FactSubject> by) {
+        Answered<K> resolve(Reading reader, souther.compiler.values.Allowance<FactSubject> by,
+                            souther.compiler.values.Allowance<FactSubject> handingOn) {
             StatedTogether whole = StatedTogether.top();
             for (StatedByClauses each : trees.values()) {
                 whole = whole.meet(each.together());
@@ -938,24 +939,29 @@ sealed interface StatedByClauses {
             // rather than in one test because every declaration a corpus holds goes through it.
             assert unspent.equals(leftOf(by, made.made().values().subjects()))
                     : "making the accounts of a declaration spent its allowance";
-            // And here the reading stops being one and becomes an answer. What the rules about the
-            // strings at a position come to is worked out now, once, out of what that position is
-            // allowed. It is the last thing this reading builds and nothing past it builds
-            // anything: a reader downstream is handed the sets.
-            // What the reading is short of, from both places it is written down: the positions it
-            // did not build, and the positions a branch it kept recorded something about. The
-            // second is not the first — a branch nobody could work out is kept and what stopped it
-            // is put on the values, while the answer that came back was built — and a caller asking
-            // whether a position is answered exactly has to ask both.
-            Set<FactSubject> shortOf = new LinkedHashSet<>(made.made().unbuilt());
-            shortOf.addAll(made.made().values().standing().keySet());
-            Published answer = published(said, by, shortOf);
-            Map<Core, ReadByClauses.OfAPart> published = answer.parts();
+            // And here the reading stops being one and becomes an answer. What each rule about the
+            // strings at a position leaves is worked out now, once, and a reader downstream is
+            // handed the sets.
+            //
+            // Out of the allowance for handing rules on and not out of the answer's. The sets the
+            // answer needed are met together and are already built; these are what each rule leaves
+            // on its own, which the answer had no use for — charged to it, what a position is read
+            // to admit would turn on what a reader downstream was promised, and the assertion above
+            // would be true of the accounts and false of the reading as a whole.
+            Map<Core, ReadByClauses.OfAPart> published = published(said, handingOn, by::known);
+            // And the answer's allowance is where it was. What a position admits is answered under
+            // the allowance for it and nothing else reaches that allowance, so what this
+            // declaration can be told exactly is the same whether or not anybody is ever handed
+            // anything — which is the whole of why the sets handed on have an allowance of their
+            // own.
+            assert unspent.equals(leftOf(by, made.made().values().subjects()))
+                    : "handing the rules of " + made.made().values().subjects()
+                            + " on spent the allowance for what they admit";
             Map<K, ReadByClauses.OfARule> clauses = new LinkedHashMap<>();
             narrowed.forEach((key, these) -> clauses.put(key,
                     new ReadByClauses.OfARule(these, published.get(byClause.get(key)))));
             ReadByClauses read = new ReadByClauses(made.made().values(), made.ordered(),
-                    byValues, byOrder, published, answer.strings());
+                    byValues, byOrder, published);
             Map<K, java.util.List<Map.Entry<Core, ReadByClauses.OfAPart>>> parts =
                     new java.util.LinkedHashMap<>();
             byPart.forEach((key, these) -> {
@@ -986,9 +992,15 @@ sealed interface StatedByClauses {
          * set is a fact about the rule and was settled long before anything was built, so it
          * crosses unchanged — it is not a set nobody made, and a reader that met it as one would be
          * told the position's allowance ran out on a rule nothing ever asked to be built.
+         *
+         * <p>What the answer built is read and not built again ({@code known}). A rule that stands
+         * alone at a position is the position's answer, and its machine exists by the time this
+         * asks — so what is charged to the allowance for handing rules on is what the answer had no
+         * use for, which is what that allowance is for.
          */
-        private Published published(Map<Core, PartAccount> said, Allowance<FactSubject> by,
-                                    Set<FactSubject> shortOf) {
+        private Map<Core, ReadByClauses.OfAPart> published(
+                Map<Core, PartAccount> said, Allowance<FactSubject> handingOn,
+                Allowance.Known<FactSubject> known) {
             Map<FactSubject, Set<AdmittedPlan>> asked = new LinkedHashMap<>();
             said.values().forEach(part -> part.aboutStrings().forEach((position, stated) -> {
                 if (stated instanceof StringRestriction.Admitting it) {
@@ -996,17 +1008,13 @@ sealed interface StatedByClauses {
                 }
             }));
             Map<FactSubject, Realizations> answers = new LinkedHashMap<>();
-            Map<FactSubject, StringPublication> how = new LinkedHashMap<>();
-            asked.forEach((position, plans) -> {
-                Realizations made = by.realizeAll(position, plans);
-                answers.put(position, made);
-                how.put(position, publicationOf(position, made, shortOf));
-            });
+            asked.forEach((position, plans) ->
+                    answers.put(position, handingOn.realizeAll(position, known, plans)));
             Map<Core, ReadByClauses.OfAPart> out = new IdentityHashMap<>();
             said.forEach((each, part) -> out.put(each, new ReadByClauses.OfAPart(
                     part.byValues(), part.byOrder(), part.aboutARule(),
                     admitted(part.aboutStrings(), answers))));
-            return new Published(out, Collections.unmodifiableMap(how));
+            return out;
         }
 
         /**
@@ -1016,7 +1024,7 @@ sealed interface StatedByClauses {
          * more. Which rules a clause states about the strings is what a walk over it asks, and an
          * entry dropped would be read as a clause that states none; a reason put here instead would
          * be the position's shortfall written out once per rule of it, over rules that may each
-         * have been affordable ({@link StringPublication}).
+         * have been affordable.
          */
         private static Map<FactSubject, AdmittedStrings> admitted(
                 Map<FactSubject, StringRestriction> stated,
@@ -1055,51 +1063,6 @@ sealed interface StatedByClauses {
      * two answers agree only for as long as nobody changes one of them.
      */
     record Account(Set<FactSubject> narrowed, Map<Core, PartAccount> parts) {}
-
-    /**
-     * What a reading publishes about the strings: the parts with their sets, and how each position
-     * came out.
-     *
-     * <p>Two halves of one answer and made together. Which positions published is what says why a
-     * part holds no entry for one, and a caller handed the parts alone would be reading that
-     * absence as a clause that states no rule about the strings there.
-     */
-    record Published(Map<Core, ReadByClauses.OfAPart> parts,
-                     Map<FactSubject, StringPublication> strings) {}
-
-    /**
-     * Whether a position published what its rules about the strings admit, and the one state this
-     * compiler has no answer for.
-     *
-     * <p>What a position that published nothing costs a reader is that nothing says where its
-     * strings stop, and that has to be answered somewhere. Where the reading is short of that
-     * position anyway, it is answered already: the position carries what it could not work out and
-     * a reader is told the values there are an upper bound, so a second word from here would be one
-     * shortfall arriving as two, the second of them against a rule that is not why.
-     *
-     * <p><b>And a position the reading answered exactly is not one this can happen at.</b> The sets
-     * a position's rules name are made while its answer is, so a group of them that cannot be made
-     * belongs to a position whose answer was not made either. What would reach here otherwise is a
-     * position nothing is short of and nothing was published about, which no reader would be told
-     * anything about at all — so it is refused rather than described. A word invented for it now
-     * would be a report about a state nobody can get to; the day something does get to it, this is
-     * what says so, and what a reader should be told is a decision to make then with the path that
-     * reached it in hand.
-     *
-     * @param shortOf the positions the reading did not answer exactly, from both places that is
-     *                written down: the ones whose answer it did not build, and the ones a branch it
-     *                kept recorded a shortfall about
-     */
-    static StringPublication publicationOf(FactSubject position, Realizations made,
-                                           Set<FactSubject> shortOf) {
-        if (made instanceof Realizations.Exact) {
-            return new StringPublication.Complete();
-        }
-        if (!shortOf.contains(position)) {
-            throw new AStringPublicationNothingAccountsFor(position);
-        }
-        return new StringPublication.Incomplete();
-    }
 
     /**
      * What one part came to, with what it says about the strings still named as a plan.

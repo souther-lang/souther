@@ -29,21 +29,7 @@ import java.util.Set;
  */
 record ReadByClauses(AdmissibleValues<FactSubject> values, OrderedIntervals<FactSubject> ordered,
                      Adoption<FactSubject> byValues, Adoption<FactSubject> byOrder,
-                     java.util.Map<souther.compiler.core.Core, OfAPart> parts,
-                     java.util.Map<FactSubject, StringPublication> strings) {
-
-    /**
-     * Whether what this reading had to say about the strings at {@code position} was published.
-     *
-     * <p>{@link StringPublication.Complete} where nothing was promised. A position no rule about
-     * the strings reached is one every such rule of which came out as a set, there being none —
-     * and a reader asking this wants to know whether anything is outstanding, which for a position
-     * nobody wrote such a rule about is no.
-     */
-    StringPublication stringsAt(FactSubject position) {
-        StringPublication how = strings.get(position);
-        return how == null ? new StringPublication.Complete() : how;
-    }
+                     java.util.Map<souther.compiler.core.Core, OfAPart> parts) {
 
     /**
      * What one rule came to on its own tree, once every branch of the value is decided.

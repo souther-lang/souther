@@ -798,7 +798,8 @@ public final class InvariantChecker {
             // met out of every clause that reached it, so anything built before the last of them
             // arrived would be built out of less than the rules say — and which of two ways of
             // writing the same rules was affordable would be a fact about the writing.
-            StatedByClauses.Answered<Written> answered = asked.resolve(reader, allowed);
+            StatedByClauses.Answered<Written> answered = asked.resolve(reader, allowed,
+                    policy.allowanceForWhatARuleLeaves());
             // What the answer has left, before a word of the account is read.
             Map<FactSubject, Integer> unspent = leftOf(allowed, positions.keySet());
             AdmissibleValues<FactSubject> values = answered.whole().values();
@@ -2034,6 +2035,15 @@ public final class InvariantChecker {
                         new FieldDomains.NoLine(each.getValue().at(), from, clause, part, why)));
                 continue;
             }
+            // And where the position could not hand its rules on as sets, the same thing is
+            // outstanding and no rule of it is why. Written down all the same: what a reader takes
+            // from an absence here is that the model draws no line, and the truth is that nobody
+            // worked out whether it does.
+            if (runs.notPublishedAt(position)) {
+                add(noLines, new FieldDomains.NoLine(each.getValue().at(), from, clause, part,
+                        new BlockReason.RulesNotHandedOnAsSets()));
+                continue;
+            }
             // And what the rule itself came to once its own choices are decided and its own
             // languages built, which is what says whether it holds the position down at all: in
             // `value == 5 || value /= 5` each side names values and the rule leaves the position
@@ -2116,15 +2126,11 @@ public final class InvariantChecker {
                         byPosition.put(position, placed(it.set(), value, from, clause, part, out));
                 case AdmittedStrings.NotKnown it ->
                         byPosition.put(position, new Run.Undecided(it.why()));
-                // And a rule of a position that published none of its sets says nothing here. Such
-                // a position is one whose own answer the reading did not build, which the reading
-                // has already written down against the position ({@link StringPublication}) — said
-                // again from this side, one shortfall would reach a reader as two, one of them
-                // filed against a rule that is not why. A position published nothing about while
-                // its answer stands is refused where the publishing happens, so nothing arrives
-                // here that this silence would be hiding.
-                case AdmittedStrings.NotPublished _ -> {
-                }
+                // And a rule of a position that could not hand its sets on leaves the question
+                // standing with nothing about the rule to say. What was not made is the position's
+                // group of them, which this rule is no more answerable for than the one beside it.
+                case AdmittedStrings.NotPublished _ ->
+                        byPosition.put(position, new Run.NotPublished());
             }
         });
         return new RunsRead(byPosition);
@@ -2223,6 +2229,17 @@ public final class InvariantChecker {
          * them a reader is shown may not turn on which branch was written first.
          */
         record Undecided(List<BlockReason.RuleReadingStopped> why) implements Run {}
+
+        /**
+         * The position could not hand its rules on as the sets they leave, so there was no set to
+         * ask.
+         *
+         * <p>Its own answer and not a reason of this rule's. What was not made is the position's
+         * whole group of sets and no rule of it is answerable for that, so this carries no reason
+         * to name one with — what it says is that the question about this conjunct stands, and the
+         * one word for why is the position's ({@link BlockReason.RulesNotHandedOnAsSets}).
+         */
+        record NotPublished() implements Run {}
     }
 
     /** What one conjunct's rules about strings came to, per position. */
@@ -2269,6 +2286,18 @@ public final class InvariantChecker {
         /** What stopped the reading at {@code position}, or null where nothing did. */
         List<BlockReason.RuleReadingStopped> stoppedAt(FactSubject position) {
             return byPosition.get(position) instanceof Run.Undecided it ? it.why() : List.of();
+        }
+
+        /**
+         * Whether this conjunct states a rule about the strings at {@code position} that the
+         * position could not hand on as a set.
+         *
+         * <p>Asked apart from {@link #stoppedAt} because the answer is not one of that one's. Those
+         * are reasons about a rule and this one is about the position, and the two would be one
+         * list only by giving the position's shortfall a rule to be filed against.
+         */
+        boolean notPublishedAt(FactSubject position) {
+            return byPosition.get(position) instanceof Run.NotPublished;
         }
 
     }

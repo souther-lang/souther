@@ -61,6 +61,28 @@ public final class PatternPlan {
         public static final Budget OF_ADMITTED_VALUES = new Budget(50_000, 200_000);
 
         /**
+         * What handing each of a position's rules on as the set it admits is allowed to cost.
+         *
+         * <p>Its own and not the one above, because the two are about different sets. That one is
+         * what a position finally admits, which is every rule of it met together; this is what each
+         * of them admits on its own, which a reading promises to whoever draws lines and offers
+         * rows. A rule met with its neighbours can be settled without its own machine — a pattern
+         * beside a value the rules write out is a question about that value — so the sets handed on
+         * are not the sets the answer needed, and charging them to the answer would let what a
+         * position is read to admit turn on what somebody downstream was promised.
+         *
+         * <p>Per position and spent on the whole of it, for the reason the first is: the sets are
+         * published as a group or not at all, so an allowance per rule would be one nobody could
+         * hold the group to.
+         *
+         * <p>A machine that already exists is not made again out of this. What the answer built is
+         * read where it was built, and what is charged here is only what the answer had no use for.
+         *
+         * <p>The same numbers as the others today, and a coincidence rather than a fact.
+         */
+        public static final Budget OF_WHAT_A_RULE_LEAVES = new Budget(50_000, 200_000);
+
+        /**
          * What writing one value out of a pattern is allowed to cost.
          *
          * <p>Its own and not the one above, because it bounds a different thing: one pattern,

@@ -57,6 +57,28 @@ public final class Allowance<A> {
     }
 
     /**
+     * What some other question of this position has already built, for a caller that may use it
+     * and must not pay for it twice.
+     *
+     * <p>Answering nothing is what an allowance that built nothing says, and it is not an answer
+     * about the values: {@link #known} is the reading of it, and null there is "nothing established
+     * this" rather than "this admits everything".
+     *
+     * @param <A> what a position is called
+     */
+    @FunctionalInterface
+    public interface Known<A> {
+
+        /** What {@code plan} was worked out to admit at {@code atom}, or null where nothing was. */
+        ValueSet of(A atom, AdmittedPlan plan);
+
+        /** Nothing has been built anywhere, which is what one allowance on its own knows. */
+        static <A> Known<A> nothing() {
+            return (_, _) -> null;
+        }
+    }
+
+    /**
      * A set, and whether it is the exact one.
      *
      * <p>One value because the two are one fact. {@code gaveUp} does not describe the set — every
@@ -188,11 +210,15 @@ public final class Allowance<A> {
      * whole list rather than being a loop somebody writes: there is no way to spell a partial
      * answer here.
      *
-     * <p>A position given up on builds nothing further. Its answer is already a set this compiler
-     * widened, and what a plan of it admits exactly is not a question the position has an allowance
-     * left to answer.
+     * <p>A machine {@code already} holds is not made again. What another of this position's
+     * questions built is a machine that exists, and reading it asks that allowance for nothing —
+     * so what is charged here is what nothing had built, which is what this allowance is for.
+     *
+     * <p>A position given up on stays given up on, here as everywhere: a group refused leaves the
+     * position spent, so a caller that asks again is told the same thing rather than being sold the
+     * rest of the allowance one plan at a time.
      */
-    public Realizations realizeAll(A atom, Collection<AdmittedPlan> plans) {
+    public Realizations realizeAll(A atom, Known<A> already, Collection<AdmittedPlan> plans) {
         if (isSpent(atom)) {
             return new Realizations.NotBuilt();
         }
@@ -205,11 +231,17 @@ public final class Allowance<A> {
         order.sort(Comparator.comparing(PlanOrder::of));
         Map<AdmittedPlan, ValueSet> out = new LinkedHashMap<>();
         for (AdmittedPlan each : order) {
+            ValueSet had = already.of(atom, each);
+            if (had != null) {
+                out.put(each, had);
+                continue;
+            }
             // The first refusal stops the rest. What is left to build is for an answer this is not
-            // going to give, and it would come out of the same allowance the position's own reading
-            // draws on.
+            // going to give, and it would come out of the same allowance the rest of this
+            // position's group draws on.
             Realization made = at(atom).of(each);
             if (!(made instanceof Realization.Exact it)) {
+                gaveUp(atom);
                 return new Realizations.NotBuilt();
             }
             out.put(each, it.set());

@@ -2,7 +2,6 @@ package souther.compiler.values;
 
 import souther.compiler.regex.Language;
 import souther.compiler.regex.Meter;
-import souther.compiler.regex.PatternPlan;
 
 import java.util.LinkedHashSet;
 import java.util.Set;
@@ -53,20 +52,14 @@ public final class Sets {
             throw new IllegalArgumentException(
                     "a language is put together where there is an allowance for it");
         }
-        return met ? metUnder(one, other, NOTHING_MAY_BE_BUILT.meter())
-                : joinedUnder(one, other, NOTHING_MAY_BE_BUILT.meter());
+        // The table below takes a meter because a pair with a language in it builds; the pairs
+        // above have none and reach no case that does. Which is a fact about the pairs and not a
+        // promise anybody keeps, so what is handed over is a meter that pays for nothing
+        // ({@link Meter#refusing}): the day a language reaches here, the state it asks for is
+        // refused where it is asked for rather than made out of an allowance nobody granted.
+        return met ? metUnder(one, other, Meter.refusing())
+                : joinedUnder(one, other, Meter.refusing());
     }
-
-    /**
-     * A meter for the pairs that make nothing, which refuses the first state anybody asks it for.
-     *
-     * <p>The table below takes one because a pair with a language in it builds; the pairs above
-     * have none and reach no case that does. Which is a fact about the pairs and not a promise
-     * anybody keeps, so it is stated as a meter that cannot pay for a machine: the day a language
-     * reaches here the build is refused where it happens, rather than made out of an allowance
-     * nobody granted and charged to no position.
-     */
-    private static final PatternPlan.Budget NOTHING_MAY_BE_BUILT = new PatternPlan.Budget(1, 1);
 
     /**
      * The values both admit, or null where making them ran past what {@code meter} allows.

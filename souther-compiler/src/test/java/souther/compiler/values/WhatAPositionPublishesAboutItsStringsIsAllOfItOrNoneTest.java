@@ -45,7 +45,7 @@ class WhatAPositionPublishesAboutItsStringsIsAllOfItOrNoneTest {
 
     @Test
     void everyPlanIsBuiltOrNoneOfThemIs() {
-        Realizations made = allowing(50_000).realizeAll("here", List.of(CHEAP, DEAR));
+        Realizations made = allowing(50_000).realizeAll("here", Allowance.Known.nothing(), List.of(CHEAP, DEAR));
 
         Realizations.Exact exact = assertInstanceOf(Realizations.Exact.class, made);
         assertNotNull(exact.of(CHEAP), "the cheap rule's strings");
@@ -65,10 +65,10 @@ class WhatAPositionPublishesAboutItsStringsIsAllOfItOrNoneTest {
         // is being asked. Without this, an allowance too small for either would pass the same
         // assertion and say nothing about a group.
         assertInstanceOf(Realizations.Exact.class,
-                allowing(20).realizeAll("here", List.of(CHEAP)),
+                allowing(20).realizeAll("here", Allowance.Known.nothing(), List.of(CHEAP)),
                 "the cheap rule is one this allowance can build");
 
-        Realizations made = allowing(20).realizeAll("here", List.of(CHEAP, DEAR));
+        Realizations made = allowing(20).realizeAll("here", Allowance.Known.nothing(), List.of(CHEAP, DEAR));
 
         assertInstanceOf(Realizations.NotBuilt.class, made,
                 "a rule that was not built takes the ones beside it with it");
@@ -86,8 +86,8 @@ class WhatAPositionPublishesAboutItsStringsIsAllOfItOrNoneTest {
         Allowance<String> one = allowing(50_000);
         Allowance<String> other = allowing(50_000);
 
-        Realizations first = one.realizeAll("here", List.of(CHEAP, DEAR));
-        Realizations second = other.realizeAll("here", List.of(DEAR, CHEAP));
+        Realizations first = one.realizeAll("here", Allowance.Known.nothing(), List.of(CHEAP, DEAR));
+        Realizations second = other.realizeAll("here", Allowance.Known.nothing(), List.of(DEAR, CHEAP));
 
         assertEquals(assertInstanceOf(Realizations.Exact.class, first).of(DEAR),
                 assertInstanceOf(Realizations.Exact.class, second).of(DEAR),
@@ -105,7 +105,7 @@ class WhatAPositionPublishesAboutItsStringsIsAllOfItOrNoneTest {
      */
     @Test
     void anAnswerIsOnlyReadableForAPlanThatWasAskedFor() {
-        Realizations made = allowing(50_000).realizeAll("here", List.of(CHEAP));
+        Realizations made = allowing(50_000).realizeAll("here", Allowance.Known.nothing(), List.of(CHEAP));
 
         assertThrows(IllegalArgumentException.class,
                 () -> assertInstanceOf(Realizations.Exact.class, made).of(DEAR));

@@ -75,12 +75,12 @@ public sealed interface BlockReason {
      */
     sealed interface AnswerRealizationStopped extends ReadingStopReason {
 
-        /** The answer was larger than the allowance it was built under, which is a figure a run may
+        /** Both are an allowance a reading was granted running out, which is a figure a run may
          *  allow more of. */
         @Override
         default RunSensitivity runSensitivity() {
             return switch (this) {
-                case ExactValuesTooCostly _ -> RunSensitivity.MAY_CHANGE;
+                case ExactValuesTooCostly _, RulesNotHandedOnAsSets _ -> RunSensitivity.MAY_CHANGE;
             };
         }
     }
@@ -101,6 +101,23 @@ public sealed interface BlockReason {
      * observable predicate — this rule has no line here — and that is what the name says.
      */
     sealed interface RuleWithoutLineReason extends BlockReason {
+    }
+
+    /**
+     * A rule with no line here where this compiler is what fell short, whether or not the shortfall
+     * is about the rule.
+     *
+     * <p>The half of {@link RuleWithoutLineReason} that is a stop, beside {@link
+     * ReadToEndWithoutLine}, which is the half that is not. What a caller asks this for is whether
+     * anything is outstanding at the place a finding sits — a rule read to the end says the model
+     * states something, and one of these says nobody knows yet.
+     *
+     * <p>Wider than {@link RuleReadingStopped} by exactly what does not name a rule. A rule whose
+     * own reading stopped is answerable as that rule; a rule whose position could not hand its sets
+     * on is not, and both leave the same thing outstanding here. Held as the narrower type, a
+     * shortfall no rule is answerable for could only be carried by pretending one is.
+     */
+    sealed interface StoppedWithoutALine extends RuleWithoutLineReason, ReadingStopReason {
     }
 
     /**
@@ -147,8 +164,7 @@ public sealed interface BlockReason {
      * the only member of {@link ReadingStopReason} that names a rule, and the only member of
      * {@link RuleWithoutLineReason} a caller asking about a stop may be handed.
      */
-    sealed interface RuleReadingStopped extends RuleWithoutLineReason, ReadingStopReason,
-            AboutARule {
+    sealed interface RuleReadingStopped extends StoppedWithoutALine, AboutARule {
 
         /**
          * One switch over the ten, and the reason for it being one: a division of these into two
@@ -455,6 +471,29 @@ public sealed interface BlockReason {
      * answer rather than something missing from it.
      */
     record ExactValuesTooCostly() implements AnswerRealizationStopped {}
+
+    /**
+     * The rules about the strings at this position were read, what the position admits was worked
+     * out, and what each of those rules leaves on its own was more than this compiler would build.
+     *
+     * <p>Two questions and this is the second. What a position admits is every rule of it met
+     * together; what a reader drawing lines needs is what each of them leaves on its own, and a
+     * rule met with its neighbours can be settled without ever making its machine — a pattern
+     * beside a value the rules write out is a question about that value. So the sets handed on are
+     * not the sets the answer needed, and where they cannot be made the answer stands exactly while
+     * nothing says where the strings of one rule stop.
+     *
+     * <p><b>About the position and about none of its rules.</b> They are made as a group out of one
+     * allowance, so a rule cheap enough on its own goes unmade beside one that was not — and which
+     * of them was which may not be told, because it would send an author to rewrite whichever rule
+     * the building reached last. Which is why this carries no rule and is not among the reasons
+     * that do ({@link AboutARule}).
+     *
+     * <p>Beside {@link ExactValuesTooCostly} rather than the same thing said twice: that one is the
+     * position's own answer coming out wider than the rules leave it, and here that answer is what
+     * the rules leave and a reader is short of something else.
+     */
+    record RulesNotHandedOnAsSets() implements AnswerRealizationStopped, StoppedWithoutALine {}
 
     /**
      * Every reading was asked about the rule at this position and none of them took it in, and none

@@ -52,18 +52,50 @@ class APositionThatDidNotBuildItsStringsSaysSoRatherThanNothingTest {
             behavior f : (c: Code) -> Ok
             """;
 
+    /**
+     * A rule about the strings the position's own answer has no use for.
+     *
+     * <p>What the position admits is the two alternatives joined, and one of them says nothing
+     * about it — so the answer is every string and the pattern is never made. The rule is still a
+     * rule about the strings there, and a reader that draws lines wants what it leaves on its own,
+     * so it is one of the sets the reading hands on.
+     *
+     * <p>Which is what makes this the model for the other allowance. The answer is exact and cost
+     * nothing; what a small allowance for handing rules on refuses is the set the reader was
+     * promised, and that is a different shortfall about the same position.
+     */
+    private static final String ONE_THE_ANSWER_DOES_NOT_NEED = """
+            module probe.spare
+
+            data Code = String
+                invariant named = value == "x"
+                invariant other = value /= "x"
+                invariant format = String.matches("[A-Z]{2}", value)
+
+            data Ok
+
+            behavior f : (c: Code) -> Ok
+            """;
+
     /** What a compilation grants a reading that has room to build the machines its rules name. */
     private static final ReadingPolicy WITH_ROOM = souther.compiler.query.ReadAs.THE_COMPILATION_DOES;
 
     /**
-     * And one with room for nothing.
+     * And one with room for nothing to answer a position with.
      *
      * <p>One state is what the smallest machine there is costs, so a pattern of two characters is
-     * refused and every rule of this position goes unpublished with it. The other two figures are
-     * the compilation's: what is being changed is the allowance to build and nothing else.
+     * refused and the position's own answer comes back widened. The other figures are the
+     * compilation's: what is being changed is one allowance and nothing else.
      */
     private static final ReadingPolicy WITH_NO_ROOM = new ReadingPolicy(
             WITH_ROOM.dnfExpansionLimit(), WITH_ROOM.scalePlacesLimit(),
+            new PatternPlan.Budget(1, 1),
+            souther.compiler.values.AsACompilationAllows.whatARuleLeaves());
+
+    /** And one with room for the answer and none for handing the rules on. */
+    private static final ReadingPolicy WITH_NOTHING_TO_HAND_ON_WITH = new ReadingPolicy(
+            WITH_ROOM.dnfExpansionLimit(), WITH_ROOM.scalePlacesLimit(),
+            souther.compiler.values.AsACompilationAllows.admittedValues(),
             new PatternPlan.Budget(1, 1));
 
     @Test
@@ -87,16 +119,44 @@ class APositionThatDidNotBuildItsStringsSaysSoRatherThanNothingTest {
         assertEquals(List.of(), reasonsUnder(WITH_NO_ROOM),
                 "the same rule under an allowance that builds nothing states nothing about the"
                         + " model: a set nobody made holds no position to anything");
-        assertEquals(List.of("c: CannotDerive / ADMITTED_VALUES at c"),
-                positionsUnder(WITH_NO_ROOM),
-                "and the position says which question was left open rather than coming back as one"
-                        + " the model divides no way");
+        assertEquals(List.of("c: CannotDerive"), positionsUnder(WITH_NO_ROOM),
+                "and the position comes back as one nothing about the model follows from, rather"
+                        + " than as one the model divides no way");
+        assertEquals(List.of("c"), askedAbout(WITH_NO_ROOM),
+                "with the question that was left open standing at it, which is what holds the"
+                        + " measure open");
+    }
+
+    /**
+     * A position whose answer is exact and whose rules could not be handed on says which of the two
+     * it was short of.
+     *
+     * <p>The two shortfalls are different facts about one position and only one of them is about
+     * what the model admits. Here the answer is every string and was free, and what is missing is
+     * the set one rule leaves on its own — so a reader is told this compiler fell short and is
+     * never told the model holds the position to something, and the position is not one the model
+     * divides no way either.
+     */
+    @Test
+    void andAPositionWhoseAnswerStandsSaysWhenItsRulesCouldNotBeHandedOn() {
+        assertEquals(List.of(), reasonsIn(ONE_THE_ANSWER_DOES_NOT_NEED, WITH_ROOM),
+                "with room to hand them on there is nothing outstanding: the rule leaves the"
+                        + " position every string and every string is where it was found");
+        assertEquals(List.of("RulesNotHandedOnAsSets"),
+                reasonsIn(ONE_THE_ANSWER_DOES_NOT_NEED, WITH_NOTHING_TO_HAND_ON_WITH),
+                "and with none, the position says the set its rule leaves was not worked out —"
+                        + " without naming the rule, which was affordable, and without saying"
+                        + " anything about what the position admits, which is exact");
     }
 
     /** What every rule of the model came to that drew no line, under {@code policy}. */
     private static List<String> reasonsUnder(ReadingPolicy policy) {
+        return reasonsIn(MODEL, policy);
+    }
+
+    private static List<String> reasonsIn(String model, ReadingPolicy policy) {
         List<String> out = new ArrayList<>();
-        for (PartitionEvidence evidence : read(policy)) {
+        for (PartitionEvidence evidence : read(model, policy)) {
             for (RuleWithoutALine each : evidence.rulesWithoutALine()) {
                 out.add(each.why().getClass().getSimpleName());
             }
@@ -104,22 +164,28 @@ class APositionThatDidNotBuildItsStringsSaysSoRatherThanNothingTest {
         return out;
     }
 
-    /** What each position no class came back for came to, and what is standing at it. */
+    /** Which of the three each position no class came back for came to. */
     private static List<String> positionsUnder(ReadingPolicy policy) {
         List<String> out = new ArrayList<>();
-        for (PartitionEvidence evidence : read(policy)) {
+        for (PartitionEvidence evidence : read(MODEL, policy)) {
             for (UndividedPosition each : evidence.notDerivable()) {
-                List<String> asked = new ArrayList<>();
-                evidence.unanswered().forEach(one -> asked.add(one.asked().toString()));
-                out.add(each.at() + ": " + each.why().getClass().getSimpleName()
-                        + " / " + String.join(", ", asked));
+                out.add(each.at() + ": " + each.why().getClass().getSimpleName());
             }
         }
         return out;
     }
 
-    private static List<PartitionEvidence> read(ReadingPolicy policy) {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
+    /** The positions a question of the model stands at, asked of the question itself. */
+    private static List<String> askedAbout(ReadingPolicy policy) {
+        List<String> out = new ArrayList<>();
+        for (PartitionEvidence evidence : read(MODEL, policy)) {
+            evidence.unanswered().forEach(each -> out.add(each.at()));
+        }
+        return out;
+    }
+
+    private static List<PartitionEvidence> read(String model, ReadingPolicy policy) {
+        Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.db().set(new Front.Reading(), policy);
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();

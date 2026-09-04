@@ -162,6 +162,11 @@ class WhatAClauseWouldExpandToIsCountedByTheFoldThatReadsItTest {
         return souther.compiler.values.AsACompilationAllows.admittedValues();
     }
 
+    /** And the other of the two, for the same reason. */
+    private static souther.compiler.regex.PatternPlan.Budget handedOn() {
+        return souther.compiler.values.AsACompilationAllows.whatARuleLeaves();
+    }
+
     /**
      * A limit that bounds nothing is refused where it is written.
      *
@@ -175,12 +180,18 @@ class WhatAClauseWouldExpandToIsCountedByTheFoldThatReadsItTest {
      */
     @Test
     void aLimitThatBoundsNothingIsRefused() {
-        assertThrows(IllegalArgumentException.class, () -> new ReadingPolicy(0, 2, allowed()));
-        assertThrows(IllegalArgumentException.class, () -> new ReadingPolicy(-1, 2, allowed()));
-        assertThrows(IllegalArgumentException.class, () -> new ReadingPolicy(64, -1, allowed()));
-        // And the third figure, which is an allowance a reading is granted rather than a number it
-        // compares anything against: a reading with none is one nothing bounds what it builds.
-        assertThrows(IllegalArgumentException.class, () -> new ReadingPolicy(64, 2, null));
-        assertEquals(0, new ReadingPolicy(64, 0, allowed()).scalePlacesLimit());
+        assertThrows(IllegalArgumentException.class,
+                () -> new ReadingPolicy(0, 2, allowed(), handedOn()));
+        assertThrows(IllegalArgumentException.class,
+                () -> new ReadingPolicy(-1, 2, allowed(), handedOn()));
+        assertThrows(IllegalArgumentException.class,
+                () -> new ReadingPolicy(64, -1, allowed(), handedOn()));
+        // And the two allowances, which a reading is granted rather than numbers it compares
+        // anything against: a reading with neither is one nothing bounds what it builds.
+        assertThrows(IllegalArgumentException.class,
+                () -> new ReadingPolicy(64, 2, null, handedOn()));
+        assertThrows(IllegalArgumentException.class,
+                () -> new ReadingPolicy(64, 2, allowed(), null));
+        assertEquals(0, new ReadingPolicy(64, 0, allowed(), handedOn()).scalePlacesLimit());
     }
 }

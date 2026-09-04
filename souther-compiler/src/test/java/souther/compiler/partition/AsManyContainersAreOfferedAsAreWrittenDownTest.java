@@ -41,7 +41,8 @@ class AsManyContainersAreOfferedAsAreWrittenDownTest {
     private static final RuleReadingSource RULES = RuleReadings.ofNoClauseFiled(SYMBOLS);
 
     private static final ReadingPolicy POLICY = new ReadingPolicy(64, 12,
-            souther.compiler.values.AsACompilationAllows.admittedValues());
+            souther.compiler.values.AsACompilationAllows.admittedValues(),
+            souther.compiler.values.AsACompilationAllows.whatARuleLeaves());
 
     /** A list of whole numbers a behavior takes, which nothing bounds and nothing counts. */
     private static final Type OF_WHOLE_NUMBERS = new Type.ListOf(Type.INT);

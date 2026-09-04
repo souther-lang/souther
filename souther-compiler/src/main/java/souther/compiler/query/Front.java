@@ -147,10 +147,12 @@ public final class Front {
          * what a scale the reading cannot read as one number already gets — which side of nought it
          * is on, and no grid.
          *
-         * <p>And what the values a position admits may be built out of, which is the third figure
-         * of the same kind. What it bounds is written where it is declared
-         * ({@link souther.compiler.regex.PatternPlan.Budget#OF_ADMITTED_VALUES}); what is settled
-         * here is that a compilation grants it, so that no reader anywhere makes itself an
+         * <p>And the two figures a reading builds machines against: what a position's answer may
+         * cost, and what handing each of its rules on as the set it leaves may cost. What each of
+         * them bounds is written where it is declared
+         * ({@link souther.compiler.regex.PatternPlan.Budget#OF_ADMITTED_VALUES},
+         * {@link souther.compiler.regex.PatternPlan.Budget#OF_WHAT_A_RULE_LEAVES}); what is settled
+         * here is that a compilation grants them, so that no reader anywhere makes itself an
          * allowance at the moment it wants a machine.
          *
          * <p>Held here rather than beside the policy it makes, so that reading a declaration cannot
@@ -159,7 +161,8 @@ public final class Front {
          */
         static final souther.compiler.check.ReadingPolicy STANDARD =
                 new souther.compiler.check.ReadingPolicy(64, 1000,
-                        souther.compiler.regex.PatternPlan.Budget.OF_ADMITTED_VALUES);
+                        souther.compiler.regex.PatternPlan.Budget.OF_ADMITTED_VALUES,
+                        souther.compiler.regex.PatternPlan.Budget.OF_WHAT_A_RULE_LEAVES);
     }
 
     /**

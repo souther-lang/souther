@@ -19,8 +19,8 @@ import java.util.List;
  * <p>Three answers, and only the first two say anything about the rule. A rule whose strings were
  * worked out is a set to draw from, and one this compiler could not read is a rule the reader has
  * nothing about. The third says the position did not publish and says nothing else: why that
- * happened is the position's answer and is held there ({@link StringPublication}), so a rule that
- * was affordable is not made to carry a shortfall that is not about it.
+ * happened is what the position itself was short of and is answered there, so a rule that was
+ * affordable is not made to carry a shortfall that is not about it.
  */
 sealed interface AdmittedStrings {
 
@@ -57,11 +57,11 @@ sealed interface AdmittedStrings {
      * The rule is one about the strings and the position published none of its sets.
      *
      * <p>No reason of its own, and that is the whole of it. Whether a position's sets were built is
-     * one answer for the whole of that position ({@link StringPublication}); this is a rule of such
-     * a position, kept so that a reader walking the rules of a clause meets what it stated here
-     * rather than an absence, and told nothing more because there is nothing about this rule to
-     * tell. The rule beside it may have been affordable — one of them was not, and which is not
-     * something either of them answers for.
+     * one answer for the whole of that position; this is a rule of such a position, kept so that a
+     * reader walking the rules of a clause meets what it stated here rather than an absence, and
+     * told nothing more because there is nothing about this rule to tell. The rule beside it may
+     * have been affordable — one of them was not, and which is not something either of them
+     * answers for.
      */
     record NotPublished() implements AdmittedStrings {}
 }

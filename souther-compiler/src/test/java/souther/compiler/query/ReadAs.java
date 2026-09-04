@@ -24,7 +24,8 @@ public final class ReadAs {
      */
     public static final ReadingPolicy MERGING_WHAT_A_CHOICE_LEAVES = new ReadingPolicy(1,
             Front.Reading.STANDARD.scalePlacesLimit(),
-            Front.Reading.STANDARD.admittedValues());
+            souther.compiler.values.AsACompilationAllows.admittedValues(),
+            souther.compiler.values.AsACompilationAllows.whatARuleLeaves());
 
     private ReadAs() {
     }

@@ -80,8 +80,12 @@ public final class ReportedReason {
             // and a limit reached there is the values coming out wider than the rules leave them.
             // Which of the three it was decides what may be said next and not what a reader is
             // promised.
+            // And a fourth, which is a position that could not hand its rules on as the sets they
+            // leave. Out there it is the same news again: what a rule of the model leaves was more
+            // than this compiler would work out. Which of the four it was decides what may be said
+            // next and not what a reader is promised.
             case BlockReason.PatternTooCostly _, BlockReason.ExactValuesTooCostly _,
-                 BlockReason.OrderedExtentTooCostly _ ->
+                 BlockReason.OrderedExtentTooCostly _, BlockReason.RulesNotHandedOnAsSets _ ->
                     UndividedPosition.Reason.EXACT_VALUES_TOO_COSTLY;
             // And its own word again, because this one never reached the values at all. A reader
             // told the values were too much would go looking for what makes them so, and what is
