@@ -1561,9 +1561,15 @@ public final class Partitions {
         // What the record is made of, read where a position's reading is made. A walk from the
         // declaration to its fields is that same reading taken a second time, and the two part
         // wherever one of them reaches through a name the other stops at.
-        if (expanding.contains(record)
-                || !(TypeView.of(Type.ref(record), ruleSource.symbols()).shape()
-                        instanceof Shape.Product(TypeSymbol _, Map<String, Type> fields))) {
+        //
+        // And the name has to be the record's own, because the rules below are read on the name
+        // the caller gave. Read through a name to another declaration's fields, the fields would
+        // be one declaration's and the rules another's, and every field would be chosen against
+        // rules that name nothing it has.
+        TypeView view = TypeView.of(Type.ref(record), ruleSource.symbols());
+        if (expanding.contains(record) || view.isWrapped()
+                || !(view.shape() instanceof Shape.Product(TypeSymbol _,
+                        Map<String, Type> fields))) {
             return null;
         }
         if (fields.isEmpty()) {

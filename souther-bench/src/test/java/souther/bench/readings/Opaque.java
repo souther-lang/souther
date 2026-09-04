@@ -15,4 +15,15 @@ public final class Opaque {
         return names.declaredNode(name) instanceof Written.Declared.Record record
                 ? record.name() : name;
     }
+
+    /**
+     * A second question, beside the first and about something else.
+     *
+     * <p>Here because a class is not always the size of a question. Named by the class, the answer
+     * to the first question stands in front of this one too, and a reader arriving here reaches the
+     * declarations under a name that was never about them. Named by the operation, it does not.
+     */
+    public static boolean somethingElse(Written.Names names, String name) {
+        return names.declaredNode(name) instanceof Written.Declared.OneValue;
+    }
 }

@@ -23,6 +23,19 @@ public final class Stage {
     }
 
     /**
+     * Takes apart a compound whose component holds many, which no descriptor says.
+     *
+     * <p>Beside the one above because the two are read differently: what that one holds is written
+     * in the descriptor of its component, and what this one holds is written only in the generic
+     * signature. A reading of components that looked at descriptors alone would see this one hold
+     * nothing, and taking it apart would read as taking nothing apart.
+     */
+    public static Written.Position takesApartOneHoldingMany(Written.Position position) {
+        return position instanceof Written.Position.Built.OfMany many
+                ? many.elements().getFirst() : null;
+    }
+
+    /**
      * Asks which compound it is and takes nothing out, which is a reading all the same.
      *
      * <p>Beside the one above and not the same shape. That one asks and then reads a component, so
@@ -52,6 +65,11 @@ public final class Stage {
     /** Asks an authority, which answers and hands nothing raw back. */
     public static String asksAnAuthority(Written.Names names, String name) {
         return Opaque.spelling(names, name);
+    }
+
+    /** Asks the operation beside it, which answers something else and reaches the declarations. */
+    public static boolean asksTheQuestionBesideIt(Written.Names names, String name) {
+        return Opaque.somethingElse(names, name);
     }
 
     /** Reads the name off a leaf, which is a name and not a structure. */

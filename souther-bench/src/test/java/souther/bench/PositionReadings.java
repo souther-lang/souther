@@ -27,6 +27,13 @@ import java.util.Set;
  * what is built out of types are stated by the sums the caller names, so the walk derives both from
  * the class files rather than knowing either — and a caller can therefore hand it a sum of its own
  * and see what the walk makes of it.
+ *
+ * <p><b>What a call is, here, is the receiver it names.</b> A method reached only through an
+ * interface, or through an override of the method a call names, has no edge: what is read is the
+ * class written into the call and not what stands there when it runs. So the reachability this
+ * answers is over the calls as written. Where a seam is an interface, what is on the far side of it
+ * is held by being in the stage — or by nothing, which is where this stops being an argument and
+ * the reader has to look.
  */
 final class PositionReadings {
 
@@ -43,8 +50,14 @@ final class PositionReadings {
 
         /**
          * The owner of the question, walked through all the same. What it answers with is composed
-         * by something the caller handed it, so a reading the caller wrote is reached from here —
-         * and stopping at this boundary would put a caller's own walk on the far side of it.
+         * by something the caller handed it, so stopping here would put whatever the caller wrote
+         * beyond this — and what the caller wrote is the thing being checked.
+         *
+         * <p>What carrying on buys is the calls this place makes itself. It does not follow the
+         * caller's own reading into the callback: that arrives by an interface, and what is
+         * followed here is the receiver a call names rather than what stands there when it runs.
+         * A reading written in the stage is checked because it is in the stage, not because this
+         * reached it.
          */
         TRANSPARENT
     }
@@ -93,10 +106,17 @@ final class PositionReadings {
      * @param observers the methods whose own code reads raw structure
      * @param inTheStage every compiled method of the stage
      * @param reached   what the stage calls, one step out
+     * @param answering the operations the stage calls that would reach raw structure if nothing
+     *                  answered for them, which is what an authority has to be named for. Derived,
+     *                  so that an operation beside one already answered for cannot arrive under its
+     *                  name — a class answers for what it was named for and nothing else
+     * @param madeOfNonRecords the cases of the compound sum whose components this cannot read,
+     *                  because they are not records. What holds another type would be invisible
      * @param bypassing the stage's methods that reach raw structure with no authority between
      * @param bypasses  the same, each with the path that gets there, for a reader to go and look
      */
     record Reading(Set<String> observers, Set<String> inTheStage, Set<String> reached,
+                   Set<String> answering, List<String> madeOfNonRecords,
                    List<String> bypassing, List<String> bypasses) {
 
         /** Which methods those are, by name alone, which is what a claim about them is written in. */
@@ -171,17 +191,73 @@ final class PositionReadings {
         }
         bypassing.sort(null);
         bypasses.sort(null);
-        return new Reading(observers, stage, reached, bypassing, bypasses);
+        return new Reading(observers, stage, reached, answering(over, observers, callersOf, reached),
+                madeOfNonRecords(models, descendantsOf(models, over.compound())),
+                bypassing, bypasses);
     }
 
-    /** The authorities of {@code over} nothing in the stage arrives at. */
-    static List<String> unreached(Over over, Reading reading) {
-        List<String> out = new ArrayList<>();
-        for (Authority each : over.authorities()) {
-            if (reading.reached().stream().noneMatch(each::answersFor)) {
-                out.add(each.owns());
+    /**
+     * The operations the stage calls that reach raw structure when nothing answers for them.
+     *
+     * <p>Derived rather than judged, which is what keeps a boundary the size of its question. Named
+     * by a class, an authority answers for whatever else that class comes to hold; named by the
+     * operation the stage calls, it answers for that one, and an operation beside it arrives here
+     * instead of under a question that was never about it.
+     *
+     * <p>The walk that finds these is the same one, with nothing answering: what is left is every
+     * way the stage would arrive at raw structure, and the first step of each is an operation
+     * somebody has to be able to point at.
+     */
+    private static Set<String> answering(Over over, Set<String> observers,
+                                         Map<String, Set<String>> callersOf, Set<String> reached) {
+        Set<String> reaches = new LinkedHashSet<>(observers);
+        Deque<String> queue = new ArrayDeque<>(reaches);
+        while (!queue.isEmpty()) {
+            String at = queue.poll();
+            for (String caller
+                    : callersOf.getOrDefault(at.substring(0, at.indexOf('(')), Set.of())) {
+                if (reaches.add(caller)) {
+                    queue.add(caller);
+                }
             }
         }
+        Set<String> named = new LinkedHashSet<>();
+        for (String at : reaches) {
+            named.add(at.substring(0, at.indexOf('(')));
+        }
+        Set<String> out = new LinkedHashSet<>();
+        for (String each : reached) {
+            // What the stage calls of its own is the population, not an answer to it: a method
+            // held to the rule cannot be what excuses another from it.
+            if (named.contains(each) && !each.startsWith(over.stage())) {
+                out.add(each);
+            }
+        }
+        return out;
+    }
+
+    /**
+     * The cases of the compound sum this cannot read the components of.
+     *
+     * <p>What is built out of types is derived from the sum, and which of a case's components hold
+     * one is read off the record attribute. A case that is not a record has no such attribute, so
+     * what it holds would be invisible and a walk taking it apart would read as taking nothing
+     * apart. The claim that a case added to the sum joins the rule holds exactly as far as this is
+     * empty, so it is answered rather than assumed.
+     */
+    private static List<String> madeOfNonRecords(Map<String, ClassModel> models,
+                                                 Set<String> compounds) {
+        List<String> out = new ArrayList<>();
+        for (String each : compounds) {
+            ClassModel model = models.get(each);
+            if (model == null || (model.flags().flagsMask() & 0x0600) != 0) {
+                continue;   // not built here, or an interface or abstract class holding no value
+            }
+            if (model.findAttribute(Attributes.record()).isEmpty()) {
+                out.add(each);
+            }
+        }
+        out.sort(null);
         return out;
     }
 

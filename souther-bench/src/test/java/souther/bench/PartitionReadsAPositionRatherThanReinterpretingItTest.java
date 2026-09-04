@@ -28,6 +28,11 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
  * methods return. A helper handing back a {@code boolean} hides nothing here, because what is
  * followed is the call and not the answer.
  *
+ * <p>Over the calls as written, which is the shape of what this claims. A method reached only
+ * through an interface has no edge here, so a seam of that kind is held by what is on the far side
+ * of it being in the stage rather than by this. Every reading the stage has today is reached
+ * through a class a call names.
+ *
  * <p><b>What counts as raw structure is the types' own statement.</b> {@link
  * souther.compiler.types.Type.Leaf} says it holds no type inside it and {@link
  * souther.compiler.types.Type.Compound} says it is built out of others, so taking a compound apart
@@ -65,21 +70,17 @@ class PartitionReadsAPositionRatherThanReinterpretingItTest {
                     "souther.compiler.check.TypeView", Traversal.OPAQUE),
             new Authority("what the rules written on a record leave its fields able to hold",
                     "souther.compiler.check.FieldDomains", Traversal.OPAQUE),
+            new Authority("which ends a declaration writes on the values of a type, and how much"
+                            + " they say it holds",
+                    "souther.compiler.check.DeclaredBounds", Traversal.OPAQUE),
             new Authority("which conjuncts are written on each of the names a value wears",
                     "souther.compiler.check.DeclaredClauses", Traversal.OPAQUE),
-            new Authority("which ends a declaration writes on the values of a type",
-                    "souther.compiler.check.DeclaredBounds", Traversal.OPAQUE),
-            new Authority("which binding each field of a declaration introduces inside its own"
-                            + " invariant",
-                    "souther.compiler.check.TypeOps#fieldBindings", Traversal.OPAQUE),
             new Authority("what carries the values of a type, and in what order",
                     "souther.compiler.check.Carrier", Traversal.OPAQUE),
             new Authority("whether reading a field reaches another location",
                     "souther.compiler.check.Location", Traversal.OPAQUE),
             new Authority("what there is to count about a value",
                     "souther.compiler.check.NumericMeasures", Traversal.OPAQUE),
-            new Authority("which distinctions the type at a position states",
-                    "souther.compiler.inputs.Distinctions", Traversal.OPAQUE),
             new Authority("what reaches each position of a behavior's inputs, read once",
                     "souther.compiler.inputs.InputDomain", Traversal.OPAQUE),
             new Authority("what a name in the tree denotes where the reader stands",
@@ -91,6 +92,15 @@ class PartitionReadsAPositionRatherThanReinterpretingItTest {
             new Authority("whether an operation and a position make one term of a number taken of"
                             + " a value",
                     "souther.compiler.inputs.NumericTerm$TakenOf", Traversal.OPAQUE),
+
+            // Named by the operation, because the class holds more than one question. A second
+            // operation beside these, about something else, would be answering under a name that
+            // was never about it — which is what naming the class would let it do.
+            new Authority("which distinctions the type at a position states",
+                    "souther.compiler.inputs.Distinctions#ofType", Traversal.OPAQUE),
+            new Authority("which binding each field of a declaration introduces inside its own"
+                            + " invariant",
+                    "souther.compiler.check.TypeOps#fieldBindings", Traversal.OPAQUE),
             new Authority("how a type is written where an author reads it",
                     "souther.compiler.types.Type#show", Traversal.OPAQUE),
 
@@ -103,7 +113,7 @@ class PartitionReadsAPositionRatherThanReinterpretingItTest {
             new Authority("what a term about a number comes to at another position",
                     "souther.compiler.inputs.NumericTerm", Traversal.TRANSPARENT));
 
-    private static PositionReadings.Over thisCompiler() throws IOException {
+    static PositionReadings.Over thisCompiler() throws IOException {
         return new PositionReadings.Over(Reactor.classes(), "souther.compiler.partition.",
                 "souther.compiler.ast.Hir$Def", "souther.compiler.check.Symbols#declaredNode",
                 "souther.compiler.types.Type$Compound", "Lsouther/compiler/types/Type;",
@@ -137,18 +147,52 @@ class PartitionReadsAPositionRatherThanReinterpretingItTest {
     }
 
     /**
-     * Every authority is one the stage actually reaches.
+     * The table names exactly the operations that have to be answered for.
      *
-     * <p>The other way round, and the half that keeps this from becoming a list. An entry nothing
-     * arrives at is a rule about a boundary that is not there — either the reader that needed it
-     * has gone, and the entry with it, or the walk stopped reaching it and what this checks has
-     * quietly narrowed.
+     * <p>Both ways round, and derived rather than judged. What needs an answer is worked out by
+     * running the same walk with nothing answering: every operation the stage calls that would
+     * arrive at raw structure on its own. An operation missing from the table has nobody saying
+     * what question it answers; an entry that answers for nothing is a rule about a boundary that
+     * is not there.
+     *
+     * <p>Which is also what keeps a boundary the size of its question. Named by its class, an
+     * authority answers for whatever else that class comes to hold — a second operation beside it,
+     * about something else, reaching the declarations under a question that was never about them.
+     * Named by the operation, that second one arrives here instead.
      */
     @Test
-    void everyAuthorityIsOneTheStageArrivesAt() throws IOException {
+    void theTableNamesTheOperationsThatHaveToBeAnsweredFor() throws IOException {
         PositionReadings.Over over = thisCompiler();
-        assertEquals(List.of(), PositionReadings.unreached(over, PositionReadings.of(over)),
-                "an authority nothing in the stage arrives at, which is a rule about a boundary"
+        PositionReadings.Reading read = PositionReadings.of(over);
+
+        List<String> unanswered = read.answering().stream()
+                .filter(each -> AUTHORITIES.stream().noneMatch(one -> one.answersFor(each)))
+                .sorted().toList();
+        List<String> answersForNothing = AUTHORITIES.stream()
+                .filter(one -> read.answering().stream().noneMatch(one::answersFor))
+                .map(Authority::owns).sorted().toList();
+
+        assertEquals(List.of(), unanswered,
+                "an operation the stage calls that reaches raw structure and nothing says what"
+                        + " question it answers");
+        assertEquals(List.of(), answersForNothing,
+                "an entry answering for nothing the stage calls, which is a rule about a boundary"
                         + " that is not there");
+    }
+
+    /**
+     * A case of what is built out of types is one this can read the components of.
+     *
+     * <p>Which components hold a type is read off the record attribute, so a case that is not a
+     * record holds nothing this can see, and a walk taking it apart would read as taking nothing
+     * apart. The claim that a case added to the sum joins the rule without anybody remembering to
+     * holds exactly as far as this does.
+     */
+    @Test
+    void everythingBuiltOutOfTypesIsOneThisCanReadTheComponentsOf() throws IOException {
+        assertEquals(List.of(), PositionReadings.of(thisCompiler()).madeOfNonRecords(),
+                "a case of what is built out of types that is not a record: what it holds is not"
+                        + " where this reads what a compound holds, so taking it apart would read"
+                        + " as reading nothing");
     }
 }

@@ -1,5 +1,7 @@
 package souther.bench.readings;
 
+import java.util.List;
+
 /**
  * A model written to be read by the walk that holds this compiler's stages apart, and by nothing
  * else.
@@ -36,11 +38,41 @@ public final class Written {
         record Leaf(String name) implements Position {}
 
         /** Built out of others, which is what taking one apart reads. */
-        sealed interface Built extends Position permits Built.OfOne, Built.OfTwo {
+        sealed interface Built extends Position
+                permits Built.OfOne, Built.OfTwo, Built.OfMany, Built.Awkward {
 
             record OfOne(Position element) implements Built {}
 
             record OfTwo(Position key, Position value, String label) implements Built {}
+
+            /**
+             * One holding many, which a descriptor cannot say.
+             *
+             * <p>A list of them erases to a list, so what this holds is written only in the generic
+             * signature — and a reading of components that looked at descriptors alone would say
+             * this one holds nothing at all.
+             */
+            record OfMany(List<Position> elements) implements Built {}
+
+            /**
+             * One written as a class, whose components are nowhere to be read.
+             *
+             * <p>Here to be refused rather than read. What a case holds is taken off the record
+             * attribute, so a case without one is a case this cannot see inside — and the claim
+             * that a case added to the sum joins the rule is worth exactly what refusing this is.
+             */
+            final class Awkward implements Built {
+
+                private final Position held;
+
+                Awkward(Position held) {
+                    this.held = held;
+                }
+
+                Position held() {
+                    return held;
+                }
+            }
         }
     }
 

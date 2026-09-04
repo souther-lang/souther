@@ -98,11 +98,44 @@ class ThisReadingSeesAReadingOfRawStructureTest {
                         // followed is the call: a walk over what came back would see neither.
                         "readsThroughAHelper",
                         "takesACompoundApart",
+                        // What a component holds is written only in the generic signature, so a
+                        // reading over descriptors alone would see this one hold nothing.
+                        "takesApartOneHoldingMany",
                         "takesOneApartThroughAHelper"),
                 bypassing(),
                 "the readers the walk sees, against the ones written to be seen. A reader missing"
                         + " from this is a shape the walk has stopped seeing, and one that is here"
                         + " and should not be reads no structure at all");
+    }
+
+    /**
+     * A boundary named by its class stands in front of the operation beside it; named by the
+     * operation, it does not.
+     *
+     * <p>Which is the whole of what sizing a boundary decides. The model's authority holds two
+     * questions, and the second reaches the declarations for reasons of its own. Named by the
+     * class, a reader asking that second question is answered for by an entry about the first —
+     * and the walk stops at a boundary that was never about what it is standing in front of.
+     */
+    @Test
+    void namingTheOperationCatchesTheQuestionBesideItAndNamingTheClassDoesNot() throws IOException {
+        assertFalse(bypassing().contains("asksTheQuestionBesideIt"),
+                "named by its class, the entry about one question answers for the other too");
+
+        PositionReadings.Over over = model();
+        PositionReadings.Over named = new PositionReadings.Over(over.classes(), over.stage(),
+                over.declaration(), over.lookup(), over.compound(), over.held(),
+                over.authorities().stream()
+                        .map(each -> each.owns().equals("souther.bench.readings.Opaque")
+                                ? new Authority(each.question(),
+                                        "souther.bench.readings.Opaque#spelling", each.traversal())
+                                : each)
+                        .toList());
+
+        assertTrue(PositionReadings.of(named).named().contains("asksTheQuestionBesideIt"),
+                "named by the operation it answers for, the question beside it arrives here");
+        assertFalse(PositionReadings.of(named).named().contains("asksAnAuthority"),
+                "and the reader of the question that is answered for still is");
     }
 
     /**
@@ -122,33 +155,44 @@ class ThisReadingSeesAReadingOfRawStructureTest {
         }
     }
 
-    /** An authority the stage arrives at is not reported as a boundary that is not there. */
+    /**
+     * What has to be answered for is the operations the stage calls that reach structure.
+     *
+     * <p>Derived, so that an operation beside one already answered for cannot arrive under its
+     * name. Both boundaries of the model are here and the helpers are not: a helper is on the way
+     * to a reading rather than an answer to it, and the stage calls it directly.
+     */
     @Test
-    void anAuthorityTheStageArrivesAtIsNotStale() throws IOException {
-        PositionReadings.Over over = model();
-        assertEquals(List.of(), PositionReadings.unreached(over, PositionReadings.of(over)),
-                "both authorities are called by the stage of the model");
+    void whatHasToBeAnsweredForIsWhatTheStageCallsThatReachesStructure() throws IOException {
+        assertEquals(List.of(
+                        "souther.bench.readings.Helpers#holdsALeaf",
+                        "souther.bench.readings.Helpers#isARecord",
+                        "souther.bench.readings.Opaque#somethingElse",
+                        "souther.bench.readings.Opaque#spelling",
+                        "souther.bench.readings.Transparent#answering",
+                        // An accessor of a declaration is a reading of one, so calling it is
+                        // arriving at raw structure like any other way of doing so. The lookup
+                        // beside it is not here: it is answered by whatever implements it, and
+                        // what a call names is an interface with no code of its own.
+                        "souther.bench.readings.Written$Declared$Record#holdsAnything"),
+                PositionReadings.of(model()).answering().stream().sorted().toList(),
+                "every operation the stage calls that would arrive at raw structure on its own");
     }
 
     /**
-     * And one nothing arrives at is, which is what a boundary that has gone looks like.
+     * A case of what is built out of types that is not a record is refused.
      *
-     * <p>Named as a method of an authority that is there, because that is the way an entry goes
-     * stale: the place stays and the operation the table pointed at is renamed or removed under it.
+     * <p>Which components hold a type is read off the record attribute, so a case without one holds
+     * nothing this can see. The claim that a case added to the sum joins the rule holds exactly as
+     * far as this refuses, which is why the refusal is asked of a model that has one.
      */
     @Test
-    void anAuthorityNothingArrivesAtIsStale() throws IOException {
-        PositionReadings.Over over = model();
-        List<Authority> withOneMore = new ArrayList<>(AUTHORITIES);
-        withOneMore.add(new Authority("a question nothing in the model asks any more",
-                "souther.bench.readings.Opaque#spellingAsItWasCalled", Traversal.OPAQUE));
-        PositionReadings.Over stale = new PositionReadings.Over(over.classes(), over.stage(),
-                over.declaration(), over.lookup(), over.compound(), over.held(), withOneMore);
-
-        assertEquals(List.of("souther.bench.readings.Opaque#spellingAsItWasCalled"),
-                PositionReadings.unreached(stale, PositionReadings.of(stale)),
-                "nothing of that name is there to be called, so naming it is a rule about a"
-                        + " boundary that is not");
+    void aCaseBuiltOutOfTypesThatIsNotARecordIsRefused() throws IOException {
+        assertEquals(List.of("souther.bench.readings.Written$Position$Built$Awkward"),
+                PositionReadings.of(model()).madeOfNonRecords(),
+                "the arm of the model written as a class rather than a record: what it holds is"
+                        + " not where this reads what a compound holds, so it is named rather than"
+                        + " read past");
     }
 
     /**

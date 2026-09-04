@@ -2249,11 +2249,14 @@ public final class Generator {
      * spread would drop the included ones with it.
      */
     private static List<String> fieldsOf(MeasuredInput subject, TypeSymbol built) {
-        // Read where a position's reading is made. A walk from the declaration to its fields is
-        // that reading taken a second time, and the two part at every name one of them reaches
-        // through and the other stops at.
-        return TypeView.of(Type.ref(built), subject.symbols()).shape()
-                        instanceof Shape.Product(TypeSymbol _, Map<String, Type> fields)
+        // A value written under a name is not written field by field: what the row writes is the
+        // name round a value, and the fields belong to what the name wraps. So the position has to
+        // wear no name as well as be a record — read where a position's reading is made, which
+        // answers both, rather than walked from the declaration a second time.
+        TypeView view = TypeView.of(Type.ref(built), subject.symbols());
+        return !view.isWrapped()
+                        && view.shape() instanceof Shape.Product(TypeSymbol _,
+                                Map<String, Type> fields)
                 ? List.copyOf(fields.keySet()) : null;
     }
 
