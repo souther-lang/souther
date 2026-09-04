@@ -72,7 +72,7 @@ public record RulesWithNoLine(List<RuleWithoutALine> reported,
      */
     public List<RuleWithoutALine> readingsThatStopped() {
         return reported.stream()
-                .filter(each -> each.why() instanceof BlockReason.RuleReadingStopped)
+                .filter(each -> each.why() instanceof BlockReason.StoppedWithoutALine)
                 .toList();
     }
 
@@ -91,6 +91,12 @@ public record RulesWithNoLine(List<RuleWithoutALine> reported,
      * <p>Any of them, and the rest say the same thing. Each costs the reading the same — the values
      * are an upper bound and there is no more or less of that — and which rule to go and look at is
      * the findings' to say, one per rule, where they are all named.
+     *
+     * <p>Which is why this is the rules and not every stop. A position that could not hand its
+     * rules on as sets has a reading that stopped, and what it admits is exact all the same: what
+     * was not worked out is what one rule leaves on its own, which is not the values coming out
+     * wider than the rules leave them. Answered with one of those, a reading would call itself
+     * partial over a position it answered exactly.
      *
      * <p><b>Asked of both of the lists, which is why it is asked here.</b> A rule of a declaration
      * whose line nothing could fold leaves a finding and its question is the accounting's; a rule

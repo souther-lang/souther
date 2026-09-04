@@ -125,7 +125,7 @@ class AStringPredicateAdmitsWhatItAcceptsAtRunTimeTest {
     }
 
     private static Language languageOf(PatternSyntax syntax) {
-        Language made = PatternPlan.of(syntax).compile(PatternPlan.Budget.OF_A_WITNESS);
+        Language made = PatternPlan.of(syntax).compile(PatternPlan.Budget.OF_A_WITNESS.meter());
         assertNotNull(made, "the lowering is a language this compiler can build");
         return made;
     }

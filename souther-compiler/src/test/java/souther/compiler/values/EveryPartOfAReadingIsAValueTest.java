@@ -207,7 +207,7 @@ class EveryPartOfAReadingIsAValueTest {
         Set<AdmissibleValues.Box<String>> boxes = new LinkedHashSet<>();
         boxes.add(box);
         AdmissibleValues.Held.Alternatives<String> held =
-                AdmissibleValues.Held.Alternatives.of(boxes, Allowance.ofAdmittedValues()).held();
+                AdmissibleValues.Held.Alternatives.of(boxes, AsACompilationAllows.forAdmittedValues()).held();
 
         boxes.add(new AdmissibleValues.Box<>(Map.of("b", ValueSet.ANY)));
         assertEquals(1, held.boxes().size(), "the alternatives are the ones it was made of");

@@ -32,7 +32,7 @@ class ReadingsConjoinedAreNotMultipliedTest {
      * composer the next meet spends from. Every set here is values written out, so nothing is built
      * and no allowance is spent.
      */
-    private static final Allowance<String> SETS = Allowance.ofAdmittedValues();
+    private static final Allowance<String> SETS = AsACompilationAllows.forAdmittedValues();
 
     /** Two readings over positions neither shares, each holding two alternatives. */
     @Test

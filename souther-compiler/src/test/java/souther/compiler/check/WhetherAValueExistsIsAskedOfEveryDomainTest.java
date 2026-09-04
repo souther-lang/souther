@@ -116,7 +116,7 @@ class WhetherAValueExistsIsAskedOfEveryDomainTest {
         // Met as one reading and handed over as one. Two readings are combined where the
         // clauses of a declaration are read, and never at the state's boundary.
         souther.compiler.values.Allowance<FactSubject> sets =
-                souther.compiler.values.Allowance.ofAdmittedValues();
+                souther.compiler.values.AsACompilationAllows.forAdmittedValues();
         return ConstraintState.<FactSubject>top().takingValuesRead(
                 AdmissibleValues.at(A_POSITION, ValueSet.just(Value.text("A")))
                         .meet(AdmissibleValues.at(A_POSITION, ValueSet.just(Value.text("B"))),

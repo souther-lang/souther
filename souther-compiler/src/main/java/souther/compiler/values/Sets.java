@@ -2,7 +2,6 @@ package souther.compiler.values;
 
 import souther.compiler.regex.Language;
 import souther.compiler.regex.Meter;
-import souther.compiler.regex.PatternPlan;
 
 import java.util.LinkedHashSet;
 import java.util.Set;
@@ -53,10 +52,13 @@ public final class Sets {
             throw new IllegalArgumentException(
                     "a language is put together where there is an allowance for it");
         }
-        // Nothing here builds, so the meter is never asked and what it allows does not matter.
-        ValueSet made = met ? metUnder(one, other, PatternPlan.Budget.OF_ADMITTED_VALUES.meter())
-                : joinedUnder(one, other, PatternPlan.Budget.OF_ADMITTED_VALUES.meter());
-        return made;
+        // The table below takes a meter because a pair with a language in it builds; the pairs
+        // above have none and reach no case that does. Which is a fact about the pairs and not a
+        // promise anybody keeps, so what is handed over is a meter that pays for nothing
+        // ({@link Meter#refusing}): the day a language reaches here, the state it asks for is
+        // refused where it is asked for rather than made out of an allowance nobody granted.
+        return met ? metUnder(one, other, Meter.refusing())
+                : joinedUnder(one, other, Meter.refusing());
     }
 
     /**

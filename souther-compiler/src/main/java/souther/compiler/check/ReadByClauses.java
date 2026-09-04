@@ -70,17 +70,21 @@ record ReadByClauses(AdmissibleValues<FactSubject> values, OrderedIntervals<Fact
      * never needed to find out.
      *
      * @param aboutARule what a rule of this part is answerable for, per position
-     * @param aboutStrings what this part states about the strings at each position it states a rule
-     *                     about. Beside the adoptions and not among them: what a part took a
-     *                     position in at is what the readings settled, and this is what the clause
-     *                     states — a rule whose written text nothing worked out is still a rule
-     *                     about the position it names, and a reader deciding which of the position's
-     *                     numbers it is measured at wants exactly that
+     * @param aboutStrings which strings this part admits at each position it states a rule about.
+     *                     Beside the adoptions and not among them: what a part took a position in
+     *                     at is what the readings settled, and this is what the clause states — a
+     *                     rule whose written text nothing worked out is still a rule about the
+     *                     position it names, and a reader deciding which of the position's numbers
+     *                     it is measured at wants exactly that.
+     *                     <p>The sets and not the plans that name them. Everything on this side of
+     *                     the reading builds nothing, and a reader handed a plan would be making
+     *                     the machine for a rule under an allowance of its own — a second answer to
+     *                     what the model admits at a position, made by whoever asked second
      */
     record OfAPart(Adoption<FactSubject> byValues, Adoption<FactSubject> byOrder,
                    java.util.Map<FactSubject,
                            java.util.List<souther.compiler.values.UnreadReason>> aboutARule,
-                   java.util.Map<FactSubject, StringRestriction> aboutStrings) {
+                   java.util.Map<FactSubject, AdmittedStrings> aboutStrings) {
 
         /** The positions some reading took the whole of this part in at. */
         java.util.Set<FactSubject> adopted() {

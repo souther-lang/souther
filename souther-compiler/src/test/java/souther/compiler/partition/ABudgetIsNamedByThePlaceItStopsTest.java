@@ -48,7 +48,9 @@ class ABudgetIsNamedByThePlaceItStopsTest {
     private static final Symbols SYMBOLS = Symbols.none(DefaultStdlib.get());
 
     private static final RuleReadingSource RULES = RuleReadings.ofNoClauseFiled(SYMBOLS);
-    private static final ReadingPolicy POLICY = new ReadingPolicy(64, 12);
+    private static final ReadingPolicy POLICY = new ReadingPolicy(64, 12,
+            souther.compiler.values.AsACompilationAllows.admittedValues(),
+            souther.compiler.values.AsACompilationAllows.whatARuleLeaves());
 
     /** What a position of this type is, which is what the builder is asked about. */
     private static Shape shape(Type type) {

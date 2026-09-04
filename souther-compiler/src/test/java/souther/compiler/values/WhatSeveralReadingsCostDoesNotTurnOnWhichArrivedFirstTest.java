@@ -39,7 +39,7 @@ class WhatSeveralReadingsCostDoesNotTurnOnWhichArrivedFirstTest {
         PatternRead said = PatternParser.read(regex);
         return AdmissibleValues.at("value", ValueSet.matching(
                 PatternPlan.of(assertInstanceOf(PatternRead.Read.class, said).syntax())
-                        .compile(PatternPlan.Budget.OF_ADMITTED_VALUES)));
+                        .compile(PatternPlan.Budget.OF_ADMITTED_VALUES.meter())));
     }
 
     private static List<AdmissibleValues<String>> readings() {
@@ -57,7 +57,7 @@ class WhatSeveralReadingsCostDoesNotTurnOnWhichArrivedFirstTest {
         int spent = -1;
         for (List<Integer> order : ORDERS) {
             List<AdmissibleValues<String>> read = readings();
-            Allowance<String> allowed = Allowance.ofAdmittedValues();
+            Allowance<String> allowed = AsACompilationAllows.forAdmittedValues();
             AdmissibleValues<String> made = AdmissibleValues.metAll(
                     order.stream().map(read::get).toList(), allowed);
 
@@ -88,11 +88,11 @@ class WhatSeveralReadingsCostDoesNotTurnOnWhichArrivedFirstTest {
                 alsoUnread(matching("x"), UnreadReason.RELATES_TWO_POSITIONS);
 
         assertEquals(List.of(UnreadReason.FORM_NOT_READ, UnreadReason.RELATES_TWO_POSITIONS),
-                AdmissibleValues.metAll(List.of(big, small), Allowance.ofAdmittedValues())
+                AdmissibleValues.metAll(List.of(big, small), AsACompilationAllows.forAdmittedValues())
                         .whyUnread("elsewhere"),
                 "the large one was read first, so its reason is written first");
         assertEquals(List.of(UnreadReason.RELATES_TWO_POSITIONS, UnreadReason.FORM_NOT_READ),
-                AdmissibleValues.metAll(List.of(small, big), Allowance.ofAdmittedValues())
+                AdmissibleValues.metAll(List.of(small, big), AsACompilationAllows.forAdmittedValues())
                         .whyUnread("elsewhere"),
                 "and the other way round when it was read second");
     }
@@ -101,7 +101,7 @@ class WhatSeveralReadingsCostDoesNotTurnOnWhichArrivedFirstTest {
     private static AdmissibleValues<String> alsoUnread(AdmissibleValues<String> read,
                                                        UnreadReason why) {
         return read.meet(AdmissibleValues.unreadable(java.util.Set.of("elsewhere"), why),
-                Allowance.ofAdmittedValues());
+                AsACompilationAllows.forAdmittedValues());
     }
 
     /** How much of one position's allowance has gone, which is what the work order decides. */

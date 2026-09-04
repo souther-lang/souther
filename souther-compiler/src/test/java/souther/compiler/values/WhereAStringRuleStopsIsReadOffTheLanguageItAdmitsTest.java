@@ -200,7 +200,7 @@ class WhereAStringRuleStopsIsReadOffTheLanguageItAdmitsTest {
         PatternRead read = PatternParser.read(pattern);
         assertInstanceOf(PatternRead.Read.class, read, pattern + " is read");
         Language made = PatternPlan.of(((PatternRead.Read) read).syntax())
-                .compile(PatternPlan.Budget.OF_ADMITTED_VALUES);
+                .compile(PatternPlan.Budget.OF_ADMITTED_VALUES.meter());
         assertNotNull(made, pattern + " compiles");
         return made;
     }

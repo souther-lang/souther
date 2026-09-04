@@ -34,7 +34,7 @@ class WhatAPositionHoldsAcrossAlternativesDoesNotFollowHowTheyWereFilledTest {
         PatternRead said = PatternParser.read(regex);
         return ValueSet.matching(PatternPlan.of(
                 assertInstanceOf(PatternRead.Read.class, said, regex).syntax())
-                .compile(PatternPlan.Budget.OF_ADMITTED_VALUES));
+                .compile(PatternPlan.Budget.OF_ADMITTED_VALUES.meter()));
     }
 
     /** One alternative, holding {@code set} at the one position there is. */
@@ -66,7 +66,7 @@ class WhatAPositionHoldsAcrossAlternativesDoesNotFollowHowTheyWereFilledTest {
             Set<AdmissibleValues.Box<String>> filled = new LinkedHashSet<>();
             order.forEach(each -> filled.add(boxes.get(each)));
 
-            Allowance<String> by = Allowance.ofAdmittedValues();
+            Allowance<String> by = AsACompilationAllows.forAdmittedValues();
             AdmissibleValues.Held.Alternatives.Made<String> made =
                     AdmissibleValues.Held.Alternatives.of(filled, by);
 
