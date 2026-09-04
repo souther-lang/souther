@@ -357,7 +357,12 @@
 
              `combine.children` is what keeps the error and warning limits the build above sets:
              without it a profile's list of arguments replaces that list rather than adding to
-             it, and a lint run would stop counting at a hundred. -->
+             it, and a lint run would stop counting at a hundred.
+
+             `-Werror` is not emptied here, so a finding of any check below that is not turned off
+             stops the build. That is what makes the list below a ledger: a check is answered at
+             every site, or it is off and says why. A finding that only printed is one nobody
+             reads, which is how the backlog this closes was collected. -->
         <profile>
             <id>lint</id>
             <activation>
@@ -369,9 +374,6 @@
                 <!-- The gate a module carries, emptied: this profile's plugin argument below is the
                      only one javac may be given. -->
                 <errorprone.gate/>
-                <!-- Emptied for the reason above: Error Prone's own findings would stop this
-                     build for something javac never said. -->
-                <javac.werror/>
             </properties>
             <build>
                 <plugins>
@@ -441,7 +443,18 @@
                                      shows the comment all the same;
                                      AvoidCommonTypeNames — `Number`, `Integer`, `Short`,
                                      `Readable` and `Record` are the language's own words here, and
-                                     each is nested where what it is a case of says so. -->
+                                     each is nested where what it is a case of says so;
+                                     InlineFormatString — what is left is a named source fixture
+                                     with a comment saying what case it is for, and inlining it
+                                     puts twenty lines of Souther inside the call and takes the
+                                     name and the comment away;
+                                     RethrowReflectiveOperationExceptionAsLinkageError — what is
+                                     left is a test harness loading what a compile emitted, where
+                                     the failure is the test's and the message names the method it
+                                     could not run; a `LinkageError` says a class would not link;
+                                     JavaLocalTimeGetNano and JavaLocalDateTimeGetNano — every one
+                                     asks whether there is a fraction of a second at all, which is
+                                     the field on its own and nothing beside it. -->
                                 <!-- Errors, because each is cheap to answer and silent to miss:
                                      ObjectToString, DuplicateBranches, UnusedVariable, UnusedMethod,
                                      SameNameButDifferent, MissingOverride, OperatorPrecedence and
@@ -452,7 +465,7 @@
                                      check is not
                                      against writing one name for one distinction at two levels — it
                                      is against a use that does not say which of them it means. -->
-                                <arg>-Xplugin:ErrorProne -Xep:UnicodeInCode:OFF -Xep:BadInstanceof:OFF -Xep:ReferenceEquality:OFF -Xep:StringSplitter:OFF -Xep:UnnecessaryParentheses:OFF -Xep:BooleanLiteral:OFF -Xep:IdentityHashMapUsage:OFF -Xep:ClassInitializationDeadlock:OFF -Xep:ArrayRecordComponent:OFF -Xep:ImmutableEnumChecker:OFF -Xep:StringConcatToTextBlock:OFF -Xep:EffectivelyPrivate:OFF -Xep:VoidUsed:OFF -Xep:NotJavadoc:OFF -Xep:AvoidCommonTypeNames:OFF -Xep:RemoveUnusedImports:ERROR -Xep:ObjectToString:ERROR -Xep:DuplicateBranches:ERROR -Xep:UnusedVariable:ERROR -Xep:UnusedMethod:ERROR -Xep:SameNameButDifferent:ERROR -Xep:MissingOverride:ERROR -Xep:OperatorPrecedence:ERROR -Xep:StringCaseLocaleUsage:ERROR ${nullaway.args}</arg>
+                                <arg>-Xplugin:ErrorProne -Xep:UnicodeInCode:OFF -Xep:BadInstanceof:OFF -Xep:ReferenceEquality:OFF -Xep:StringSplitter:OFF -Xep:UnnecessaryParentheses:OFF -Xep:BooleanLiteral:OFF -Xep:IdentityHashMapUsage:OFF -Xep:ClassInitializationDeadlock:OFF -Xep:ArrayRecordComponent:OFF -Xep:ImmutableEnumChecker:OFF -Xep:StringConcatToTextBlock:OFF -Xep:EffectivelyPrivate:OFF -Xep:VoidUsed:OFF -Xep:NotJavadoc:OFF -Xep:AvoidCommonTypeNames:OFF -Xep:InlineFormatString:OFF -Xep:RethrowReflectiveOperationExceptionAsLinkageError:OFF -Xep:JavaLocalTimeGetNano:OFF -Xep:JavaLocalDateTimeGetNano:OFF -Xep:RemoveUnusedImports:ERROR -Xep:ObjectToString:ERROR -Xep:DuplicateBranches:ERROR -Xep:UnusedVariable:ERROR -Xep:UnusedMethod:ERROR -Xep:SameNameButDifferent:ERROR -Xep:MissingOverride:ERROR -Xep:OperatorPrecedence:ERROR -Xep:StringCaseLocaleUsage:ERROR ${nullaway.args}</arg>
                             </compilerArgs>
                             <annotationProcessorPaths>
                                 <path>
