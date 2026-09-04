@@ -317,11 +317,12 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, RuleRead
          * Takes {@code step}, adding what stands below. False where this type and value cannot take
          * it.
          *
-         * <p>False and standing nowhere are two answers. False is the reading and the observation
-         * disagreeing about what is at this position — a step this walk cannot take at all — and
-         * adding nothing is a step taken by a value that turns out to stand nowhere below it: the
-         * empty list at an element, a case the row is not at under a refinement. A caller reads the
-         * first as a walk it could not make and the second as a row that is somewhere else.
+         * <p>False and standing nowhere are two answers. False is a step this walk cannot take at
+         * all — the reading does not expose the name here, or what stands here is not the
+         * construction the reading says does — and adding nothing is a step taken by a value that
+         * turns out to stand nowhere below it: the empty list at an element, a case the row is not
+         * at under a refinement. A caller reads the first as a walk it could not make and the
+         * second as a row that is somewhere else.
          */
         boolean step(TermPath.Step step, Symbols symbols, List<Standing> out) {
             if (value.unread() != null) {
