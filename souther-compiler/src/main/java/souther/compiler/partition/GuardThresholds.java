@@ -160,7 +160,7 @@ public final class GuardThresholds {
         for (ComparisonReadings.Reading each : comparisons.all()) {
             switch (each.standing()) {
                 case BoundaryPolicy.Standing.Admitted admitted ->
-                        lineAt(each.catalogued(), plan, symbols,
+                        lineAt(each.catalogued(), plan,
                                 admitted.read(), found, between, withoutALine);
                 // Not a rule with no line here: its outcome is about no row, whichever of the
                 // reasons refused it ({@link NotABoundary}), so there is nothing for a report to
@@ -422,7 +422,7 @@ public final class GuardThresholds {
      */
     private static void lineAt(ComparisonCatalog.Catalogued each,
                                CoverageSites.Plan plan,
-                               Symbols symbols, ComparisonAssessment read,
+                               ComparisonAssessment read,
                                List<LineEvidence> out,
                                List<LineDrawn> between,
                                RulesWithNoLine.Gathered withoutALine) {

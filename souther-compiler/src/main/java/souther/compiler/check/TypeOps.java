@@ -1727,8 +1727,7 @@ public final class TypeOps {
                 // a set holds no duplicates, which is a question about equality of its elements
                 Type element = typeArg(ref, symbols, "set", 3,
                         "Set needs a type argument, e.g. Set<String>");
-                requireEquality(element, ref, false,
-                        "a Set has no duplicate elements, and a function has no value to compare");
+                requireEquality(element, ref, false);
                 yield Type.set(element);
             }
             case "Option" -> Type.option(typeArg(ref, symbols, "option", 6, "Option needs a type argument"));
@@ -1740,8 +1739,7 @@ public final class TypeOps {
                 Type value = typeArg(ref, symbols, "map", 3, "Map needs a value type, e.g. Map<String, Int>");
                 Type key = ref.tupleElems() == null
                         ? Type.STRING : resolveTerm(ref.tupleElems().get(0));
-                requireEquality(key, ref, true,
-                        "a Map finds a value by its key, and a function has no value to compare");
+                requireEquality(key, ref, true);
                 yield Type.map(key, value);
             }
             default -> {
@@ -1820,8 +1818,7 @@ public final class TypeOps {
     }
 
     /** Refuses a collection whose element or key a function makes uncomparable. */
-    private static void requireEquality(Type t, Reference at, boolean aMapKey,
-                                        String message) {
+    private static void requireEquality(Type t, Reference at, boolean aMapKey) {
         if (!supportsEquality(t)) {
             throw CompileException.of(Diagnostic.at(at.pos())
                     .say(aMapKey

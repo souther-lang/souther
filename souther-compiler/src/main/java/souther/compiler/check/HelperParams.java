@@ -258,7 +258,7 @@ final class HelperParams {
                                         Map<String, Type> recursiveHelperFns,
                                         Map<Integer, OpenUse> openUses) {
         BodyTyping typing = new BodyTyping(symbols, reqSigs, recursiveHelperFns);
-        Type answers = declaredReturn(h, symbols);
+        Type answers = declaredReturn(h);
         Map<Integer, Type> found = new LinkedHashMap<>();
         List<Integer> value = new ArrayList<>();
         for (int idx : open) {
@@ -368,7 +368,7 @@ final class HelperParams {
     }
 
     /** The return type {@code h} declares, or null where it declares none or names something unknown. */
-    private static Type declaredReturn(Hir.FnDef h, Symbols symbols) {
+    private static Type declaredReturn(Hir.FnDef h) {
         if (h.declaredReturn() == null) {
             return null;
         }

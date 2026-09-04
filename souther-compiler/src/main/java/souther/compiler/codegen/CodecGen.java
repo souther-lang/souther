@@ -184,6 +184,7 @@ final class CodecGen {
      * canonicalization collision is caught, and that is a property of every key type, not of the
      * ones that need converting.
      */
+    @SuppressWarnings("UnusedVariable")   // the key is what a narrowing would read; see above
     private static boolean needsRekey(MapKeyRepresentation key) {
         return true;
     }
