@@ -14,11 +14,16 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
  * Each question about a shape is asked of the one that answers it, and of nothing else.
  *
  * <p>Four are asked: what is readable off a value standing at a position, what a value there is
- * composed out of, which positions a reading has under it, and where a step into a written value
- * lands. They come to the same fields at a record and part at a sum whose cases share a spread, and
+ * composed out of, which positions a reading has under it, and what a written value has under a
+ * step. They come to the same fields at a record and part at a sum whose cases share a spread, and
  * that agreement is a law over the answers — checked as one in
  * {@code WhatIsReadableAndWhatIsBuiltAgreeAtARecordAndPartAtASumTest}, which holds however the four
  * are worked out.
+ *
+ * <p>Four and not five. How an observed value is read down a path consumes a value and answers with
+ * as many standings as it finds, so it is not one of these and no equality holds between it and
+ * them; what it owes is that it admits a field by what is readable and never by what the value in
+ * hand turns out to carry, which is checked where that walk is.
  *
  * <p>Which is why that law is not enough on its own. A question answered out of another's answer
  * satisfies it exactly while the two agree at a record: the reading of a value or the walk into a
@@ -44,13 +49,17 @@ class NoQuestionAboutAShapeIsAnsweredOutOfAnothersAnswerTest {
 
     /** Who asks what is readable off a value: the elaboration of a field read, the accessor a sum's
      *  interface declares, what a construction may spread, what the model writes where a value
-     *  stands, and the reading of a behavior's inputs. */
+     *  stands, the reading of a behavior's inputs, and the walk that reads a row at a position —
+     *  which asks whether a name may be read there before taking it off the value it holds, so that
+     *  a case carrying a name of its own does not make it readable for the rows that are that
+     *  case. */
     private static final List<String> ASK_WHAT_IS_READABLE = List.of(
             "souther.compiler.check.DataChecker",
             "souther.compiler.check.Elaborator",
             "souther.compiler.check.ValueReading",
             "souther.compiler.codegen.ValueClassGen",
-            "souther.compiler.inputs.InputDomain");
+            "souther.compiler.inputs.InputDomain",
+            "souther.compiler.partition.BehaviorInputs$Standing");
 
     /** Who asks what a value is composed out of. Composing one is what the question is for, so there
      *  is one asker, and a second is a reader with some other question. */
@@ -62,14 +71,26 @@ class NoQuestionAboutAShapeIsAnsweredOutOfAnothersAnswerTest {
     private static final List<String> ASK_WHAT_STANDS_UNDER =
             List.of("souther.compiler.inputs.InputDomain");
 
-    /** Who asks where a step into a written value lands. Nobody outside the walk that takes the
-     *  step — a reader working it out again turns a row's own path into a second reading of the
-     *  declarations. */
-    private static final List<String> ASK_WHERE_A_STEP_LANDS = List.of();
+    /** Who asks what a written value has under a step. Nobody outside the class that answers it — a
+     *  reader working it out again turns a row's own path into a second reading of the declarations.
+     *
+     *  <p>Named for the written relation and not for a step's landing place. A step has two of them
+     *  — where a written value has a part, and what a value standing here may be read as — and a
+     *  list called after the step rather than after the question is one a reader satisfies by
+     *  taking whichever answer is nearest. Which is what happened: the walk over a row's values
+     *  took this one, and every name a model reads through a sum came back unread. */
+    private static final List<String> ASK_WHAT_A_WRITTEN_VALUE_HAS_UNDER_A_STEP = List.of();
 
+    /**
+     * Both ways in, counted together.
+     *
+     * <p>Every name at a position and one name of it are the same question asked twice over, so who
+     * asks it is one list. Counted apart, a reader could move from one to the other and leave the
+     * list it was on — which reads as a reader having gone away.
+     */
     @Test
     void whatIsReadableIsAskedOfTheOneThatAnswersIt() {
-        assertEquals(ASK_WHAT_IS_READABLE, callersOf(ReadableFields.class, "of"),
+        assertEquals(ASK_WHAT_IS_READABLE, callersOf(ReadableFields.class, "of", "at"),
                 "these ask what is readable off a value, and this is who does");
     }
 
@@ -96,19 +117,25 @@ class NoQuestionAboutAShapeIsAnsweredOutOfAnothersAnswerTest {
     }
 
     /**
-     * Where a step into a written value lands, asked by the walk that takes the step.
+     * What a written value has under a step, asked inside the class that answers it.
      *
      * <p>Both halves, because the expected set is empty and an empty set is what a question nobody
      * can name comes to as well: the first says the question is asked at all, the second that it is
      * asked nowhere but inside its owner.
+     *
+     * <p>And only that far. This helper leaves out the owner and everything nested in it, so the
+     * two readers that live inside {@code BehaviorInputs} are invisible here however they ask —
+     * which is how a walk over a row's values came to take this answer without anything saying so.
+     * Who asks it inside the class is a separate invariant, in
+     * {@code OnlyTypeAtWrittenPathStepsIntoAWrittenValueTest}.
      */
     @Test
-    void whereAStepIntoAWrittenValueLandsIsAskedOfTheOneThatAnswersIt() {
+    void whatAWrittenValueHasUnderAStepIsAskedOfTheOneThatAnswersIt() {
         Class<?> owner = souther.compiler.partition.BehaviorInputs.class;
         assertFalse(WhatWasCompiled.callersOf(owner, "stepWrittenValue").isEmpty(),
                 "a step into a written value is turned into a type somewhere, or this is watching a"
                         + " name nothing calls");
-        assertEquals(ASK_WHERE_A_STEP_LANDS, callersOf(owner, "stepWrittenValue"),
+        assertEquals(ASK_WHAT_A_WRITTEN_VALUE_HAS_UNDER_A_STEP, callersOf(owner, "stepWrittenValue"),
                 "a step into what a row wrote is turned into a type in one place");
     }
 
@@ -128,11 +155,14 @@ class NoQuestionAboutAShapeIsAnsweredOutOfAnothersAnswerTest {
                 "the fields a sum's cases share are read where the readable surface is made");
     }
 
-    /** Who calls {@code method} on {@code on}, leaving out the class that declares it and anything
-     *  nested inside it — a record holds its own accessor, a lambda is compiled into the class that
-     *  wrote it, and naming itself is not reading itself. */
-    private static List<String> callersOf(Class<?> on, String method) {
-        Set<String> found = WhatWasCompiled.callersOf(on, method);
+    /** Who calls any of {@code methods} on {@code on}, leaving out the class that declares them and
+     *  anything nested inside it — a record holds its own accessor, a lambda is compiled into the
+     *  class that wrote it, and naming itself is not reading itself. */
+    private static List<String> callersOf(Class<?> on, String... methods) {
+        Set<String> found = new java.util.LinkedHashSet<>();
+        for (String method : methods) {
+            found.addAll(WhatWasCompiled.callersOf(on, method));
+        }
         return found.stream()
                 .filter(each -> !each.equals(on.getName()) && !each.startsWith(on.getName() + "$"))
                 .sorted().toList();
