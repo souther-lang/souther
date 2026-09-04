@@ -396,7 +396,34 @@
                                      to an error so that the next one stops the build it arrived
                                      in. The check reads documentation too, so an import only a
                                      {@link} mentions is not one of these. -->
-                                <arg>-Xplugin:ErrorProne -Xep:UnicodeInCode:OFF -Xep:RemoveUnusedImports:ERROR ${nullaway.args}</arg>
+                                <!-- ReferenceEquality is off. It reports a comparison written `==`
+                                     on a type that overrides `equals`, and this compiler asks that
+                                     question on purpose in several shapes, none of which the check
+                                     can be told about. A rewrite answers `child == node.child() ?
+                                     node : new ...`, where equality would rebuild a tree that
+                                     already means what it means. A primitive type and an emitted
+                                     call target are enum constants held in a field the interface
+                                     declares, so the check sees `Type` and `CallTarget` where the
+                                     comparison is against an enum constant and cannot be wrong. A
+                                     sentinel is the one object it is — a not-found and a failed
+                                     read are each a bare `Object`, which has nothing but its
+                                     identity to be compared by. And a node's occurrence is what a
+                                     walk keys on: two structurally equal subtrees are two places,
+                                     and `equals` would make them one.
+
+                                     The shape that is not one of those is a constant that is the
+                                     only instance of a record: two of those are equal without being
+                                     the same object, so the comparison holds on the strength of
+                                     nobody writing a second one. Every one the check found is now
+                                     asked with `instanceof`, which is how the rest of this compiler
+                                     asks it, so no comparison left here rests on that.
+
+                                     What going off costs is the report it would make about the next
+                                     `==` written on a type whose values can be equal without being
+                                     the same. Nothing else here catches one; the way to ask again
+                                     is to turn the check back on for a run and read what it says,
+                                     which is how the comparisons above were read. -->
+                                <arg>-Xplugin:ErrorProne -Xep:UnicodeInCode:OFF -Xep:ReferenceEquality:OFF -Xep:RemoveUnusedImports:ERROR ${nullaway.args}</arg>
                             </compilerArgs>
                             <annotationProcessorPaths>
                                 <path>

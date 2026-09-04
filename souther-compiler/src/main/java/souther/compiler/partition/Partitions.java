@@ -1673,7 +1673,7 @@ public final class Partitions {
         NumericDomain.Bounds range =
                 TypeBounds.admissible(DeclaredBounds.of(view, ruleSource), null);
         Place from = inside(range, carrier);
-        if (from == null || carrier != Carrier.WHOLE) {
+        if (from == null || !(carrier instanceof Carrier.Whole)) {
             return from != null && index == 0 ? from : null;
         }
         Count stepped = Count.number(from).plus(index);
