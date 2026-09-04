@@ -67,7 +67,7 @@ class ANameGoesBackOnTheWayItCameOffTest {
     }
 
     private PartitionClass classOf(String type, String id) {
-        return PartitionClasses.of(Type.ref(named(type)), rules, souther.compiler.query.ReadAs.THE_COMPILATION_DOES).stream()
+        return PartitionClasses.of(Type.ref(named(type)), rules, souther.compiler.query.ReadAs.THE_COMPILATION_DOES, java.util.Set.of()).stream()
                 .filter(each -> each.id().equals(id)).findFirst().orElseThrow();
     }
 

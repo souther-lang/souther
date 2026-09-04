@@ -165,10 +165,10 @@ public record FixtureTemplate(String text, Hir.Expr value) {
      * order stops is a second thing to keep true. What such a point leaves is a point nothing
      * composes a value at, which is what the callers already read a null as.
      *
-     * <p>Bare. How many names the value wears at the position it is going to is a different question
-     * with its own answer ({@link Witnesses#wrapped}), which walks every layer; answered here as
-     * well, it was answered one layer deep, and a value of a newtype over a newtype came back
-     * missing the name in the middle.
+     * <p>Bare. Which names the value wears at the position it is going to is a different question
+     * with its own answer ({@link WornNames#under}), taken from the reading of that position;
+     * answered here as well, it was answered one layer deep, and a value of a newtype over a newtype
+     * came back missing the name in the middle.
      */
     public static FixtureTemplate on(Carrier carrier, Place at, TypeReachName.Naming naming) {
         if (!carrier.extent().admits(at)) {

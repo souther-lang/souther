@@ -68,11 +68,17 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
             Map.entry("souther.compiler.partition.Witnesses#<clinit>()V",
                     "how many elements and characters a proposal holds, and how many pairings"),
             Map.entry("souther.compiler.partition.Witnesses#sized("
-                            + "Lsouther/compiler/types/Type;I"
+                            + "Lsouther/compiler/check/Shape;I"
                             + "Lsouther/compiler/check/RuleReadingSource;"
                             + "Lsouther/compiler/check/ReadingPolicy;Ljava/util/Set;)"
                             + "Lsouther/compiler/partition/Witnesses$Built;",
                     "stops at the elements and the characters, and says which"),
+            Map.entry("souther.compiler.partition.Witnesses#ofMapping("
+                            + "Lsouther/compiler/check/Shape$Mapping;I"
+                            + "Lsouther/compiler/check/RuleReadingSource;"
+                            + "Lsouther/compiler/check/ReadingPolicy;Ljava/util/Set;)"
+                            + "Lsouther/compiler/partition/Witnesses$Built;",
+                    "stops at the pairings a map is built from at once, and says which"),
             Map.entry("souther.compiler.partition.ContainersAddingUp#<clinit>()V",
                     "how many elements a total is spread over, and how many shapes are offered"),
             Map.entry("souther.compiler.partition.ContainersAddingUp#to("

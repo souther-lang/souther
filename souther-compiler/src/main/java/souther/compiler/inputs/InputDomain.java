@@ -1318,9 +1318,9 @@ public final class InputDomain {
         // carrier first, every rule anybody ever wrote about the length of a string would have
         // become a rule about the string.
         DeclaredBounds.Bounds ofType = taken == null ? null
-                : DeclaredBounds.of(type, source, Carrier.WHOLE, taken);
+                : DeclaredBounds.of(view, source, Carrier.WHOLE, taken);
         DeclaredBounds.Bounds valueOfType = carried == null ? null
-                : DeclaredBounds.of(type, source, carried, null);
+                : DeclaredBounds.of(view, source, carried, null);
         // Rules about both coordinates and nothing here to choose between. Said before they are
         // dropped and from the list that still holds them, because this is the one place that knows
         // which rules they were — recovered afterwards from a position with no axis, the finding

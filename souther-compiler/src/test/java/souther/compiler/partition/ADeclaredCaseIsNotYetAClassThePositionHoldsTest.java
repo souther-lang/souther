@@ -55,7 +55,7 @@ class ADeclaredCaseIsNotYetAClassThePositionHoldsTest {
     @Test
     void theTypeDeclaresEveryCaseWhateverItsRulesSay() {
         assertEquals(List.of("Prospecting", "Qualified", "Won"),
-                PartitionClasses.of(Type.ref(TypeSymbols.declared(new TypeKey(rules.symbols().module(), "StageI"))), rules, souther.compiler.query.ReadAs.THE_COMPILATION_DOES).stream()
+                PartitionClasses.of(Type.ref(TypeSymbols.declared(new TypeKey(rules.symbols().module(), "StageI"))), rules, souther.compiler.query.ReadAs.THE_COMPILATION_DOES, java.util.Set.of()).stream()
                         .map(PartitionClass::id).toList());
     }
 

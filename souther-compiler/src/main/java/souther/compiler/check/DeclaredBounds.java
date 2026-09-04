@@ -3,7 +3,6 @@ package souther.compiler.check;
 import souther.compiler.numeric.CountDomain;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.Place;
-import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
@@ -138,16 +137,19 @@ public final class DeclaredBounds {
 
     /** What a numeric newtype's own rules leave its value between, for a caller that is asking about
      * the value and not about anything taken of it. */
-    public static Bounds of(Type type, RuleReadingSource source) {
-        return of(type, source, Carrier.ofValue(type, source.symbols()), null);
+    public static Bounds of(TypeView view, RuleReadingSource source) {
+        return of(view, source, Carrier.ofValue(view.declared(), source.symbols()), null);
     }
 
     /**
+     * @param view    the position as it was read: the rules of every name it wears are the rules of
+     *                its value, and which names those are is that reading's answer rather than one
+     *                worked out again here
      * @param carrier what the clauses' values are read on, or null where nothing here reads them
      * @param measure the operation the number is taken by, or null where the number is the value
      *                itself
      */
-    public static Bounds of(Type type, RuleReadingSource source, Carrier carrier,
+    public static Bounds of(TypeView view, RuleReadingSource source, Carrier carrier,
                             ValueName measure) {
         if (carrier == null) {
             return null;
@@ -156,7 +158,7 @@ public final class DeclaredBounds {
         End max = null;
         // The ends of the clauses, which is one projection of them and not the reading of them.
         // Every layer that put an end where it is is kept, because each is a rule a row is owed.
-        for (DeclaredClauses.Conjunct each : DeclaredClauses.of(type, source)) {
+        for (DeclaredClauses.Conjunct each : DeclaredClauses.allOf(view.wrappers(), source)) {
             // An end and nothing else. A rule this reads no end from narrows nothing here, and a
             // rule stepping past the last value of the order states an end no value is at — which
             // is a declaration with no value, answered where counts are and not by a bound written
@@ -241,9 +243,14 @@ public final class DeclaredBounds {
      * <p>What is being counted follows from the type. A string's rule reaches this as readily as a
      * list's, and comes back a floor on characters; a caller reading every floor above zero as a
      * collection that cannot be empty would be answering a question this did not.
+     *
+     * <p>Of the position as it was read, like every other question about the rules on it. How many a
+     * value holds is what the rules of every name it wears say, so this needs the same reading
+     * {@link #of} does — and a caller that had already read the position and handed a type over here
+     * would have it read a second time, which is one more answer to which names it wears.
      */
-    public static int leastCountOf(Type type, RuleReadingSource source) {
-        return countsHeld(type, source, null).least();
+    public static int leastCountOf(TypeView view, RuleReadingSource source) {
+        return countsHeld(view, source, null).least();
     }
 
     /**
@@ -258,20 +265,20 @@ public final class DeclaredBounds {
      * settled once. A second reading here could put a record's {@code > 3} at three while the type's
      * came to four, and the two would disagree about one rule written twice.
      */
-    public static int leastCountOf(Type type, RuleReadingSource source, FieldDomains.Held held) {
-        return countsHeld(type, source, held).least();
+    public static int leastCountOf(TypeView view, RuleReadingSource source, FieldDomains.Held held) {
+        return countsHeld(view, source, held).least();
     }
 
     /**
-     * How many of whatever counts a value of {@code type} the rules on it allow it to hold, or every
+     * How many of whatever counts a value of the position the rules on it allow it to hold, or every
      * number where they cap it in no way.
      *
      * <p>The dual of {@link #leastCountOf} and asked for the same reason: a rule capping a value at
      * none is written on the type as readily as on the record holding one, and a reader finding only
      * the second offered a value at a position the first leaves no room for.
      */
-    public static int mostCountOf(Type type, RuleReadingSource source) {
-        return countsHeld(type, source, null).most();
+    public static int mostCountOf(TypeView view, RuleReadingSource source) {
+        return countsHeld(view, source, null).most();
     }
 
     /**
@@ -280,12 +287,12 @@ public final class DeclaredBounds {
      * <p>The lower of the two, because both are rules the construction has to satisfy -- which is
      * {@link #leastCountOf}'s argument at the other end.
      */
-    public static int mostCountOf(Type type, RuleReadingSource source, FieldDomains.Held held) {
-        return countsHeld(type, source, held).most();
+    public static int mostCountOf(TypeView view, RuleReadingSource source, FieldDomains.Held held) {
+        return countsHeld(view, source, held).most();
     }
 
     /**
-     * How many a value of {@code type} may hold, both ends of one reading of the rules.
+     * How many a value of the position may hold, both ends of one reading of the rules.
      *
      * <p>Both together, because a caller choosing how many to build needs the pair and neither end
      * alone is safe to stand in for it. A reader holding only the floor builds the fewest a rule
@@ -298,10 +305,10 @@ public final class DeclaredBounds {
      * to walk. That is the model's answer, and a caller that walked an inverted range would step
      * over it silently.
      */
-    public static CountRange countsHeld(Type type, RuleReadingSource source,
+    public static CountRange countsHeld(TypeView view, RuleReadingSource source,
                                         FieldDomains.Held held) {
-        ValueName.Stdlib counts = NumericMeasures.takenOf(type, source.symbols());
-        Bounds sized = counts == null ? null : of(type, source, Carrier.WHOLE, counts);
+        ValueName.Stdlib counts = NumericMeasures.takenOf(view.declared(), source.symbols());
+        Bounds sized = counts == null ? null : of(view, source, Carrier.WHOLE, counts);
         Endpoint least = sized == null || sized.min() == null ? null : sized.min().at();
         Endpoint most = sized == null || sized.max() == null ? null : sized.max().at();
         return new CountRange(

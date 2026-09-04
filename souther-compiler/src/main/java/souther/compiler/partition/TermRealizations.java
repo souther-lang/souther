@@ -3,7 +3,7 @@ package souther.compiler.partition;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.ReadingPolicy;
 import souther.compiler.check.RuleReadingSource;
-import souther.compiler.check.TypeOps;
+import souther.compiler.check.TypeView;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermOrders;
 import souther.compiler.numeric.Count;
@@ -251,8 +251,15 @@ final class TermRealizations {
             return new Realization.None(
                     Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
         }
-        Type holder = TypeOps.base(sourceType, ruleSource.symbols());
-        Witnesses.Sized built = Witnesses.ofSize(holder, many, ruleSource, policy, Set.of());
+        TypeView holder = TypeView.of(sourceType, ruleSource.symbols());
+        // A name this module cannot write leaves no value to write, which is a position nothing
+        // composes one for rather than a value written without the name. Asked of the position
+        // before anything is built for it, since it is the same answer for every value.
+        if (!(WornNames.of(holder.wrappers(), ruleSource) instanceof WornNames.Spelled worn)) {
+            return new Realization.None(
+                    Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+        }
+        Witnesses.Sized built = Witnesses.ofSize(holder.shape(), many, ruleSource, policy, Set.of());
         if (built.values().isEmpty()) {
             // Read off the build that was already done. `Witnesses` keeps what it made and why it
             // stopped as two halves of one answer for exactly this, and asking it again would be
@@ -265,7 +272,7 @@ final class TermRealizations {
         }
         List<FixtureTemplate> out = new ArrayList<>();
         for (FixtureTemplate each : built.values()) {
-            out.add(Witnesses.wrapped(sourceType, each, ruleSource));
+            out.add(RepresentativeSource.under(worn.names(), each));
         }
         return new Realization.Built(out, built.heldBack());
     }
@@ -296,7 +303,8 @@ final class TermRealizations {
         }
         Place seconds = Count.of(count.at()
                 .multiply(java.math.BigDecimal.valueOf(part.seconds())));
-        FixtureTemplate standing = Witnesses.wrapped(sourceType,
+        FixtureTemplate standing = WornNames.under(
+                TypeView.of(sourceType, ruleSource.symbols()).wrappers(),
                 FixtureTemplate.on(observed, seconds, ruleSource.symbols().scope()::reach), ruleSource);
         return standing == null
                 ? new Realization.None(
@@ -336,8 +344,10 @@ final class TermRealizations {
             return new Realization.None(
                     Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
         }
-        FixtureTemplate standing = Witnesses.wrapped(sourceType,
-                FixtureTemplate.on(observed, Dates.dayOf(on), ruleSource.symbols().scope()::reach), ruleSource);
+        FixtureTemplate standing = WornNames.under(
+                TypeView.of(sourceType, ruleSource.symbols()).wrappers(),
+                FixtureTemplate.on(observed, Dates.dayOf(on), ruleSource.symbols().scope()::reach),
+                ruleSource);
         return standing == null
                 ? new Realization.None(
                         Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE)
@@ -401,7 +411,8 @@ final class TermRealizations {
 
     /** One value, wearing every name the position declares, or the reason there is none. */
     private static Realization oneValue(FixtureTemplate bare, Type sourceType, RuleReadingSource ruleSource) {
-        FixtureTemplate standing = Witnesses.wrapped(sourceType, bare, ruleSource);
+        FixtureTemplate standing = WornNames.under(
+                TypeView.of(sourceType, ruleSource.symbols()).wrappers(), bare, ruleSource);
         return standing == null
                 ? new Realization.None(
                         Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE)

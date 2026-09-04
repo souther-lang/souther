@@ -3,7 +3,7 @@ package souther.compiler.partition;
 import souther.compiler.check.ReadingPolicy;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.RuleReadingSource;
-import souther.compiler.check.TypeOps;
+import souther.compiler.check.TypeView;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Quantities;
 import souther.compiler.inputs.TermOrders;
@@ -271,12 +271,18 @@ final class Intervals {
         // Exhaustive, with no `default`. What a value reading as this number looks like is a
         // different construction per kind of number, so a kind added is one this has to be told
         // how to build for rather than one that falls to whichever branch it was not named in.
+        TypeView view = TypeView.of(type, ruleSource.symbols());
+        // A name this module cannot write leaves no value to write, whichever number the value is
+        // asked to read as. Asked of the position, once, before anything is built for it.
+        if (!(WornNames.of(view.wrappers(), ruleSource) instanceof WornNames.Spelled worn)) {
+            return List.of();
+        }
         switch (of) {
             case NumericTerm.ValueOf _ -> {
-                FixtureTemplate standing = Witnesses.wrapped(type,
-                        FixtureTemplate.on(carrier, inside, ruleSource.symbols().scope()::reach),
-                        ruleSource);
-                return standing == null ? List.of() : List.of(standing);
+                FixtureTemplate standing =
+                        FixtureTemplate.on(carrier, inside, ruleSource.symbols().scope()::reach);
+                return standing == null ? List.of()
+                        : List.of(RepresentativeSource.under(worn.names(), standing));
             }
             case NumericTerm.TakenOf _ -> { }
         }
@@ -286,9 +292,8 @@ final class Intervals {
         }
         List<FixtureTemplate> out = new ArrayList<>();
         for (FixtureTemplate each
-                : Witnesses.ofSize(TypeOps.base(type, ruleSource.symbols()), size, ruleSource,
-                        policy, Set.of()).values()) {
-            out.add(Witnesses.wrapped(type, each, ruleSource));
+                : Witnesses.ofSize(view.shape(), size, ruleSource, policy, Set.of()).values()) {
+            out.add(RepresentativeSource.under(worn.names(), each));
         }
         return List.copyOf(out);
     }

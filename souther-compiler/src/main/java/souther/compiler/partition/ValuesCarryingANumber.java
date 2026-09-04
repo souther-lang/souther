@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import souther.compiler.check.ReadingPolicy;
 import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.TypeView;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.types.TypeSymbol;
 
@@ -38,7 +39,9 @@ record ValuesCarryingANumber(TermPath fixed, FixtureTemplate value, RuleReadingS
         // plan's `worn` is what a value already wearing those is still missing, which is what a
         // value chosen at a slot by a search is.
         return slot.at().equals(fixed)
-                ? Witnesses.wrapped(slot.type(), value, ruleSource) : null;
+                ? WornNames.under(TypeView.of(slot.type(), ruleSource.symbols()).wrappers(),
+                        value, ruleSource)
+                : null;
     }
 
     @Override
