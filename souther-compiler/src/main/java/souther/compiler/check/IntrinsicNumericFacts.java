@@ -55,6 +55,9 @@ final class IntrinsicNumericFacts {
      * premise is written here rather than once for the condition on the arguments and again for the
      * argument a row stands against.
      */
+    // Written once as a value rather than as a method per reader: what it says is one premise, and
+    // it is the same premise wherever the rows under it are read.
+    @SuppressWarnings("UnnecessaryLambda")
     private static final Function<DeclaredArgument, LinearForm<FactSubject>>
             NO_ARGUMENTS = _ -> null;
 

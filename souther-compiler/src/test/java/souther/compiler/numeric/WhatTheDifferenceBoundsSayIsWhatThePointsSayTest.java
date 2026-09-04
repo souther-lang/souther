@@ -181,7 +181,7 @@ class WhatTheDifferenceBoundsSayIsWhatThePointsSayTest {
         int howMany = 2 + dice.nextInt(4);
         for (int i = 0; i < howMany; i++) {
             String one = POSITIONS.get(dice.nextInt(POSITIONS.size()));
-            long threshold = LOW + dice.nextInt(HIGH - LOW + 1);
+            long threshold = LOW + (long) dice.nextInt(HIGH - LOW + 1);
             boolean strict = dice.nextBoolean();
             if (dice.nextBoolean()) {
                 Rel rel = dice.nextBoolean()

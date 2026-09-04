@@ -73,10 +73,10 @@ public final class SyntaxSymbols implements NameSense {
     /** A module resolved against a registry that reads its declarations however it likes — the form
      * a query-backed compilation uses.
      *
-     * <p>Reached through {@link Scoping.Scoped#writtenSymbols}, which is where the three that are
-     * one answer — the module, its scope and its aliases — come from. A caller free to pass them
-     * separately could pass parts of two different assemblies, and nothing it was holding would
-     * have said so. */
+     * <p>Reached through {@link Scoping.Scoped#writtenSymbols(Registry, Stdlib)}, which is where
+     * the three that are one answer — the module, its scope and its aliases — come from. A caller
+     * free to pass them separately could pass parts of two different assemblies, and nothing it was
+     * holding would have said so. */
     public static SyntaxSymbols of(String module, Registry<Ast.Def> registry, Denoting names,
                                    Stdlib stdlib) {
         return new SyntaxSymbols(module, registry, names, stdlib.names());

@@ -202,7 +202,9 @@ public record Incompleteness(Code code, Target target, Optional<Citation> at) {
         return new Incompleteness(code, new Target.OfSource(source), Optional.empty());
     }
 
-    /** @throws IllegalArgumentException for a scope whose subject is not a name — a source is
+    /** What {@code code} says, about the thing {@code subject} names in {@code scope}.
+     *
+     *  @throws IllegalArgumentException for a scope whose subject is not a name — a source is
      *          {@link #ofSource} and a position is {@link #atPosition} */
     public static Incompleteness of(Code code, Scope scope, String subject) {
         return new Incompleteness(code, Target.of(scope, subject), Optional.empty());

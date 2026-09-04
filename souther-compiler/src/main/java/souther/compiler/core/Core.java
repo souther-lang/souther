@@ -933,9 +933,8 @@ public sealed interface Core {
      * a pass rewrites it as it rewrites any other value a field is given.
      *
      * <p>Said once and read twice — by the walk above, where a construction is an expression like any
-     * other, and by {@link #mapChildren(Construct, java.util.function.UnaryOperator,
-     * java.util.function.UnaryOperator)}, which is how a pass recurses through the one an attempt
-     * holds.
+     * other, and by the overload of {@code mapChildren} that takes a construction, which is how a
+     * pass recurses through the one an attempt holds.
      */
     private static Construct atSlots(Construct nd, java.util.function.UnaryOperator<Core> atExpr) {
         List<FieldValue> values = each(nd.values(), v -> {

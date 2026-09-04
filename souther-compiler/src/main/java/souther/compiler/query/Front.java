@@ -222,6 +222,8 @@ public final class Front {
     public record Layout() implements Key<Layout.Of> {
 
         /**
+         * Which source each module and each of its example files is written in.
+         *
          * @param idOfModule the source each module was declared in
          * @param exampleFilesOf the {@code examples for} sources contributing to each module
          * @param exampleFileTargets the module each {@code examples for} source names, by source id
@@ -451,6 +453,9 @@ public final class Front {
         }
 
         /**
+         * The modules this compilation can see, and the ones it can see are there and will not
+         * read.
+         *
          * @param modules the ones this compilation may read declarations from
          * @param refused the ones it will not, and knows are there all the same — a module that
          *        took a name no module may take, and one this compiler cannot read what it

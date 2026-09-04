@@ -423,17 +423,36 @@
                                      ImmutableEnumChecker — every one of these fields is built with
                                      `List.of`, `Set.copyOf` or an unmodifiable wrapper, and saying
                                      so to the check means annotating the types, which would put
-                                     Error Prone's annotations on the compile path. -->
+                                     Error Prone's annotations on the compile path;
+                                     StringConcatToTextBlock — what is left is a source fixture, and
+                                     a fixture is written to be read against the case it is for: one
+                                     Java line carries several source lines where the case is about
+                                     what the formatter does to them, and the leading spaces are the
+                                     input. A text block re-lays both out;
+                                     EffectivelyPrivate — every one of these is the canonical
+                                     constructor of a record nested in a public sealed interface,
+                                     where `public` is not a choice: a record's canonical
+                                     constructor may not be less accessible than the record, and a
+                                     record declared in an interface is public whatever is written;
+                                     VoidUsed — the `Void` parameter belongs to `TreePathScanner`,
+                                     and an override takes the parameters of what it overrides;
+                                     NotJavadoc — what is left documents a member of an anonymous
+                                     or local class, where javadoc publishes nothing and an editor
+                                     shows the comment all the same;
+                                     AvoidCommonTypeNames — `Number`, `Integer`, `Short`,
+                                     `Readable` and `Record` are the language's own words here, and
+                                     each is nested where what it is a case of says so. -->
                                 <!-- Errors, because each is cheap to answer and silent to miss:
                                      ObjectToString, DuplicateBranches, UnusedVariable, UnusedMethod,
-                                     SameNameButDifferent, MissingOverride and StringCaseLocaleUsage.
+                                     SameNameButDifferent, MissingOverride, OperatorPrecedence and
+                                     StringCaseLocaleUsage.
                                      The last is not style: a case fold with no locale is the
                                      platform's, and on a Turkish one `INFO` lowercases to `ınfo`,
                                      which a search misses and a snapshot writes down. The name
                                      check is not
                                      against writing one name for one distinction at two levels — it
                                      is against a use that does not say which of them it means. -->
-                                <arg>-Xplugin:ErrorProne -Xep:UnicodeInCode:OFF -Xep:BadInstanceof:OFF -Xep:ReferenceEquality:OFF -Xep:StringSplitter:OFF -Xep:UnnecessaryParentheses:OFF -Xep:BooleanLiteral:OFF -Xep:IdentityHashMapUsage:OFF -Xep:ClassInitializationDeadlock:OFF -Xep:ArrayRecordComponent:OFF -Xep:ImmutableEnumChecker:OFF -Xep:RemoveUnusedImports:ERROR -Xep:ObjectToString:ERROR -Xep:DuplicateBranches:ERROR -Xep:UnusedVariable:ERROR -Xep:UnusedMethod:ERROR -Xep:SameNameButDifferent:ERROR -Xep:MissingOverride:ERROR -Xep:StringCaseLocaleUsage:ERROR ${nullaway.args}</arg>
+                                <arg>-Xplugin:ErrorProne -Xep:UnicodeInCode:OFF -Xep:BadInstanceof:OFF -Xep:ReferenceEquality:OFF -Xep:StringSplitter:OFF -Xep:UnnecessaryParentheses:OFF -Xep:BooleanLiteral:OFF -Xep:IdentityHashMapUsage:OFF -Xep:ClassInitializationDeadlock:OFF -Xep:ArrayRecordComponent:OFF -Xep:ImmutableEnumChecker:OFF -Xep:StringConcatToTextBlock:OFF -Xep:EffectivelyPrivate:OFF -Xep:VoidUsed:OFF -Xep:NotJavadoc:OFF -Xep:AvoidCommonTypeNames:OFF -Xep:RemoveUnusedImports:ERROR -Xep:ObjectToString:ERROR -Xep:DuplicateBranches:ERROR -Xep:UnusedVariable:ERROR -Xep:UnusedMethod:ERROR -Xep:SameNameButDifferent:ERROR -Xep:MissingOverride:ERROR -Xep:OperatorPrecedence:ERROR -Xep:StringCaseLocaleUsage:ERROR ${nullaway.args}</arg>
                             </compilerArgs>
                             <annotationProcessorPaths>
                                 <path>

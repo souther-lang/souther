@@ -607,6 +607,8 @@ public final class CoverageSites {
          * gets as far as an {@code unreachable} is E1911 and states nothing, so an arm only such a
          * row could go through is an arm no row will ever be recorded in.
          */
+        // The `unreachable` above is the language's own word, not this method's `reachable`.
+        @SuppressWarnings("InvalidParam")
         private DraftArm armOf(SourceOutcome.Arm outcome, Core owner,
                                CoverageOrigin origin, int part, Core arm,
                                boolean reachable,

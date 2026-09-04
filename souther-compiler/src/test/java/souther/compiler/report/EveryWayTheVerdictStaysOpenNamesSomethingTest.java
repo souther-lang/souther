@@ -158,7 +158,8 @@ class EveryWayTheVerdictStaysOpenNamesSomethingTest {
                         Incompleteness.Code.VALUE_TRUNCATED,
                         Incompleteness.Code.VALUE_UNREADABLE))));
         out.put("Stopped[nothing composed]",
-                stopped(EstablishmentGap.Composition.of(Set.of(CompositionBudget.values()[0]))));
+                stopped(EstablishmentGap.Composition.of(
+                        Set.of(CompositionBudget.ELEMENTS_A_PROPOSAL_HOLDS))));
         out.put("NothingShowedIt",
                 new ObligationDisposition.Uncertainty.WhetherARowCanBeWritten.NothingShowedIt());
         return out;

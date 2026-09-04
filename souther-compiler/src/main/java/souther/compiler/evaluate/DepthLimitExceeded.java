@@ -15,6 +15,14 @@ package souther.compiler.evaluate;
 public final class DepthLimitExceeded extends RuntimeException {
     private static final long serialVersionUID = 1L;
 
+    /**
+     * The one of these there is.
+     *
+     * <p>Shared safely because it holds nothing about the throw that reached it: the constructor
+     * asks for no trace and no suppression, so what a second instance would carry beyond this one
+     * is nothing.
+     */
+    @SuppressWarnings("StaticAssignmentOfThrowable")
     public static final DepthLimitExceeded INSTANCE = new DepthLimitExceeded();
 
     private DepthLimitExceeded() {

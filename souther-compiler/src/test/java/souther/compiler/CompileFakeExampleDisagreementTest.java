@@ -286,10 +286,6 @@ class CompileFakeExampleDisagreementTest {
                             | (N(1)) -> Missing { why = "none" }
                         """, DoesNotComeBack.everythingAboutRowsOf("find")));
 
-        List<String> codes = new ArrayList<>();
-        for (souther.compiler.diag.Diagnostic d : e.diagnostics()) {
-            codes.add(d.code());
-        }
         assertTrue(codesOf(e).contains("E1923"), codesOf(e).toString());
         assertFalse(codesOf(e).contains("E1919"), codesOf(e).toString());
     }

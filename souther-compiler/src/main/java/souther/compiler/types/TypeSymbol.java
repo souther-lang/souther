@@ -216,7 +216,7 @@ public sealed interface TypeSymbol extends Comparable<TypeSymbol> {
      * the arm's own name. */
     TypeSymbol SOME = new LanguageCase(LanguageCaseId.SOME);
 
-    /** @see #SOME */
+    /** Option's empty case, on the same terms as {@link #SOME}. */
     TypeSymbol NONE = new LanguageCase(LanguageCaseId.NONE);
 
     /** Option's case of that spelling, or {@code null} for any other. */

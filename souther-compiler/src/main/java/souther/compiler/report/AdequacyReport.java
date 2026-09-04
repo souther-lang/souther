@@ -177,6 +177,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
     }
 
     /**
+     * What one module's compile came to, as this report says it.
+     *
      * @param owedByDeclarations what this module's declarations are owed and how far the reading it
      *                           was made from got. An account and not a list of debts: a module
      *                           whose lines nobody could read holds no debts anybody found, and read
@@ -288,6 +290,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
     }
 
     /**
+     * What one behavior's compile came to, as this report says it.
+     *
      * @param claimed   what the body declared cannot arrive, beside the measures rather than in
      *                  them. The two are joined where this report is written and nowhere else,
      *                  which is what keeps a claim from reaching a denominator
@@ -1051,8 +1055,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         return owed;
     }
 
-    /** Whether the bar refuses over any of {@code kinds}, which is what puts the measure that finds
-     *  them among the answers a verdict needs. */
+    /** Whether the bar refuses over {@code kind}, which is what puts the measure that finds them
+     *  among the answers a verdict needs. */
     private boolean refuses(Adequacy.Kind kind) {
         return held.refuses(kind);
     }

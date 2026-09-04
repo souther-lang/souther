@@ -891,10 +891,10 @@ public final class InvariantChecker {
     /**
      * The atom each position under {@code value} is named by, keyed by the path it is reached at.
      *
-     * <p>The walk {@link #seedAt} took, over the same reads, so a position the seeding put a bound on
-     * is a position this can name. Two levels down as well as one: a clause on a record relates a
-     * field of a field to something, and the bound that leaves on it is read at the path it sits at
-     * rather than at the record it happens to be inside.
+     * <p>The walk {@link PathEngine#seedAt} took, over the same reads, so a position the seeding
+     * put a bound on is a position this can name. Two levels down as well as one: a clause on a
+     * record relates a field of a field to something, and the bound that leaves on it is read at
+     * the path it sits at rather than at the record it happens to be inside.
      *
      * <p>A name wrapped round a value is not a step of the path ({@link Location#isStep}), which is
      * the rule the rest of this already reads by: the atom of {@code w.value.n} <em>is</em> the atom
@@ -2218,7 +2218,7 @@ public final class InvariantChecker {
         }
 
         /** What stopped the reading at each name it stopped at, for the classification to carry. */
-        SequencedMap<RuleKey, List<BlockReason.RuleReadingStopped>> undecided(
+        private SequencedMap<RuleKey, List<BlockReason.RuleReadingStopped>> undecided(
                 Map<FactSubject, Coordinate> byName) {
             SequencedMap<RuleKey, List<BlockReason.RuleReadingStopped>> out = new LinkedHashMap<>();
             byPosition.forEach((position, run) -> {

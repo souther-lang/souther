@@ -809,7 +809,7 @@ class WhatGoesBetweenTwoTokensOnALineTest {
         }
         Set<String> missing = new TreeSet<>();
         for (SyntaxKind k : SyntaxKind.values()) {
-            if (k.ordinal() >= SyntaxKind.SOURCE_FILE.ordinal() && !built.contains(k)) {
+            if (k.compareTo(SyntaxKind.SOURCE_FILE) >= 0 && !built.contains(k)) {
                 missing.add(k.name());
             }
         }

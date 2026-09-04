@@ -17,7 +17,11 @@ final class Declared {
 
     private Declared() {}
 
-    /** @throws IllegalStateException always */
+    /** Aborts, saying that {@code named} is not a declaration a module wrote.
+     *
+     *  @throws IllegalStateException always */
+    // Callers call it: it stands where a value is wanted, which is what the type parameter is for.
+    @SuppressWarnings("DoNotCallSuggester")
     static <T> T notAModules(TypeSymbol named, Hir.Def answered) {
         throw new IllegalStateException("`" + named + "` is not a declaration a module wrote, and `"
                 + answered.declares() + "` was answered for it");

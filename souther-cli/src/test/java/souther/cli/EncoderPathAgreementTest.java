@@ -150,7 +150,8 @@ class EncoderPathAgreementTest {
 
     /** Runs one of the two behaviors and returns the JSON it wrote. */
     private String written(String type, String value, String behavior) throws Exception {
-        Path file = dir.resolve("w" + Math.abs((type + value).hashCode()) + ".sou");
+        Path file = dir.resolve(
+                "w" + Integer.toUnsignedString((type + value).hashCode()) + ".sou");
         String built = builtBy(value);
         Files.writeString(file, """
                 module demo

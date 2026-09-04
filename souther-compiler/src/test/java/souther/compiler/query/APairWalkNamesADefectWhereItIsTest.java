@@ -206,6 +206,8 @@ class APairWalkNamesADefectWhereItIsTest {
 
     /** And the same of two lists, which answer to a contract of their own. */
     @Test
+    // The two classes are the case: one contract, two implementations, one answer.
+    @SuppressWarnings("JdkObsolete")
     void twoListsOfOneContractAreNotTwoAnswers() {
         Covered<Divergence> walked = Divergence.between(
                 new Held(new java.util.ArrayList<>(List.of("a")), new Address()),

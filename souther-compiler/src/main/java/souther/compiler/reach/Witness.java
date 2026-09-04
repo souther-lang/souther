@@ -17,12 +17,13 @@ import souther.compiler.coverage.ArmProbe;
  */
 public sealed interface Witness permits ARunWentThrough, EveryRuleReadAndNothingAbove {
 
-    /** @see ARunWentThrough */
+    /** A run this compiler generated went through the point; see {@link ARunWentThrough}. */
     static Witness aRunWentThrough(ArmProbe probe) {
         return new ARunWentThrough(probe);
     }
 
-    /** @see EveryRuleReadAndNothingAbove */
+    /** Every rule reaching the position was read and nothing stands above it; see
+     *  {@link EveryRuleReadAndNothingAbove}. */
     static Witness everyRuleReadAndNothingAbove(String position) {
         return new EveryRuleReadAndNothingAbove(position);
     }

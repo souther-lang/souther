@@ -1323,7 +1323,9 @@ public final class Bodies {
      */
     public record Expanding(String name, InliningPolicy policy) implements Key<Expanding.Of> {
 
-        /** @param table which declaration each name reaches
+        /** The helpers a module offers an expansion, read.
+         *
+         *  @param table which declaration each name reaches
          *  @param graph what each of them calls, and which of them recurse */
         public record Of(HelperTable table, HelperGraph graph) {}
 
@@ -2095,6 +2097,8 @@ public final class Bodies {
     public record ModuleCheck(String name) implements Key<ModuleCheck.Of> {
 
         /**
+         * What checking one module came to.
+         *
          * @param emittedHelpers the bodies it elaborated, which the backend emits as methods
          * @param sound whether it found nothing wrong. An abandoned unit is wrong and says nothing
          *              of its own, so this is not the same as having reported nothing

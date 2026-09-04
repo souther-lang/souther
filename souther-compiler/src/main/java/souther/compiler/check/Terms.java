@@ -1479,7 +1479,7 @@ final class Terms {
 
         @Override
         public boolean extents(NumericDomain.Bounds a, NumericDomain.Bounds b) {
-            return a == null || b == null ? a == b : sameExtent(a, b);
+            return (a == null || b == null) ? a == b : sameExtent(a, b);
         }
     };
 
@@ -1766,8 +1766,8 @@ final class Terms {
      * the one the case carrying that type holds. */
     private static boolean answersIn(NumericResult<DeclaredArgument> result, Type answered) {
         return result.at() instanceof NumericResult.Answered.Directly
-                || result.at() instanceof NumericResult.Answered.InTheCaseCarrying(Type carried)
-                        && carried.equals(answered);
+                || (result.at() instanceof NumericResult.Answered.InTheCaseCarrying(Type carried)
+                        && carried.equals(answered));
     }
 
     /**
@@ -2119,8 +2119,6 @@ final class Terms {
                     ps -> interned.built(nd.typeName(),
                             nd.values().stream().map(Core.FieldValue::field).toList(), ps));
             case Core.Match m -> {
-                List<Core> arms = new ArrayList<>();
-                arms.add(m.scrutinee());
                 Map<BindingId, Term> outer = bound;
                 List<Naming> answers = new ArrayList<>();
                 for (Core.Case arm : m.cases()) {
