@@ -22,11 +22,13 @@ import java.util.Set;
  * written after a {@code .}. Two walks would be two answers about the same declarations, and the one
  * that answered later would find nothing.
  *
- * <p>How the evidence flows through an expression is this walk's, and what a field of a declaration
- * holds is not. Crossing a {@code .} is a question about a declaration rather than about the
- * expression that reached it, and it is put to {@link #fields} — so a caller in a world where the
- * check has settled what a value is made of gets that answer here, and the walk cannot reach a
- * second one by reading the declaration itself.
+ * <p>How the evidence flows through an expression is this walk's, and what a {@code .} on a value
+ * may name is not. Which names a position makes readable, and how far the names it wears come off,
+ * are {@link FieldRead}'s — one reading, the same one an elaboration types a text by — and what one
+ * of those declarations holds under a name is {@link #fields}'. So a caller in a world where the
+ * check has settled what a value is made of gets that answer here, the walk cannot reach a second
+ * one by reading the declaration itself, and a name every case of a sum spreads is answered for
+ * because it is readable, rather than left unanswered because a sum lays out no field of its own.
  *
  * <p>Nothing is run. Every step reads a name {@code Resolve} already settled or a declaration a
  * module already made, so asking costs no helper a second application against a row's budget.
@@ -84,8 +86,8 @@ public record DeclaredTypeEvidence(Symbols symbols, FieldTypes fields,
             case Hir.Apply c when constructsANewtype(c) -> Type.ref(constructs(c));
             case Hir.FieldAccess fa -> {
                 Type target = declaredTypeOf(fa.target(), seen, inForce);
-                yield target instanceof Type.Ref(TypeSymbol owner)
-                        ? fields.field(owner, fa.field()) : null;
+                yield target == null ? null
+                        : new FieldRead(symbols, fields).of(target, fa.field());
             }
             case Hir.LetIn let -> {
                 BindingId binding = let.binder().id();

@@ -149,7 +149,8 @@ class AFieldAccessIsTypedByTheWorldsOwnAnswerTest {
         assertEquals(Map.of(), c.db().ask(new Shapes.ValueShapes("demo")).value(),
                 "the clause did not elaborate, so the check settled nothing about `Bad`");
 
-        assertEquals(Type.INT, new ResolvedFieldTypes(scope).field(bad, "n"),
+        assertEquals(Type.INT,
+                new FieldRead(scope, new ResolvedFieldTypes(scope)).of(Type.ref(bad), "n"),
                 "and what the declaration denotes is still there to be read");
     }
 

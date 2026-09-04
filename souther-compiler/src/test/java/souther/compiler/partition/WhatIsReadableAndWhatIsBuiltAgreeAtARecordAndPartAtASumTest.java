@@ -81,7 +81,7 @@ class WhatIsReadableAndWhatIsBuiltAgreeAtARecordAndPartAtASumTest {
     @Test
     void atARecordTheFourAnswersAreOneMap() {
         Type record = typeOf("p");
-        Map<String, Type> readable = ReadableFields.of(shapeOf(record)).fields();
+        Map<String, Type> readable = ReadableFields.of(shapeOf(record)).declaredFields();
 
         assertEquals(Map.of("deadline", Type.INT, "x", Type.INT), readable,
                 "the model under test declares a record of two fields");
@@ -104,7 +104,7 @@ class WhatIsReadableAndWhatIsBuiltAgreeAtARecordAndPartAtASumTest {
     @Test
     void atASumSharingASpreadOnlyWhatIsReadableHasFields() {
         Type sum = typeOf("r");
-        Map<String, Type> readable = ReadableFields.of(shapeOf(sum)).fields();
+        Map<String, Type> readable = ReadableFields.of(shapeOf(sum)).declaredFields();
 
         assertEquals(Map.of("deadline", Type.INT), readable,
                 "the name every case spreads is readable at every value of the sum");

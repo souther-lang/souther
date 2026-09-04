@@ -3,6 +3,7 @@ package souther.compiler.check;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.WhatWasCompiled;
+import souther.compiler.observe.FieldTypes;
 
 import java.util.List;
 import java.util.Set;
@@ -13,9 +14,14 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 /**
  * Each question about a shape is asked of the one that answers it, and of nothing else.
  *
- * <p>Four are asked: what is readable off a value standing at a position, what a value there is
- * composed out of, which positions a reading has under it, and what a written value has under a
- * step. They come to the same fields at a record and part at a sum whose cases share a spread, and
+ * <p>Four are asked of a shape: what is readable off a value standing at a position, what a value
+ * there is composed out of, which positions a reading has under it, and what a written value has
+ * under a step. Two more stand either side of the first — crossing a {@code .} on a type, which is
+ * the reading a text is typed by, and what one declaration holds under its own names, which is the
+ * layout a value already narrowed to a declaration is walked by. A reader that took the second where
+ * it wanted the first is told a name every case of a sum spreads is a field nothing declares.
+ *
+ * <p>The four come to the same fields at a record and part at a sum whose cases share a spread, and
  * that agreement is a law over the answers — checked as one in
  * {@code WhatIsReadableAndWhatIsBuiltAgreeAtARecordAndPartAtASumTest}, which holds however the four
  * are worked out.
@@ -47,19 +53,43 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
  */
 class NoQuestionAboutAShapeIsAnsweredOutOfAnothersAnswerTest {
 
-    /** Who asks what is readable off a value: the elaboration of a field read, the accessor a sum's
+    /** Who asks what is readable off a value: the reading of a field access, the accessor a sum's
      *  interface declares, what a construction may spread, what the model writes where a value
      *  stands, the reading of a behavior's inputs, and the walk that reads a row at a position —
      *  which asks whether a name may be read there before taking it off the value it holds, so that
-     *  a case carrying a name of its own does not make it readable for the rows that are that
-     *  case. */
+     *  a case carrying a name of its own does not make it readable for the rows that are that case.
+     *
+     *  <p>The first of those is {@link FieldRead} and not the elaboration. Reading a field access is
+     *  one question — which names a position makes readable, and how far the names a value wears
+     *  come off — and the elaboration is one of the readers that asks it rather than the one that
+     *  answers it. */
     private static final List<String> ASK_WHAT_IS_READABLE = List.of(
             "souther.compiler.check.DataChecker",
-            "souther.compiler.check.Elaborator",
+            "souther.compiler.check.FieldRead",
             "souther.compiler.check.ValueReading",
             "souther.compiler.codegen.ValueClassGen",
             "souther.compiler.inputs.InputDomain",
             "souther.compiler.partition.BehaviorInputs$Standing");
+
+    /** Who crosses a {@code .} on a type: the elaboration that types what a text wrote, the walk
+     *  that says what declarations already state about an expression, and the snapshot an editor
+     *  asks what may follow a {@code .}. Readers of one answer, so what a compiler accepts, what a
+     *  measurement of a written value reads, and what an author is offered are the same names. */
+    private static final List<String> CROSS_A_DOT = List.of(
+            "souther.compiler.check.DeclaredTypeEvidence",
+            "souther.compiler.check.Elaborator",
+            "souther.compiler.sites.SemanticSnapshot");
+
+    /** Who asks what one declaration holds under its names. A caller here has already settled which
+     *  declaration it is walking — the case a value turned out to be, the name a newtype is written
+     *  under, the declarations a readable surface is written on. A reader with a type in hand and a
+     *  {@code .} to cross belongs in {@link #CROSS_A_DOT}: asked here, a sum answers that a name
+     *  every one of its cases spreads is a field nothing declares. */
+    private static final List<String> ASK_WHAT_A_DECLARATION_HOLDS = List.of(
+            "souther.compiler.check.FieldRead",
+            "souther.compiler.check.ReadableFields",
+            "souther.compiler.examples.NeutralForm",
+            "souther.compiler.observe.ValueTypes");
 
     /** Who asks what a value is composed out of. Composing one is what the question is for, so there
      *  is one asker, and a second is a reader with some other question. */
@@ -92,6 +122,41 @@ class NoQuestionAboutAShapeIsAnsweredOutOfAnothersAnswerTest {
     void whatIsReadableIsAskedOfTheOneThatAnswersIt() {
         assertEquals(ASK_WHAT_IS_READABLE, callersOf(ReadableFields.class, "of", "at"),
                 "these ask what is readable off a value, and this is who does");
+    }
+
+    /**
+     * And crossing a {@code .} is asked of the one that answers it.
+     *
+     * <p>Both halves: that somebody crosses one at all, and that nobody crosses one anywhere else.
+     * The first matters because the readers of this answer are what the question exists for — a
+     * reading nobody asks is a reading that has been worked out again beside it.
+     *
+     * <p>Both ways in are counted together. The surface a position makes readable and the one name a
+     * text wrote are one question asked at two widths, and a reader moving from the narrow entry to
+     * the wide one would leave a census that watched only the first looking like a reader that had
+     * stopped asking.
+     */
+    @Test
+    void crossingADotIsAskedOfTheOneThatAnswersIt() {
+        assertFalse(callersOf(FieldRead.class, "at", "of").isEmpty(),
+                "a field access is typed somewhere, or this is watching a name nothing calls");
+        assertEquals(CROSS_A_DOT, callersOf(FieldRead.class, "at", "of"),
+                "these cross a `.` on a type, and this is who answers what one may name");
+    }
+
+    /**
+     * And what a declaration holds is asked by readers that have already settled which declaration.
+     *
+     * <p>The other side of the one above, and the reason it holds. There is no step from a type to a
+     * field on {@link FieldTypes} — a caller names a declaration — so a reader with a position in
+     * hand has to say which declaration it means, and the only thing that turns a position into
+     * declarations is {@link ReadableFields}. That is what keeps the answer about a sum from being
+     * "no fields" where the question was what a value of it makes readable.
+     */
+    @Test
+    void whatADeclarationHoldsIsAskedByReadersThatSettledWhichDeclaration() {
+        assertEquals(ASK_WHAT_A_DECLARATION_HOLDS, callersOf(FieldTypes.class, "of"),
+                "these read one declaration's own layout, and each names the declaration it means");
     }
 
     @Test
