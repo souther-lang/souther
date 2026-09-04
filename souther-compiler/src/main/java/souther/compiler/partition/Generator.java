@@ -3765,7 +3765,7 @@ public final class Generator {
         // Nothing of a population is short here. What a proposal holds back is a figure of this
         // compiler's over what it builds, and every value of the kind it does build is one it would
         // offer.
-        HeldBack held = heldBack(subject, p, plan, settled);
+        HeldBack held = heldBack(subject, p, plan, under);
         return whatTheSearchCameTo(held.offer(), Set.of(), held.plan(), product);
     }
 
@@ -3894,17 +3894,15 @@ public final class Generator {
     /**
      * Why a position of this parameter offered less than its rules allow, or null where none did.
      *
-     * <p>Under the same settled positions the values were chosen against. A rule counting one field
-     * against another asks for nothing in particular until the row fixes the other, so a reading
-     * without them answers about a rule this row is no longer under — and would say "every value
-     * tried was refused" of a position whose values were never built.
+     * <p>Off the reading the values were chosen against, handed in rather than made again. A rule
+     * counting one field against another asks for nothing in particular until the row fixes the
+     * other, so a reading without them answers about a rule this row is no longer under — and would
+     * say "every value tried was refused" of a position whose values were never built. Read a
+     * second time here, the two readings are of one row and are free to come apart the first time
+     * either is given something the other is not.
      */
     private static HeldBack heldBack(MeasuredInput subject, int p, ConstructionPlan plan,
-                                     Map<TermPath, Place> settled) {
-        TermPath root = TermPath.of(subject.parameters().get(p));
-        Type declared = subject.types().get(p);
-        FieldDomains rules = rulesOf(declared, subject.rules(), subject.inputs().policy(),
-                under(root, settled));
+                                     FieldDomains rules) {
         // Every budget that held a position back, and not the first or the strongest. Two positions
         // stopped by two budgets are two things this compiler declined to do, and a reader asking
         // what would let the search go further is owed both — read as one, whichever the walk met

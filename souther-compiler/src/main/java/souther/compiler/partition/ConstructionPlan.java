@@ -570,11 +570,6 @@ final class ConstructionPlan {
             // however far this had read, so a figure named beside it sends an author to raise one
             // that changes nothing, and a figure named instead of it says this compiler did not
             // look, of a position it has the answer for.
-            // Asked before the figure and before the descent, because this is the model's answer
-            // and those are this compiler's. A list the rules leave no room in holds nothing
-            // however far this had read, so a figure named beside it sends an author to raise one
-            // that changes nothing, and a figure named instead of it says this compiler did not
-            // look, of a position it has the answer for.
             if (demanded && holds.most() < needed) {
                 return new NodeResult.Refused(new ModelRefusal.NoRoom(here, needed, holds));
             }
@@ -628,38 +623,27 @@ final class ConstructionPlan {
         }
         Map<String, Node> under = new LinkedHashMap<>();
         Set<CompositionBudget> beyond = new LinkedHashSet<>();
-        NodeResult.Unnarrowed owed = null;
         for (Map.Entry<String, Type> field : composed.fields().entrySet()) {
             switch (node(field.getValue(), here.then(field.getKey()), symbols, depth + 1, decided,
                     required, howMany)) {
                 case NodeResult.Made(Node built) -> under.put(field.getKey(), built);
-                // The model settling that there is no value ends the walk: nothing a field further
-                // along could say outranks it, and one proof is the whole of what a reader gets —
-                // a second would name another position to look at where there is no row to look
-                // for.
-                case NodeResult.Refused refused -> { return refused; }
-                // Every field's, and not the first one's. Two fields whose demands are out of reach
-                // are two figures a reader could raise, and taking whichever the walk met first
-                // would make the answer turn on the order the fields are declared in.
-                case NodeResult.Beyond(Set<CompositionBudget> by) -> beyond.addAll(by);
-                // One position, and the first of them. A narrowing is stated at a position rather
-                // than gathered up, and the caller states one and asks again — so what it is owed
-                // is somewhere to begin, and the field a second one is under may not even be
-                // reached under the narrowing it settles on here.
+                // One position, and the first of them, which is what both of these are.
                 //
-                // Kept rather than returned, because a field after it may be one the model refuses
-                // outright — and a caller sent to state a narrowing would state it and be told
-                // there was never a row. Which one is owed does not change: it is still the first,
-                // in the order the declarations write them.
-                case NodeResult.Unnarrowed unnarrowed -> {
-                    if (owed == null) {
-                        owed = unnarrowed;
-                    }
-                }
+                // <p>Neither outranks the other, because they are not about one position. What
+                // #1315 orders is a refusal against a figure met at the same place, and a sequence
+                // settles that before it descends. Between two fields there is nothing to order: a
+                // caller told to state a narrowing at one field is told something true of that
+                // field whatever the next one comes to, and a caller told the model refuses another
+                // is told something true of that one. Walking on to prefer one of them would buy no
+                // answer and would take the walk into fields the first answer says nothing about.
+                case NodeResult.Refused refused -> { return refused; }
+                case NodeResult.Unnarrowed unnarrowed -> { return unnarrowed; }
+                // Every field's, and not the first one's — which is where this parts from the two
+                // above. Two fields whose demands are out of reach are two figures a reader could
+                // raise, and a reader owed one of them is owed both; taking whichever the walk met
+                // first would make what they are told turn on the order the fields are declared in.
+                case NodeResult.Beyond(Set<CompositionBudget> by) -> beyond.addAll(by);
             }
-        }
-        if (owed != null) {
-            return owed;
         }
         if (!beyond.isEmpty()) {
             return new NodeResult.Beyond(beyond);
@@ -808,7 +792,7 @@ final class ConstructionPlan {
      * <p>And at the position as well as under it. A refinement does not move to another position,
      * so a second narrowing of one an absence settled is written at that same path: leaving it out
      * as "not below" reads a rule about steps into a value as one about narrowings, which take
-     * none. That is what {@link Result.Conflict} is about at a position two narrowings disagree
+     * none. That is what {@link ModelRefusal.Conflict} is about at a position two narrowings disagree
      * over, and this is the other half of it — the narrowings agree, and there is nothing there for
      * the second to be about.
      *

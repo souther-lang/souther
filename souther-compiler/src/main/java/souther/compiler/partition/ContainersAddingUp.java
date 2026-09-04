@@ -626,12 +626,14 @@ final class ContainersAddingUp {
      * @param cutBy   the figures the planning stopped at, which are this compiler's
      */
     private record Ways(List<Filling> filled, Set<CompositionBudget> cutBy,
-                        List<TermPath> nothingStandsAt) {
+                        List<TermPath> nothingStandsAt,
+                        List<ConstructionPlan.ModelRefusal.NoRoom> withNoRoom) {
 
         Ways {
             filled = List.copyOf(filled);
             cutBy = Set.copyOf(cutBy);
             nothingStandsAt = List.copyOf(nothingStandsAt);
+            withNoRoom = List.copyOf(withNoRoom);
         }
 
         /**
@@ -639,14 +641,20 @@ final class ContainersAddingUp {
          *
          * <p>One sentence per thing that happened, and never one for two of them. A way that was
          * walked and built nothing says the ways are exhausted; a position nothing stands under
-         * says there was never a way to try. Told the same thing, a reader would be working out
-         * which of them it was from what the sentence left out.
+         * says there was never a way to try; a collection the rules leave no room in says there was
+         * a way and the rules refuse what it asks for. Told the same thing, a reader would be
+         * working out which of them it was from what the sentence left out.
          */
         String said(TermPath demand) {
             if (!filled.isEmpty()) {
                 return spelling(filled.stream().map(Filling::fixed).toList())
                         + (filled.size() == 1 ? " was a way down to `" : " were ways down to `")
                         + demand + "`, and none of them composed a value";
+            }
+            if (!withNoRoom.isEmpty()) {
+                return spelling(withNoRoom.stream()
+                                .map(ConstructionPlan.ModelRefusal.NoRoom::at).toList())
+                        + " holds nothing the way down to `" + demand + "` could stand in";
             }
             return nothingStandsAt.isEmpty()
                     ? "nothing here reaches `" + demand + "`"
@@ -690,6 +698,7 @@ final class ContainersAddingUp {
                                  RuleReadingSource ruleSource) {
         List<Filling> found = new ArrayList<>();
         List<TermPath> nothingStandsAt = new ArrayList<>();
+        List<ConstructionPlan.ModelRefusal.NoRoom> withNoRoom = new ArrayList<>();
         Asking asking = new Asking(element, at, ruleSource);
         asking.add(demand);
         for (ConstructionPlan.Result answer = asking.next(); answer != null;
@@ -729,16 +738,18 @@ final class ContainersAddingUp {
                                         + " to be both " + conflict.one().spelled() + " and "
                                         + conflict.other().spelled()
                                         + ", though one narrowing was stated");
-                        // A container this element stands in holds nothing, so there is no way down
-                        // to the number — which is the same news as a position nothing stands
-                        // under, and not a way that was tried and refused.
+                        // A collection on the way down holds nothing, so no element of this
+                        // container reaches the number. Its own answer rather than one of the two
+                        // beside it: a way that was walked and built nothing says the ways are
+                        // exhausted, and a position nothing stands under says there was never a
+                        // way — this says there was one and the rules refuse what it asks for.
                         case ConstructionPlan.ModelRefusal.NoRoom noRoom ->
-                                nothingStandsAt.add(noRoom.at());
+                                withNoRoom.add(noRoom);
                     }
                 }
             }
         }
-        return new Ways(found, asking.stoppedBy(), nothingStandsAt);
+        return new Ways(found, asking.stoppedBy(), nothingStandsAt, withNoRoom);
     }
 
     /**

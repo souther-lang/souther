@@ -1612,35 +1612,21 @@ public final class Partitions {
         return DeclaredBounds.leastCountOf(view, ruleSource);
     }
 
-    /** The same, of a position nothing here has read yet. */
-    static int leastHeld(Type type, RuleReadingSource ruleSource) {
-        return leastHeld(TypeView.of(type, ruleSource.symbols()), ruleSource);
-    }
-
     /** The same, where the record the position sits in has a rule about it too. */
     static int leastHeld(TypeView view, RuleReadingSource ruleSource, FieldDomains.Held held) {
         return DeclaredBounds.leastCountOf(view, ruleSource, held);
     }
 
-    /** The same, of a position nothing here has read yet. */
-    static int leastHeld(Type type, RuleReadingSource ruleSource, FieldDomains.Held held) {
-        return leastHeld(TypeView.of(type, ruleSource.symbols()), ruleSource, held);
-    }
-
-    /** How many the rules on a value of the position allow it to hold, where the record it sits in
-     *  has a rule about it too: {@link DeclaredBounds#mostCountOf}. */
-    static int mostHeld(Type type, RuleReadingSource ruleSource, FieldDomains.Held held) {
-        return DeclaredBounds.mostCountOf(TypeView.of(type, ruleSource.symbols()), ruleSource, held);
-    }
-
     /**
      * From how few to how many the rules let a value at the position hold, as one answer.
      *
-     * <p><b>Both ends of one reading.</b> A caller deciding whether there is room for a value being
-     * placed needs the floor to know how many the rules ask for besides it and the cap to know
-     * whether the one fits at all. Taken as two readings, the two can be of different states of the
-     * row — which is how a floor settled where the caller had fixed a field came to be compared
-     * with a cap read where it had not.
+     * <p><b>Both ends of one reading, and there is no reading of the cap alone.</b> A caller
+     * deciding whether there is room for a value being placed needs the floor to know how many the
+     * rules ask for besides it and the cap to know whether the one fits at all. Taken as two
+     * readings, the two can be of different states of the row — which is how a floor settled where
+     * the caller had fixed a field came to be compared with a cap read where it had not. So the
+     * cap has no projection of its own here: a caller wanting it takes both and is holding one
+     * answer.
      */
     static DeclaredBounds.CountRange heldRange(Type type, RuleReadingSource ruleSource,
                                                FieldDomains.Held held) {

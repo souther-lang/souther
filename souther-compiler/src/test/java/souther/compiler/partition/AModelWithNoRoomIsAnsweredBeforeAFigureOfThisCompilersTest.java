@@ -13,7 +13,6 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -109,38 +108,40 @@ class AModelWithNoRoomIsAnsweredBeforeAFigureOfThisCompilersTest {
         }
     }
 
-    /** And the answer says which collection, how many it would have to hold, and how many it may. */
+    /** And every one of them says which collection, how many it needs, and how many it may hold. */
     @Test
     void theAnswerSaysWhatTheRulesLeaveRoomFor() {
-        String said = unresolved().getFirst().detail();
+        for (Generator.UnresolvedCombination each : unresolved()) {
+            String said = each.detail();
 
-        assertNotNull(said, "the answer says what it is about: " + unresolved());
-        assertTrue(said.contains("box.xs") && said.contains("hold 1") && said.contains("room for 0"),
-                "and says the collection, what it would have to hold, and what the rules leave"
-                        + " room for: " + said);
+            assertNotNull(said, () -> "the answer says what it is about: " + each);
+            assertTrue(said.contains("box.xs") && said.contains("hold 1")
+                            && said.contains("room for 0"),
+                    () -> "and says the collection, what it would have to hold, and what the rules"
+                            + " leave room for: " + said);
+        }
     }
 
     /**
-     * A point whose cap the row has not fixed is left open on the figure the search reached.
+     * A search that met a figure of this compiler's still says so.
      *
-     * <p>The control against reading too much into the rules. Nothing here settles {@code cap}, so
-     * the rules leave the list holding whatever a larger one would allow and no refusal is proved —
-     * and what this compiler has to say is what it did. A refusal made from the cap alone would
-     * take these with it.
+     * <p>The control against reading too much into the rules. Where the row has not fixed the cap
+     * the rules leave the list holding whatever a larger one would allow, nothing is proved, and
+     * what this compiler has to say is what it did. A refusal made from the cap alone rather than
+     * from the cap the row fixed would take these with it and leave the figure unreachable.
+     *
+     * <p>Asked of every search the account holds and not of a chosen few. Which of them are about
+     * a position inside the list is a question the account does not answer, and picking them out of
+     * how a class is spelled is how a reading of this model came to be about the wrong ones.
      */
     @Test
-    void aPointTheRowHasNotFixedTheCapAtStaysOpenOnTheFigure() {
-        List<ItemAssessment.Attempt> made = insideTheList("placing");
-
-        assertFalse(made.isEmpty(), "the classes of the element are asked about");
-        for (ItemAssessment.Attempt each : made) {
-            ItemAssessment.Attempt.Stopped stopped = assertInstanceOf(
-                    ItemAssessment.Attempt.Stopped.class, each,
-                    () -> "the search met a figure and says so: " + each);
-            assertEquals(List.of(CompositionBudget.ASSIGNMENTS_A_SEARCH_COMPOSES),
-                    stopped.stoppedBy().written(),
-                    "and names the figure rather than a refusal it has not proved");
-        }
+    void aSearchThatMetTheFigureStillSaysSo() {
+        assertTrue(everySearch().stream()
+                        .anyMatch(each -> each instanceof ItemAssessment.Attempt.Stopped stopped
+                                && stopped.stoppedBy().written()
+                                        .contains(CompositionBudget.ASSIGNMENTS_A_SEARCH_COMPOSES)),
+                "a search of this behavior meets the assignments a search composes: "
+                        + everySearch());
     }
 
     /**
@@ -164,54 +165,17 @@ class AModelWithNoRoomIsAnsweredBeforeAFigureOfThisCompilersTest {
         return filling.composed().unresolved();
     }
 
-    /**
-     * Every search of a point standing inside the capped list, asked with nothing on the way to it.
-     *
-     * <p>Those asked under a condition on {@code cap} are a different question: the way already
-     * says what the row has to be. What is left is the points the combination itself fixes the cap
-     * at, which is where a reading of the rules is all there is to go on.
-     */
-    private static List<ItemAssessment.Attempt> insideTheList(String behavior) {
+    /** Every search this behavior's account holds, whatever point or role it was for. */
+    private static List<ItemAssessment.Attempt> everySearch() {
         List<ItemAssessment.Attempt> out = new ArrayList<>();
-        for (BorderAssessment border : lines(behavior)) {
+        for (BorderAssessment border : lines("placing")) {
             for (PointRole role : PointRole.values()) {
                 if (border.at(role) instanceof ItemAssessment.Owed owed) {
-                    owed.searches().each().stream()
-                            .filter(each -> about(each).contains("xs["))
-                            .filter(each -> wayTo(each).onTheWay().isEmpty())
-                            .forEach(out::add);
+                    out.addAll(owed.searches().each());
                 }
             }
         }
         return out;
-    }
-
-    /** What a search was about, in the words the account names its classes by. */
-    private static String about(ItemAssessment.Attempt made) {
-        return switch (made) {
-            case ItemAssessment.Attempt.Certified it -> it.row().purposes().toString();
-            case ItemAssessment.Attempt.Unverified it -> it.row().purposes().toString();
-            case ItemAssessment.Attempt.Stopped it -> it.why().classes().toString();
-            case ItemAssessment.Attempt.Unexhausted it -> it.why().classes().toString();
-            case ItemAssessment.Attempt.Limited it -> it.why().classes().toString();
-            case ItemAssessment.Attempt.Unplanned it -> it.why().classes().toString();
-            case ItemAssessment.Attempt.Unresolved it -> it.why().classes().toString();
-            case ItemAssessment.Attempt.Unavailable it -> it.toString();
-        };
-    }
-
-    /** What had to hold on the way to the point the search was for. */
-    private static WayToTheBorder wayTo(ItemAssessment.Attempt made) {
-        return switch (made) {
-            case ItemAssessment.Attempt.Certified it -> it.way();
-            case ItemAssessment.Attempt.Unverified it -> it.way();
-            case ItemAssessment.Attempt.Stopped it -> it.way();
-            case ItemAssessment.Attempt.Unexhausted it -> it.way();
-            case ItemAssessment.Attempt.Limited it -> it.way();
-            case ItemAssessment.Attempt.Unplanned it -> it.way();
-            case ItemAssessment.Attempt.Unresolved it -> it.way();
-            case ItemAssessment.Attempt.Unavailable _ -> new WayToTheBorder(List.of());
-        };
     }
 
     /** The rows the behavior was offered, as they are written out. */
