@@ -52,11 +52,17 @@ class ThisReadingSeesAReadingOfRawStructureTest {
                 "Lsouther/bench/readings/Written$Position;", AUTHORITIES);
     }
 
-    /** The compiled model, which is what this is a reading of. */
+    /**
+     * The compiled model, which is what this is a reading of.
+     *
+     * <p>Found from the repository, the way everything else here finds what a build produced. Read
+     * from wherever this happens to have been started instead, the model would be missing whenever
+     * that was somewhere else — and a walk over no classes finds no reading and says nothing.
+     */
     private static List<Path> written() throws IOException {
-        Path built = Path.of("target/test-classes/souther/bench/readings");
+        Path built = Reactor.root().resolve("souther-bench/target/test-classes/souther/bench/readings");
         assertTrue(Files.isDirectory(built),
-                "the model was not compiled, so this would assert nothing: " + built.toAbsolutePath());
+                "the model was not compiled, so this would assert nothing: " + built);
         try (Stream<Path> walk = Files.walk(built)) {
             List<Path> out = new ArrayList<>(
                     walk.filter(each -> each.toString().endsWith(".class")).toList());

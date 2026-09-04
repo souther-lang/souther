@@ -141,10 +141,11 @@ final class PositionReadings {
 
         // Backwards from every reading of raw structure, stopping where an authority answers. A
         // method inside one is not carrying the reading outwards — it is making the answer.
-        Map<String, String> through = new LinkedHashMap<>();
+        Map<String, Step> through = new LinkedHashMap<>();
         Deque<String> queue = new ArrayDeque<>();
         for (String at : observers) {
-            if (!stops(over, at) && through.putIfAbsent(at, why.get(at)) == null) {
+            if (!stops(over, at)
+                    && through.putIfAbsent(at, new Step.Reading(why.get(at))) == null) {
                 queue.add(at);
             }
         }
@@ -152,7 +153,8 @@ final class PositionReadings {
             String at = queue.poll();
             for (String caller
                     : callersOf.getOrDefault(at.substring(0, at.indexOf('(')), Set.of())) {
-                if (stops(over, caller) || through.putIfAbsent(caller, at) != null) {
+                if (stops(over, caller)
+                        || through.putIfAbsent(caller, new Step.Through(at)) != null) {
                     continue;
                 }
                 queue.add(caller);
@@ -188,21 +190,40 @@ final class PositionReadings {
                 .anyMatch(each -> each.traversal() == Traversal.OPAQUE && each.answersFor(at));
     }
 
+    /**
+     * The next step out of a method towards the reading it arrives at.
+     *
+     * <p>Two things a step can be, said as two and not told apart by how they are spelled. A method
+     * carries the reading up from what it calls; a sentence is where the reading is, and is the end
+     * of the path. Held as one string, the end of a path and a step of it are told apart by
+     * sniffing for a bracket — which is a reading of a value that could have said which it was.
+     */
+    private sealed interface Step {
+
+        /** The method this one reaches it through. */
+        record Through(String at) implements Step {}
+
+        /** What is read here, which is where the path stops. */
+        record Reading(String said) implements Step {}
+    }
+
     /** How the reading is arrived at from here, for a reader who has to go and look. */
-    private static String pathFrom(String at, Map<String, String> through) {
+    private static String pathFrom(String at, Map<String, Step> through) {
         List<String> path = new ArrayList<>();
         String walk = at;
         Set<String> seen = new LinkedHashSet<>();
         while (walk != null && seen.add(walk) && path.size() < 8) {
-            String next = through.get(walk);
-            // The end of a path is why it is one, which is a sentence rather than a method — and a
-            // sentence naming the member it is about has a `#` in it like any other.
-            if (next == null || !next.contains("(")) {
-                path.add(next == null ? "?" : next);
-                break;
+            switch (through.get(walk)) {
+                case Step.Through(String next) -> {
+                    path.add(next.substring(0, next.indexOf('(')));
+                    walk = next;
+                }
+                case Step.Reading(String said) -> {
+                    path.add(said);
+                    walk = null;
+                }
+                case null -> walk = null;
             }
-            path.add(next.substring(0, next.indexOf('(')));
-            walk = next;
         }
         return String.join(" -> ", path);
     }

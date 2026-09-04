@@ -108,13 +108,16 @@ sealed interface ValueReading {
     /** What the model writes where a value of {@code type} stands. */
     static ValueReading of(Type type, Symbols symbols) {
         TypeView view = TypeView.of(type, symbols);
-        if (view.isWrapped()) {
-            // What is readable under the name is written on the name's own declaration, so the
-            // declaration is asked of the walk over them. The reading above says which names are
-            // worn and stops there: a position's interpretation is not a way back to a body.
-            TypeOps.Layer worn = TypeOps.newtypeChain(type, symbols).getFirst();
-            return new UnderAName(worn.named(), owning(worn.named(), symbols),
-                    TypeOps.fieldTypes(worn.data(), symbols));
+        if (view.isWrapped() && symbols.declaredNode(view.wrappers().getFirst())
+                instanceof Hir.Data worn) {
+            // The outermost name is the reading's, and what is readable under it is written on that
+            // name's own declaration — so the name comes from the reading and the body is fetched
+            // here, where reading a declaration is the question. Walked again for the body instead,
+            // this would decide how far a newtype reaches a second time in a method that has
+            // already been told.
+            TypeSymbol name = view.wrappers().getFirst();
+            return new UnderAName(name, owning(name, symbols),
+                    TypeOps.fieldTypes(worn, symbols));
         }
         // What a field access may write here is one question with one owner, asked once for every
         // shape. What is left for the switch is which declarations state something of every value

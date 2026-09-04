@@ -309,20 +309,6 @@ public final class FieldDomains {
         return of(named, source, policy, Map.of());
     }
 
-    /**
-     * The record {@code named} is declared as.
-     *
-     * <p>A name that is not one is a caller asking for the field rules of something that has no
-     * fields, which is a question about the caller rather than about the model: what a name stands
-     * for is decided before anything asks what is written about its fields.
-     */
-    private static Hir.Data declaring(TypeSymbol.AtModule named, RuleReadingSource source) {
-        if (source.symbols().declaredNode(named.key()) instanceof Hir.Data data) {
-            return data;
-        }
-        throw new IllegalArgumentException(
-                "the field rules of a name that declares no record: " + named);
-    }
 
     /**
      * The same, with some fields already settled at a value.
@@ -334,8 +320,14 @@ public final class FieldDomains {
      */
     public static FieldDomains of(TypeSymbol.AtModule named, RuleReadingSource source,
                                   ReadingPolicy policy, Map<RuleKey, Count> settled) {
-        return of(named, declaring(named, source), source, policy, atValues(settled),
-                InvariantChecker.Reach.EVERYTHING);
+        // A name declaring no record leaves nothing about fields it has not got, which is what
+        // nothing written comes to here. The same answer the other readers of a declaration give
+        // when handed such a name, because it is the same fact about the name rather than three
+        // opinions about the caller.
+        return source.symbols().declaredNode(named.key()) instanceof Hir.Data data
+                ? of(named, data, source, policy, atValues(settled),
+                        InvariantChecker.Reach.EVERYTHING)
+                : NONE;
     }
 
     /** Settlings written as names, read as what stands at each. What a caller naming a place means

@@ -225,13 +225,12 @@ final class PartitionClasses {
         // A case of a primitive-headed union is a primitive or one of the language's own, which
         // no module declares and nothing composes field by field: naming it builds it, the same as
         // a unit data. So the two are told apart here, where the declaration is asked for.
-        TypeView held = leaf instanceof TypeSymbol.AtModule at
-                ? TypeView.of(Type.ref(at), ruleSource.symbols()) : null;
-        if (!(leaf instanceof TypeSymbol.AtModule declared) || held == null
-                || !(held.isWrapped() || held.shape() instanceof Shape.Product)) {
-            return PartitionClass.of(idOfCase(leaf), leaf.name(), is,   // naming it builds it
-                    RepresentativeSource.under(writes,
-                            RepresentativeSource.of(FixtureTemplate.unitCase(names))));
+        if (!(leaf instanceof TypeSymbol.AtModule declared)) {
+            return namingItBuildsIt(leaf, is, writes, names);
+        }
+        TypeView held = TypeView.of(Type.ref(declared), ruleSource.symbols());
+        if (!held.isWrapped() && !(held.shape() instanceof Shape.Product)) {
+            return namingItBuildsIt(leaf, is, writes, names);
         }
         if (held.isWrapped()) {
             // Values of the case, which is a position of its own: it is read like any other, and
@@ -252,6 +251,22 @@ final class PartitionClasses {
         // { id = 1 })`.
         return PartitionClass.of(idOfCase(leaf), leaf.name(), is,
                 RepresentativeSource.under(writes, new RepresentativeSource.Composed(declared)));
+    }
+
+    /**
+     * The class of a case whose value is written by naming it.
+     *
+     * <p>What a unit data is, and what a case of a primitive-headed union is: neither is composed
+     * field by field, because there are no fields to compose. Written once because the two arrive
+     * at it by different questions — one has no declaration of this module's at all, and the other
+     * has one that makes no record — and what they come to is the same class.
+     */
+    private static PartitionClass namingItBuildsIt(TypeSymbol leaf, Recognition is,
+                                                   List<TypeReachName.Written> writes,
+                                                   TypeReachName.Written names) {
+        return PartitionClass.of(idOfCase(leaf), leaf.name(), is,
+                RepresentativeSource.under(writes,
+                        RepresentativeSource.of(FixtureTemplate.unitCase(names))));
     }
 
     private PartitionClasses() {}
