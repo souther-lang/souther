@@ -17,15 +17,15 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 /**
  * A position and the same position under a name are proposed for alike.
  *
- * <p>Two routes reach one answer. A position whose type is written as a primitive is answered from
- * what the primitive is; a position wearing a name is asked what it divides into first, and a
- * {@code Bool} divides into two and an {@code Option} into present and absent. So the value a row
- * carries at {@code Bool} is chosen by one reading and the value it carries at {@code data F = Bool}
- * by another, and nothing says the two agree.
+ * <p>One route. The position is read, and the value is chosen from the shape that reading came to —
+ * so what a name does is decide how the value is spelled and nothing else. A {@code Bool} divides
+ * into two and an {@code Option} into present and absent whether or not a name is worn over it, and
+ * which of those the position stands for is settled before any name goes back on.
  *
- * <p>Held because they have to. A name is how a value is written and never what it is, so a name put
- * on a position cannot change which value stands for it. What is pinned here is that the two routes
- * arrive at the same value today, which is what makes joining them a change that keeps the answers
+ * <p>Written down before the routes were joined, when there were two. A position whose type was
+ * written as a primitive was answered from what the primitive is, and one wearing a name was asked
+ * what it divides into first — so the two chose the value by different readings and nothing said
+ * they agreed. They did, and pinning that is what made joining them a change that keeps the answers
  * rather than one that quietly picks a different row.
  */
 class APositionIsProposedForAlikeWhetherOrNotItWearsANameTest {
