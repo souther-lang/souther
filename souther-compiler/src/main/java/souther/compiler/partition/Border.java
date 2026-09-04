@@ -923,7 +923,7 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<DomainPoint, Poin
                 : new DomainPoint.BesideTheLine(kept);
         DomainPoint outside = holdsHere ? new DomainPoint.BesideTheLine(kept.opposite())
                 : new DomainPoint.AtTheLine();
-        PointAnswer on = againstABound(space, cut, kept, holdsHere, within, origin);
+        PointAnswer on = againstABound(space, cut, kept, holdsHere, within);
         demands.put(inside, on);
         demands.put(outside, new PointAnswer.NotOwed(NotOwedReason.THE_RULES_REFUSE_IT));
         // The partition the bound bounds, without the value against the line.
@@ -961,8 +961,7 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<DomainPoint, Poin
      * side the bound keeps, which is the question the point is about anyway.
      */
     private static PointAnswer againstABound(LevelSpace space, Level cut, Towards kept,
-                                             boolean holdsHere, NumericDomain.Bounds within,
-                                             OriginRef origin) {
+                                             boolean holdsHere, NumericDomain.Bounds within) {
         if (holdsHere) {
             return pointAt(space, cut, kept, true, within);
         }
