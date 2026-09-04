@@ -1760,9 +1760,9 @@ public final class Formatter {
                 attemptBinder(n), GAP, TokenDoc.token(SyntaxKind.THEN_KW, "then"),
                 nest(INDENT, TokenDoc.at(then, concat(expr(parts.get(1), then), TokenDoc.endsTheLineOf(then)))),
                 SOFT_GAP, TokenDoc.token(SyntaxKind.ELSE_KW, "else"),
-                departures != TokenDoc.NIL
-                        ? departures
-                        : otherwise(n, at, parts.get(2)))));
+                departures instanceof TokenDoc.Nil
+                        ? otherwise(n, at, parts.get(2))
+                        : departures)));
     }
 
     private TokenDoc otherwise(SyntaxNode n, Place at, SyntaxNode part) {
@@ -2047,7 +2047,7 @@ public final class Formatter {
         Place ofTheTest = places.under(at, exprs.get(0).kind(), Opening.NONE,
                 Written.of(exprs.get(0)));
         TokenDoc departures = elseArms(n, at);
-        if (departures != TokenDoc.NIL) {
+        if (!(departures instanceof TokenDoc.Nil)) {
             return TokenDoc.node(n.kind(), concat(TokenDoc.token(SyntaxKind.GUARD_KW, "guard"), GAP,
                     TokenDoc.at(ofTheTest, expr(exprs.get(0), ofTheTest)),
                     attemptBinder(n), GAP, TokenDoc.token(SyntaxKind.ELSE_KW, "else"), departures));

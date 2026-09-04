@@ -565,7 +565,7 @@ public final class TypeOps {
             // every position the value it produced flowed into.
             return true;
         }
-        if (from == Type.NOTHING) {
+        if (from instanceof Type.Nothing) {
             return true;   // the empty list's bottom element assigns into any element type (ADR-0028)
         }
         if (from instanceof Type.Never) {
@@ -732,12 +732,12 @@ public final class TypeOps {
         switch (param) {
             case Type.Var v -> {
                 Type bound = bindings.get(v.name());
-                if (bound == null || bound == Type.NOTHING) {
+                if (bound == null || bound instanceof Type.Nothing) {
                     // first sight, or widen an empty-collection bottom to a concrete element: an
                     // earlier `[]` / `Map.empty` argument bound NOTHING, and a later real element
                     // fixes it (ADR-0028). Order-independent, so insert(k, v, Map.empty) infers V.
                     bindings.put(v.name(), arg);
-                } else if (arg == Type.NOTHING) {
+                } else if (arg instanceof Type.Nothing) {
                     // the empty bottom absorbs into the concrete binding already learned
                 } else if (refusing && !assignable(arg, bound, symbols)
                         && !assignable(bound, arg, symbols)) {

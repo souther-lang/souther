@@ -245,7 +245,7 @@ final class Substitution {
         // decided is that decision here, and comparing the variable itself would find every reading
         // through one to disagree with every other.
         Type at = zonk(reading);
-        if (at == m || Type.mentions(at, m::equals)) {
+        if (Type.mentions(at, m::equals)) {
             // A variable cannot stand for something it stands inside: a list of itself is a value
             // that would have to hold itself. It stays open, and the reading that said so settles
             // nothing rather than being taken as a disagreement — the same answer {@link Readings}
