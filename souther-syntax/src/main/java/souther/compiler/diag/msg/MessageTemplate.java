@@ -7,10 +7,10 @@ import java.util.List;
  * A catalog entry as its literal text and the values it names, parsed once.
  *
  * <p>What reads an entry and what checks one are the same parser. Written twice they drift, which is
- * the defect this whole area exists to remove: a renderer that took {@code {} } to the next brace and
- * a check that only recognised {@code {[a-zA-Z][a-zA-Z0-9]*}} disagreed about {@code {held_by}} and
- * about an unclosed {@code {field}, so an entry naming a value nothing fills passed the build and
- * showed the reader a brace.
+ * the defect this whole area exists to remove: a renderer that took <code>{</code> to the next brace
+ * and a check that only recognised {@code {[a-zA-Z][a-zA-Z0-9]*}} disagreed about {@code {held_by}}
+ * and about an unclosed <code>{field</code>, so an entry naming a value nothing fills passed the
+ * build and showed the reader a brace.
  */
 public record MessageTemplate(List<Part> parts) {
 

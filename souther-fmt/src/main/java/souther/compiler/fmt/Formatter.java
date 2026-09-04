@@ -492,7 +492,7 @@ public final class Formatter {
 
     /**
      * What ends the line a construct opens with — the {@code example j}, the {@code data D =}, the
-     * {@code match … with}, the {@code else}, the {@code {}.
+     * {@code match … with}, the {@code else}, the <code>{</code>.
      *
      * <p>A construct written over several lines has a first line that none of its members is on, so
      * that line is a place of its own: what the source wrote at the end of it is about the construct

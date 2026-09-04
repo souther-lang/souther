@@ -39,9 +39,9 @@ class EveryShapeTheGrammarWritesIsReadAsTheEngineReadsItTest {
      * sequence, at the back, between two symbols, inside a group, under a repetition and in an arm
      * of a choice, and each of those is a different question about what they come to.
      *
-     * <p>And the pieces that are not pieces. A bare {@code {} is a character to some engines and a
-     * syntax error to Java, and a bare {@code *} follows nothing — the generator writes them where
-     * a leaf goes and the agreement below says what has to happen.
+     * <p>And the pieces that are not pieces. A bare <code>{</code> is a character to some engines
+     * and a syntax error to Java, and a bare {@code *} follows nothing — the generator writes them
+     * where a leaf goes and the agreement below says what has to happen.
      */
     private static final List<String> LEAVES =
             List.of("a", "b", ".", "[ab]", "[^a]", "\\d", "^", "$", "", "{", "*");

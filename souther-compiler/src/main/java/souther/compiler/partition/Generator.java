@@ -1524,7 +1524,7 @@ public final class Generator {
      *
      * <p>And a refusal of the exact mutation is a reason to repair it, not to abandon the origin.
      * Where {@code f = C} needs {@code g = G2} beside it, what a reader wants is the baseline with
-     * both moved — {@code Cond &#123;...none, f = C, g = G2&#125;} — and falling back to a
+     * both moved — {@code Cond {...none, f = C, g = G2}} — and falling back to a
      * composition moves everything the classes happened to name. The supporting position is part of
      * the row and no part of what it is for: the row is still named for the class alone
      * ({@link Purpose.ForAClass}).

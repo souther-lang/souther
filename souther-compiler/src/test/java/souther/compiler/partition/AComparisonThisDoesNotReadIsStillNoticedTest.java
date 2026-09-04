@@ -190,7 +190,7 @@ class AComparisonThisDoesNotReadIsStillNoticedTest {
      * <p>The position was all this used to carry, so a report could say a rule about `+p.x+` went
      * unread and name no rule. What identifies a comparison is the behavior it is written in and
      * the construct the author wrote; what finds it is where it is written. Neither is the
-     * plan\u0027s: a condition nothing can be measured about is numbered nowhere, and the model
+     * plan's: a condition nothing can be measured about is numbered nowhere, and the model
      * states the rule regardless.
      */
     @Test

@@ -21,7 +21,8 @@ final class Declared {
      *
      *  @throws IllegalStateException always */
     // Callers call it: it stands where a value is wanted, which is what the type parameter is for.
-    @SuppressWarnings("DoNotCallSuggester")
+    // Nothing of type T is ever made — the method does not return — so nothing is cast unchecked.
+    @SuppressWarnings({"DoNotCallSuggester", "TypeParameterUnusedInFormals"})
     static <T> T notAModules(TypeSymbol named, Hir.Def answered) {
         throw new IllegalStateException("`" + named + "` is not a declaration a module wrote, and `"
                 + answered.declares() + "` was answered for it");

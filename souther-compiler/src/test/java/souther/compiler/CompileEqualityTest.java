@@ -111,6 +111,8 @@ class CompileEqualityTest {
 
     /** 1.0 and 1.00 are the same amount; only their scale differs. */
     @Test
+    // What `BigDecimal.equals` says is the thing being contrasted with, so it is asked on purpose.
+    @SuppressWarnings("BigDecimalEquals")
     void decimalIgnoresScale() throws Exception {
         BytesClassLoader loader = loader();
         Object m1 = make(loader, "Money", new BigDecimal("1.0"));

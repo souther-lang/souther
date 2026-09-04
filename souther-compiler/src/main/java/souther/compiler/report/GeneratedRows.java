@@ -442,11 +442,6 @@ public final class GeneratedRows {
      *  are indented past it. */
     private static final String ROW = "    | ";
 
-    /** What the heading over a behavior's clauses says. A source-level fact and not a reading of one:
-     * these are the words the author put in the declaration, quoted here whether or not the checker
-     * could make a rule of them, so what is claimed is that they are written and nothing further. */
-    private static final String WRITTEN_FOR = "`ensures` written for `%s`:%n";
-
     /**
      * The clauses each behavior carries, put over the rows they are about.
      *
@@ -469,7 +464,10 @@ public final class GeneratedRows {
             List<String> clauses =
                     behavior == null ? List.of() : ensures.getOrDefault(behavior, List.of());
             if (!clauses.isEmpty()) {
-                out.append(String.format(WRITTEN_FOR, behavior));
+                // The words the author put in the declaration, quoted whether or not the checker
+                // could make a rule of them: what is claimed is that they are written, and nothing
+                // further.
+                out.append(String.format("`ensures` written for `%s`:%n", behavior));
                 for (String clause : clauses) {
                     for (String each : clause.lines().toList()) {
                         out.append("    ").append(each).append(System.lineSeparator());

@@ -293,6 +293,9 @@ final class Handoff {
      * machine that keeps it: what does not fit is waited out in as much of it as does, as many
      * times as it takes, and what is left is a length throughout.
      */
+    // The loop the wait needs is the caller's, which spins on the phase until it changes. A
+    // spurious wake-up leaves the phase where it was and comes straight back here.
+    @SuppressWarnings("WaitNotInLoop")
     private Duration waitedOut(Duration remaining) throws InterruptedException {
         long asked = remaining.compareTo(LONGEST_AWAIT) > 0 ? Long.MAX_VALUE : remaining.toNanos();
         return leftOf(remaining, asked, moved.awaitNanos(asked));

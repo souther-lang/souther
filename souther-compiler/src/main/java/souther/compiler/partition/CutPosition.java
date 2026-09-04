@@ -20,7 +20,7 @@ import java.math.BigInteger;
  * @param written what the rule compared against, on the form it was written in
  * @param per     how much of the quantity that form is, which is never zero and never negative
  */
-public record CutPosition(Level written, BigDecimal per) {
+public record CutPosition(Level written, BigDecimal per) implements Comparable<CutPosition> {
 
     public CutPosition {
         if (written == null || per == null || per.signum() <= 0) {
@@ -188,6 +188,7 @@ public record CutPosition(Level written, BigDecimal per) {
      * and one at two sixths fall in one place, and neither of them is a number this language can
      * write out to compare.
      */
+    @Override
     public int compareTo(CutPosition other) {
         BigDecimal mine = numberOf(written);
         BigDecimal theirs = numberOf(other.written);

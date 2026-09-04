@@ -998,7 +998,9 @@ public final class Main {
             return switch (color) {
                 case "always" -> true;
                 case "never" -> false;
-                default -> System.console() != null && System.getenv("NO_COLOR") == null;
+                // A console exists whether or not the output is a terminal, so the console is
+                // asked which it is: colour written into a pipe is escape codes in a file.
+                default -> System.console().isTerminal() && System.getenv("NO_COLOR") == null;
             };
         }
 

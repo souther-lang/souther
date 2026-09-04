@@ -11,6 +11,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Locale;
+import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -32,7 +33,9 @@ class WhatThisCommandCannotDecideItRefusesTest {
 
         assertEquals(2, run.code());
         assertTrue(run.err().contains("<groupId>:<artifactId>"), run.err());
-        assertEquals(List.of(), Files.list(directory).toList(), "a refusal wrote something");
+        try (Stream<Path> wrote = Files.list(directory)) {
+            assertEquals(List.of(), wrote.toList(), "a refusal wrote something");
+        }
     }
 
     @Test
@@ -235,7 +238,9 @@ class WhatThisCommandCannotDecideItRefusesTest {
                 new PrintStream(err, true, StandardCharsets.UTF_8), directory, null);
 
         assertEquals(2, code);
-        assertEquals(List.of(), Files.list(directory).toList());
+        try (Stream<Path> wrote = Files.list(directory)) {
+            assertEquals(List.of(), wrote.toList());
+        }
     }
 
     private static final String POM = """
