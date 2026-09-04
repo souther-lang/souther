@@ -108,6 +108,17 @@ public final class ClauseHelpers {
         return Map.copyOf(out);
     }
 
+    /**
+     * What a declaration with no {@code invariant} to write has: nothing, said as an answer.
+     *
+     * <p>Here because this is where expanded clauses are made. A caller outside this package cannot
+     * build one, which is the point — and a kind the HIR gives no clauses still needs an answer, so
+     * the one place that mints them offers it rather than leaving a second way in.
+     */
+    public static ExpandedClauses noClausesToExpand(TypeKey declaration) {
+        return ExpandedClauses.nothingToExpand(declaration);
+    }
+
     /** {@code m} with its helper parameter types settled and the names in its invariants written
      * qualified — what both representations are expanded from, so neither reads a table the other
      * would key differently. */

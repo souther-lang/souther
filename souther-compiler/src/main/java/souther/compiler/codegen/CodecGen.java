@@ -703,12 +703,17 @@ final class CodecGen {
      * <p>The mapping is written against the operations an author wrote — {@code List.length},
      * {@code List.allDistinctBy} — and by the time the backend emits, a prelude helper has become the
      * fold it is derived from. Reading the settled form instead would leave every collection rule
-     * unrecognised. A type another module declares has no such form here; nothing asks, because a type's
-     * decoder is generated where the type is declared.
+     * unrecognised.
+     *
+     * <p><b>Every rule or none.</b> A decoder is what the boundary holds a value to, so one built
+     * from the rules that happened to be readable holds it to less than the model says and carries
+     * no word for having done so — a value the model refuses would cross. Where a rule was not
+     * reached this refuses to emit instead: the module's classes do not come out, and what is wrong
+     * with the declaration it could not read is reported where that declaration is.
      */
     private List<Hir.InvariantClause> dischargeForm(Hir.Data data) {
-        return TypeOps.analysisInvariants(data.declares(), data, symbols,
-                ctx.dischargeInvariants());
+        return TypeOps.expandedInvariants(data.declares(), data, symbols,
+                ctx.dischargeInvariants()).clauses();
     }
 
     /** Collects the named types used as map keys anywhere in a derived decoder. */

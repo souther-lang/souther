@@ -58,6 +58,7 @@ class WhatEachWayOfMissingARuleComesToIsWrittenDownOnceTest {
         table.put("ClauseNotTyped", "BY_EVERY_VALUE/NOT_REACHED");
         table.put("ClauseLost", "BY_EVERY_VALUE/NOT_REACHED");
         table.put("PositionNotOpened", "BY_EVERY_VALUE/NOT_REACHED");
+        table.put("ClausesNotExpanded", "BY_EVERY_VALUE/NOT_REACHED");
         table.put("ClauseNotAsked", "BY_EVERY_VALUE/NOT_REACHED");
         table.put("NoReadingWasMade", "BY_EVERY_VALUE/NOT_REACHED");
         table.put("ReadingFellOver", "BY_EVERY_VALUE/NOT_REACHED");
@@ -135,6 +136,7 @@ class WhatEachWayOfMissingARuleComesToIsWrittenDownOnceTest {
         out.add(new RulesMissed.ClauseNotTyped());
         out.add(new RulesMissed.ClauseLost());
         out.add(new RulesMissed.PositionNotOpened());
+        out.add(new RulesMissed.ClausesNotExpanded());
         out.add(new RulesMissed.ClauseNotAsked());
         out.add(new RulesMissed.NoReadingWasMade());
         out.add(new RulesMissed.ReadingFellOver());

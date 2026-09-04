@@ -1563,6 +1563,7 @@ public final class FieldDomains {
                 };
                 case RulesMissed.ClauseNotTyped _, RulesMissed.ClauseLost _,
                      RulesMissed.PositionNotOpened _, RulesMissed.ClauseNotAsked _,
+                     RulesMissed.ClausesNotExpanded _,
                      RulesMissed.NoReadingWasMade _, RulesMissed.ReadingFellOver _ -> false;
             };
             if (!afford) {

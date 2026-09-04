@@ -47,7 +47,8 @@ class EveryDeclarationAModuleWritesHasItsClausesExpandedTest {
     private record Read(RuleReadingSource rules, String module) {
 
         ExpandedClauses of(String name) {
-            return rules.invariants().of(new TypeKey(module, name));
+            return rules.invariants().of(new TypeKey(module, name))
+                    instanceof ExpandedClauseResult.Found(ExpandedClauses found) ? found : null;
         }
     }
 

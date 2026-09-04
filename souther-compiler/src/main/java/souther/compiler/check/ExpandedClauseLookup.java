@@ -19,16 +19,9 @@ import souther.compiler.types.TypeKey;
 @FunctionalInterface
 public interface ExpandedClauseLookup {
 
-    /**
-     * The clauses of {@code declaration}, or null where nothing in this compilation declares one.
-     *
-     * <p>Null is the one absence: a declaration this compilation does not have. A declaration it has
-     * and could not expand is no answer of this kind at all and is refused by whoever produces it —
-     * the two are not the same fact, and a reading told "no clauses" for the second would report a
-     * declaration as stating nothing when what happened is that nothing was read.
-     */
-    ExpandedClauses of(TypeKey declaration);
+    /** What is known about {@code declaration}'s clauses. */
+    ExpandedClauseResult of(TypeKey declaration);
 
     /** Nothing declared anywhere — for a reading over primitives, which asks of no declaration. */
-    ExpandedClauseLookup NONE = _ -> null;
+    ExpandedClauseLookup NONE = ExpandedClauseResult.NotDeclared::new;
 }

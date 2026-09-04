@@ -664,8 +664,17 @@ public final class InvariantChecker {
             // missing from this reading is the position, since a clause of this declaration can
             // name any position of it.
             boolean skipped = false;
-            if (!opened && !c.clauses.of(named, data).isEmpty()) {
+            ExpandedRules rules = c.clauses.of(named, data);
+            if (!opened && !rules.reached().isEmpty()) {
                 gathering.missed(RuleKey.THE_VALUE, new RulesMissed.PositionNotOpened());
+            }
+            // A rule that never arrived, as against one this reading declined or could not read. It
+            // is recorded whether or not the position was opened: what it says is that the clauses
+            // of some declaration reached here were never worked out, which is true of this position
+            // however far the reading went into it.
+            if (!rules.everyRuleReached()) {
+                read = false;
+                gathering.missed(RuleKey.THE_VALUE, new RulesMissed.ClausesNotExpanded());
             }
             for (TypeOps.Declared declared :
                     opened ? c.clauses.declared(named, data) : List.<TypeOps.Declared>of()) {

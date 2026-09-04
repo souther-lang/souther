@@ -1223,22 +1223,17 @@ public final class TypeOps {
     }
 
     /**
-     * The same clauses in the representation a static analysis reads: the language's own operations
-     * left standing ({@link InliningPolicy#DISCHARGE}).
+     * The same clauses in the representation a reading of rules takes, with whether every rule that
+     * applies was reached.
      *
-     * <p>Which representation is being read is in the name of the method and not in an argument a
-     * caller may leave out. A lookup that may answer nothing cannot be that argument: answering
-     * nothing and asking for the settled form are one value, so a reader that never got its
-     * representation would read the tree the backend emits from with nothing to say so.
+     * <p>Which representation is read is in the name and not in an argument a caller may pass. There
+     * is deliberately no way to ask this for the written tree: what a declaration's rules are in this
+     * representation comes from {@code form} and from nowhere else, and a walk that could be handed
+     * another source of clauses is a walk somebody can hand the wrong one.
      */
-    public static List<Hir.InvariantClause> analysisInvariants(
-            TypeSymbol.AtModule named, Hir.Data data, Symbols symbols,
-            ExpandedClauseLookup form) {
-        List<Hir.InvariantClause> invs = new ArrayList<>();
-        for (Declared one : declaredForAnalysis(named, data, symbols, form)) {
-            invs.add(one.clause());
-        }
-        return invs;
+    public static ExpandedRules expandedInvariants(
+            TypeSymbol.AtModule named, Hir.Data data, Symbols symbols, ExpandedClauseLookup form) {
+        return declaredExpanded(named, data, symbols, form);
     }
 
     /**
@@ -1268,67 +1263,84 @@ public final class TypeOps {
      * taken from it rather than walked again.
      */
     public static List<Declared> declaredSettled(Hir.Data data, Symbols symbols) {
-        return declared(null, data, symbols, (_, on) -> on.invariants());
+        return declaredWritten(null, data, symbols);
     }
 
     /**
-     * The same in the representation a static analysis reads, wherever the declaration was written.
+     * The same in the representation a reading of rules takes, wherever the declaration was written.
      *
-     * <p>Every clause comes from {@code form}, which is asked by the declaration's address and by
-     * nothing else. There is no arm here for a declaration of another module, because there is
-     * nothing to tell it by: what a clause of one is read as is what its own module expanded, which
-     * is what the lookup answers (spec §invariant-discharge-representation).
+     * <p>Its own walk and not the settled one under an argument. Every clause here comes from
+     * {@code form}, asked by the declaration's address; there is no parameter through which a caller
+     * could offer clauses of its own, and so no way to ask for this representation and be given the
+     * written tree. The two walks say the same thing about spreads and differ in that one sentence,
+     * and that is the sentence the whole of #1312 was about — shared through a clause-source
+     * parameter, it is one edit away from being a choice again.
      *
      * <p>{@code named} is what the walk reached this declaration by. A spread whose name is not a
-     * module's declaration leaves it null and contributes nothing: no module wrote it, so there is
-     * no expansion of it to read and no address to ask under. The declaration's own tree is not read
-     * instead — it is the representation this is not.
+     * module's declaration contributes nothing and costs nothing: no module wrote it, so there is no
+     * expansion of it to be short of.
      */
-    public static List<Declared> declaredForAnalysis(
+    public static ExpandedRules declaredExpanded(
             TypeSymbol.AtModule named, Hir.Data data, Symbols symbols, ExpandedClauseLookup form) {
         if (form == null) {
             throw new IllegalArgumentException(
-                    "reading a declaration's clauses as an analysis takes somewhere to read them from");
+                    "reading a declaration's clauses takes somewhere to read them from");
         }
-        return declared(named, data, symbols, (at, _) -> at == null ? List.of() : expanded(at, form));
+        ExpandedRules found = new ExpandedRules(List.of(), true);
+        for (Hir.Name inc : data.includes()) {
+            Hir.Data id = spreadTarget(inc, symbols);
+            if (id != null) {
+                found = found.and(declaredExpanded(
+                        inc.answered().type() instanceof TypeSymbol.AtModule at ? at : null,
+                        id, symbols, form));
+            }
+        }
+        return found.and(ownClausesOf(named, form));
     }
 
     /**
-     * What {@code form} answers for {@code named}, and no clauses where it answers nothing.
+     * What {@code form} answers for {@code named} alone, as rules.
      *
-     * <p>Nothing back is a module whose own expansion could not be worked out — one that does not
-     * compile, or whose imports form a cycle. That is an ordinary absence and not a disagreement:
-     * the module is being told what is wrong with it, and turning its failure into this compiler
-     * contradicting itself would answer a broken file with a crash.
-     *
-     * <p>The other absence is not reachable here. A module whose expansion did come out has an
-     * answer for every declaration it wrote, empty where the declaration wrote no clause, and a
-     * declaration missing from one is refused where the expansion is read rather than here — where
-     * it could only be told from the first by asking the module again.
+     * <p>An answer this could not be given is carried as a rule not reached rather than as no rule.
+     * They are the same empty list and opposite facts: a declaration that states nothing holds every
+     * value its type does, and one whose clauses nobody worked out holds whatever its author wrote.
+     * A reading handed the second as the first says a position admits everything and says nothing
+     * about not having looked.
      */
-    private static List<Hir.InvariantClause> expanded(
-            TypeSymbol.AtModule named, ExpandedClauseLookup form) {
-        ExpandedClauses clauses = form.of(named.key());
-        return clauses == null ? List.of() : clauses.clauses();
+    private static ExpandedRules ownClausesOf(TypeSymbol.AtModule named, ExpandedClauseLookup form) {
+        if (named == null) {
+            return new ExpandedRules(List.of(), true);
+        }
+        return switch (form.of(named.key())) {
+            case ExpandedClauseResult.Found(ExpandedClauses clauses) -> {
+                List<Declared> out = new ArrayList<>();
+                for (int ordinal = 0; ordinal < clauses.clauses().size(); ordinal++) {
+                    out.add(new Declared(named, ordinal, clauses.clauses().get(ordinal)));
+                }
+                yield new ExpandedRules(out, true);
+            }
+            case ExpandedClauseResult.Unavailable _ -> new ExpandedRules(List.of(), false);
+            // Nothing declares one, so there is no rule of its to be short of. This is not the walk
+            // failing to reach something: it is a name no declaration answers, which every reader
+            // above has already had to deal with to have got here.
+            case ExpandedClauseResult.NotDeclared _ -> new ExpandedRules(List.of(), true);
+        };
     }
 
-    /** What a clause of a declaration is, in whichever representation {@code clauses} answers. Not
-     *  public: which representation is read is said by the method a caller names, and a caller able
-     *  to pass this could say one thing and read the other. */
-    private static List<Declared> declared(
-            TypeSymbol.AtModule named, Hir.Data data, Symbols symbols,
-            java.util.function.BiFunction<TypeSymbol.AtModule, Hir.Data,
-                    List<Hir.InvariantClause>> clauses) {
+    /** What a clause of a declaration is, as the declaration writes it. Its own walk, so the
+     *  representation a caller reads is the method it named and never an argument it passed. */
+    private static List<Declared> declaredWritten(TypeSymbol.AtModule named, Hir.Data data,
+                                                  Symbols symbols) {
         List<Declared> invs = new ArrayList<>();
         for (Hir.Name inc : data.includes()) {
             Hir.Data id = spreadTarget(inc, symbols);
             if (id != null) {
-                invs.addAll(declared(
+                invs.addAll(declaredWritten(
                         inc.answered().type() instanceof TypeSymbol.AtModule at ? at : null,
-                        id, symbols, clauses));
+                        id, symbols));
             }
         }
-        List<Hir.InvariantClause> wrote = clauses.apply(named, data);
+        List<Hir.InvariantClause> wrote = data.invariants();
         for (int ordinal = 0; ordinal < wrote.size(); ordinal++) {
             invs.add(new Declared(named, ordinal, wrote.get(ordinal)));
         }

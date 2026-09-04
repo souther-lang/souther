@@ -3,6 +3,7 @@ package souther.compiler.query;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.ClauseDischarge;
 import souther.compiler.check.ExpandedClauseLookup;
+import souther.compiler.check.ExpandedClauseResult;
 import souther.compiler.check.ExpandedClauses;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.InvariantSettled;
@@ -535,7 +536,12 @@ public final class Shapes {
             // Answered either way, because what a reader of this does about a count it has not been
             // given is that reader's: a module whose declarations could not be checked still has
             // everything else about it to report, and going absent here would take that with it.
-            if (!reading.present()) {
+            //
+            // Not counted, either, where this module's own clauses could not be expanded. What makes
+            // a type uninhabitable is what its rules leave, so a count taken over the rules that
+            // happened to be readable would say a type is inhabited when what happened is that
+            // nobody read the rule that empties it.
+            if (!reading.present() || !db.ask(new ExpandedDeclarationClauses(name)).present()) {
                 return Answer.of(new UninhabitableTypes.WithNoValue.NotCounted());
             }
             List<Hir.Def> declarations = lowering.value().settled().defs();
@@ -582,10 +588,7 @@ public final class Shapes {
      * that could answer that module's way, which is the arrangement this replaces.
      */
     public static ExpandedClauseLookup expandedClauses(Db db) {
-        return named -> {
-            Answer<ExpandedClauses> clauses = db.ask(new ClausesExpandedFor(named));
-            return clauses.present() ? clauses.value() : null;
-        };
+        return named -> db.ask(new ClausesExpandedFor(named)).value();
     }
 
     /**
@@ -646,24 +649,51 @@ public final class Shapes {
      * other thing — a module that does not compile, or whose imports form a cycle — and is passed
      * on as the absence it is.
      */
-    public record ClausesExpandedFor(TypeKey named) implements Key<ExpandedClauses> {
+    public record ClausesExpandedFor(TypeKey named) implements Key<ExpandedClauseResult> {
         @Override
         public String module() {
             return named.module();
         }
 
         @Override
-        public Answer<ExpandedClauses> compute(Db db) {
+        public Answer<ExpandedClauseResult> compute(Db db) {
+            // The kind first, and the module that would expand it second. Which kinds have an
+            // `invariant` to write is the HIR's answer and holds whoever declared one, so a sum is
+            // answered before there is any question of an environment to expand in — asked the other
+            // way round, the language's own declarations, which are the only ones no compilation
+            // module wrote, would come back as clauses nobody could work out.
+            Hir.Def declared = declarationOf(db, named);
+            if (declared == null) {
+                return Answer.of(new ExpandedClauseResult.NotDeclared(named));
+            }
+            if (!(declared instanceof Hir.Data)) {
+                return Answer.of(new ExpandedClauseResult.Found(
+                        ClauseHelpers.noClausesToExpand(named)));
+            }
             Answer<Map<TypeKey, ExpandedClauses>> expanded =
                     db.ask(new ExpandedDeclarationClauses(named.module()));
             if (!expanded.present()) {
-                return Answer.absent();
+                // What the module was told about itself travels with the absence. Flattened to a
+                // bare `absent`, the reports its expansion produced would be dropped here and the
+                // reader would be short of the clauses and of the reason both.
+                return Answer.of(new ExpandedClauseResult.Unavailable(named), expanded.reports());
             }
             ExpandedClauses clauses = expanded.value().get(named);
             if (clauses == null) {
                 throw new NothingWasExpandedFor(named);
             }
-            return Answer.of(clauses);
+            return Answer.of(new ExpandedClauseResult.Found(clauses), expanded.reports());
+        }
+
+        /** The declaration {@code named} is, whether a module of this compilation wrote it or the
+         *  language declares it, or null where nothing does. */
+        private static Hir.Def declarationOf(Db db, TypeKey named) {
+            Answer<Hir.Def> mine = db.ask(new Names.ResolvedDeclaration(named));
+            if (mine.present()) {
+                return mine.value();
+            }
+            Answer<souther.compiler.stdlib.Stdlib> library = db.ask(new Front.Library());
+            return library.present() ? library.value().languageDeclaration(named) : null;
         }
     }
 

@@ -9,7 +9,7 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -75,9 +75,11 @@ class AConstructionIsWrittenAsOneInTheAnalysisRepresentationTest {
             if (!(def instanceof Hir.Data data) || data.invariants().isEmpty()) {
                 continue;
             }
-            ExpandedClauses expanded = rules.invariants().of(data.declares().key());
-            assertNotNull(expanded, data.declares() + " is read in the representation its module expanded");
-            List<Hir.InvariantClause> read = expanded.clauses();
+            ExpandedClauseResult expanded = rules.invariants().of(data.declares().key());
+            assertInstanceOf(ExpandedClauseResult.Found.class, expanded,
+                    data.declares() + " is read in the representation its module expanded");
+            List<Hir.InvariantClause> read =
+                    ((ExpandedClauseResult.Found) expanded).clauses().clauses();
             Hir.Def again = NewtypeDesugar.rewriteInvariantsOf(
                     new Hir.Data(data.written(), data.declares(), data.newtype(), data.includes(),
                             data.fields(), read, data.pos()),

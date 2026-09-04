@@ -96,6 +96,25 @@ public sealed interface RulesMissed {
     }
 
     /**
+     * A rule of the value whose clauses could not be worked out at all.
+     *
+     * <p>The declaration was reached and its module's expansion was not — it does not compile, or
+     * its imports form a cycle. What that leaves is not "the declaration states nothing": it is a
+     * rule this reading never saw, and a position told the first would be reported as admitting
+     * every value its type has while the model says otherwise.
+     *
+     * <p>Its own arm rather than {@link #ClauseNotTyped}, which is a clause this had and could not
+     * read. Here there was no clause to fail on.
+     */
+    record ClausesNotExpanded() implements RulesMissed {
+
+        @Override
+        public InvariantChecker.Borne borne() {
+            return InvariantChecker.Borne.BY_EVERY_VALUE;
+        }
+    }
+
+    /**
      * A rule of the value this reading was asked to leave out.
      *
      * <p>Said once however many were left out: what is recorded is which position is short, and the

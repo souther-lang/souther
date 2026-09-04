@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import souther.compiler.ast.Hir;
 import souther.compiler.check.ExpandedClauseLookup;
+import souther.compiler.check.ExpandedClauseResult;
 import souther.compiler.check.BehaviorContract;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.CheckedEnsures;
@@ -123,7 +124,8 @@ class AClassificationIsPlacedInsideTheClauseItIsAboutTest {
                 // held is that it is inside one of them — a position inside the helper is inside none.
                 boolean inside = false;
                 for (Hir.InvariantClause clause
-                        : declared.of(((TypeSymbol.AtModule) named).key()).clauses()) {
+                        : ((ExpandedClauseResult.Found) declared.of(
+                                ((TypeSymbol.AtModule) named).key())).clauses().clauses()) {
                     assertNotNull(clause.region(), "the clause knows where it is written");
                     inside = inside || Region.encloses(clause.region(), Region.point(answer.owed().clause()));
                 }

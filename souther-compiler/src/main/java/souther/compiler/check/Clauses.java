@@ -31,20 +31,20 @@ import java.util.Set;
 final class Clauses {
 
     private final Symbols symbols;
-    private final ExpandedClauseLookup inTheAnalysisRepresentation;
+    private final ExpandedClauseLookup expandedClauses;
     private final Map<Hir.Data, Map<String, Type>> fields = new HashMap<>();
     private final Map<TypeSymbol.AtModule, Map<String, BindingId>> bindings =
             new HashMap<>();
     /** Remembered per declaration, not per clause: a clause an include brings in is one expression
      * reached under two names, and what it types to is read against the fields of the one asking. */
     private final Map<TypeSymbol, Map<Hir.Expr, TypedClause>> typed = new HashMap<>();
-    private final Map<TypeSymbol.AtModule, List<Hir.InvariantClause>> effective = new HashMap<>();
+    private final Map<TypeSymbol.AtModule, ExpandedRules> effective = new HashMap<>();
     /** Which of a declaration's own fields each typed clause reads — what a construction has to have
      * filled for the clause to be read at all. */
     private final Map<Core, Set<BindingId>> readsFields = new IdentityHashMap<>();
 
     /**
-     * @param inTheAnalysisRepresentation the clauses of the module being checked, in the
+     * @param expandedClauses the clauses of the module being checked, in the
      *        representation the discharge rules are written at ({@link InliningPolicy#DISCHARGE}). A
      *        type another module declares is not among them and its clauses are read off its
      *        declaration, in the settled representation that travels with it (spec
@@ -54,22 +54,22 @@ final class Clauses {
      *        a rule is about.
      */
     Clauses(Symbols symbols,
-            ExpandedClauseLookup inTheAnalysisRepresentation) {
+            ExpandedClauseLookup expandedClauses) {
         this.symbols = symbols;
-        this.inTheAnalysisRepresentation = inTheAnalysisRepresentation;
+        this.expandedClauses = expandedClauses;
     }
 
     /** The representation this reads a declaration's clauses in, for a reader that has to hand it
      *  on rather than ask for one of its own. */
-    ExpandedClauseLookup analysisRepresentation() {
-        return inTheAnalysisRepresentation;
+    ExpandedClauseLookup expandedClauses() {
+        return expandedClauses;
     }
 
-    /** Every invariant that applies to {@code named}, each in the analysis representation where this
-     * module declares it. */
-    List<Hir.InvariantClause> of(TypeSymbol.AtModule named, Hir.Data data) {
+    /** Every rule that applies to {@code named}, in the expanded representation, with whether every
+     * one of them was reached. */
+    ExpandedRules of(TypeSymbol.AtModule named, Hir.Data data) {
         return effective.computeIfAbsent(named, name ->
-                TypeOps.analysisInvariants(name, data, symbols, inTheAnalysisRepresentation));
+                TypeOps.expandedInvariants(name, data, symbols, expandedClauses));
     }
 
     private final Map<TypeSymbol.AtModule, List<TypeOps.Declared>> declaredClauses =
@@ -204,8 +204,7 @@ final class Clauses {
 
     /** Every clause of {@code named}, each with the declaration that wrote it. */
     List<TypeOps.Declared> declared(TypeSymbol.AtModule named, Hir.Data data) {
-        return declaredClauses.computeIfAbsent(named, name ->
-                TypeOps.declaredForAnalysis(name, data, symbols, inTheAnalysisRepresentation));
+        return declaredClauses.computeIfAbsent(named, name -> of(name, data).reached());
     }
 
     /** Which of {@code data}'s own fields {@code clause} reads, remembered: a clause is read at every

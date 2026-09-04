@@ -43,14 +43,13 @@ public final class ExpandedClauses {
     }
 
     /**
-     * The clauses of a declaration kind that has no {@code invariant} to write —
-     * {@link Hir.SumData} and {@link Hir.UnitData}.
+     * A named way in for a declaration kind with no {@code invariant} to write — {@link Hir.SumData}
+     * and {@link Hir.UnitData}.
      *
-     * <p>Its own way in, and not the empty list handed to the constructor, because it states a
-     * different fact. A {@link Hir.Data} with nothing expanded for it is this compiler having failed
-     * to hand its own reading over; a sum has nothing to expand at all, and the HIR says so — only
-     * {@link Hir.Data} carries {@code invariants()}. Reached through one door the two would be one
-     * value and opposite facts.
+     * <p>The producer's, and nothing the value carries. What a reader needs is that every rule about
+     * the declaration has been read and there are none; why there were none is why the producer
+     * called this rather than the other, and a value that remembered it would let a reader ask a
+     * declaration's kind through a question about its rules.
      */
     static ExpandedClauses nothingToExpand(TypeKey declaration) {
         return new ExpandedClauses(declaration, List.of());

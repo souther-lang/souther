@@ -13,6 +13,7 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 /**
@@ -73,10 +74,10 @@ class AClauseIsAddressedWhereItWasWrittenTest {
     private static List<Hir.InvariantClause> asExpanded(Compilation compilation) {
         String module = compilation.modules().get(0);
         TypeSymbol.AtModule even = TypeSymbols.declared(new TypeKey(module, "Even"));
-        ExpandedClauses declared =
+        ExpandedClauseResult declared =
                 RuleReadings.of(compilation, module).invariants().of(even.key());
-        assertNotNull(declared);
-        return declared.clauses();
+        assertInstanceOf(ExpandedClauseResult.Found.class, declared);
+        return ((ExpandedClauseResult.Found) declared).clauses().clauses();
     }
 
     /** {@code Even}'s clauses as the declaration writes them, with no helper expanded into them. */
