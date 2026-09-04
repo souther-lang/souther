@@ -1904,10 +1904,6 @@ public final class HelperInliner {
                     new ReachName.InScope(new ValueName.Local(binder.name(), binder.id())));
         }
 
-        /** What stands here reaches. */
-        ValueName denotes() {
-            return reachedAs.denotes();
-        }
     }
 
     /**

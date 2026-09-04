@@ -634,10 +634,6 @@ public final class DataChecker {
         checkEncoder(derived.encoder(), ctx);
     }
 
-    private static Scope fieldScope(CheckContext ctx) {
-        return fieldScope(ctx.data().declares(), ctx.data(), ctx.symbols());
-    }
-
     /**
      * The bindings a declaration's own invariant reads: its fields, each as the binding it is.
      *

@@ -466,10 +466,6 @@ public final class FixtureReader {
         return built != null && neutral.isNewtype(built);
     }
 
-    private Hir.Data declared(TypeSymbol name) {
-        return symbols.declaredNode(name) instanceof Hir.Data data ? data : null;
-    }
-
     /**
      * Whether what a row wrote is a value of {@code type}, read off what the row wrote and nothing
      * else.

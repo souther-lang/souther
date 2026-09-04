@@ -2990,33 +2990,6 @@ public final class Generator {
         return true;
     }
 
-    /**
-     * Which classes each ordered axis fell in for one row, empty where the row did not say.
-     *
-     * <p>More than one where the position is inside a sequence: a row whose list holds elements
-     * either side of a line stands in both classes there, and picking one of them would report what
-     * the row covers off an element this chose.
-     */
-    private static List<int[]> reachedIn(Map<AxisId, Classification> row, List<Axis> axes) {
-        List<int[]> at = new ArrayList<>();
-        for (Axis axis : axes) {
-            List<Integer> here = new ArrayList<>();
-            if (row.get(axis.id()) instanceof Classification.Classified in) {
-                for (int c = 0; c < axis.classes().size(); c++) {
-                    if (in.classIds().contains(axis.classes().get(c).id())) {
-                        here.add(c);
-                    }
-                }
-            }
-            int[] found = new int[here.size()];
-            for (int k = 0; k < here.size(); k++) {
-                found[k] = here.get(k);
-            }
-            at.add(found);
-        }
-        return at;
-    }
-
     /** Where {@code id} sits among {@code axis}'s classes, or -1 where it is none of them. */
     private static int classIn(Axis axis, String id) {
         for (int c = 0; c < axis.classes().size(); c++) {
