@@ -583,7 +583,7 @@ public final class InputDomain {
                     next.add(under);
                     continue;
                 }
-                PlacementOutcome.Reason why = whyNothingAt(at, step);
+                PlacementOutcome.Reason why = whyNothingAt(at);
                 if (why != null) {
                     otherwise.add(new PlacementOutcome.Unresolved(why));
                 } else {
@@ -614,7 +614,7 @@ public final class InputDomain {
      * with the language about what may be written — which is not a limitation an author can be told
      * about, and not something to hand on as one.
      */
-    private PlacementOutcome.Reason whyNothingAt(TermPath at, String step) {
+    private PlacementOutcome.Reason whyNothingAt(TermPath at) {
         Position position = byPath.get(at);
         if (position != null
                 && position.structure() instanceof StructuralInspection.Retained retained

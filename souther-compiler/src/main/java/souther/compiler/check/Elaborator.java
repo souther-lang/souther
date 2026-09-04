@@ -752,7 +752,7 @@ public final class Elaborator {
         Substitution decided = applied.decided();
         List<Core> values = applied.values();
         Scope inner = applied.inner();
-        Type declaredResult = declaredResult(ex, ctx);
+        Type declaredResult = declaredResult(ex);
         // The declaration is what an empty collection inside the body has to go on: at a call site
         // that expects nothing concrete, nothing else says what it holds. Pushed in only once this
         // application has settled it — before that it names variables, and a variable states no type.
@@ -860,7 +860,7 @@ public final class Elaborator {
                             instanceof Type.FnOf declared)) {
                 continue;
             }
-            Type arrives = arrivesAs(g, ex, env, ctx);
+            Type arrives = arrivesAs(g, ex, env);
             if (arrives != null) {
                 // Both sides are one statement each, so both are read as one. Each was instantiated
                 // once — the receiving declaration when this call was expanded, the arriving one
@@ -897,7 +897,7 @@ public final class Elaborator {
      * supplied — and reading that declaration is what a boundary does. Only a lambda written at the
      * call has no declaration of its own, and it is read at the application that decides it.
      */
-    private static Type arrivesAs(Hir.Given g, Hir.Expansion ex, Scope env, CheckContext ctx) {
+    private static Type arrivesAs(Hir.Given g, Hir.Expansion ex, Scope env) {
         Type is = g.arrivesAs() != null ? TypeOps.resolveParamType(g.arrivesAs())
                 : g.value() instanceof Hir.Var.Denoting v
                         && env.of(v.denotes(), v.reaches()) instanceof Type.FnOf fn ? fn : null;
@@ -1026,7 +1026,7 @@ public final class Elaborator {
     /** The one type the callee's declaration gives its result, or null where it declared none or
      * declared a union — a union names one type where the body may answer several, so there is
      * nothing single to hold the body to. */
-    private static Type declaredResult(Hir.Expansion ex, CheckContext ctx) {
+    private static Type declaredResult(Hir.Expansion ex) {
         return ex.declaredReturn() == null || ex.declaredReturn().cases().size() != 1 ? null
                 : TypeOps.resolveParamType(ex.declaredReturn());
     }

@@ -1318,7 +1318,7 @@ public final class Resolve {
      * construction of a unit data and records where it came from; applied, it is a newtype taking
      * what it wraps, and the application is what says that.
      */
-    private Reach lookup(WrittenName name, boolean applied, InForce bound) {
+    private Reach lookup(WrittenName name, InForce bound) {
         String written = name.canonical();
         // a binding in force wins over everything else: a body may bind a name a module declares,
         // and the binding is what the name means there
@@ -1453,7 +1453,7 @@ public final class Resolve {
             return null;
         }
         WrittenName written = dottedName(fa);
-        switch (lookup(written, applied, bound)) {
+        switch (lookup(written, bound)) {
             case Reach.Reaches(ValueName denotes) -> {
                 ValueName resolved = answered(written, denotes);
                 return new Hir.Var.Denoting(written,
@@ -1467,7 +1467,7 @@ public final class Resolve {
                 return new Hir.Var.Unanswered(written, written.region());
             }
             case Reach.NotInScope _ -> {
-                return unknownMember(fa, written, applied, bound);
+                return unknownMember(fa, written, bound);
             }
         }
     }
@@ -1483,8 +1483,7 @@ public final class Resolve {
      * as the unknown identifier it is once the chain is read as the field access it turned out to
      * be.
      */
-    private Hir.Var unknownMember(Ast.FieldAccess fa, WrittenName written, boolean applied,
-                                  InForce bound) {
+    private Hir.Var unknownMember(Ast.FieldAccess fa, WrittenName written, InForce bound) {
         WrittenName qualifier = dottedName(fa.target());
         if (qualifier == null || !isNamespace(qualifier.canonical())) {
             return null;
@@ -1523,7 +1522,7 @@ public final class Resolve {
 
     /** What a name used as a value denotes, or null where nothing does — reported here. */
     private ValueName valueName(WrittenName written, InForce bound) {
-        return switch (lookup(written, false, bound)) {
+        return switch (lookup(written, bound)) {
             case Reach.Reaches(ValueName named) -> named;
             // Already accounted for on the import line that could not bring it in. Counted, so the
             // module is not emitted, and said nothing about, so the author is not sent to a body
@@ -1541,7 +1540,7 @@ public final class Resolve {
      * position it was written in is a fact about the source rather than about the name.
      */
     private ValueName calledName(WrittenName applied, InForce bound) {
-        return switch (lookup(applied, true, bound)) {
+        return switch (lookup(applied, bound)) {
             case Reach.Reaches(ValueName named) -> named;
             case Reach.StandsForNothing _ -> unanswered();
             case Reach.NotInScope _ -> nothing(unknownIdentifier(applied, bound));

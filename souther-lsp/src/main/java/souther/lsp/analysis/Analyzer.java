@@ -558,7 +558,7 @@ public final class Analyzer {
             }
             String title = lensTitle(compilation, module, behavior.name(), adequacy);
             if (title != null) {
-                out.add(new CodeLens(pointRange(lines, behavior.pos()), title));
+                out.add(new CodeLens(pointRange(behavior.pos()), title));
             }
         }
         return out;
@@ -683,7 +683,7 @@ public final class Analyzer {
     }
 
     /** The caret at one position, as a range of no width. */
-    private static Range pointRange(LineIndex lines, SourcePos pos) {
+    private static Range pointRange(SourcePos pos) {
         Position at = new Position(pos.line() - 1, pos.column() - 1);
         return new Range(at, at);
     }
@@ -770,7 +770,7 @@ public final class Analyzer {
         LineIndex lines = new LineIndex(text);
         for (Hir.BehaviorDef behavior : written.behaviors()) {
             if (!isWrittenIn(behavior, uri, graph)
-                    || !overlaps(pointRange(lines, behavior.pos()), requested)) {
+                    || !overlaps(pointRange(behavior.pos()), requested)) {
                 continue;
             }
             // Whether the model owes this behavior anything a row could answer. Asked of the
