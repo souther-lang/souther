@@ -72,7 +72,7 @@ class ACaseComposedForOneReaderIsComposedForEveryReaderTest {
      */
     @Test
     void theSomeOfAnOptionalSumOfRecordsStandsForAComposedCase() {
-        PartitionClass some = PartitionClasses.of(new Type.OptionOf(sum()), rules, souther.compiler.query.ReadAs.THE_COMPILATION_DOES).stream()
+        PartitionClass some = PartitionClasses.of(new Type.OptionOf(sum()), rules, souther.compiler.query.ReadAs.THE_COMPILATION_DOES, Set.of()).stream()
                 .filter(each -> each.id().equals("Some")).findFirst().orElseThrow();
 
         List<FixtureTemplate> stands =
@@ -118,7 +118,7 @@ class ACaseComposedForOneReaderIsComposedForEveryReaderTest {
      *  value for. */
     @Test
     void everyCaseOfTheSumStandsForSomething() {
-        for (PartitionClass each : PartitionClasses.of(sum(), rules, souther.compiler.query.ReadAs.THE_COMPILATION_DOES)) {
+        for (PartitionClass each : PartitionClasses.of(sum(), rules, souther.compiler.query.ReadAs.THE_COMPILATION_DOES, Set.of())) {
             assertFalse(Partitions.representativesOf(named(each.id()), rules, souther.compiler.query.ReadAs.THE_COMPILATION_DOES).isEmpty(),
                     () -> "a record case stands for a value: " + each.id());
         }

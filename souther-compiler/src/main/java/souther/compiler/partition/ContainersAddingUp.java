@@ -98,15 +98,17 @@ final class ContainersAddingUp {
         if (!(answer instanceof Count total) || elements == null) {
             return none(Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
         }
-        if (!(TypeView.of(container, ruleSource.symbols()).shape()
-                instanceof Shape.Sequence holding)) {
+        // The position, read once. What it holds, how many of them its rules leave it holding, and
+        // the names the container is written under are three questions of one reading, and asking
+        // the type again for any of them is another answer to which names it wears.
+        TypeView view = TypeView.of(container, ruleSource.symbols());
+        if (!(view.shape() instanceof Shape.Sequence holding)) {
             // A total is taken of a container, and what is declared at the root is not one. Which is
             // a term nobody should have been able to build; said here rather than by composing a
             // value of whatever shape is there.
             return none(Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
         }
-        DeclaredBounds.CountRange howMany =
-                howMany(container, target.writeRoot(), within, ruleSource);
+        DeclaredBounds.CountRange howMany = howMany(view, target.writeRoot(), within, ruleSource);
         NumericDomain.Bounds runs =
                 within.runsBetween(new NumericTerm.ValueOf(occurrences(target)));
         Ends ends = Ends.of(runs == null ? NumericDomain.Bounds.OPEN : runs, elements);
@@ -160,7 +162,7 @@ final class ContainersAddingUp {
                 // offer each case and to say the rest were never made.
                 for (Filling filling : ways.filled()) {
                     FixtureTemplate one =
-                            filled(split, holding, container, filling, elements, ruleSource, policy);
+                            filled(split, holding, view, filling, elements, ruleSource, policy);
                     if (one == null || built.contains(one)) {
                         continue;
                     }
@@ -199,15 +201,15 @@ final class ContainersAddingUp {
      * answers it as narrowed by whatever the row had to pass to get here. Read here instead, this
      * would be a second reading of the rules, free to part from the one the search was run against.
      */
-    private static DeclaredBounds.CountRange howMany(Type container, TermPath root,
+    private static DeclaredBounds.CountRange howMany(TypeView container, TermPath root,
                                                      SearchRegion within,
                                                      RuleReadingSource ruleSource) {
         Symbols symbols = ruleSource.symbols();
         DeclaredBounds.CountRange declared =
                 DeclaredBounds.countsHeld(container, ruleSource, null);
-        ValueName.Stdlib counts = NumericMeasures.takenOf(container, symbols);
+        ValueName.Stdlib counts = NumericMeasures.takenOf(container.declared(), symbols);
         NumericTerm.FromOnePosition term = counts == null ? null
-                : NumericTerm.TakenOf.of(counts, root, container, symbols);
+                : NumericTerm.TakenOf.of(counts, root, container.declared(), symbols);
         NumericDomain.Bounds runs = term == null ? null : within.runsBetween(term);
         if (runs == null) {
             return declared;
@@ -346,7 +348,7 @@ final class ContainersAddingUp {
      * rather than composed as a list, so that the day one arrives it arrives here.
      */
     private static FixtureTemplate filled(List<BigDecimal> split, Shape.Sequence holding,
-                                          Type container, Filling filling,
+                                          TypeView container, Filling filling,
                                           Carrier elements, RuleReadingSource ruleSource, ReadingPolicy policy) {
         if (holding.kind() != Shape.Sequence.Kind.LIST) {
             return null;
@@ -364,8 +366,7 @@ final class ContainersAddingUp {
             }
             values.add(one);
         }
-        return WornNames.under(TypeView.of(container, ruleSource.symbols()).wrappers(),
-                FixtureTemplate.collection(values), ruleSource);
+        return WornNames.under(container.wrappers(), FixtureTemplate.collection(values), ruleSource);
     }
 
     /**

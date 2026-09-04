@@ -252,6 +252,13 @@ final class TermRealizations {
                     Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
         }
         TypeView holder = TypeView.of(sourceType, ruleSource.symbols());
+        // A name this module cannot write leaves no value to write, which is a position nothing
+        // composes one for rather than a value written without the name. Asked of the position
+        // before anything is built for it, since it is the same answer for every value.
+        if (!(WornNames.of(holder.wrappers(), ruleSource) instanceof WornNames.Spelled worn)) {
+            return new Realization.None(
+                    Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+        }
         Witnesses.Sized built = Witnesses.ofSize(holder.shape(), many, ruleSource, policy, Set.of());
         if (built.values().isEmpty()) {
             // Read off the build that was already done. `Witnesses` keeps what it made and why it
@@ -265,14 +272,7 @@ final class TermRealizations {
         }
         List<FixtureTemplate> out = new ArrayList<>();
         for (FixtureTemplate each : built.values()) {
-            FixtureTemplate standing = WornNames.under(holder.wrappers(), each, ruleSource);
-            // A name this module cannot write leaves no value to write, which is a position nothing
-            // composes one for rather than a value written without the name.
-            if (standing == null) {
-                return new Realization.None(
-                        Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
-            }
-            out.add(standing);
+            out.add(RepresentativeSource.under(worn.names(), each));
         }
         return new Realization.Built(out, built.heldBack());
     }

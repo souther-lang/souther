@@ -271,13 +271,18 @@ final class Intervals {
         // Exhaustive, with no `default`. What a value reading as this number looks like is a
         // different construction per kind of number, so a kind added is one this has to be told
         // how to build for rather than one that falls to whichever branch it was not named in.
+        TypeView view = TypeView.of(type, ruleSource.symbols());
+        // A name this module cannot write leaves no value to write, whichever number the value is
+        // asked to read as. Asked of the position, once, before anything is built for it.
+        if (!(WornNames.of(view.wrappers(), ruleSource) instanceof WornNames.Spelled worn)) {
+            return List.of();
+        }
         switch (of) {
             case NumericTerm.ValueOf _ -> {
-                FixtureTemplate standing = WornNames.under(
-                        TypeView.of(type, ruleSource.symbols()).wrappers(),
-                        FixtureTemplate.on(carrier, inside, ruleSource.symbols().scope()::reach),
-                        ruleSource);
-                return standing == null ? List.of() : List.of(standing);
+                FixtureTemplate standing =
+                        FixtureTemplate.on(carrier, inside, ruleSource.symbols().scope()::reach);
+                return standing == null ? List.of()
+                        : List.of(RepresentativeSource.under(worn.names(), standing));
             }
             case NumericTerm.TakenOf _ -> { }
         }
@@ -285,11 +290,10 @@ final class Intervals {
         if (size < 0) {
             return List.of();
         }
-        TypeView view = TypeView.of(type, ruleSource.symbols());
         List<FixtureTemplate> out = new ArrayList<>();
         for (FixtureTemplate each
                 : Witnesses.ofSize(view.shape(), size, ruleSource, policy, Set.of()).values()) {
-            out.add(WornNames.under(view.wrappers(), each, ruleSource));
+            out.add(RepresentativeSource.under(worn.names(), each));
         }
         return List.copyOf(out);
     }

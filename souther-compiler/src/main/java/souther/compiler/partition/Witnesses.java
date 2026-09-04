@@ -450,7 +450,7 @@ final class Witnesses {
                                                      ReadingPolicy policy,
                                                      Set<TypeSymbol> expanding) {
         List<FixtureTemplate> out = new ArrayList<>();
-        for (PartitionClass each : PartitionClasses.of(type, ruleSource, policy)) {
+        for (PartitionClass each : PartitionClasses.of(type, ruleSource, policy, expanding)) {
             out.addAll(Partitions.standingFor(each.representatives(), ruleSource, policy, expanding));
         }
         return out;
@@ -469,10 +469,10 @@ final class Witnesses {
         TypeView view = TypeView.of(type, ruleSource.symbols());
         if (view.shape() instanceof Shape.Scalar scalar && scalar.prim() == Type.Prim.STRING) {
             return WornNames.under(view.wrappers(), FixtureTemplate.string(
-                    "x".repeat(Math.max(1, Partitions.leastHeld(type, ruleSource)) + index)),
+                    "x".repeat(Math.max(1, Partitions.leastHeld(view, ruleSource)) + index)),
                     ruleSource);
         }
-        Place at = Partitions.numberInside(type, ruleSource, index);
+        Place at = Partitions.numberInside(view, ruleSource, index);
         if (at == null) {
             return null;
         }

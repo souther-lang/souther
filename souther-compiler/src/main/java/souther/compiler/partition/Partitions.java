@@ -944,12 +944,14 @@ public final class Partitions {
                 values.add(each.value());
             }
         }
+        // The position, read once: every class below writes its value under the same names.
+        TypeView view = TypeView.of(type, ruleSource.symbols());
         List<PartitionClass> classes = new ArrayList<>();
         for (Place value : values) {
             String written = carrier.written(value);
             classes.add(classAt(term + "/= " + written, "= " + written,
                     holding(orders, new Recognition.CountIs.At(value)),
-                    standing(type, carrier, value, ruleSource)));
+                    standing(view, carrier, value, ruleSource)));
         }
         Place other = carrier.somethingOtherThan(values, within);
         String label = "/= " + String.join(", ",
@@ -961,7 +963,7 @@ public final class Partitions {
                         "nothing here composed a value of this position other than the ones"
                                 + " singled out")
                 : classAt(term + "/" + label, label, away,
-                        standing(type, carrier, other, ruleSource)));
+                        standing(view, carrier, other, ruleSource)));
         // Classes of the number the values were singled out of, said where that is known.
         return classes.stream().map(each -> each.ofTheNumber(term)).toList();
     }
@@ -976,10 +978,11 @@ public final class Partitions {
                 : PartitionClass.of(id, label, is, RepresentativeSource.of(standing));
     }
 
-    /** A count written at a position, wearing every name that position declares. */
-    private static FixtureTemplate standing(Type type, Carrier carrier, Place at,
+    /** A count written at a position, wearing every name that position declares — which the reading
+     *  of the position says, and nothing here asks again. */
+    private static FixtureTemplate standing(TypeView view, Carrier carrier, Place at,
             RuleReadingSource ruleSource) {
-        return WornNames.under(TypeView.of(type, ruleSource.symbols()).wrappers(),
+        return WornNames.under(view.wrappers(),
                 FixtureTemplate.on(carrier, at, ruleSource.symbols().scope()::reach), ruleSource);
     }
 
@@ -1274,12 +1277,18 @@ public final class Partitions {
                 return List.of();
             }
         }
+        // A name this module cannot write leaves no value to write. Asked of the position and not of
+        // each value: whether the names can be spelled is a fact about where the value is going, and
+        // a value at a position wearing one of them is no value here whatever it is.
+        if (!(WornNames.of(view.wrappers(), ruleSource) instanceof WornNames.Spelled spelled)) {
+            return List.of();
+        }
         // What the rules ask for, and then what the position is where nothing was written about it.
         List<FixtureTemplate> bare = new ArrayList<>();
         bare.addAll(whereTheRulesLeaveTheValue(view, ruleSource, within));
         bare.addAll(whatAFormatAsksFor(view, ruleSource));
         // What the rules say the value holds, before the value that would hold nothing.
-        bare.addAll(Witnesses.holding(view.shape(), leastHeld(view.declared(), ruleSource),
+        bare.addAll(Witnesses.holding(view.shape(), leastHeld(view, ruleSource),
                 ruleSource, policy, inside));
         List<FixtureTemplate> ofTheShape =
                 whatTheShapeStandsFor(view.shape(), ruleSource, policy, within, inside);
@@ -1287,19 +1296,14 @@ public final class Partitions {
 
         List<FixtureTemplate> candidates = new ArrayList<>();
         for (FixtureTemplate each : bare) {
-            // A name this module cannot write leaves no value to write, and no candidate.
-            FixtureTemplate written = WornNames.under(view.wrappers(), each, ruleSource);
-            if (written != null) {
-                candidates.add(written);
-            }
+            candidates.add(RepresentativeSource.under(spelled.names(), each));
         }
         // Where the shape stands for no value of its own, what stands at the position is one of the
-        // kinds its type divides into, and the classes are what name them. Asked only there: what a
-        // class says about the value a position holds is what stands at the position under it, and
-        // asking that of a shape that has a value of its own is the value asking for itself — an
-        // optional's `Some` is its element, met again while the element is being built.
+        // kinds its type divides into, and the classes are what name them. Asked only there, because
+        // a class of a position says what stands at the position under it: asked of a shape that has
+        // a value of its own, the answer is that value again, arrived at by building it.
         if (ofTheShape.isEmpty()) {
-            candidates.addAll(dividedInto(view, ruleSource, policy, expanding));
+            candidates.addAll(dividedInto(view, ruleSource, policy, inside));
         }
         Map<String, FixtureTemplate> once = new LinkedHashMap<>();
         for (FixtureTemplate each : candidates) {
@@ -1324,7 +1328,8 @@ public final class Partitions {
                                                      ReadingPolicy policy,
                                                      java.util.Set<TypeSymbol> expanding) {
         for (PartitionClass each : PartitionClasses.of(
-                Distinctions.ofType(view, ruleSource.symbols()), view, ruleSource, policy)) {
+                Distinctions.ofType(view, ruleSource.symbols()), view, ruleSource, policy,
+                expanding)) {
             List<FixtureTemplate> stands =
                     standingFor(each.representatives(), ruleSource, policy, expanding);
             if (!stands.isEmpty()) {
@@ -1597,20 +1602,31 @@ public final class Partitions {
     }
 
     /** How many of whatever counts a value the rules on it require it to hold, read where the rules
-     * are: {@link DeclaredBounds#leastCountOf}. */
+     * are: {@link DeclaredBounds#leastCountOf}. Of the position as it was read, since how many a
+     * value holds is what the rules of every name it wears say. */
+    static int leastHeld(TypeView view, RuleReadingSource ruleSource) {
+        return DeclaredBounds.leastCountOf(view, ruleSource);
+    }
+
+    /** The same, of a position nothing here has read yet. */
     static int leastHeld(Type type, RuleReadingSource ruleSource) {
-        return DeclaredBounds.leastCountOf(type, ruleSource);
+        return leastHeld(TypeView.of(type, ruleSource.symbols()), ruleSource);
     }
 
     /** The same, where the record the position sits in has a rule about it too. */
-    static int leastHeld(Type type, RuleReadingSource ruleSource, FieldDomains.Held held) {
-        return DeclaredBounds.leastCountOf(type, ruleSource, held);
+    static int leastHeld(TypeView view, RuleReadingSource ruleSource, FieldDomains.Held held) {
+        return DeclaredBounds.leastCountOf(view, ruleSource, held);
     }
 
-    /** How many the rules on a value of {@code type} allow it to hold, where the record the position
-     *  sits in has a rule about it too: {@link DeclaredBounds#mostCountOf}. */
+    /** The same, of a position nothing here has read yet. */
+    static int leastHeld(Type type, RuleReadingSource ruleSource, FieldDomains.Held held) {
+        return leastHeld(TypeView.of(type, ruleSource.symbols()), ruleSource, held);
+    }
+
+    /** How many the rules on a value of the position allow it to hold, where the record it sits in
+     *  has a rule about it too: {@link DeclaredBounds#mostCountOf}. */
     static int mostHeld(Type type, RuleReadingSource ruleSource, FieldDomains.Held held) {
-        return DeclaredBounds.mostCountOf(type, ruleSource, held);
+        return DeclaredBounds.mostCountOf(TypeView.of(type, ruleSource.symbols()), ruleSource, held);
     }
 
     /**
@@ -1633,8 +1649,9 @@ public final class Partitions {
     static java.util.Set<CompositionBudget> notBuilt(Type type, RuleReadingSource ruleSource,
                                                      ReadingPolicy policy,
                                                      FieldDomains.Held held) {
-        return Witnesses.heldBackFor(TypeView.of(type, ruleSource.symbols()).shape(),
-                leastHeld(type, ruleSource, held), ruleSource, policy);
+        TypeView view = TypeView.of(type, ruleSource.symbols());
+        return Witnesses.heldBackFor(view.shape(), leastHeld(view, ruleSource, held),
+                ruleSource, policy);
     }
 
     /**
@@ -1649,13 +1666,13 @@ public final class Partitions {
      * <p>Only a whole number steps. Between two decimals there is no next value, so a dense carrier
      * names the one number inside its range and no more.
      */
-    static Place numberInside(Type type, RuleReadingSource ruleSource, int index) {
-        Type base = TypeOps.numericBase(type, ruleSource.symbols());
+    static Place numberInside(TypeView view, RuleReadingSource ruleSource, int index) {
+        Type base = TypeOps.numericBase(view.declared(), ruleSource.symbols());
         if (base == null) {
             return null;
         }
-        NumericDomain.Bounds range = TypeBounds.admissible(
-                DeclaredBounds.of(TypeView.of(type, ruleSource.symbols()), ruleSource), null);
+        NumericDomain.Bounds range =
+                TypeBounds.admissible(DeclaredBounds.of(view, ruleSource), null);
         Place from = inside(range, base == Type.DECIMAL ? Carrier.DENSE : Carrier.WHOLE);
         if (from == null || base != Type.INT) {
             return from != null && index == 0 ? from : null;
@@ -1669,8 +1686,10 @@ public final class Partitions {
      *
      * <p>Both, and the floor first. Each is what one rule was read to produce and which of them the
      * whole of the rules admits is the decoder's answer, so neither withdraws the other — the same
-     * reading {@link #insideTheNewtype} makes of a newtype carrying a floor, made here of a position
-     * whose floor is its record's. What the order decides is not which is right: the search over a
+     * reading {@link #representativesOf(TypeView, RuleReadingSource, ReadingPolicy,
+     * NumericDomain.Bounds, java.util.Set)} makes of a position whose own rules give it a floor,
+     * made here of one whose floor is its record's. What the order decides is not which is right:
+     * the search over a
      * row's positions is bounded, so a position offering the value that holds nothing first spends
      * an assignment on a value the rule refuses, and rows at positions the rule has nothing to do
      * with are what runs out.
@@ -1679,12 +1698,23 @@ public final class Partitions {
                                                         ReadingPolicy policy,
                                                         NumericDomain.Bounds within,
                                                         FieldDomains.Held held) {
-        return representativesHolding(type, ruleSource, policy, within, held, java.util.Set.of());
+        return representativesHolding(TypeView.of(type, ruleSource.symbols()), ruleSource, policy,
+                within, held, java.util.Set.of());
+    }
+
+    /** The same, of a position nothing here has read yet. */
+    static List<FixtureTemplate> representativesHolding(Type type, RuleReadingSource ruleSource,
+                                                        ReadingPolicy policy,
+                                                        NumericDomain.Bounds within,
+                                                        FieldDomains.Held held,
+                                                        java.util.Set<TypeSymbol> expanding) {
+        return representativesHolding(TypeView.of(type, ruleSource.symbols()), ruleSource, policy,
+                within, held, expanding);
     }
 
     /** The same, with the names this is already inside the value of, for the same reason
      *  {@link #representativesOf} carries them. */
-    static List<FixtureTemplate> representativesHolding(Type type, RuleReadingSource ruleSource,
+    static List<FixtureTemplate> representativesHolding(TypeView view, RuleReadingSource ruleSource,
                                                         ReadingPolicy policy,
                                                         NumericDomain.Bounds within,
                                                         FieldDomains.Held held,
@@ -1693,16 +1723,16 @@ public final class Partitions {
         // Under every name the position wears, because a floor read off the record says how much the
         // value holds and not what it is written as: a field of a newtype over a list takes a list
         // inside that newtype's own name.
-        TypeView view = TypeView.of(type, ruleSource.symbols());
-        for (FixtureTemplate bare : Witnesses.holding(view.shape(),
-                leastHeld(type, ruleSource, held), ruleSource, policy, expanding)) {
-            // A name this module cannot write leaves no value to write, and no candidate.
-            FixtureTemplate written = WornNames.under(view.wrappers(), bare, ruleSource);
-            if (written != null) {
-                candidates.add(written);
+        //
+        // A name this module cannot write leaves no value to write, which is asked once of the
+        // position rather than of each value built for it.
+        if (WornNames.of(view.wrappers(), ruleSource) instanceof WornNames.Spelled spelled) {
+            for (FixtureTemplate bare : Witnesses.holding(view.shape(),
+                    leastHeld(view, ruleSource, held), ruleSource, policy, expanding)) {
+                candidates.add(RepresentativeSource.under(spelled.names(), bare));
             }
         }
-        candidates.addAll(representativesOf(type, ruleSource, policy, within, expanding));
+        candidates.addAll(representativesOf(view, ruleSource, policy, within, expanding));
         Map<String, FixtureTemplate> once = new LinkedHashMap<>();
         for (FixtureTemplate each : candidates) {
             once.putIfAbsent(each.text(), each);
@@ -1728,12 +1758,15 @@ public final class Partitions {
                                                             ReadingPolicy policy,
                                                             NumericDomain.Bounds within,
                                                             FieldDomains.Held held) {
-        List<FixtureTemplate> base =
-                new ArrayList<>(representativesHolding(type, ruleSource, policy, within, held));
+        // The position, read once and handed to everything below: what it ordinarily offers, what it
+        // holds back, where its rules leave a number, and the names any of those go under.
+        TypeView view = TypeView.of(type, ruleSource.symbols());
+        List<FixtureTemplate> base = new ArrayList<>(representativesHolding(
+                view, ruleSource, policy, within, held, java.util.Set.of()));
         // What a position holds back for the product search's second pass is on offer here from the
         // start. This pass runs only where both of those have already failed, and a position keeping
         // a value from the last search there is a value nothing will ever be tried at.
-        for (FixtureTemplate kept : inReserve(type, ruleSource, policy, within)) {
+        for (FixtureTemplate kept : inReserve(view, ruleSource, policy, within)) {
             if (base.stream().noneMatch(each -> each.text().equals(kept.text()))) {
                 base.add(kept);
             }
@@ -1742,15 +1775,17 @@ public final class Partitions {
         if (numeric == null) {
             return List.copyOf(base);
         }
-        NumericDomain.Bounds range = TypeBounds.admissible(
-                DeclaredBounds.of(TypeView.of(type, ruleSource.symbols()), ruleSource), within);
+        NumericDomain.Bounds range =
+                TypeBounds.admissible(DeclaredBounds.of(view, ruleSource), within);
         Carrier carrier = numeric == Type.INT ? Carrier.WHOLE : Carrier.DENSE;
         Place step = displaced(range, carrier);
         if (step == null) {
             return List.copyOf(base);
         }
-        FixtureTemplate value = standing(type, carrier, step, ruleSource);
-        if (base.stream().anyMatch(each -> each.text().equals(value.text()))) {
+        FixtureTemplate value = standing(view, carrier, step, ruleSource);
+        // Nothing to offer beside the first, either because the order has no value there or because
+        // a name the position wears is one this module cannot write.
+        if (value == null || base.stream().anyMatch(each -> each.text().equals(value.text()))) {
             return List.copyOf(base);
         }
         base.add(value);
@@ -1836,9 +1871,14 @@ public final class Partitions {
      */
     static List<FixtureTemplate> inReserve(Type type, RuleReadingSource ruleSource, ReadingPolicy policy,
                                            NumericDomain.Bounds within) {
+        return inReserve(TypeView.of(type, ruleSource.symbols()), ruleSource, policy, within);
+    }
+
+    /** The same, of a position that has already been read. */
+    static List<FixtureTemplate> inReserve(TypeView view, RuleReadingSource ruleSource,
+                                           ReadingPolicy policy, NumericDomain.Bounds within) {
         // A far edge is a rule's, and a rule is written on a name. A position wearing none carries
         // no rule of its own, so there is no edge here to hold anything back at.
-        TypeView view = TypeView.of(type, ruleSource.symbols());
         if (!view.isWrapped()) {
             return List.of();
         }
