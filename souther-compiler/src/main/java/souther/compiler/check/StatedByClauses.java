@@ -939,6 +939,13 @@ sealed interface StatedByClauses {
             // rather than in one test because every declaration a corpus holds goes through it.
             assert unspent.equals(leftOf(by, made.made().values().subjects()))
                     : "making the accounts of a declaration spent its allowance";
+            // What the reading is short of, from both places it is written down: the positions it
+            // did not build, and the positions a branch it kept recorded something about. The
+            // second is not the first — a branch nobody could work out is kept and what stopped it
+            // is put on the values, while the answer that came back was built — and a caller asking
+            // whether a position was answered exactly has to ask both.
+            Set<FactSubject> shortOf = new LinkedHashSet<>(made.made().unbuilt());
+            shortOf.addAll(made.made().values().standing().keySet());
             // And here the reading stops being one and becomes an answer. What each rule about the
             // strings at a position leaves is worked out now, once, and a reader downstream is
             // handed the sets.
@@ -948,7 +955,7 @@ sealed interface StatedByClauses {
             // on its own, which the answer had no use for — charged to it, what a position is read
             // to admit would turn on what a reader downstream was promised, and the assertion above
             // would be true of the accounts and false of the reading as a whole.
-            Map<Core, ReadByClauses.OfAPart> published = published(said, handingOn, by::known);
+            Map<Core, ReadByClauses.OfAPart> published = published(said, handingOn, shortOf);
             // And the answer's allowance is where it was. What a position admits is answered under
             // the allowance for it and nothing else reaches that allowance, so what this
             // declaration can be told exactly is the same whether or not anybody is ever handed
@@ -993,14 +1000,24 @@ sealed interface StatedByClauses {
          * crosses unchanged — it is not a set nobody made, and a reader that met it as one would be
          * told the position's allowance ran out on a rule nothing ever asked to be built.
          *
-         * <p>What the answer built is read and not built again ({@code known}). A rule that stands
-         * alone at a position is the position's answer, and its machine exists by the time this
-         * asks — so what is charged to the allowance for handing rules on is what the answer had no
-         * use for, which is what that allowance is for.
+         * <p>What the answer built is read and not built again ({@link Allowance#besides}). A rule
+         * that stands alone at a position is the position's answer, and its machine exists by the
+         * time this asks — so what is charged to the allowance for handing rules on is what the
+         * answer had no use for, which is what that allowance is for.
+         *
+         * <p><b>And nothing is published at a position the answer is short of.</b> What each rule
+         * leaves is a projection of what the position admits, and a projection may not answer where
+         * the thing it projects could not: given its own allowance to try again, the reading would
+         * be telling a reader which strings a rule leaves at a position it has just said it cannot
+         * say what stands at, and the two would differ over exactly the patterns one of them can
+         * afford — which is the arrangement this whole reading exists to remove. So the second
+         * allowance makes up what the first had no use for, and never what it could not manage.
+         *
+         * @param shortOf the positions the reading did not answer exactly
          */
         private Map<Core, ReadByClauses.OfAPart> published(
                 Map<Core, PartAccount> said, Allowance<FactSubject> handingOn,
-                Allowance.Known<FactSubject> known) {
+                Set<FactSubject> shortOf) {
             Map<FactSubject, Set<AdmittedPlan>> asked = new LinkedHashMap<>();
             said.values().forEach(part -> part.aboutStrings().forEach((position, stated) -> {
                 if (stated instanceof StringRestriction.Admitting it) {
@@ -1008,8 +1025,9 @@ sealed interface StatedByClauses {
                 }
             }));
             Map<FactSubject, Realizations> answers = new LinkedHashMap<>();
-            asked.forEach((position, plans) ->
-                    answers.put(position, handingOn.realizeAll(position, known, plans)));
+            asked.forEach((position, plans) -> answers.put(position,
+                    shortOf.contains(position) ? new Realizations.NotBuilt()
+                            : handingOn.realizeAll(position, plans)));
             Map<Core, ReadByClauses.OfAPart> out = new IdentityHashMap<>();
             said.forEach((each, part) -> out.put(each, new ReadByClauses.OfAPart(
                     part.byValues(), part.byOrder(), part.aboutARule(),

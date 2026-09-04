@@ -41,11 +41,15 @@ public final class Allowance<A> {
     private final Map<A, Realizer> realizers = new LinkedHashMap<>();
     /** The positions whose exact answer this stopped building, in the order they were found. */
     private final Set<A> spent = new LinkedHashSet<>();
+    /** What another question of the same positions built, which this one may use and does not pay
+     *  for — see {@link #besides}. */
+    private final Known<A> borrowed;
     private Realizer nowhere;
     private boolean spentElsewhere;
 
-    private Allowance(PatternPlan.Budget budget) {
+    private Allowance(PatternPlan.Budget budget, Known<A> borrowed) {
         this.budget = budget;
+        this.borrowed = borrowed;
     }
 
     /** A fresh allowance for every position of one answer. */
@@ -53,7 +57,26 @@ public final class Allowance<A> {
         if (budget == null) {
             throw new IllegalArgumentException("an allowance allows something");
         }
-        return new Allowance<>(budget);
+        return new Allowance<>(budget, Known.nothing());
+    }
+
+    /**
+     * The same, beside another question of the same positions whose machines this one may use.
+     *
+     * <p>A machine exists or it does not, and one that does is not made twice: what {@code answers}
+     * built is read wherever a plan of it comes up here, including inside a plan this is building
+     * out of others. Charged again, a question that needs one part more than its neighbour would
+     * pay for the neighbour as well, and an allowance meant for the difference would be spent on
+     * what was already bought.
+     *
+     * <p>Reading it spends nothing of {@code answers} ({@link #known}), and it is a reading and not
+     * a share: what this builds is this one's, and the other question's allowance is where it was.
+     */
+    public static <A> Allowance<A> besides(PatternPlan.Budget budget, Allowance<A> answers) {
+        if (budget == null || answers == null) {
+            throw new IllegalArgumentException("an allowance allows something, beside something");
+        }
+        return new Allowance<>(budget, answers::known);
     }
 
     /**
@@ -193,7 +216,8 @@ public final class Allowance<A> {
      * undone from outside.
      */
     Realizer realizer(A atom) {
-        return realizers.computeIfAbsent(atom, _ -> new Realizer(meter(atom)));
+        return realizers.computeIfAbsent(atom,
+                _ -> new Realizer(meter(atom), plan -> borrowed.of(atom, plan)));
     }
 
     /**
@@ -210,15 +234,15 @@ public final class Allowance<A> {
      * whole list rather than being a loop somebody writes: there is no way to spell a partial
      * answer here.
      *
-     * <p>A machine {@code already} holds is not made again. What another of this position's
-     * questions built is a machine that exists, and reading it asks that allowance for nothing —
-     * so what is charged here is what nothing had built, which is what this allowance is for.
+     * <p>A machine this allowance may borrow is not made again ({@link #besides}), wherever it
+     * comes up: a plan of it inside a plan being built out of others is read the same way, so what
+     * is charged here is the difference and never what was already bought.
      *
      * <p>A position given up on stays given up on, here as everywhere: a group refused leaves the
      * position spent, so a caller that asks again is told the same thing rather than being sold the
      * rest of the allowance one plan at a time.
      */
-    public Realizations realizeAll(A atom, Known<A> already, Collection<AdmittedPlan> plans) {
+    public Realizations realizeAll(A atom, Collection<AdmittedPlan> plans) {
         if (isSpent(atom)) {
             return new Realizations.NotBuilt();
         }
@@ -231,11 +255,6 @@ public final class Allowance<A> {
         order.sort(Comparator.comparing(PlanOrder::of));
         Map<AdmittedPlan, ValueSet> out = new LinkedHashMap<>();
         for (AdmittedPlan each : order) {
-            ValueSet had = already.of(atom, each);
-            if (had != null) {
-                out.put(each, had);
-                continue;
-            }
             // The first refusal stops the rest. What is left to build is for an answer this is not
             // going to give, and it would come out of the same allowance the rest of this
             // position's group draws on.
@@ -259,7 +278,7 @@ public final class Allowance<A> {
      */
     public Realizer elsewhere() {
         if (nowhere == null) {
-            nowhere = new Realizer(budget.meter());
+            nowhere = new Realizer(budget.meter(), plan -> borrowed.of(null, plan));
         }
         return nowhere;
     }
@@ -319,7 +338,11 @@ public final class Allowance<A> {
      * copies of them, for that reason.
      */
     public <B> Allowance<B> renamed(java.util.function.Function<A, B> naming) {
-        Allowance<B> out = new Allowance<>(budget);
+        // What was lent goes with the positions it was lent to, which are the realizers below: each
+        // of them holds the lending question already, asked under the name it was asked under. A
+        // position this hears of only after the renaming is one that was in no lending question,
+        // there being nothing under either name to lend — so what is left here lends nothing.
+        Allowance<B> out = new Allowance<>(budget, Known.nothing());
         meters.forEach((atom, meter) -> out.meters.put(naming.apply(atom), meter));
         realizers.forEach((atom, made) -> out.realizers.put(naming.apply(atom), made));
         spent.forEach(atom -> out.spent.add(naming.apply(atom)));

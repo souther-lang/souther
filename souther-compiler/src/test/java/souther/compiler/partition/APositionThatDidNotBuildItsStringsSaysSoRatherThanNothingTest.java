@@ -77,6 +77,26 @@ class APositionThatDidNotBuildItsStringsSaysSoRatherThanNothingTest {
             behavior f : (c: Code) -> Ok
             """;
 
+    /**
+     * A rule whose strings are a run of the order, which is an edge wherever it is read.
+     *
+     * <p>The model for what the second allowance may not do. A prefix read to its strings puts a
+     * line on the position, so a reading that answered it out of the allowance for handing rules on
+     * would be publishing a boundary at a position whose own answer it had just said it could not
+     * build — the two allowances answering one model, and the wider of them speaking where the
+     * narrower had stopped.
+     */
+    private static final String ONE_THAT_WOULD_DRAW_A_LINE = """
+            module probe.prefix
+
+            data Code = String
+                invariant starts = String.startsWith("A", value)
+
+            data Ok
+
+            behavior f : (c: Code) -> Ok
+            """;
+
     /** What a compilation grants a reading that has room to build the machines its rules name. */
     private static final ReadingPolicy WITH_ROOM = souther.compiler.query.ReadAs.THE_COMPILATION_DOES;
 
@@ -97,6 +117,12 @@ class APositionThatDidNotBuildItsStringsSaysSoRatherThanNothingTest {
             WITH_ROOM.dnfExpansionLimit(), WITH_ROOM.scalePlacesLimit(),
             souther.compiler.values.AsACompilationAllows.admittedValues(),
             new PatternPlan.Budget(1, 1));
+
+    /** And the pair the other way round, which is the one nothing may be published under. */
+    private static final ReadingPolicy ROOM_TO_HAND_ON_AND_NONE_TO_ANSWER = new ReadingPolicy(
+            WITH_ROOM.dnfExpansionLimit(), WITH_ROOM.scalePlacesLimit(),
+            new PatternPlan.Budget(1, 1),
+            souther.compiler.values.AsACompilationAllows.whatARuleLeaves());
 
     @Test
     void aRuleReadToItsStringsIsTheModelHoldingThePositionToThem() {
@@ -149,6 +175,30 @@ class APositionThatDidNotBuildItsStringsSaysSoRatherThanNothingTest {
                         + " anything about what the position admits, which is exact");
     }
 
+    /**
+     * And the allowance for handing rules on does not answer where the answer could not.
+     *
+     * <p>The rule here is one that draws a line when it is read, so a reading that made its machine
+     * out of the second allowance would put a boundary on the position — at a position whose own
+     * answer it could not build. What the second allowance is for is the sets the first had no use
+     * for, not the ones it could not manage, and the difference is only visible on a rule whose set
+     * would show.
+     */
+    @Test
+    void andTheAllowanceForHandingRulesOnDoesNotAnswerWhereTheAnswerCouldNot() {
+        assertEquals(List.of(), positionsIn(ONE_THAT_WOULD_DRAW_A_LINE, WITH_ROOM),
+                "read with room, the position is answered and nothing about it is outstanding");
+
+        assertEquals(List.of("c: CannotDerive"),
+                positionsIn(ONE_THAT_WOULD_DRAW_A_LINE, ROOM_TO_HAND_ON_AND_NONE_TO_ANSWER),
+                "and with none — however much is left to hand its rules on with — it is a position"
+                        + " nothing about the model follows from");
+        assertEquals(List.of(), reasonsIn(ONE_THAT_WOULD_DRAW_A_LINE,
+                        ROOM_TO_HAND_ON_AND_NONE_TO_ANSWER),
+                "nothing is said about what its rules leave, and the rule is one that leaves a"
+                        + " line when it is read: a set the answer never made draws none");
+    }
+
     /** What every rule of the model came to that drew no line, under {@code policy}. */
     private static List<String> reasonsUnder(ReadingPolicy policy) {
         return reasonsIn(MODEL, policy);
@@ -166,8 +216,12 @@ class APositionThatDidNotBuildItsStringsSaysSoRatherThanNothingTest {
 
     /** Which of the three each position no class came back for came to. */
     private static List<String> positionsUnder(ReadingPolicy policy) {
+        return positionsIn(MODEL, policy);
+    }
+
+    private static List<String> positionsIn(String model, ReadingPolicy policy) {
         List<String> out = new ArrayList<>();
-        for (PartitionEvidence evidence : read(MODEL, policy)) {
+        for (PartitionEvidence evidence : read(model, policy)) {
             for (UndividedPosition each : evidence.notDerivable()) {
                 out.add(each.at() + ": " + each.why().getClass().getSimpleName());
             }

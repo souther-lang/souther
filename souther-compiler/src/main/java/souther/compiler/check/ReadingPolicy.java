@@ -107,11 +107,11 @@ public final class ReadingPolicy {
      */
     @Override
     public boolean equals(Object other) {
-        return this == other || other instanceof ReadingPolicy it
+        return this == other || (other instanceof ReadingPolicy it
                 && dnfExpansionLimit == it.dnfExpansionLimit
                 && scalePlacesLimit == it.scalePlacesLimit
                 && admittedValues.equals(it.admittedValues)
-                && whatARuleLeaves.equals(it.whatARuleLeaves);
+                && whatARuleLeaves.equals(it.whatARuleLeaves));
     }
 
     @Override
@@ -175,16 +175,26 @@ public final class ReadingPolicy {
     }
 
     /**
-     * And one for handing each of a position's rules on as the set it leaves.
+     * And one for handing each of a position's rules on as the set it leaves, beside the answer it
+     * is a projection of.
      *
      * <p>Apart from the answer's, because the two build different sets and only one of them is what
      * the model is read to admit ({@link souther.compiler.regex.PatternPlan.Budget
      * #OF_WHAT_A_RULE_LEAVES}). Spending the answer's on what a reader downstream was promised
      * would let what a position admits turn on what somebody else asked for.
      *
+     * <p>Beside {@code answers} and never on its own. What is built here is what each rule of a
+     * position leaves, which is a projection of what the position admits — so it uses the machines
+     * that answer already made, and it is not a second chance at the ones it could not. A position
+     * this reading is short of is one nothing here may answer about, which is the caller's to keep
+     * ({@code StatedByClauses}): given the position's rules all the same, the two allowances would
+     * be two readers of one model, and the wider of them would be answering for the model where
+     * the narrower had said it could not.
+     *
      * @param <A> what a position is called
      */
-    public <A> souther.compiler.values.Allowance<A> allowanceForWhatARuleLeaves() {
-        return souther.compiler.values.Allowance.of(whatARuleLeaves);
+    public <A> souther.compiler.values.Allowance<A> allowanceForWhatARuleLeaves(
+            souther.compiler.values.Allowance<A> answers) {
+        return souther.compiler.values.Allowance.besides(whatARuleLeaves, answers);
     }
 }

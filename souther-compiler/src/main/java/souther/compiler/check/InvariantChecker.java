@@ -799,7 +799,7 @@ public final class InvariantChecker {
             // arrived would be built out of less than the rules say — and which of two ways of
             // writing the same rules was affordable would be a fact about the writing.
             StatedByClauses.Answered<Written> answered = asked.resolve(reader, allowed,
-                    policy.allowanceForWhatARuleLeaves());
+                    policy.allowanceForWhatARuleLeaves(allowed));
             // What the answer has left, before a word of the account is read.
             Map<FactSubject, Integer> unspent = leftOf(allowed, positions.keySet());
             AdmissibleValues<FactSubject> values = answered.whole().values();

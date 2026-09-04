@@ -7,13 +7,19 @@ import org.junit.jupiter.api.Test;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.lang.classfile.ClassFile;
+import java.lang.classfile.ClassModel;
+import java.lang.classfile.CodeElement;
+import java.lang.classfile.MethodModel;
 import java.lang.classfile.constantpool.MemberRefEntry;
 import java.lang.classfile.constantpool.PoolEntry;
+import java.lang.classfile.instruction.InvokeInstruction;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.stream.Stream;
 
@@ -29,13 +35,15 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * the model admits there — and because it would be building under an allowance of its own, the two
  * can differ over a pattern one of them can afford and the other cannot, with neither saying so.
  *
- * <p><b>Three allowances and three owners, which is the shape rather than three numbers.</b> The
+ * <p><b>Four allowances and four owners, which is the shape rather than four numbers.</b> The
  * numbers are equal today and that is a coincidence; what is not a coincidence is which question
- * each of them bounds. One is what a position may build to answer what it admits; one is what
- * writing a value out of a pattern may cost, which is a witness for a row and no answer about any
- * position; one is what walking a published set for where it stops may cost, which is a report's
- * question about an answer somebody else built. Each is named by its owner and by nobody else, so a
- * fourth reader wanting a machine has to say whose allowance it is spending.
+ * each of them bounds. One is what a position may build to answer what it admits. One is what
+ * handing each of its rules on as the set it leaves may build, which is a projection of that answer
+ * and is granted beside it. One is what writing a value out of a pattern may cost, which is a
+ * witness for a row and no answer about any position. And one is what walking a published set for
+ * where it stops may cost, which is a report's question about an answer somebody else built. Each
+ * is named by its owner and by nobody else, so a fifth reader wanting a machine has to say whose
+ * allowance it is spending.
  *
  * <p>Read off the compiled classes and not the source, so that a name reached through a constant is
  * a row here whatever it is spelled as. A row that is new is a finding: either the capability moved
@@ -83,11 +91,17 @@ class WhoMayBuildALanguageAboutAPositionTest {
      * budget. So the askers are counted too. One answer is one allowance, and the place a reading
      * is made is the place that asks — {@code InvariantChecker} where a declaration's positions are
      * read, and the two input readers that read a declaration's rules for a behavior's inputs.
+     *
+     * <p><b>How many times each of them asks, and not just that it does.</b> Two calls in one class
+     * reach the constant pool once, so a walk over the names it mentions sees the same row for one
+     * asking and for two — and two askings inside one reading is exactly the thing being refused. So
+     * the invocations are counted where they are written, which is the only place they differ.
      */
     private static final List<String> ASKING_FOR_AN_ALLOWANCE = List.of(
-            "souther/compiler/check/InvariantChecker",
-            "souther/compiler/inputs/PlacedRules",
-            "souther/compiler/inputs/ReadQuantities");
+            "souther/compiler/check/InvariantChecker allowanceForAdmittedValues x1",
+            "souther/compiler/check/InvariantChecker allowanceForWhatARuleLeaves x1",
+            "souther/compiler/inputs/PlacedRules allowanceForAdmittedValues x1",
+            "souther/compiler/inputs/ReadQuantities allowanceForAdmittedValues x1");
 
     /**
      * What writing one value out of a pattern may cost.
@@ -208,11 +222,29 @@ class WhoMayBuildALanguageAboutAPositionTest {
                 && member.name().stringValue().equals(field));
     }
 
-    /** Every class that asks the policy for an allowance of either kind. */
+    /** Every asking of the policy for an allowance, counted where it is written. */
     private static List<String> askingForAnAllowance() {
-        return found(entry -> entry instanceof MemberRefEntry member
-                && member.owner().name().stringValue().equals(POLICY)
-                && member.name().stringValue().startsWith("allowanceFor"));
+        Map<String, Integer> counted = new TreeMap<>();
+        for (Path module : REPOSITORY.modules()) {
+            for (Path each : classesUnder(module)) {
+                String asker = internalName(module, each);
+                for (MethodModel method : classOf(each).methods()) {
+                    method.code().ifPresent(code -> {
+                        for (CodeElement element : code) {
+                            if (element instanceof InvokeInstruction call
+                                    && call.owner().name().stringValue().equals(POLICY)
+                                    && call.name().stringValue().startsWith("allowanceFor")) {
+                                counted.merge(asker + " " + call.name().stringValue(), 1,
+                                        Integer::sum);
+                            }
+                        }
+                    });
+                }
+            }
+        }
+        List<String> out = new ArrayList<>();
+        counted.forEach((who, times) -> out.add(who + " x" + times));
+        return out;
     }
 
     /** Every class that asks a plan for the machine it names. */
@@ -244,8 +276,12 @@ class WhoMayBuildALanguageAboutAPositionTest {
     }
 
     private static Iterable<PoolEntry> constantPoolOf(Path compiled) {
+        return classOf(compiled).constantPool();
+    }
+
+    private static ClassModel classOf(Path compiled) {
         try {
-            return ClassFile.of().parse(Files.readAllBytes(compiled)).constantPool();
+            return ClassFile.of().parse(Files.readAllBytes(compiled));
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
