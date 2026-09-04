@@ -6,7 +6,10 @@ import java.io.IOException;
 import java.lang.classfile.ClassFile;
 import java.lang.classfile.ClassModel;
 import java.lang.classfile.CodeModel;
+import java.lang.classfile.instruction.InvokeDynamicInstruction;
 import java.lang.classfile.instruction.InvokeInstruction;
+import java.lang.constant.ConstantDesc;
+import java.lang.constant.DirectMethodHandleDesc;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -43,6 +46,9 @@ class OnlyTypeAtWrittenPathStepsIntoAWrittenValueTest {
 
     private static final String OWNER = "souther.compiler.partition.BehaviorInputs";
 
+    /** The same class as {@link #OWNER}, as a method handle spells its owner. */
+    private static final String SHORT = "BehaviorInputs";
+
     private static final String ANSWERS = "stepWrittenValue";
 
     /**
@@ -75,9 +81,7 @@ class OnlyTypeAtWrittenPathStepsIntoAWrittenValueTest {
                     continue;
                 }
                 for (var element : code) {
-                    if (element instanceof InvokeInstruction call
-                            && call.owner().asInternalName().replace('/', '.').equals(OWNER)
-                            && call.name().stringValue().equals(ANSWERS)) {
+                    if (reaches(element)) {
                         asks.add(from + "#" + method.methodName().stringValue()
                                 + method.methodType().stringValue());
                     }
@@ -114,6 +118,38 @@ class OnlyTypeAtWrittenPathStepsIntoAWrittenValueTest {
                         + "Lsouther/compiler/check/Symbols;)Lsouther/compiler/types/Type;"),
                 declared,
                 "where a written value has a part is one question, so it is answered by one method");
+    }
+
+    /**
+     * Whether this piece of a method's code reaches the answer, however it was written.
+     *
+     * <p>Two encodings and they are one reading. A call written as a call is an invocation naming
+     * the method; a method reference is an {@code invokedynamic} whose bootstrap carries the same
+     * method as a handle, and the name of the method appears nowhere in the instruction. Read for
+     * the first alone, {@code BehaviorInputs::stepWrittenValue} handed to a {@code map} would put
+     * the written relation back inside the reading walk and this would go on naming one caller.
+     */
+    private static boolean reaches(java.lang.classfile.CodeElement element) {
+        if (element instanceof InvokeInstruction call) {
+            return names(call.owner().asInternalName().replace('/', '.'),
+                    call.name().stringValue());
+        }
+        if (!(element instanceof InvokeDynamicInstruction made)) {
+            return false;
+        }
+        for (ConstantDesc argument : made.bootstrapArgs()) {
+            if (argument instanceof DirectMethodHandleDesc handle
+                    && names(handle.owner().displayName(), handle.methodName())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Whether a call names the answer. The owner by its display name where a handle carries it and
+     *  by its binary name where an instruction does, which are the same name for a nested class. */
+    private static boolean names(String owner, String method) {
+        return (owner.equals(OWNER) || owner.equals(SHORT)) && method.equals(ANSWERS);
     }
 
     private static Path fileOf(String binaryName) {

@@ -81,9 +81,16 @@ class NoQuestionAboutAShapeIsAnsweredOutOfAnothersAnswerTest {
      *  took this one, and every name a model reads through a sum came back unread. */
     private static final List<String> ASK_WHAT_A_WRITTEN_VALUE_HAS_UNDER_A_STEP = List.of();
 
+    /**
+     * Both ways in, counted together.
+     *
+     * <p>Every name at a position and one name of it are the same question asked twice over, so who
+     * asks it is one list. Counted apart, a reader could move from one to the other and leave the
+     * list it was on — which reads as a reader having gone away.
+     */
     @Test
     void whatIsReadableIsAskedOfTheOneThatAnswersIt() {
-        assertEquals(ASK_WHAT_IS_READABLE, callersOf(ReadableFields.class, "of"),
+        assertEquals(ASK_WHAT_IS_READABLE, callersOf(ReadableFields.class, "of", "at"),
                 "these ask what is readable off a value, and this is who does");
     }
 
@@ -148,11 +155,14 @@ class NoQuestionAboutAShapeIsAnsweredOutOfAnothersAnswerTest {
                 "the fields a sum's cases share are read where the readable surface is made");
     }
 
-    /** Who calls {@code method} on {@code on}, leaving out the class that declares it and anything
-     *  nested inside it — a record holds its own accessor, a lambda is compiled into the class that
-     *  wrote it, and naming itself is not reading itself. */
-    private static List<String> callersOf(Class<?> on, String method) {
-        Set<String> found = WhatWasCompiled.callersOf(on, method);
+    /** Who calls any of {@code methods} on {@code on}, leaving out the class that declares them and
+     *  anything nested inside it — a record holds its own accessor, a lambda is compiled into the
+     *  class that wrote it, and naming itself is not reading itself. */
+    private static List<String> callersOf(Class<?> on, String... methods) {
+        Set<String> found = new java.util.LinkedHashSet<>();
+        for (String method : methods) {
+            found.addAll(WhatWasCompiled.callersOf(on, method));
+        }
         return found.stream()
                 .filter(each -> !each.equals(on.getName()) && !each.startsWith(on.getName() + "$"))
                 .sorted().toList();

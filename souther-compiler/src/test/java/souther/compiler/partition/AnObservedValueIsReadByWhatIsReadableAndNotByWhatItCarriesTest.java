@@ -163,6 +163,32 @@ class AnObservedValueIsReadByWhatIsReadableAndNotByWhatItCarriesTest {
                 "the cases spreading the name change nothing about what a run of it holds");
     }
 
+    /**
+     * The steps that are not a field admit what they admit here, said apart from the written walk.
+     *
+     * <p>An element and a narrowing come to the same type under either relation today, and the two
+     * walks answer them separately so that they may stop. Pinned here and in
+     * {@link WhatIsReadableAndWhatIsBuiltAgreeAtARecordAndPartAtASumTest} rather than compared, for
+     * the reason the four questions about a shape are: two answers held against each other are one
+     * answer wearing two names, and the day somebody means to move one of them, what the other says
+     * has to fail on its own.
+     *
+     * <p>An element of a list, a narrowing to the case the row wrote, and a narrowing to the other
+     * one. The last is the step being taken and finding nothing, which is what tells the pair apart
+     * from a step that cannot be taken at all.
+     */
+    @Test
+    void whatTheStepsBesideAFieldAdmitIsSaidHere() {
+        assertEquals(List.of(new ObservedValue.Integer(6), new ObservedValue.Integer(7)),
+                read(SPREAD, aCardAndACash(), amount()),
+                "an element of the list is every element the row wrote");
+        assertEquals(List.of(new ObservedValue.Text("x")),
+                read(SPREAD, aCardAndACash(), cardNumberAsACard()),
+                "and a narrowing keeps what the row wrote as that case");
+        assertEquals(List.of(), read(SPREAD, List.of(cash(7)), cardNumberAsACard()),
+                "and drops what it wrote as another, which is a step taken");
+    }
+
     private static TermPath amount() {
         return TermPath.of("ns").element().then("method").then("amount");
     }

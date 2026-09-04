@@ -253,10 +253,11 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, RuleRead
      * ({@link ReadableFields}), and it is asked of the reading rather than worked out from this.
      *
      * <p><b>Answered for whoever writes a value, and for nobody else.</b> Reading a row is the other
-     * relation and takes its own steps ({@link Standing#step}), which is not a duplicate of this: the
-     * two are one answer at a record and part at a sum whose cases share a spread, and that agreement
-     * is a law over them rather than a reason for either to be the other's implementation. The one
-     * caller is {@link #typeAtWrittenPath}, and it is watched.
+     * relation and takes its own steps ({@link Standing#step}), which is not a duplicate of this:
+     * the two are one answer at a record and part at a sum whose cases share a spread. Where they
+     * agree, each is written down on its own rather than one being read out of the other, so a
+     * reader that means to move one is not moving both. The one caller is
+     * {@link #typeAtWrittenPath}, and it is watched.
      */
     static Type stepWrittenValue(TermPath.Step step, Type from, Symbols symbols) {
         TypeView view = TypeView.of(from, symbols);
@@ -308,7 +309,12 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, RuleRead
      * {@link BehaviorInputs#stepWrittenValue}. A field every case of a sum spreads is where the two
      * relations part: it is readable at every value of the sum and a row writes one of the cases, so
      * a walk taking the written relation reached nothing at a name every reading of the model uses.
-     * That they agree at a record is a law over the two and not a reason to share one of them.
+     *
+     * <p>The steps beside a field come to one answer under both today, and each says so on its own:
+     * what this walk admits at an element and at a narrowing is written down where the walk is
+     * tested and what the written relation lands on is written down where that is, rather than
+     * either being read out of the other. Nothing holds the two together, deliberately — the day
+     * one of them means to move, the other has to go on saying what it said.
      */
     private record Standing(ObservedValue value, Type type, TermPath reached,
                             Map<TermPath, Integer> at) {
@@ -344,7 +350,7 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, RuleRead
                 // something the model states. The name is admitted by what every value of the
                 // position carries, and then the case is where it is taken from.
                 case TermPath.Step.Field named -> {
-                    Type next = ReadableFields.of(view.shape()).fields().get(named.name());
+                    Type next = ReadableFields.at(view.shape(), named.name());
                     if (next == null || !(here instanceof ObservedValue.Constructed made)) {
                         return false;
                     }
