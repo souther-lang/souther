@@ -33,10 +33,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * Every test whose subjects come from this repository says that it is one.
  *
- * <p>A test that sweeps the models this repository carries, or its sources, or its specification, is
- * asking about the language rather than about a source somebody wrote to ask one question. Answering
- * such a subject is most of what the suite costs, so a plain run leaves them out and the merge into
- * develop asks them. What decides which run a test lands in is the tag it carries.
+ * <p>A test that sweeps the models this repository carries is asking about the language rather than
+ * about a source somebody wrote to ask one question. Answering such a subject is most of what the
+ * suite costs, so a plain run leaves them out and the merge into develop asks them. What decides
+ * which run a test lands in is the tag it carries.
  *
  * <p><b>So the tag cannot be a thing to remember.</b> A test reaching a corpus without one is left in
  * the run everybody waits on, and nothing about writing it would say so — the class compiles, passes,
@@ -46,6 +46,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>The corpora are named below rather than recognised. A corpus is a thing somebody wrote to be
  * swept, and there are few of them; a rule that guessed which classes were corpora would be a second
  * account of the same short list, and the two would disagree the first time one moved.
+ *
+ * <p><b>What this sees is a test that reaches one of the corpora named below.</b> A test that walks
+ * this repository's own sources or its specification some other way — through
+ * {@link RepositoryLayout} and a suffix, say — sweeps a population too and is not one of these, so
+ * it is asked in every run and nothing here says whether that is right. Naming the layout as a
+ * corpus would not close it either: reading class files to answer a question about this compiler
+ * goes through the same door, and every check in this package would come back as a population test.
  */
 class EveryTestAboutTheRepositorysPopulationSaysSoTest {
 
@@ -68,6 +75,27 @@ class EveryTestAboutTheRepositorysPopulationSaysSoTest {
             "souther/compiler/fmt/WhatGoesBetweenTwoTokensOnALineTest",
             "souther/bench/Corpus");
 
+    /**
+     * The tests that reach a corpus and are asked anyway, with what each of them is.
+     *
+     * <p>Reaching a corpus is not the whole of what the tag is about. What it defers is a question
+     * about the language, asked by sweeping the models; what these ask is whether a change broke
+     * something, and the corpus is where they ask it. Deferred, each would pass on the change that
+     * breaks it and fail after the merge, on a branch nobody is waiting to fix — and the first of
+     * them is fixed by regenerating files that are checked in, which is worse to discover there.
+     *
+     * <p>Sweeping is what a population test costs, and neither of these sweeps: both are answered
+     * over a corpus already analysed, so leaving them in costs the run they are left in almost
+     * nothing.
+     */
+    private static final Map<String, String> ASKED_ANYWAY = Map.of(
+            "souther/compiler/conformance/TheAnswersAboutEachConformanceCorpusAreTheOnesCheckedInTest",
+            "nothing else fails when an answer changes, and what fixes it is regenerating what is"
+                    + " checked in",
+            "souther/compiler/conformance/AConformanceCorpusReachesEveryConstructTheLanguageDeclaresTest",
+            "a construct added to the language is one the corpus does not reach yet, and the change"
+                    + " that added it is the one to say so");
+
     @Test
     void everyTestReachingACorpusCarriesTheTag() {
         Map<String, Set<String>> references = referencesByClass();
@@ -82,10 +110,21 @@ class EveryTestAboutTheRepositorysPopulationSaysSoTest {
                 // anything about it.
                 continue;
             }
-            if (!tags(each).contains(TAG)) {
-                untagged.add(each.replace('/', '.'));
+            if (ASKED_ANYWAY.containsKey(each) || tags(each).contains(TAG)) {
+                continue;
+            }
+            untagged.add(each.replace('/', '.'));
+        }
+
+        TreeSet<String> tagged = new TreeSet<>();
+        for (String each : ASKED_ANYWAY.keySet()) {
+            if (tags(each).contains(TAG)) {
+                tagged.add(each.replace('/', '.'));
             }
         }
+        assertEquals(List.of(), List.copyOf(tagged),
+                "a test named above as one asked anyway, carrying the tag that defers it: it is in"
+                        + " one list or the other and the tag is what surefire reads");
 
         assertEquals(List.of(), List.copyOf(untagged),
                 "a test whose subjects come from this repository, in the run somebody waits on while"
