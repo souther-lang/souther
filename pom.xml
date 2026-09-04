@@ -437,7 +437,15 @@
                                      asked somewhere it cannot be. That those methods answer an
                                      absence with null is a thing to fix in the methods, not at the
                                      conditions reading them, and it is not what this reports. -->
-                                <arg>-Xplugin:ErrorProne -Xep:UnicodeInCode:OFF -Xep:BadInstanceof:OFF -Xep:ReferenceEquality:OFF -Xep:RemoveUnusedImports:ERROR ${nullaway.args}</arg>
+                                <!-- ObjectToString and DuplicateBranches are errors. Each found a
+                                     place written as though it said something and saying nothing:
+                                     an exception message that named an end and printed its identity
+                                     hash, an assertion whose left side asked a `toString` nothing
+                                     wrote and so could not hold, and a condition whose two branches
+                                     were the same number. What they report is cheap to answer and
+                                     silent to miss, which is the pairing that earns a build
+                                     failure rather than a line in a log. -->
+                                <arg>-Xplugin:ErrorProne -Xep:UnicodeInCode:OFF -Xep:BadInstanceof:OFF -Xep:ReferenceEquality:OFF -Xep:RemoveUnusedImports:ERROR -Xep:ObjectToString:ERROR -Xep:DuplicateBranches:ERROR ${nullaway.args}</arg>
                             </compilerArgs>
                             <annotationProcessorPaths>
                                 <path>

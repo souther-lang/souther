@@ -174,7 +174,7 @@ class WhatTheDifferenceBoundsSayIsWhatThePointsSayTest {
     private static List<Written> aSystem(Random dice) {
         List<Written> out = new ArrayList<>();
         for (String position : POSITIONS) {
-            out.add(new Written(Map.of(position, Rational.of(-LOW == 0 ? 1 : 1)),
+            out.add(new Written(Map.of(position, Rational.ONE),
                     Rational.of(-LOW), Rel.GE));
             out.add(new Written(Map.of(position, Rational.ONE), Rational.of(-HIGH), Rel.LE));
         }
