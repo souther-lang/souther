@@ -172,16 +172,30 @@ class WhatAStandingQuestionIsAccountedForByTest {
      */
     @Test
     void onlyAReasonAboutTheAnswerStandsInForARulesOwnAccount() {
-        assertEquals(Set.of(UnreadReason.EXACT_VALUES_TOO_COSTLY),
-                Arrays.stream(UnreadReason.values())
-                        .filter(each -> each.about() == UnreadReason.About.THE_ANSWER)
-                        .collect(Collectors.toCollection(LinkedHashSet::new)),
-                "what may account for a standing question without naming a rule");
-        assertEquals(Set.of(UnreadReason.NOT_REACHED, UnreadReason.NOT_REACHED_PAST_DEPTH_LIMIT),
-                Arrays.stream(UnreadReason.values())
-                        .filter(each -> each.about() == UnreadReason.About.NEITHER)
-                        .collect(Collectors.toCollection(LinkedHashSet::new)),
-                "and what accounts for nothing, which the refusal must not take for the above");
+        assertEquals(Set.of(UnreadReason.About.THE_ANSWER), aboutWhat(true),
+                "only a reason about the answer stands in for what a rule would have said");
+        assertEquals(Set.of(UnreadReason.About.A_RULE, UnreadReason.About.NEITHER), aboutWhat(false),
+                "a rule's own reason is filed under the rule, and a reason about neither accounts"
+                        + " for nothing — the refusal must take neither for the above");
+        // And every kind is decided, so the two above are the whole of the classification rather
+        // than the part of it this enum happens to hold reasons for today.
+        assertEquals(Set.of(UnreadReason.About.values()),
+                Set.copyOf(union(aboutWhat(true), aboutWhat(false))));
+    }
+
+    /** What the reasons that do, or do not, stand in for a rule's own account are about. */
+    private static Set<UnreadReason.About> aboutWhat(boolean standingIn) {
+        return Arrays.stream(UnreadReason.values())
+                .filter(each -> FieldDomains.standsInForARulesOwnAccount(each) == standingIn)
+                .map(UnreadReason::about)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+    }
+
+    private static Set<UnreadReason.About> union(Set<UnreadReason.About> one,
+                                                 Set<UnreadReason.About> other) {
+        Set<UnreadReason.About> out = new LinkedHashSet<>(one);
+        out.addAll(other);
+        return out;
     }
 
     /** What became of every question of every rule that nothing answered. */

@@ -141,6 +141,53 @@ class ARuleReachedThroughAHelperIsReadAsTheOneWrittenOutTest {
     }
 
     /**
+     * A value an author wrote reaches every reading of it, whichever way the rule reaches it.
+     *
+     * <p>The other half of what a binding is transparent to. What a position is settles which rule
+     * a reading is about; what a value is settles what the rule says — which values stand there,
+     * which strings a format admits, where an end falls. Both are asked of the same expression, and
+     * a helper standing in an operand is a binding over both.
+     *
+     * <p>Asked of the declaration rather than of a construction, because that is where the answer
+     * is a value rather than a verdict: a construction reads the rule through one more reader, and
+     * a verdict that agreed would not say the readings do.
+     */
+    @ParameterizedTest
+    @MethodSource("operands")
+    void aValueAnAuthorWroteIsTheSameValueThroughAHelper(String base, String rule, String named) {
+        assertEquals(admitted(base, "", rule), admitted(base, ITSELF, named),
+                "what the position admits does not turn on which spelling the value arrived by");
+    }
+
+    private static final String ITSELF = """
+            let itself (n: Int) = n
+            let itsSelf (s: String) = s
+            """;
+
+    private static Stream<org.junit.jupiter.params.provider.Arguments> operands() {
+        return Stream.of(
+                org.junit.jupiter.params.provider.Arguments.of(
+                        "Int", "value >= 1", "value >= itself(1)"),
+                org.junit.jupiter.params.provider.Arguments.of(
+                        "Int", "value == 1", "value == itself(1)"),
+                org.junit.jupiter.params.provider.Arguments.of(
+                        "String", "String.matches(\"[a-z]+\", value)",
+                        "String.matches(itsSelf(\"[a-z]+\"), value)"));
+    }
+
+    /** What the one position of a newtype is left, as the declaration's own reading says it. */
+    private static String admitted(String base, String helpers, String clause) {
+        return souther.compiler.check.RuleReadings.admittedByTheValueOf("""
+                module demo
+
+                %s
+
+                data N = %s
+                    invariant %s
+                """.formatted(helpers, base, clause));
+    }
+
+    /**
      * A value no guard can be written about is owed nothing, whichever way the rule reaches it.
      *
      * <p>The other direction, and the one entering a binding can get wrong. What a behavior answers

@@ -2113,7 +2113,21 @@ final class Terms {
             // where the expression is named rather than where the fact is filed. The parameter's
             // reads went through the de Bruijn map below, which is what a closure needs — a lambda's
             // parameter stands for no value — and what a binding does not.
-            case Core.LetIn li -> naming(li.body(), inside(li, at), bound, depth, leaf);
+            case Core.LetIn li -> {
+                // Two environments, because they answer two questions. What a name denotes is the
+                // environment's ({@link #inside}, ADR-0106), and the body is read inside it. What a
+                // name is called is this walk's own, and a binder is called what it was given —
+                // read under the names in scope here, so a closure's parameter keeps the index it
+                // was bound at. Entered in the first alone, `x -> let y = x in y` lost `x`'s place
+                // in the closure and stopped being the term `x -> x` is.
+                Naming value = naming(li.value(), at, bound, depth, leaf);
+                if (value instanceof Naming.Unnamed absent) {
+                    yield absent;
+                }
+                Map<BindingId, Term> inner = new HashMap<>(bound);
+                inner.put(li.binder().binding(), value.term());
+                yield naming(li.body(), inside(li, at), inner, depth, leaf);
+            }
             // A construction is a pure function of its fields, and a closure that builds one is what a
             // mapping usually is. The fields are held in declaration order, so two sites writing them
             // in different orders — or one of them through a spread — write one term.
@@ -2615,26 +2629,56 @@ final class Terms {
      * has nothing to fold.
      */
     static Hir.Expr asWrittenValue(Core e) {
+        return asWrittenValue(e, Map.of());
+    }
+
+    /** {@code given} with {@code li}'s binder standing for what it was given. */
+    private static Map<BindingId, Core> withGiven(Map<BindingId, Core> given, Core.LetIn li) {
+        Map<BindingId, Core> out = new HashMap<>(given);
+        out.put(li.binder().binding(), li.value());
+        return out;
+    }
+
+    /**
+     * The same, with {@code given} holding what each binding on the way in was given.
+     *
+     * <p>The one rule a binding needs here, and the reason it is needed at all: a helper call is
+     * expanded as a binding over the helper's body (spec §invariant-discharge-representation), so a
+     * value an author wrote at a call stands under one. Asked of the tree alone, {@code itself(1)}
+     * was not a written value where {@code 1} was — and the readings that ask this question are the
+     * ones that say which values a position holds and which strings a format admits, so a rule
+     * stating a value through a helper said nothing about either.
+     *
+     * <p>What the binder was given is in the node, so nothing is looked up: this is the written
+     * value's own question, answered where it is asked, and not a second account of what a name
+     * means. What a name <em>denotes</em> is the environment's ({@link #inside}), and a reader that
+     * needs that asks for it.
+     */
+    private static Hir.Expr asWrittenValue(Core e, Map<BindingId, Core> given) {
         // Written over nothing, every one of them. A value rendered back out of what was computed is
         // the value and not the characters any of it came from: the fold has already been over them,
         // and what it arrived at may be a number no line of the file spells.
         return switch (e) {
+            // A binding is the value its body is, with the binder standing for what it was given.
+            case Core.LetIn li -> asWrittenValue(li.body(), withGiven(given, li));
+            case Core.Read r when given.containsKey(r.binding()) ->
+                    asWrittenValue(given.get(r.binding()), given);
             case Core.Int i -> new Hir.IntLit(i.value(), i.pos(), null);
             case Core.Decimal d -> new Hir.DecimalLit(d.value(), d.pos(), null);
             case Core.Str s -> new Hir.StringLit(s.value(), s.pos(), null);
             case Core.Bool b -> new Hir.BoolLit(b.value(), b.pos(), null);
             case Core.Neg n -> {
-                Hir.Expr operand = asWrittenValue(n.operand());
+                Hir.Expr operand = asWrittenValue(n.operand(), given);
                 yield operand == null ? null : new Hir.Neg(operand, n.pos(), null);
             }
             case Core.Binary b -> {
-                Hir.Expr left = asWrittenValue(b.left());
-                Hir.Expr right = asWrittenValue(b.right());
+                Hir.Expr left = asWrittenValue(b.left(), given);
+                Hir.Expr right = asWrittenValue(b.right(), given);
                 yield left == null || right == null ? null
                         : new Hir.Binary(b.op(), left, right, b.origin(), b.pos(), null);
             }
             case Core.PreservedCall call -> {
-                List<Hir.Expr> args = written(call.args());
+                List<Hir.Expr> args = written(call.args(), given);
                 yield args == null ? null
                         : Hir.Apply.synthetic(call.operation().name(), reachOf(call.operation()), args,
                                 call.pos(), null);
@@ -2667,10 +2711,10 @@ final class Terms {
     }
 
     /** Every argument as it was written, or null where any of them was computed. */
-    private static List<Hir.Expr> written(List<Core> args) {
+    private static List<Hir.Expr> written(List<Core> args, Map<BindingId, Core> given) {
         List<Hir.Expr> out = new ArrayList<>();
         for (Core arg : args) {
-            Hir.Expr each = asWrittenValue(arg);
+            Hir.Expr each = asWrittenValue(arg, given);
             if (each == null) {
                 return null;
             }

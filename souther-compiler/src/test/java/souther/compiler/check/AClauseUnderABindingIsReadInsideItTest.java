@@ -173,6 +173,45 @@ class AClauseUnderABindingIsReadInsideItTest {
                 "the fold changes the environment and nothing else");
     }
 
+    /**
+     * A binding under a closure keeps the closure's own account of its parameter.
+     *
+     * <p>Two environments and two questions. What a name denotes is the environment's, and the body
+     * of a binding is read inside it; what a name is <em>called</em> is the naming walk's own, and a
+     * closure's parameter is called where it is bound rather than which binding it is, so that two
+     * lambdas written alike are one term. A binding entered in the first alone lost the second, and
+     * {@code x -> let y = x in y} stopped being the term {@code x -> x} is.
+     *
+     * <p>Held on the naming and not on a clause, because that is where the two meet: a binding is
+     * called what it was given, and what it was given is read under the names in scope where it
+     * stands.
+     */
+    @Test
+    void aBindingUnderAClosureKeepsThePlaceItsParameterIsBoundAt() {
+        Terms terms = RuleReadings.termsOfNoClauseFiled(
+                Symbols.none(souther.compiler.DefaultStdlib.get()),
+                souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+        Core.Binder x = new Core.Binder("x", new BindingId(OWNER, 7));
+        Core.Binder a = new Core.Binder("a", new BindingId(OWNER, 8));
+
+        Core plain = block(x, new Core.Read("x", x.binding(), Type.INT, POS));
+        Core bound = block(x, let("y", 9, new Core.Read("x", x.binding(), Type.INT, POS),
+                new Core.Read("y", new BindingId(OWNER, 9), Type.INT, POS)));
+        Core renamed = block(a, let("b", 10, new Core.Read("a", a.binding(), Type.INT, POS),
+                new Core.Read("b", new BindingId(OWNER, 10), Type.INT, POS)));
+
+        assertEquals(terms.subjectOf(plain, Denotations.none()),
+                terms.subjectOf(bound, Denotations.none()),
+                "a name given a parameter is that parameter");
+        assertEquals(terms.subjectOf(bound, Denotations.none()),
+                terms.subjectOf(renamed, Denotations.none()),
+                "and two closures written alike are one term, whatever the names are");
+    }
+
+    private static Core block(Core.Binder param, Core body) {
+        return new Core.Block(List.of(param), body, Type.INT, POS);
+    }
+
     @Test
     void aDenialIsCarriedThroughTheBinding() {
         Core.Read bound = read("$p", 1, Type.INT);

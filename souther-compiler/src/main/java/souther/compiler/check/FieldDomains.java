@@ -1059,10 +1059,32 @@ public final class FieldDomains {
             return new RuleAccounting.Why.TheValueReadingSays(why);
         }
         if (unreadByName.getOrDefault(at, List.of()).stream()
-                .noneMatch(each -> each.about() == UnreadReason.About.THE_ANSWER)) {
+                .noneMatch(FieldDomains::standsInForARulesOwnAccount)) {
             throw new AStandingQuestionWithNoAccount(rule, named);
         }
         return new RuleAccounting.Why.NothingTookItIn();
+    }
+
+    /**
+     * Whether {@code why} accounts for a question a rule left standing, in place of the rule's own
+     * account of it.
+     *
+     * <p>Named and asked once, because it is the whole of the refusal above: written inline as a
+     * test of the shape a reason is not, a reason of the third kind stood in for an account that is
+     * not there. Its three answers are the three kinds a reason is about, so a reason added to any
+     * of them is decided here rather than by where it happens to be written.
+     *
+     * <p>A reason about the answer does stand in: an allowance run down by everything a position
+     * admits is a fact about what the rules come to and about none of them, so no rule is answerable
+     * for it and none is filed. A reason about a rule does not — it is filed under its rule and
+     * reached before this. A reason about neither accounts for nothing, which is what it says: the
+     * reading never got to the position.
+     */
+    static boolean standsInForARulesOwnAccount(UnreadReason why) {
+        return switch (why.about()) {
+            case THE_ANSWER -> true;
+            case A_RULE, NEITHER -> false;
+        };
     }
 
     /**
