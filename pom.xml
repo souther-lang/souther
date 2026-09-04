@@ -411,13 +411,25 @@
                                      the parentheses are how the increment is seen;
                                      BooleanLiteral — what is left stands where an `Object` goes,
                                      and `false` there is not `Boolean.FALSE` but a value a ternary
-                                     will promote to a number. -->
+                                     will promote to a number;
+                                     IdentityHashMapUsage — a walk keys on the node it reached, and
+                                     the remedy would put the concrete class through record
+                                     components and signatures that say `Map`;
+                                     ClassInitializationDeadlock — a sealed interface holding a
+                                     constant of one of its own arms is how a nullary case is
+                                     written here, and there are dozens;
+                                     ArrayRecordComponent — none of these records is compared or
+                                     keyed on, so what it warns of does not arise;
+                                     ImmutableEnumChecker — every one of these fields is built with
+                                     `List.of`, `Set.copyOf` or an unmodifiable wrapper, and saying
+                                     so to the check means annotating the types, which would put
+                                     Error Prone's annotations on the compile path. -->
                                 <!-- Errors, because each is cheap to answer and silent to miss:
                                      ObjectToString, DuplicateBranches, UnusedVariable, UnusedMethod,
                                      SameNameButDifferent and MissingOverride. The name check is not
                                      against writing one name for one distinction at two levels — it
                                      is against a use that does not say which of them it means. -->
-                                <arg>-Xplugin:ErrorProne -Xep:UnicodeInCode:OFF -Xep:BadInstanceof:OFF -Xep:ReferenceEquality:OFF -Xep:StringSplitter:OFF -Xep:UnnecessaryParentheses:OFF -Xep:BooleanLiteral:OFF -Xep:RemoveUnusedImports:ERROR -Xep:ObjectToString:ERROR -Xep:DuplicateBranches:ERROR -Xep:UnusedVariable:ERROR -Xep:UnusedMethod:ERROR -Xep:SameNameButDifferent:ERROR -Xep:MissingOverride:ERROR ${nullaway.args}</arg>
+                                <arg>-Xplugin:ErrorProne -Xep:UnicodeInCode:OFF -Xep:BadInstanceof:OFF -Xep:ReferenceEquality:OFF -Xep:StringSplitter:OFF -Xep:UnnecessaryParentheses:OFF -Xep:BooleanLiteral:OFF -Xep:IdentityHashMapUsage:OFF -Xep:ClassInitializationDeadlock:OFF -Xep:ArrayRecordComponent:OFF -Xep:ImmutableEnumChecker:OFF -Xep:RemoveUnusedImports:ERROR -Xep:ObjectToString:ERROR -Xep:DuplicateBranches:ERROR -Xep:UnusedVariable:ERROR -Xep:UnusedMethod:ERROR -Xep:SameNameButDifferent:ERROR -Xep:MissingOverride:ERROR ${nullaway.args}</arg>
                             </compilerArgs>
                             <annotationProcessorPaths>
                                 <path>

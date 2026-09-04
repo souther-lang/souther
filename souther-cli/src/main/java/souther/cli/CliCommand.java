@@ -1,5 +1,6 @@
 package souther.cli;
 
+import java.util.Collections;
 import java.util.EnumMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -84,7 +85,11 @@ enum CliCommand {
         this.spelling = spelling;
         this.operands = operands;
         this.summary = summary;
-        this.reads = reads.isEmpty() ? Map.of() : new EnumMap<>(reads);
+        // Held unmodifiable, which is what a field of an enum constant has to be: every caller of
+        // this command sees the one map, so a caller that could write to it would be writing for
+        // all of them.
+        this.reads = reads.isEmpty() ? Map.of()
+                : Collections.unmodifiableMap(new EnumMap<>(reads));
     }
 
     /** The command this name is, or null where this compiler has no such command. */
