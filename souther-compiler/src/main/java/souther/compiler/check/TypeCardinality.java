@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import souther.compiler.ast.Hir;
 import souther.compiler.types.Type;
+import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
 
 import java.util.ArrayList;
@@ -53,6 +54,13 @@ public final class TypeCardinality {
     public static Cardinalities solve(List<Hir.Def> declarations, RuleReadingSource source,
                                       ReadingPolicy policy) {
         Symbols symbols = source.symbols();
+        // What this count is short of is worked out from the clauses it actually asked for, which
+        // is why the reading it runs against is wrapped rather than the declarations it walked
+        // being counted afterwards. The two are not the same set: a rule reaches a declaration
+        // through a spread, which the graph below does not follow, so a set taken from the graph
+        // would leave out exactly the rules that arrive from somewhere else.
+        Asked asked = new Asked(source.invariants());
+        source = new RuleReadingSource(symbols, asked);
         Map<TypeSymbol, Hir.Def> declared = reached(declarations, symbols);
         Map<TypeSymbol, Set<TypeSymbol>> edges = new LinkedHashMap<>();
         declared.forEach((name, def) -> edges.put(name, read(def, symbols, declared.keySet())));
@@ -62,27 +70,41 @@ public final class TypeCardinality {
         List<List<TypeSymbol>> components = TypeComponents.of(edges);
         return new Cardinalities(
                 Map.copyOf(pass(components, declared, edges, cuts, source, policy, Set.of())),
-                components, declared, edges, cuts, source, policy,
-                everyRuleReached(declared.keySet(), source));
+                components, declared, edges, cuts, source, policy, asked.everyRuleReached());
     }
 
     /**
-     * Whether the rules of every declaration this count read could be read at all.
+     * The reading a count runs against, remembering whether every clause it was asked for could be
+     * given.
      *
-     * <p>What makes a type have no value is what its rules leave, so a count taken where one of them
-     * was never worked out is a count over fewer rules than the model states. It may still be right;
-     * what it may not do is say so. Asked of the declarations this reading actually reached rather
-     * than of the module it started in — a rule that empties a type can be written on a declaration
-     * of any module the reading walks into.
+     * <p>What makes a type have no value is what its rules leave, so a count taken where one of
+     * them was never worked out is a count over fewer rules than the model states. It may still be
+     * right; what it may not do is say so.
+     *
+     * <p>It answers as the reading it wraps and adds nothing to the answer. What it holds is about
+     * the run and not about any declaration, so a caller reads it once the run is over.
      */
-    private static boolean everyRuleReached(Set<TypeSymbol> reached, RuleReadingSource source) {
-        for (TypeSymbol name : reached) {
-            if (name instanceof TypeSymbol.AtModule at
-                    && source.invariants().of(at.key()) instanceof ExpandedClauseResult.Unavailable) {
-                return false;
-            }
+    private static final class Asked implements ExpandedClauseLookup {
+
+        private final ExpandedClauseLookup reading;
+        private boolean everyRuleReached = true;
+
+        Asked(ExpandedClauseLookup reading) {
+            this.reading = reading;
         }
-        return true;
+
+        @Override
+        public ExpandedClauseResult of(TypeKey declaration) {
+            ExpandedClauseResult result = reading.of(declaration);
+            if (result instanceof ExpandedClauseResult.Unavailable) {
+                everyRuleReached = false;
+            }
+            return result;
+        }
+
+        boolean everyRuleReached() {
+            return everyRuleReached;
+        }
     }
 
     /**
