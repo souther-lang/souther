@@ -28,7 +28,9 @@ jobs:
           java-version: '25'
           cache: maven
       - name: Build and test
-        run: mvn -B --no-transfer-progress verify
+        # Two, because that is what the runner has. The number in the pom is a ceiling for a
+        # machine somebody is also working on, and a runner is nobody's.
+        run: mvn -B --no-transfer-progress verify -DforkCount=2
 
   # And the population, asked where waiting for it costs nobody an edit: on the merge into
   # develop or main, and once a night. Emptying the property is what asks them; everything the
@@ -45,4 +47,4 @@ jobs:
           java-version: '25'
           cache: maven
       - name: Build and test, the population included
-        run: mvn -B --no-transfer-progress verify -Dtest.excluded.groups=
+        run: mvn -B --no-transfer-progress verify -DforkCount=2 -Dtest.excluded.groups=

@@ -96,13 +96,23 @@
         <!-- Named rather than written where it is used: `souther init` writes a project that runs
              its tests, and what it hands that project is this number. -->
         <surefire.version>3.5.6</surefire.version>
-        <!-- A JVM per two cores. Named here so -DforkCount=N reaches it: a literal in the plugin's
-             configuration outranks the property surefire declares, so the override the comment
-             below offers was not one, and a fork count could not be measured until it was.
-             Measured on sixteen cores, whole build, three runs each: 59s at one per core, 53s at
-             this. A fork brings its own compiler and collector threads, and one per core leaves
-             nothing for them but the cores the tests are on. -->
-        <forkCount>0.5C</forkCount>
+        <!-- How many JVMs the tests are spread over. Named here so -DforkCount=N reaches it: a
+             literal in the plugin's configuration outranks the property surefire declares, so the
+             override the comment below offers was not one, and a fork count could not be measured
+             until it was.
+
+             A ceiling, and not a share of the machine. A share takes the whole of whatever it is
+             run on, and what it is run on is usually a machine somebody is also working on: a fork
+             brings its own compiler and collector threads, so a share of the cores is all of them
+             once those are counted. Held to a share the suite finishes sooner and nothing else on
+             the machine gets done while it runs, which is a trade the person waiting was never
+             asked about.
+
+             `NC` cannot say this. It is a multiplier, so the figure that gives this ceiling on a
+             large machine gives less than one core on a small one, and a run on two cores would
+             come down to a single JVM. The ceiling is written as itself, and a machine with fewer
+             cores than this is told the number it has — which is what CI is passed. -->
+        <forkCount>4</forkCount>
         <!-- How a fork compiles and collects. Named for the same reason the fork count is: a literal
              in the plugin's configuration is not overridable, and what these are worth has to be
              measurable against the suite as it stands rather than the one they were chosen on.

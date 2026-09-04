@@ -15,6 +15,10 @@ question. They are what the merge into develop and the nightly run, and the
 third line above is how to run them here. Naming a class with `-Dtest=` runs it
 whatever it is tagged, so iterating on one of them needs nothing extra.
 
+Forks are capped rather than taken as a share of the machine, so a run leaves
+the machine usable for whatever else is on it. `-DforkCount=N` overrides the
+cap; CI passes the number its runner has.
+
 Add `-Dmaven.compiler.useIncrementalCompilation=false` for a mutation or a probe
 — 21s to 5s, because one changed file otherwise sends the whole module to javac.
 It does not recompile what depends on what it recompiled, so drop it as soon as
