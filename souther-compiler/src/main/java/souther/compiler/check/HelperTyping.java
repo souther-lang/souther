@@ -779,7 +779,7 @@ public final class HelperTyping {
     /**
      * The data each recursive helper constructs, transitively. A recursive helper is lowered to a
      * method rather than inlined, so its constructions do not appear in a caller's body; this map lets
-     * {@link #collectConstructs} attribute them to the behavior that calls the helper (spec §blocks). The
+     * {@link DataChecker#collectConstructs} attribute them to the behavior that calls the helper (spec §blocks). The
      * closure follows recursive-helper calls: a helper's set includes what the recursive helpers it
      * calls construct. Non-recursive helper calls are already inlined into the bodies here.
      */

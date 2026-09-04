@@ -734,7 +734,7 @@ public final class FixtureReader {
      * {@code DecisionN} and supplies an {@code Approved}. Only the second is a case of the position,
      * so only the second may be counted at it.
      *
-     * <p>The other direction of what {@link souther.compiler.partition.Classifier#under} does to an
+     * <p>The other direction of what {@link souther.compiler.partition.Classifier#inside} does to an
      * observation, and it takes the names off on the same terms: only the ones that are there come
      * off, so a fixture not wearing them is read as it stands rather than decided to be nothing.
      *

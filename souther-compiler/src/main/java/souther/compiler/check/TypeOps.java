@@ -947,7 +947,7 @@ public final class TypeOps {
      * would be worked out against whoever is reading, and a reader of another module's declaration
      * would bind its fields under its own name — a different binding for the same field, and the
      * clauses carried in with the declaration resolve against nothing. A caller reading its own
-     * declaration passes {@link Symbols#own}; a caller reading one it reached passes the name it
+     * declaration passes {@link Symbols#module}; a caller reading one it reached passes the name it
      * reached it by.
      *
      * <p>The body under that name is read here. Naming which declaration this is and holding the

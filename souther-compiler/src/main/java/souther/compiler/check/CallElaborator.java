@@ -368,7 +368,7 @@ public final class CallElaborator {
             return cores[i].type();
         }
 
-        /** Argument {@code i} checked against {@code expected}, as {@link #requireType} does. */
+        /** Argument {@code i} checked against {@code expected}, as {@link Elaborator#requireType} does. */
         void require(int i, Type expected, String what) {
             Core c = Elaborator.elaborate(args.get(i), env, ctx);
             cores[i] = c;

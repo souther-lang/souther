@@ -27,7 +27,7 @@ import java.util.Set;
  * The slice-3 type checker. Adds a module symbol table so fields, decoders, and encoders
  * can reference other data types (e.g. {@code id: MemberId}, {@code field("id",
  * MemberId.decoder)}, {@code MemberId.encode(self.id)}). Exposes {@link #symbols} and
- * {@link #typeOf} for the backend; the type-level operations live in {@link TypeOps}.
+ * {@link Elaborator#typeOf} for the backend; the type-level operations live in {@link TypeOps}.
  */
 public final class TypeChecker {
 

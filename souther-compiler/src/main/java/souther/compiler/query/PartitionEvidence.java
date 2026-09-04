@@ -50,7 +50,7 @@ import java.util.Set;
  * not a measurement of it, and the rule this normalization follows is to drop only what something
  * shows is covered.
  *
- * @param whyUnclassified why the rows counted in {@link AxisCoverage#unclassifiedRows} could not be
+ * @param whyUnclassified why the rows counted in {@link AxisCoverage.Reached#unclassifiedRows} could not be
  *                     placed. The count is the measurement and this is what it came out of, which
  *                     is why they are two things and not one wider count. Not a report's list of
  *                     reasons: these are what classification observed, and joining them to
@@ -711,7 +711,7 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
          * name and nothing else cannot say which position to write the row at, and neither can a
          * document trying to join the two back together.
          *
-         * <p>Which of {@link #axis} and {@link #path} names the position to a reader is not settled
+         * <p>Which of {@link #at} and {@link #path} names the position to a reader is not settled
          * here. The two are for different readers and a value that chose one of them would be this
          * measure writing a report's sentence.
          */

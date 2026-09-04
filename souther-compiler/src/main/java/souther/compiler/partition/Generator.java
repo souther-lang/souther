@@ -149,7 +149,7 @@ public final class Generator {
      * <p>In this package's own words and not the report's. A finding is what a report is written
      * from and lives a layer above; what a search here is asked for is a class of a position, a
      * combination the body decides together, or a point of a border — and a reader upstream joins
-     * those to its findings by identity ({@link GenerationResult#attemptAt}).
+     * those to its findings by identity ({@link GenerationResult}).
      */
     public sealed interface Purpose {
 
@@ -413,8 +413,8 @@ public final class Generator {
              * ADR-0091 took. A reason added is then a case here rather than a word that quietly
              * joins whichever side a reader's condition happened to leave it on.
              *
-             * <p>Named as {@link souther.compiler.query.PartitionEvidence.PairSpace#provenInfeasible}
-             * names it, since it is the same question about the same thing.
+             * <p>Named as {@link souther.compiler.query.PartitionEvidence.PairSpace} names it, since
+             * it is the same question about the same thing.
              */
             public boolean provesInfeasible() {
                 return switch (this) {

@@ -48,7 +48,7 @@ class WhatAClauseWouldExpandToIsCountedByTheFoldThatReadsItTest {
                 POS);
     }
 
-    /** As the analysis representation spells one, which is what {@link Predicates#negated} reads. */
+    /** As the analysis representation spells one, which is what {@link Predicates} reads. */
     private static Core not(Core e) {
         return new Core.If(e, new Core.Bool(false, Type.BOOL, POS),
                 new Core.Bool(true, Type.BOOL, POS), CoverageOrigin.unwritten(), Type.BOOL, POS, java.util.List.of());

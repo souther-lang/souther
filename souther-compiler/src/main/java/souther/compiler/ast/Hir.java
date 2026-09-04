@@ -182,7 +182,7 @@ public interface Hir {
      * runs; every name-bearing position in this tree carries one of these, so no later pass decides
      * for itself what a spelling means or whether a qualified one is allowed here (issue #177).
      *
-     * <p>A check reads {@link #denotes()}, which every name the pass answered carries. A name
+     * <p>A check reads {@link Denoting#type()}, which every name the pass answered carries. A name
      * nothing declares is reported where it is written and is {@link Unanswered} from there on,
      * which the check over its declaration is what settles ({@code Names.Unbuilt}): the pass does
      * not stop, so an author is told about every unknown name at once and the definitions beside it

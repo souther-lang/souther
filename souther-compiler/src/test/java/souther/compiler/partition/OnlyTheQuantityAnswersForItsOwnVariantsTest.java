@@ -27,7 +27,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * assessment path and report arm — nine places, for the second of two.
  *
  * <p>So the rule is that a reader takes what the quantity answers ({@link BorderQuantity#levels},
- * {@link BorderQuantity#standsAt}, {@link BorderQuantity#standingAt}, {@link BorderQuantity#carrier},
+ * {@link BorderQuantity#standsAt}, {@link BorderQuantity#standingAt}, {@link BorderQuantity#carrierOf},
  * {@link BorderQuantity#left}, {@link BorderQuantity#writtenAt}, {@link BorderQuantity#shape}) and
  * never asks which one it is. A reader that needs an answer none of those gives is a reader asking
  * for a method on the quantity, not for a variant.

@@ -20,7 +20,7 @@ import java.util.Set;
  *   <li>{@link #titleKey()} is the category a reader sees in the header — {@code BOUNDARY TYPE},
  *       {@code TYPE MISMATCH}. It is shared, and says nothing about identity;</li>
  *   <li>this code is the identity a reader looks up and a tool keys on;</li>
- *   <li>the message key a site passes to {@link Diagnostic#of} is the wording for one way the rule
+ *   <li>the message key a site passes to {@link Diagnostic#say} is the wording for one way the rule
  *       was broken, and several of them belong to one code.</li>
  * </ul>
  *

@@ -1954,7 +1954,7 @@ public final class Adequacy {
      * Every line each of a module's behaviors met, and how far the reading that found them got.
      *
      * <p>Where the lines a behavior was read at are kept. Two accounts are made from these — what a
-     * behavior is owed a row for ({@link PartitionEvidence#owes}) and what a module's declarations
+     * behavior is owed a row for ({@link PartitionEvidence}) and what a module's declarations
      * are ({@link DeclaredBorders}) — and what a report shows of a border whole is this: a block
      * accounts for a border's four points whosever they are, which is a different question from
      * whose debt each of them is.

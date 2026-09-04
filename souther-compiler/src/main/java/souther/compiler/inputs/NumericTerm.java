@@ -109,7 +109,7 @@ public sealed interface NumericTerm permits NumericTerm.FromOnePosition, Numeric
      * <p>Not against the observed value, which would tell a string from a collection and leave the
      * one pair a reader might confuse undistinguished: a {@code List} and a {@code Set} are one
      * observation, and which of the two it was is the declared type's to say. So it is the declared
-     * type that is asked, and {@link #read} applies the account to the observation without asking
+     * type that is asked, and the reading applies the account to the observation without asking
      * again.
      */
     final class TakenOf implements FromOnePosition {

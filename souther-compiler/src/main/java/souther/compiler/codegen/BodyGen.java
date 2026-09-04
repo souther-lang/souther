@@ -650,7 +650,7 @@ final class BodyGen {
          * Emits a Core expression — the single expression emitter (ADR-0021); every node kind is
          * handled here. A {@code let} whose value is a runtime-selected function still asks the
          * type checker (which works on the AST) whether the value is such a function and for its
-         * parameter types, so those calls go through {@link Core#toAst()}: Core is untyped and type
+         * parameter types, so those calls go through the tree the checker reads: Core is untyped and type
          * inference lives in the checker, so the backend reuses it rather than re-deriving types.
          */
         Type genExpr(Core e) {

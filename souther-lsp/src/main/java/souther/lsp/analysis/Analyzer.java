@@ -1995,7 +1995,7 @@ public final class Analyzer {
      * What the behaviors of {@code module} are still owed, as declarations to write.
      *
      * <p>Two sets, not one. An implementation is owed by a behavior written as a signature with
-     * nothing implementing it, which is {@link Requirements#injected} — the same question the
+     * nothing implementing it, which is {@link Requirements#injectedNames} — the same question the
      * emitter asks about what it has to be given. A row may be written for any behavior at all: a
      * composition has no implementation to offer, since it is its own, and has rows like anything
      * else.

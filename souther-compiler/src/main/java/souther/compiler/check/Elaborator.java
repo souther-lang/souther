@@ -1383,7 +1383,7 @@ public final class Elaborator {
         requireType(e, typeOf(e, env, ctx), expected, ctx.symbols(), what);
     }
 
-    /** As {@link #requireType(Hir.Expr, Type, Map, Hir.Data, Map, Map, String)}, but with the
+    /** As {@link #requireType}, but with the
      * operand's type already computed — a caller that has typed {@code e} does not re-type its
      * subtree. */
     static void requireType(Hir.Expr e, Type actual, Type expected,

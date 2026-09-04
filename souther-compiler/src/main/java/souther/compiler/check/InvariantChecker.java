@@ -403,7 +403,7 @@ public final class InvariantChecker {
      * What the invariants reaching a value of {@code data} leave each of its fields able to hold, and
      * the atom each field is named by.
      *
-     * <p>The same seeding a parameter of that type gets ({@link #seedAt}), read for what it says of
+     * <p>The same seeding a parameter of that type gets ({@link PathEngine#seedAt}), read for what it says of
      * the values instead of for what it discharges. A record's own clause relates its fields; each
      * field's type bounds that field on its own; and both land in one state over the same atoms,
      * which is what lets a bound reach one field through another.
@@ -3553,7 +3553,7 @@ public final class InvariantChecker {
      * A case split a value is handed, and the bindings in scope where it stands. A case split is a
      * node answering one of several arms where which one is decided by something a reading can
      * assume — an {@code if} by its condition, a {@code match} by which case the scrutinee is — and
-     * which arms those are is {@link #armsOf}'s answer, so nothing reading a site asks which of the
+     * which arms those are is settled where the split is read, so nothing reading a site asks which of the
      * forms it was handed.
      *
      * <p>The node and the scope go together: a node is found by searching down from the outside, and
@@ -3741,7 +3741,7 @@ public final class InvariantChecker {
      * enough and was once all there was: a kind can be answered {@code true} here and still reach no
      * reader that opens one. What carries the decision out is that this is the one gate — {@link
      * #splitIn} finds a site by asking it, and {@link #splitOf} reads the arms off the same
-     * {@link Choice} — and that {@link #choosing} switches over {@link Choice.Decides}, which is
+     * {@link Choice} — and that {@link Terms#choosing} switches over {@link Choice.Decides}, which is
      * sealed, so a kind declared a split with nothing to enter it by does not compile.
      */
     private static boolean isASplit(Core e) {
