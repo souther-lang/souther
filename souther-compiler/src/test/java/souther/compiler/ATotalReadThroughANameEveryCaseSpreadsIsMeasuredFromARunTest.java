@@ -188,20 +188,31 @@ class ATotalReadThroughANameEveryCaseSpreadsIsMeasuredFromARunTest {
      * <p>Without where the comparison is written or what the term is spelled as, which are the two
      * things that differ between the models by construction. What is left is which point of which
      * kind went unmet, which is what the two are being held to.
+     *
+     * <p><b>A border with no gaps and a border this could not find are two answers.</b> Both are no
+     * lines, and a caller reading the first out of the second would say a line is fully covered
+     * because the section it is in moved. So the section not being there is said here, where it can
+     * still be told apart, rather than handed on as an empty list.
      */
     private static List<String> borderGapsIn(String report) {
         List<String> gaps = new ArrayList<>();
+        boolean found = false;
         boolean inBorder = false;
         for (String line : report.lines().toList()) {
             String said = line.strip();
             if (line.startsWith("    ") && !line.startsWith("     ")) {
                 inBorder = said.startsWith("border");
+                found |= inBorder;
                 continue;
             }
             if (inBorder && (said.startsWith("!") || said.startsWith("?"))) {
                 int at = said.indexOf(" (comparison@");
                 gaps.add(at < 0 ? said : said.substring(0, at));
             }
+        }
+        if (!found) {
+            throw new AssertionError("this reads the points of a border out of the report, and"
+                    + " there is no border section in it: " + report);
         }
         return gaps;
     }
