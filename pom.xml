@@ -107,6 +107,10 @@
              plugin's configuration is not overridable, and what these flags are worth has to be
              measurable against the suite as it stands rather than the one they were chosen on. -->
         <test.jvm.args>-XX:TieredStopAtLevel=1 -XX:+UseSerialGC -Xss4m</test.jvm.args>
+        <!-- The tag a test carries when its subjects are enumerated from what this repository
+             carries rather than written in the test. Left out of a plain run and asked for by
+             emptying this. -->
+        <test.excluded.groups>population</test.excluded.groups>
         <!-- What a row of an example is held to while the suite runs. The shipped default is a
              hundred million, which is what a model somebody wrote deserves; the models here write a
              literal or a small record, and dozens of them hold a helper that loops on purpose,
@@ -215,6 +219,12 @@
                              did first. Override with -DforkCount=N; 1 is one JVM for everything. -->
                         <forkCount>${forkCount}</forkCount>
                         <reuseForks>true</reuseForks>
+                        <!-- Left out of a plain run: what a test tagged this way is about is every
+                             model, source or specification this repository carries, and answering
+                             those is most of what the suite costs. A run that means to ask them
+                             empties this — `-Dtest.excluded.groups=` — which is what the merge into
+                             develop and the nightly build do. -->
+                        <excludedGroups>${test.excluded.groups}</excludedGroups>
                         <!-- Classes go to the forks by what they took last time, which is recorded
                              in a `.surefire-*` file beside the module. Handed out in file order
                              instead, one fork draws the longest class and a share of the rest, and
