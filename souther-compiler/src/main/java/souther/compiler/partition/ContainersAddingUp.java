@@ -719,12 +719,23 @@ final class ContainersAddingUp {
                 }
                 case ConstructionPlan.Result.Beyond(Set<CompositionBudget> by) ->
                         asking.gaveUpAt(by);
-                // Two narrowings at one position, which nothing here writes: every one of them was
-                // stated by this walk, one at a time, at a position the plan named.
-                case ConstructionPlan.Result.Conflict conflict ->
-                        throw new IllegalStateException("`" + conflict.at() + "` would have to be"
-                                + " both " + conflict.one().spelled() + " and "
-                                + conflict.other().spelled() + ", though one narrowing was stated");
+                case ConstructionPlan.Result.Refused(ConstructionPlan.ModelRefusal why) -> {
+                    switch (why) {
+                        // Two narrowings at one position, which nothing here writes: every one of
+                        // them was stated by this walk, one at a time, at a position the plan
+                        // named.
+                        case ConstructionPlan.ModelRefusal.Conflict conflict ->
+                                throw new IllegalStateException("`" + conflict.at() + "` would have"
+                                        + " to be both " + conflict.one().spelled() + " and "
+                                        + conflict.other().spelled()
+                                        + ", though one narrowing was stated");
+                        // A container this element stands in holds nothing, so there is no way down
+                        // to the number — which is the same news as a position nothing stands
+                        // under, and not a way that was tried and refused.
+                        case ConstructionPlan.ModelRefusal.NoRoom noRoom ->
+                                nothingStandsAt.add(noRoom.at());
+                    }
+                }
             }
         }
         return new Ways(found, asking.stoppedBy(), nothingStandsAt);
@@ -786,7 +797,7 @@ final class ContainersAddingUp {
             asked = left.removeFirst();
             return ConstructionPlan.of(element, at, ruleSource.symbols(),
                     Set.of(asked), Requirements.NONE,
-                    (_, building) -> Partitions.leastHeld(building, ruleSource));
+                    (_, building) -> Partitions.heldRange(building, ruleSource, null));
         }
 
         /** The way the last answer is about. */

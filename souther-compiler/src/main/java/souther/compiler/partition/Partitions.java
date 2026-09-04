@@ -1634,6 +1634,20 @@ public final class Partitions {
     }
 
     /**
+     * From how few to how many the rules let a value at the position hold, as one answer.
+     *
+     * <p><b>Both ends of one reading.</b> A caller deciding whether there is room for a value being
+     * placed needs the floor to know how many the rules ask for besides it and the cap to know
+     * whether the one fits at all. Taken as two readings, the two can be of different states of the
+     * row — which is how a floor settled where the caller had fixed a field came to be compared
+     * with a cap read where it had not.
+     */
+    static DeclaredBounds.CountRange heldRange(Type type, RuleReadingSource ruleSource,
+                                               FieldDomains.Held held) {
+        return DeclaredBounds.countsHeld(TypeView.of(type, ruleSource.symbols()), ruleSource, held);
+    }
+
+    /**
      * Why a position offered less than its rules allow, or null where it offered everything.
      *
      * <p>Two things are told apart from a refusal here, and both are facts about this rather than about

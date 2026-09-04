@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.check.DeclaredBounds;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeView;
 import souther.compiler.inputs.Case;
@@ -173,20 +174,24 @@ final class ConstructionPlan {
      *
      * @param worn  {@link Node#worn}: every name the position wears, since what is composed here
      *              is bare
-     * @param under the element's own position
-     * @param least how many the rules say the list holds at the fewest, which is one where they say
-     *              nothing. The element being placed is one of them and the rest are values of the
-     *              element's type: a class at an element asks for a list holding a value in it, and
-     *              a list that met that and broke the rule about how many it holds is not a row
+     * @param under  the element's own position
+     * @param needed how many this has to hold for the value to be placed in it: the fewest the
+     *               rules allow, and never fewer than one. The element being placed is one of them
+     *               and the rest are values of the element's type — a class at an element asks for
+     *               a list holding a value in it, and a list that met that and broke the rule about
+     *               how many it holds is not a row.
+     *               <p>Named for what it is and not for the end it is read off. The floor is the
+     *               rules'; this is what the composing has to make, and the two part wherever the
+     *               rules ask for none.
      */
-    record Held(TermPath at, Type type, List<TypeSymbol> worn, Node under, int least)
+    record Held(TermPath at, Type type, List<TypeSymbol> worn, Node under, int needed)
             implements Node {
 
         Held {
             worn = List.copyOf(worn);
-            if (least < 1) {
+            if (needed < 1) {
                 throw new IllegalArgumentException(
-                        "a list built around an element holds it: " + least);
+                        "a list built around an element holds it: " + needed);
             }
         }
     }
@@ -258,8 +263,16 @@ final class ConstructionPlan {
         /** The plan, which is what a caller that got one goes on with. */
         record Planned(ConstructionPlan plan) implements Result {}
 
-        /** No value is at both, and this is the position and the two it would have to be. */
-        record Conflict(TermPath at, Refinement one, Refinement other) implements Result {}
+        /**
+         * The model settles that there is no value to plan for, and this is what settles it.
+         *
+         * <p>One arm for every way of that, so a reader takes them together or not at all. What a
+         * reader does with one of these is the same whichever it is — there is no row and no figure
+         * to raise — and what parts them is only what to say. Beside {@link Beyond} as separate
+         * arms, each new way the model can settle it would be a fourth arm somebody had to notice
+         * belonged with the first rather than the second.
+         */
+        record Refused(ModelRefusal why) implements Result {}
 
         /**
          * What the caller asked for stands under a position this compiler stopped short of reading.
@@ -270,9 +283,9 @@ final class ConstructionPlan {
          * value out of the row. That is the one shape of this a reader could not tell from an
          * ordinary row.
          *
-         * <p>Told apart from {@link Conflict} by whose fact it is. A conflict is the model settling
-         * that no value is at both positions; this is a figure of this compiler's, and what would
-         * change it is somebody raising the figure.
+         * <p>Told apart from {@link Refused} by whose fact it is. That is the model settling that
+         * there is no value; this is a figure of this compiler's, and what would change it is
+         * somebody raising the figure.
          *
          * <p>Carries the figures and no word for them. What a search that gets this comes back with
          * is the caller's to say — the plan knows the demand was out of reach and not what the
@@ -318,6 +331,51 @@ final class ConstructionPlan {
     }
 
     /**
+     * What the model settles, where what it settles is that there is nothing to build.
+     *
+     * <p>Each of these is a fact about the declarations, established before anything was searched
+     * for and standing however far this compiler went on to look. So one of these is what a reader
+     * is told, and a figure this compiler reached at the same position is not — an author sent to
+     * raise it would raise it and be told the same thing.
+     *
+     * <p>Which is why they are one type. A reader of a refusal acts on it the same way whichever it
+     * is, and the ordering against a figure is written once, over this, rather than once per way
+     * the model can settle it.
+     */
+    sealed interface ModelRefusal {
+
+        /** Where the model settles it, which is what a report about it is written at. */
+        TermPath at();
+
+        /** No value is at both, and this is the position and the two it would have to be. */
+        record Conflict(TermPath at, Refinement one, Refinement other) implements ModelRefusal {}
+
+        /**
+         * A value is to be placed inside a collection the rules leave no room in.
+         *
+         * <p>Both numbers off one reading of the rules, taken where the plan is made and against
+         * the positions the caller has settled. What the floor says is how many the collection has
+         * to hold besides the one being placed, so what is needed is never fewer than one; what the
+         * cap says is whether that many fit. Read apart, the two can be of different states of the
+         * row.
+         *
+         * @param needed how many the collection would have to hold for the value to be placed in it
+         * @param holds  from how few to how many the rules let it hold
+         */
+        record NoRoom(TermPath at, int needed, DeclaredBounds.CountRange holds)
+                implements ModelRefusal {
+
+            public NoRoom {
+                if (needed <= holds.most()) {
+                    throw new IllegalArgumentException("a collection with room for what is placed"
+                            + " in it refuses nothing: " + at + " holds " + holds
+                            + " and needs " + needed);
+                }
+            }
+        }
+    }
+
+    /**
      * The plan for one parameter, against everything that has to hold of it.
      *
      * <p><b>The requirements are put together here and nowhere else.</b> A path states what has to
@@ -336,14 +394,15 @@ final class ConstructionPlan {
      *                   exists to stop
      */
     static Result of(Type declared, TermPath at, Symbols symbols, Set<TermPath> decided,
-                     Requirements additional,
-                     java.util.function.ToIntBiFunction<TermPath, Type> least) {
+                     Requirements additional, HowManyItHolds howMany) {
         Requirements required = additional;
         for (TermPath fixed : decided) {
             switch (required.merge(fixed.requirements())) {
                 case Requirements.Merge.Merged both -> required = both.requirements();
-                case Requirements.Merge.Conflict against ->
-                        { return new Result.Conflict(against.at(), against.one(), against.other()); }
+                case Requirements.Merge.Conflict against -> {
+                    return new Result.Refused(new ModelRefusal.Conflict(
+                            against.at(), against.one(), against.other()));
+                }
             }
         }
         // A position said twice. A caller that fixed a value at a position and also requires a
@@ -361,12 +420,28 @@ final class ConstructionPlan {
                         + " keeping two accounts of one position");
             }
         }
-        return switch (node(declared, at, symbols, 0, decided, required, least)) {
+        return switch (node(declared, at, symbols, 0, decided, required, howMany)) {
             case NodeResult.Made(Node root) -> new Result.Planned(new ConstructionPlan(root));
+            case NodeResult.Refused(ModelRefusal why) -> new Result.Refused(why);
             case NodeResult.Beyond(Set<CompositionBudget> by) -> new Result.Beyond(by);
             case NodeResult.Unnarrowed(TermPath where, List<Refinement> narrowings) ->
                     new Result.Unnarrowed(where, narrowings);
         };
+    }
+
+    /**
+     * How many the rules let the value at a position hold, read against what the caller has settled.
+     *
+     * <p>Asked rather than read here, because which rules those are is the caller's to know: a
+     * position of a parameter is read against the record it sits in and the values fixed beside it,
+     * and a position of a container being built to a total is read against the element's own type.
+     * Handed over as one answer with both ends, so that the floor and the cap are of one state of
+     * the row.
+     */
+    interface HowManyItHolds {
+
+        /** What the rules let the value built at {@code at}, of type {@code building}, hold. */
+        DeclaredBounds.CountRange at(TermPath at, Type building);
     }
 
     /**
@@ -381,6 +456,10 @@ final class ConstructionPlan {
 
         /** The position, worked out. */
         record Made(Node node) implements NodeResult {}
+
+        /** Nothing was, because the model settles that there is no value to build here or under
+         *  here. */
+        record Refused(ModelRefusal why) implements NodeResult {}
 
         /** Nothing was, because what the caller asked for is under a figure this reached. */
         record Beyond(Set<CompositionBudget> by) implements NodeResult {}
@@ -422,26 +501,6 @@ final class ConstructionPlan {
                 .anyMatch(each -> !each.equals(here) && each.isAtOrUnder(here));
     }
 
-    /** The collections this plan builds out of what stands at their element. */
-    List<Held> held() {
-        List<Held> out = new ArrayList<>();
-        collectHeld(root, out);
-        return List.copyOf(out);
-    }
-
-    private static void collectHeld(Node node, List<Held> out) {
-        switch (node) {
-            // Nothing is built under either: one holds a value the search chooses and the other a
-            // value the requirement settled, and a collection is neither.
-            case Slot _, Exact _ -> { }
-            case Built built -> built.under().values().forEach(each -> collectHeld(each, out));
-            case Held held -> {
-                out.add(held);
-                collectHeld(held.under(), out);
-            }
-        }
-    }
-
     /** Every position a value is chosen at, in the order they are composed. */
     List<Slot> slots() {
         List<Slot> out = new ArrayList<>();
@@ -462,7 +521,7 @@ final class ConstructionPlan {
 
     private static NodeResult node(Type declared, TermPath at, Symbols symbols, int depth,
                                    Set<TermPath> decided, Requirements required,
-                                   java.util.function.ToIntBiFunction<TermPath, Type> least) {
+                                   HowManyItHolds howMany) {
         // What the requirements leave standing here, worked out before anything is decided about
         // the position. Read once and in full: what is built, whether the search chooses it, and
         // where every path below it hangs all follow from it.
@@ -496,30 +555,52 @@ final class ConstructionPlan {
         CompositionBudget descent = CompositionBudget.DEPTH_A_CONSTRUCTION_PLAN_DESCENDS;
         boolean asDeepAsThisGoes = depth >= descent.maximum();
         if (view.shape() instanceof souther.compiler.check.Shape.Sequence sequence) {
+            // Asked once, here, and handed to everything below that turns on it. What is built at
+            // this position, whether the descent has anything to reach, and whether the rules leave
+            // room for it are one question — is the caller asking for something inside this list —
+            // and read twice they are free to come apart over one list.
+            boolean demanded = anythingIsAskedUnder(here, decided, required);
+            // How many it would have to hold, and how many it may, off one reading. What the floor
+            // says is how many the rules ask for besides the value being placed, so what is needed
+            // is that and never fewer than the one.
+            DeclaredBounds.CountRange holds = demanded ? howMany.at(here, building) : null;
+            int needed = demanded ? Math.max(1, holds.least()) : 0;
+            // Asked before the figure and before the descent, because this is the model's answer
+            // and those are this compiler's. A list the rules leave no room in holds nothing
+            // however far this had read, so a figure named beside it sends an author to raise one
+            // that changes nothing, and a figure named instead of it says this compiler did not
+            // look, of a position it has the answer for.
+            // Asked before the figure and before the descent, because this is the model's answer
+            // and those are this compiler's. A list the rules leave no room in holds nothing
+            // however far this had read, so a figure named beside it sends an author to raise one
+            // that changes nothing, and a figure named instead of it says this compiler did not
+            // look, of a position it has the answer for.
+            if (demanded && holds.most() < needed) {
+                return new NodeResult.Refused(new ModelRefusal.NoRoom(here, needed, holds));
+            }
             // A sequence is planned by asking what stands at its element, so the figure is met here
             // rather than below: read as a shape nothing composes — which is what a sequence is to
             // the descent under this — a list this stopped short of looking into would be a
             // position the declarations put nothing under.
             if (asDeepAsThisGoes) {
-                return givenUpAt(descent, here, building, settled.outer(), decided, required);
+                return givenUpAt(descent, here, building, settled.outer(), demanded);
             }
             NodeResult inside = node(sequence.element(), here.element(), symbols, depth + 1,
-                    decided, required, least);
+                    decided, required, howMany);
             if (!(inside instanceof NodeResult.Made(Node element))) {
                 return inside;
             }
-            Under under = under(element);
-            if (under.demanded()) {
-                return new NodeResult.Made(new Held(here, building, worn, element,
-                        Math.max(1, least.applyAsInt(here, building))));
+            if (demanded) {
+                return new NodeResult.Made(new Held(here, building, worn, element, needed));
             }
             // Nothing was asked for inside it, so the list is chosen whole — but where the walk
             // that would have found something gave up part-way, that is not the same answer. Read
             // as "no class is placed in here", a plan that never reached the class says there is
             // none.
-            if (!under.cutBy().isEmpty()) {
+            Set<CompositionBudget> cutBy = cutBy(element);
+            if (!cutBy.isEmpty()) {
                 return new NodeResult.Made(new Slot(here, building, settled.outer(),
-                        new Leaf.Beneath(under.cutBy())));
+                        new Leaf.Beneath(cutBy)));
             }
         }
         ConstructionDescent.ProductBuild composed = ConstructionDescent.toBuild(view.shape());
@@ -542,14 +623,21 @@ final class ConstructionPlan {
                     new Slot(here, building, settled.outer(), new Leaf.Open()));
         }
         if (asDeepAsThisGoes) {
-            return givenUpAt(descent, here, building, settled.outer(), decided, required);
+            return givenUpAt(descent, here, building, settled.outer(),
+                    anythingIsAskedUnder(here, decided, required));
         }
         Map<String, Node> under = new LinkedHashMap<>();
         Set<CompositionBudget> beyond = new LinkedHashSet<>();
+        NodeResult.Unnarrowed owed = null;
         for (Map.Entry<String, Type> field : composed.fields().entrySet()) {
             switch (node(field.getValue(), here.then(field.getKey()), symbols, depth + 1, decided,
-                    required, least)) {
+                    required, howMany)) {
                 case NodeResult.Made(Node built) -> under.put(field.getKey(), built);
+                // The model settling that there is no value ends the walk: nothing a field further
+                // along could say outranks it, and one proof is the whole of what a reader gets —
+                // a second would name another position to look at where there is no row to look
+                // for.
+                case NodeResult.Refused refused -> { return refused; }
                 // Every field's, and not the first one's. Two fields whose demands are out of reach
                 // are two figures a reader could raise, and taking whichever the walk met first
                 // would make the answer turn on the order the fields are declared in.
@@ -558,8 +646,20 @@ final class ConstructionPlan {
                 // than gathered up, and the caller states one and asks again — so what it is owed
                 // is somewhere to begin, and the field a second one is under may not even be
                 // reached under the narrowing it settles on here.
-                case NodeResult.Unnarrowed unnarrowed -> { return unnarrowed; }
+                //
+                // Kept rather than returned, because a field after it may be one the model refuses
+                // outright — and a caller sent to state a narrowing would state it and be told
+                // there was never a row. Which one is owed does not change: it is still the first,
+                // in the order the declarations write them.
+                case NodeResult.Unnarrowed unnarrowed -> {
+                    if (owed == null) {
+                        owed = unnarrowed;
+                    }
+                }
             }
+        }
+        if (owed != null) {
+            return owed;
         }
         if (!beyond.isEmpty()) {
             return new NodeResult.Beyond(beyond);
@@ -577,10 +677,9 @@ final class ConstructionPlan {
      * written at, and a plan handed back would compose a row the caller's value is missing from.
      */
     private static NodeResult givenUpAt(CompositionBudget figure, TermPath here, Type building,
-                                        List<TypeSymbol> outer, Set<TermPath> decided,
-                                        Requirements required) {
+                                        List<TypeSymbol> outer, boolean demanded) {
         Set<CompositionBudget> by = Set.of(figure);
-        return anythingIsAskedUnder(here, decided, required) ? new NodeResult.Beyond(by)
+        return demanded ? new NodeResult.Beyond(by)
                 : new NodeResult.Made(new Slot(here, building, outer, new Leaf.Beneath(by)));
     }
 
@@ -741,77 +840,33 @@ final class ConstructionPlan {
     }
 
     /**
-     * What a walk of the positions under one found, for the two questions a caller of it has.
+     * Every figure this compiler gave up reading at, in {@code inside} and everything under it.
      *
-     * <p><b>Both, because "nothing was asked for here" is not what an empty-handed walk found.</b>
-     * A walk that gave up at a figure part-way down came back without a demand it never reached,
-     * and a reader taking that for the model's answer says there is no class inside a list the plan
-     * never opened. The two are one walk and are held together so that a reader of the first has
-     * the second in hand.
-     *
-     * @param demanded whether the caller asked something of a position under here — a value fixed
-     *                 at one, a narrowing stated at one, or a value a requirement settled
-     * @param cutBy    every figure the walk gave up at, which is empty where it reached the bottom
+     * <p>Read off the plan that was built rather than off how the paths are written, because this
+     * is about what the walk did and the paths say nothing about that. What the caller asked for is
+     * a separate question, answered where the demand is
+     * ({@link #anythingIsAskedUnder}) and once — a plan read back for it would be this compiler
+     * working out from what it built what it had been told.
      */
-    private record Under(boolean demanded, Set<CompositionBudget> cutBy) {
-
-        Under {
-            cutBy = Set.copyOf(cutBy);
-        }
-    }
-
-    /**
-     * {@code inside} and everything under it, read for both.
-     *
-     * <p>Asked of the plan that was built for it rather than of how the paths are written. Whether
-     * one position is under another is a fact about the steps between them, and a rendering runs
-     * those together with whatever each is spelled with — so a test on the text has to name every
-     * separator a step can wear, and a position one collection further in follows its container with
-     * no dot and matched none of them. Built and then read, the only thing compared is one path with
-     * itself.
-     */
-    private static Under under(Node inside) {
-        Under below = switch (inside) {
+    private static Set<CompositionBudget> cutBy(Node inside) {
+        return switch (inside) {
             case Slot(TermPath _, Type _, List<TypeSymbol> _, Leaf leaf) -> switch (leaf) {
-                case Leaf.Fixed _ -> new Under(true, Set.of());
-                case Leaf.Open _ -> new Under(false, Set.of());
-                // Nothing was asked below one of these, and that is settled where the position is
-                // made rather than assumed here: a demand under a figure is refused there and no
-                // plan comes back at all. Read as an ordinary empty hand, this would be the answer
-                // whether or not that check exists.
-                case Leaf.Beneath(Set<CompositionBudget> cutBy) -> new Under(false, cutBy);
+                case Leaf.Fixed _, Leaf.Open _ -> Set.of();
+                case Leaf.Beneath(Set<CompositionBudget> cutBy) -> cutBy;
             };
             case Built built -> across(built.under().values());
-            case Held held -> under(held.under());
-            // A value the requirement settled is as much something asked of the position as one the
-            // caller fixed: a list asked to hold a `None` is a list built around it. Reached where
-            // the path above it does not narrow, which is a requirement stated at this position
-            // rather than at one the path passed through.
-            case Exact _ -> new Under(true, Set.of());
+            case Held held -> cutBy(held.under());
+            case Exact _ -> Set.of();
         };
-        // A position the caller narrowed is one it asked something of, as much as one it fixed a
-        // value at: a class placing a case inside a list is a class placed under the list. Read off
-        // the fixed values alone, a list holding a case of a sum was chosen whole and every element
-        // of it came back as whatever stands for the element's type.
-        //
-        // Answered beside what the walk found rather than in place of it. Returned on its own, a
-        // narrowed position would hide every figure the walk below it gave up at — which is the
-        // reading this type exists to keep whole.
-        return inside.at().narrowsWhatItReaches()
-                ? new Under(true, below.cutBy()) : below;
     }
 
-    /** The same of several positions: asked for where any of them was, and given up at wherever
-     *  any of them was. */
-    private static Under across(Collection<Node> nodes) {
-        boolean demanded = false;
-        Set<CompositionBudget> cutBy = new LinkedHashSet<>();
+    /** The same of several positions: given up at wherever any of them was. */
+    private static Set<CompositionBudget> across(Collection<Node> nodes) {
+        Set<CompositionBudget> out = new LinkedHashSet<>();
         for (Node each : nodes) {
-            Under one = under(each);
-            demanded |= one.demanded();
-            cutBy.addAll(one.cutBy());
+            out.addAll(cutBy(each));
         }
-        return new Under(demanded, cutBy);
+        return out;
     }
 
     /**
@@ -824,7 +879,7 @@ final class ConstructionPlan {
      * compiler not having looked.
      */
     Set<CompositionBudget> cutBy() {
-        return under(root).cutBy();
+        return cutBy(root);
     }
 
     /**

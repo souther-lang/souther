@@ -7,6 +7,7 @@ import souther.compiler.coverage.ControlPointId;
 import souther.compiler.check.ReadingPolicy;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleKey;
+import souther.compiler.check.DeclaredBounds;
 import souther.compiler.check.FieldDomains;
 import souther.compiler.check.Shape;
 import souther.compiler.check.TypeView;
@@ -3651,18 +3652,32 @@ public final class Generator {
                 subject.inputs().policy(), under(root, settled));
         ConstructionPlan.Result planned = ConstructionPlan.of(subject.types().get(p), root,
                 subject.symbols(), decided.keySet(), additional,
-                (at, building) -> leastHeld(under, at, building, subject.rules()));
+                (at, building) -> heldRange(under, at, building, subject.rules()));
         ConstructionPlan plan;
         switch (planned) {
             case ConstructionPlan.Result.Planned made -> plan = made.plan();
-            // A row that would have to be two things at one position, which is what the model
-            // settles and not something this fell short of — the same answer the class search gives
-            // when two classes select different refinements of one position.
-            case ConstructionPlan.Result.Conflict against -> {
-                return new Outcome.Unresolved(
-                        UnresolvedCombination.Reason.ONE_POSITION_CANNOT_BE_BOTH,
-                        "`" + against.at() + "` would have to be both " + against.one().spelled()
-                                + " and " + against.other().spelled());
+            // What the model settles, which is not something this fell short of. Said before
+            // anything was searched for and standing however far the search then went, so no figure
+            // of this compiler's stands beside it: an author raising one would raise it and be told
+            // the same thing.
+            case ConstructionPlan.Result.Refused(ConstructionPlan.ModelRefusal why) -> {
+                return switch (why) {
+                    // The same answer the class search gives when two classes select different
+                    // refinements of one position.
+                    case ConstructionPlan.ModelRefusal.Conflict against ->
+                            new Outcome.Unresolved(
+                                    UnresolvedCombination.Reason.ONE_POSITION_CANNOT_BE_BOTH,
+                                    "`" + against.at() + "` would have to be both "
+                                            + against.one().spelled() + " and "
+                                            + against.other().spelled());
+                    case ConstructionPlan.ModelRefusal.NoRoom(TermPath at, int needed,
+                                                              DeclaredBounds.CountRange holds) ->
+                            new Outcome.Unresolved(
+                                    UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
+                                    "`" + at + "` would have to hold " + needed
+                                            + " for the value placed in it, and the rules leave"
+                                            + " room for " + holds.most());
+                };
             }
             // What the caller asked for is under a position the plan stopped short of reading, so
             // there is nothing to search: a row composed against such a plan would be one the
@@ -3745,17 +3760,13 @@ public final class Generator {
         // the rules allow was offered. A position that read a count past what a row is built to carry,
         // or that has more pairings than are built at once, held something back, and saying so is the
         // difference between a fact about the model and a fact about this.
-        return switch (heldBack(subject, p, plan, settled)) {
-            case HeldBack.NoRoomForOne _ -> new Outcome.Unresolved(
-                    UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE, null);
-            // What each of them was short of, handed over unmerged and unranked. Which of the two
-            // a reader is owed is one decision and it is made in one place.
-            // Nothing of a population is short here. What a proposal holds back is a figure of this
-            // compiler's over what it builds, and every value of the kind it does build is one it
-            // would offer.
-            case HeldBack.Short(Set<CompositionBudget> offer, Set<CompositionBudget> plans) ->
-                    whatTheSearchCameTo(offer, Set.of(), plans, product);
-        };
+        // What each of them was short of, handed over unmerged and unranked. Which of the two a
+        // reader is owed is one decision and it is made in one place.
+        // Nothing of a population is short here. What a proposal holds back is a figure of this
+        // compiler's over what it builds, and every value of the kind it does build is one it would
+        // offer.
+        HeldBack held = heldBack(subject, p, plan, settled);
+        return whatTheSearchCameTo(held.offer(), Set.of(), held.plan(), product);
     }
 
     /**
@@ -3865,26 +3876,19 @@ public final class Generator {
     }
 
     /**
-     * How many the rules say the list at {@code path} holds at the most, or every number where they
-     * say nothing about how many.
+     * From how few to how many the rules let the value built at {@code path} hold.
      *
-     * <p>Beside the floor and asked separately, because a collection built around an element has to
-     * meet both: the floor says how many it needs beside the one being placed, and this says whether
-     * there is room for that one at all. Read only for the floor, a rule capping a collection at
-     * none was met with a collection of one and every combination of the row came back as one every
-     * value was refused at — over a position the rules leave no room in, and over the positions
-     * beside it that have nothing to do with it.
+     * <p>Both ends off one reading of {@code rules}, which is the reading the values are chosen
+     * against. A collection built around an element has to meet both — the floor says how many it
+     * holds besides the one being placed, and the cap says whether that one fits at all — and taken
+     * as two readings the two answered about different states of the row.
      */
-    private static int mostHeld(FieldDomains rules, TermPath path, Type building, RuleReadingSource ruleSource) {
+    private static DeclaredBounds.CountRange heldRange(FieldDomains rules, TermPath path,
+                                                       Type building,
+                                                       RuleReadingSource ruleSource) {
         RuleKey field = fieldUnder(path);
-        return Partitions.mostHeld(building, ruleSource, field == null ? null : rules.heldAt(field));
-    }
-
-    /** How many the rules say the value built at {@code path} holds at the fewest, or zero where
-     *  they say nothing about how many. Read the same two ways as the cap beside it. */
-    private static int leastHeld(FieldDomains rules, TermPath path, Type building, RuleReadingSource ruleSource) {
-        RuleKey field = fieldUnder(path);
-        return Partitions.leastHeld(building, ruleSource, field == null ? null : rules.heldAt(field));
+        return Partitions.heldRange(building, ruleSource,
+                field == null ? null : rules.heldAt(field));
     }
 
     /**
@@ -3901,15 +3905,6 @@ public final class Generator {
         Type declared = subject.types().get(p);
         FieldDomains rules = rulesOf(declared, subject.rules(), subject.inputs().policy(),
                 under(root, settled));
-        // A collection asked to hold a value in a class, whose rules say it holds fewer than that.
-        // Nothing composes one: what the search would offer is a collection the rules refuse, and
-        // saying every candidate was refused sends an author looking for a value where the rule
-        // says there is no room for one.
-        for (ConstructionPlan.Held each : plan.held()) {
-            if (mostHeld(rules, each.at(), each.type(), subject.rules()) < each.least()) {
-                return new HeldBack.NoRoomForOne();
-            }
-        }
         // Every budget that held a position back, and not the first or the strongest. Two positions
         // stopped by two budgets are two things this compiler declined to do, and a reader asking
         // what would let the search go further is owed both — read as one, whichever the walk met
@@ -3921,7 +3916,7 @@ public final class Generator {
             budgets.addAll(Partitions.notBuilt(each.type(), subject.rules(),
                     subject.inputs().policy(), field == null ? null : rules.heldAt(field)));
         }
-        return new HeldBack.Short(budgets, plan.cutBy());
+        return new HeldBack(budgets, plan.cutBy());
     }
 
     /**
@@ -3939,24 +3934,22 @@ public final class Generator {
      * ({@link #whatTheSearchCameTo}) and not here. Decided here as well, the rule would be written
      * twice, and the second reader to learn of a short offer — the one that learns it only after
      * the search came back — would have nowhere to say so.
+     *
+     * <p><b>Both are this compiler's, and nothing read here says the model refuses anything.</b>
+     * What the model settles about a collection with no room for what is placed in it is settled
+     * where the plan is made ({@link ConstructionPlan.ModelRefusal.NoRoom}), before any of this
+     * ran. Asked again here, it would be asked of a search that had already happened — and
+     * whichever answer came back first would be the one a reader got.
+     *
+     * @param offer what the offers were short of
+     * @param plan  what the plan was short of. Either may be empty, and both being empty is a
+     *              search that had the whole of what the point had
      */
-    private sealed interface HeldBack {
+    private record HeldBack(Set<CompositionBudget> offer, Set<CompositionBudget> plan) {
 
-        /** A collection is asked to hold more than its rules leave room for, which is the model
-         *  settling it and not a budget of this compiler's. */
-        record NoRoomForOne() implements HeldBack {}
-
-        /**
-         * What the offers were short of, and what the plan was short of. Either may be empty, and
-         * both being empty is a search that had the whole of what the point had.
-         */
-        record Short(Set<CompositionBudget> offer, Set<CompositionBudget> plan)
-                implements HeldBack {
-
-            public Short {
-                offer = Set.copyOf(offer);
-                plan = Set.copyOf(plan);
-            }
+        private HeldBack {
+            offer = Set.copyOf(offer);
+            plan = Set.copyOf(plan);
         }
     }
 

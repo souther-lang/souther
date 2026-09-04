@@ -99,7 +99,7 @@ final class PlanComposer {
             return null;
         }
         FixtureTemplate collection =
-                Witnesses.holdingAlso(carrier, element, plan.least(), ruleSource, policy);
+                Witnesses.holdingAlso(carrier, element, plan.needed(), ruleSource, policy);
         if (collection == null) {
             return null;
         }

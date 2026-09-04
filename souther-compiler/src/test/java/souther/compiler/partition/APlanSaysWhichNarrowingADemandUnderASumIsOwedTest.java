@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.ast.Hir;
+import souther.compiler.check.DeclaredBounds;
 import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
@@ -45,6 +46,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * the caller's value is quietly missing from what was built.
  */
 class APlanSaysWhichNarrowingADemandUnderASumIsOwedTest {
+
+    /** The rules counting nothing, which is what every model here leaves them saying. */
+    private static final ConstructionPlan.HowManyItHolds ANY =
+            (_, _) -> new DeclaredBounds.CountRange(0, Integer.MAX_VALUE);
+
 
     /**
      * A list of items whose method is a sum of two cases, both spreading the same amount.
@@ -186,7 +192,7 @@ class APlanSaysWhichNarrowingADemandUnderASumIsOwedTest {
 
     private static ConstructionPlan.Result planningOf(String source, Set<TermPath> decided) {
         return ConstructionPlan.of(typeOf(source), TermPath.of("query"), symbolsOf(source),
-                decided, Requirements.NONE, (_, _) -> 0);
+                decided, Requirements.NONE, ANY);
     }
 
     private static Type typeOf(String source) {
