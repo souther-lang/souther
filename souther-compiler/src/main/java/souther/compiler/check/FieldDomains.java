@@ -1032,15 +1032,13 @@ public final class FieldDomains {
     /**
      * Everything the reading of values was stopped by, of {@code rule} at {@code named}.
      *
-     * <p>Asked of the rule and never of the name. Two clauses reach one name and are short of this
-     * reading in two ways, and the name holds what both of them came to — so a rule answered from
-     * there is named beside a limit that belongs to its neighbour, which is the misattribution the
-     * whole accounting is asked per rule to avoid.
+     * <p>What a rule is answerable for is asked of the rule and never of the name. Two clauses
+     * reach one name and are short of this reading in two ways, and the name holds what both of
+     * them came to — so a rule answered from there is named beside a limit that belongs to its
+     * neighbour, which is the misattribution the whole accounting is asked per rule to avoid.
      *
-     * <p>Not the name's other reasons: those belong to whichever rule left them, and a rule answered
-     * from the name is named beside a limit that is its neighbour's.
-     *
-     * <p><b>And what the name holds beside it, which is not a fallback.</b> An allowance run down by
+     * <p><b>And what the name holds that no rule is answerable for, which is not a fallback.</b>
+     * An allowance run down by
      * everything a position admits is a fact about the answer and not about any rule that paid into
      * it ({@link UnreadReason.About#THE_ANSWER}), so {@link ReadingEvidence#stoppedBy} refuses such
      * a reason rather than filing it under a rule and it is read off the name instead. It still
@@ -1049,12 +1047,13 @@ public final class FieldDomains {
      * of its own, a rule short in both ways went out short in one — an author rewrites the form and
      * the position is as wide as it was, for a limit nothing named.
      *
-     * <p>The rule's own account first and the name's after it, each said once. That is the order
-     * the two were established in, and it leaves a question short in one way spelled exactly as it
-     * was before there was a second.
+     * <p>Each in its own carrier, and neither made into the other. What a rule is answerable for
+     * stands at a place an author wrote and what the answer was short of stands at no place at all,
+     * so the two are held apart all the way out and a reader is never offered a source to look at
+     * for the half that has none.
      *
-     * <p>Empty is the accounting coming apart. The rule was met by the walk that asks and by nothing
-     * that reads, and neither the rule nor the position has a word for it.
+     * <p>Both empty is the accounting coming apart. The rule was met by the walk that asks and by
+     * nothing that reads, and neither the rule nor the position has a word for it.
      */
     private RuleAccounting.Why stoppedBy(RuleRef rule, RuleKey at, List<FactSubject> named) {
         // What a rule is answerable for, as the facts it is answerable for. Asked for the reasons

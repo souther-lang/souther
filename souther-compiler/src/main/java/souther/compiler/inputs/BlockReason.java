@@ -46,11 +46,10 @@ public sealed interface BlockReason {
         /**
          * Whether a run of this compiler that allows more could get past this.
          *
-         * <p>Asked of a stop and of {@link AboutARule}, and of nothing else. Between them those two
-         * hold exactly the reasons a measurement can be left open by — the stops, and the rule
-         * nothing claimed — and the five that are in neither are the ones read from end to end,
-         * which leave no measure short of anything and so have nothing here to be asked about. A
-         * reason answering for a measure it does not weaken is an answer a report could reach for.
+         * <p>Asked of a stop and of nothing else. These are exactly the reasons a measurement can
+         * be left open by, and the ones that are not among them were read from end to end — they
+         * leave no measure short of anything and so have nothing here to be asked about. A reason
+         * answering for a measure it does not weaken is an answer a report could reach for.
          *
          * <p>The question is the allowances and never the person: did a figure this compiler
          * compared something against stop it. What an author or an operator may go on to do is what
@@ -317,16 +316,13 @@ public sealed interface BlockReason {
         return switch (why) {
             case NOT_REACHED -> new ValueRulesNotReached();
             case NOT_REACHED_PAST_DEPTH_LIMIT -> new ValueRulesNotReachedPastDepthLimit();
-            // The one a reading can be short of that is about no rule at all, and the reason this
-            // answers a wider type than the one below. A caller here is asking what stopped the
-            // reading of a position, which this is; asking which rule it was is the other question
-            // and has no answer.
-            case EXACT_VALUES_TOO_COSTLY -> new ExactValuesTooCostly();
-            // And the rest by the one above, written out rather than defaulted to. A reason added
-            // to the vocabulary is a decision about which of these three it is, and a default takes
+            // And every other way this reading is short by the one below, since all of them leave a
+            // question of a rule standing. Written out rather than defaulted to: a reason added to
+            // the vocabulary is a decision about which of the two halves it is, and a default takes
             // that decision by arriving at whichever arm was written last.
-            case RELATES_TWO_POSITIONS, FORM_NOT_READ, ALTERNATIVE_NOT_READ, PATTERN_TOO_COSTLY,
-                 PATTERN_TOO_DEEPLY_NESTED -> ofARuleTheValueReadingLeft(why);
+            case EXACT_VALUES_TOO_COSTLY, RELATES_TWO_POSITIONS, FORM_NOT_READ,
+                 ALTERNATIVE_NOT_READ, PATTERN_TOO_COSTLY, PATTERN_TOO_DEEPLY_NESTED ->
+                    ofAQuestionStandingOn(why);
         };
     }
 
@@ -338,15 +334,17 @@ public sealed interface BlockReason {
      * that never arrived at the position raises no question for anything to stand on, so one of
      * those here is a caller answering a question out of a place it never looked.
      *
-     * <p>Refused rather than dropped, and refused here rather than at each caller. What guarantees
-     * nothing arrives is {@link souther.compiler.check.RuleAccounting.Why.TheValueReadingSays},
-     * which will not hold one; this says the same thing where the type changes, so the guarantee is
-     * not a comment about a constructor two packages away.
+     * <p>Refused by naming the two rather than by asking what came back from the one above. Which
+     * capability a reason arrives in is what this decides, so reading it off a reason this made is
+     * deciding it twice — and a reason added to the vocabulary would be classified by whichever arm
+     * it happened to land in instead of stopping the compile here.
      */
     static QuestionStandingReason ofAQuestionStandingOn(souther.compiler.values.UnreadReason why) {
-        return switch (of(why)) {
-            case QuestionStandingReason it -> it;
-            case AboutThePosition _ -> throw new IllegalArgumentException(
+        return switch (why) {
+            case EXACT_VALUES_TOO_COSTLY -> new ExactValuesTooCostly();
+            case RELATES_TWO_POSITIONS, FORM_NOT_READ, ALTERNATIVE_NOT_READ, PATTERN_TOO_COSTLY,
+                 PATTERN_TOO_DEEPLY_NESTED -> ofARuleTheValueReadingLeft(why);
+            case NOT_REACHED, NOT_REACHED_PAST_DEPTH_LIMIT -> throw new IllegalArgumentException(
                     "a reason about " + why.about() + " leaves no question of a rule standing: "
                             + why);
         };

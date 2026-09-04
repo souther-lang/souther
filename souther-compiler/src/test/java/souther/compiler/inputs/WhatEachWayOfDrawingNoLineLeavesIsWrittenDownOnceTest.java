@@ -225,7 +225,7 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
 
     /** And of the reasons that are in neither of those capabilities. */
     @Test
-    void everyOtherReasonAboutARuleSaysWhatItIsCalled() {
+    void everyReasonInNeitherHalfSaysWhatItIsCalled() {
         Map<String, String> said = new LinkedHashMap<>();
         for (BlockReason each : theOtherReasons()) {
             said.put(each.getClass().getSimpleName(),
@@ -401,14 +401,17 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
      *
      * <p>Two surfaces, and each is fed by the capabilities its producers hold. An entry about a
      * position is written from a rule that came to no line and from a stop at the position itself;
-     * a question's is written from what is short about a rule. Neither contains the other: a type
-     * that could not be worked out is a stop at a position and reaches no question, and a rule
-     * nothing claimed is about a rule and reaches no position.
+     * a question's is written from what leaves a question standing. Neither set of reasons contains
+     * the other: a type nothing could work out is a stop at a position and raises no question, and
+     * an answer larger than the allowance leaves a question standing and is no rule a position's
+     * entry names.
      *
-     * <p>Each held to its own capabilities and not to the other surface. Written as one vocabulary
-     * and the other plus a word, the question's admitted everything a position's did — a type
-     * nothing could work out among them, which no question can be left standing by — and a
-     * difference is all a check of two sets one of which is defined as the other can ever see.
+     * <p>Their words are another matter, and the words are what a document promises. An answer
+     * larger than the allowance and a pattern larger than one machine are one word out there, and
+     * the second is a rule with no line — so the question's vocabulary comes out inside the
+     * position's while the reasons behind them do not. Which is why each surface is held to its own
+     * producers: read off the other, either would be right about a word its own reasons never
+     * reach.
      */
     @Test
     void eachSurfaceAdmitsTheWordsItsOwnReasonsReach() throws Exception {

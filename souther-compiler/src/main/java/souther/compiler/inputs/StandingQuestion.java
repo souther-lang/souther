@@ -46,9 +46,12 @@ public sealed interface StandingQuestion {
      * without a published word reaching back into what a reading may record; which word a document
      * writes for one of these is {@link ReportedReason}'s.
      *
-     * <p>About the rule and never about the place. What is short is short of that rule — a reason
-     * about the position it stands at answers a different question and belongs to whoever asks that
-     * one.
+     * <p>Which rule raised the question is {@link #rule()}, and what is short is this. The two are
+     * different facts: a rule read from end to end whose position's values were never worked out
+     * leaves its question standing on a limit no rule is answerable for, so a list that promised a
+     * rule to name for each of these would have to invent one. What every entry does promise is
+     * that a reading fell short — a rule read to the end that draws no line leaves nothing standing
+     * and belongs to whoever asks about lines.
      */
     List<BlockReason.QuestionStandingReason> stopped();
 
