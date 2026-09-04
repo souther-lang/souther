@@ -1,5 +1,6 @@
 package souther.compiler.inputs;
 
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.ast.Hir;
@@ -37,6 +38,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * and decides what a reader should be told about it. So a shorter list is a failure as much as a
  * longer one.
  */
+@Tag("population")
 class NoRuleIsPlacedWhereNothingAccountsForItTest {
 
     /**

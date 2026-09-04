@@ -1,5 +1,6 @@
 package souther.compiler.fmt;
 
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.cst.CstParser;
@@ -31,6 +32,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * the rule's name is the construct together with the two kinds — so the construct has to be one its
  * reader can find in the canonical form rather than one only the formatter knows.
  */
+@Tag("population")
 class TheConstructABoundaryNamesIsTheOneTheOutputHasTest {
 
     /** Every code token of a source, in the order it is written. */

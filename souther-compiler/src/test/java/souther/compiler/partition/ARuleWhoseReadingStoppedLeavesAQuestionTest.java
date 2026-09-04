@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.conformance.RepositoryModels;
@@ -38,6 +39,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * not exercise, since what is being checked is a property of the readers rather than of any one
  * model.
  */
+@Tag("population")
 class ARuleWhoseReadingStoppedLeavesAQuestionTest {
 
     /** A position whose two coordinates are both spoken for, which no accounting decides. */

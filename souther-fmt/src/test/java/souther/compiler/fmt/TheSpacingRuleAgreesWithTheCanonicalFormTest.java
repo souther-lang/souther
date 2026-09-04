@@ -1,5 +1,6 @@
 package souther.compiler.fmt;
 
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -24,6 +25,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * <p>Only the intervals the output left unbroken. What is written at a boundary the layout broke is
  * a newline and an indent, and those are the break rules' — the function has no answer for them.
  */
+@Tag("population")
 class TheSpacingRuleAgreesWithTheCanonicalFormTest {
 
     /** Every pair the corpus writes, written as the function says it is. */

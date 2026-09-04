@@ -1,5 +1,6 @@
 package souther.compiler.coverage;
 
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.conformance.ConformanceCorpus;
@@ -33,6 +34,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * survive is expansion and lowering: a helper spliced into two calls is two places that look alike
  * and stand in different slots, and that is the case the whole thing is for.
  */
+@Tag("population")
 class TwoWalksOfOneBodyNameItsPlacesAlikeTest {
 
     /** A helper spliced twice, so two places are equal trees standing in different slots. */

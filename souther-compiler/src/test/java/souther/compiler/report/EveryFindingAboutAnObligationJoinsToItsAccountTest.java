@@ -1,5 +1,6 @@
 package souther.compiler.report;
 
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.conformance.ConformanceCorpus;
@@ -31,6 +32,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * is that a shape which should carry one does. Here the two ends are compared: every finding of a
  * kind that is about an obligation, against the array that account publishes.
  */
+@Tag("population")
 class EveryFindingAboutAnObligationJoinsToItsAccountTest {
 
     private static final JsonMapper JSON = JsonMapper.builder().build();

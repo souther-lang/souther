@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.conformance.ConformanceCorpus;
@@ -31,6 +32,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
  * reader shown the first is not left with nothing to act on, and that a reader shown a position the
  * model states something about is not sent after a limit that is not there.
  */
+@Tag("population")
 class AnUnderivablePositionIsPublishedWithSomethingToActOnTest {
 
     /** A rule about a pair of positions, which each of them is read through and neither divided by. */

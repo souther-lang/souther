@@ -1,5 +1,6 @@
 package souther.compiler.flow;
 
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.conformance.ConformanceCorpus;
@@ -34,6 +35,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * the ways to a truth that holds none of them says the value is never settled that way, so it is only
  * ever answered where the reading of what the body does agrees.
  */
+@Tag("population")
 class ANamingDecidesHowAWayIsWrittenAndNotWhetherThereIsOneTest {
 
     /**

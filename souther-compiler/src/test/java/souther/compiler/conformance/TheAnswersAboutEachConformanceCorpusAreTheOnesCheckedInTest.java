@@ -1,5 +1,6 @@
 package souther.compiler.conformance;
 
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
@@ -26,6 +27,7 @@ import java.util.List;
  *
  * <p>What it does not claim is that the answers are good ones. It records what they are.
  */
+@Tag("population")
 class TheAnswersAboutEachConformanceCorpusAreTheOnesCheckedInTest {
 
     /**
