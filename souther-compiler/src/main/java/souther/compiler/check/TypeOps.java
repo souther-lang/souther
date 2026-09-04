@@ -390,7 +390,7 @@ public final class TypeOps {
     static List<TypeSymbol> caseNames(Hir.SumData sum) {
         List<TypeSymbol> names = new ArrayList<>();
         for (Hir.Name c : sum.cases()) {
-            if (c.answered() instanceof Hir.Name.Denoting named) {
+            if (c instanceof Hir.Name.Denoting named) {
                 names.add(named.type());
             }
         }
@@ -1036,7 +1036,7 @@ public final class TypeOps {
         // through spreads, holds no such field at all.
         Map<String, String> suppliedBy = new LinkedHashMap<>();
         for (Hir.Name inc : data.includes()) {
-            if (!(inc.answered() instanceof Hir.Name.Denoting names)) {
+            if (!(inc instanceof Hir.Name.Denoting names)) {
                 // Nothing declares it, which was reported where it is written. It brings in no
                 // fields, and complaining here that it is not a product data would be a second
                 // report about the one mistake.
@@ -1097,7 +1097,7 @@ public final class TypeOps {
      * not a product. Only {@link #fieldTypes} turns those into a diagnostic, and every declared data
      * goes through it; the readers asked about one field or one invariant answer for what they see. */
     private static Hir.Data spreadTarget(Hir.Name inc, Symbols symbols) {
-        return inc.answered() instanceof Hir.Name.Denoting named
+        return inc instanceof Hir.Name.Denoting named
                 && symbols.declaredNode(named.type()) instanceof Hir.Data d
                 ? d : null;
     }

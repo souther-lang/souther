@@ -92,7 +92,7 @@ final class CardinalityTransfer {
     private static List<TypeSymbol> namedCases(Hir.SumData sum) {
         List<TypeSymbol> named = new ArrayList<>();
         for (Hir.Name each : sum.cases()) {
-            if (!(each.answered() instanceof Hir.Name.Denoting denoting)) {
+            if (!(each instanceof Hir.Name.Denoting denoting)) {
                 return null;
             }
             named.add(denoting.type());

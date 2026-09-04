@@ -240,7 +240,7 @@ public final class Elaborator {
             case Hir.Apply call -> CallElaborator.elaborateCall(call, env, ctx, expected);
             case Hir.Binary bin -> BinaryElaborator.elaborateBinary(bin, env, ctx);
             case Hir.NewData nd -> {
-                if (!(nd.typeName().answered() instanceof Hir.Name.Denoting built)) {
+                if (!(nd.typeName() instanceof Hir.Name.Denoting built)) {
                     // reported where the name is written; this definition has no meaning to work out
                     throw new Unanswerable(nd.pos());
                 }
@@ -258,7 +258,7 @@ public final class Elaborator {
                 // fields, so it is refused the way the name would be anywhere else a value goes.
                 List<Core.Read> spreads = new ArrayList<>();
                 for (Hir.Var s : nd.spreads()) {
-                    if (!(s.answered() instanceof Hir.Var.Denoting named
+                    if (!(s instanceof Hir.Var.Denoting named
                             && named.denotes() instanceof ValueName.Local local)) {
                         throw notAValue(s, env);
                     }
@@ -660,7 +660,7 @@ public final class Elaborator {
         // question about it: what the binding opens has no type, so the body under it would be
         // checked against a shape nothing states. Abandoned as a name standing anywhere else in a
         // body is, rather than passed on as an absent type for the reading below to take for one.
-        if (!(li.opens().answered() instanceof Hir.Name.Denoting opens)) {
+        if (!(li.opens() instanceof Hir.Name.Denoting opens)) {
             throw new Unanswerable(li.opens().pos());
         }
         TypeSymbol layer = opens.type();
@@ -976,7 +976,7 @@ public final class Elaborator {
      * where it is applied and not here. Where it is not, it is left to the body that applies it.
      */
     private static boolean reads(Hir.Expr e, Scope env) {
-        if (e instanceof Hir.Apply call && call.answered() instanceof Hir.Var.Denoting callee
+        if (e instanceof Hir.Apply call && call.function() instanceof Hir.Var.Denoting callee
                 && callee.denotes() instanceof ValueName.Helper
                 && env.of(callee.denotes(), callee.reaches()) == null) {
             return false;

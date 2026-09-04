@@ -620,7 +620,7 @@ public final class HelperInliner {
      * declaration: a binding holding a lambda is applied by the expression and reaches nothing.
      */
     private static ReachName.Declaration calledHelper(Stdlib stdlib, Hir.Apply call) {
-        if (!(call.answered() instanceof Hir.Var.Denoting callee)) {
+        if (!(call.function() instanceof Hir.Var.Denoting callee)) {
             return null;
         }
         Stdlib.Rewrite rewrite = rewriteTaken(stdlib, call);
@@ -724,7 +724,7 @@ public final class HelperInliner {
      * boundary is read in is what answers for it.
      */
     private Hir.RetType arrivesAs(Hir.Expr arg) {
-        if (!(arg instanceof Hir.Var v) || !(v.answered() instanceof Hir.Var.Denoting named)) {
+        if (!(arg instanceof Hir.Var.Denoting named)) {
             return null;
         }
         Hir.FnDef is = expands(named);
@@ -1603,7 +1603,7 @@ public final class HelperInliner {
      * {@code ()}, and there is no block taking no parameter to expand it to.
      */
     private OptionalInt declarationArity(Hir.Var name) {
-        if (!(name.answered() instanceof Hir.Var.Denoting v)) {
+        if (!(name instanceof Hir.Var.Denoting v)) {
             return OptionalInt.empty();   // it stands for no declaration to take anything
         }
         int arity = switch (v.denotes()) {
@@ -1652,7 +1652,7 @@ public final class HelperInliner {
             int k = next();
             return inline(etaExpand(v, arity.getAsInt(), i -> "$v" + k + "_" + i));
         }
-        if (!(v.answered() instanceof Hir.Var.Denoting named)
+        if (!(v instanceof Hir.Var.Denoting named)
                 || !(named.denotes() instanceof ValueName.Helper)) {
             return v;
         }
@@ -1809,8 +1809,7 @@ public final class HelperInliner {
         Integer idx = table.library().theWalk().equals(call.answered().denotes())
                 ? BLOCK_ARG_OF_THE_WALK : null;
         if (idx == null || idx >= call.args().size()
-                || !(call.args().get(idx) instanceof Hir.Var v)
-                || !(v.answered() instanceof Hir.Var.Denoting named)) {
+                || !(call.args().get(idx) instanceof Hir.Var.Denoting named)) {
             return call;
         }
         Hir.FnDef helper = expands(named);
@@ -1818,7 +1817,7 @@ public final class HelperInliner {
             return call;   // a bare name that stands for no body is left for the type checker to report
         }
         int k = next();
-        Hir.Block block = etaExpand(v, helper.params().size(), i -> "$b" + k + "_" + i);
+        Hir.Block block = etaExpand(named, helper.params().size(), i -> "$b" + k + "_" + i);
         List<Hir.Expr> args = new ArrayList<>(call.args());
         args.set(idx, block);
         return call.withArgs(args);
@@ -2218,7 +2217,7 @@ public final class HelperInliner {
      * comes out as far as its spelling is long.
      */
     private Hir.Var renameVar(Hir.Var name, Renaming renaming) {
-        if (!(name.answered() instanceof Hir.Var.Denoting v)) {
+        if (!(name instanceof Hir.Var.Denoting v)) {
             return name;   // it names nothing, so there is nothing to rename it to
         }
         Substituted stands = renaming.substituted(v.denotes());
@@ -2251,7 +2250,7 @@ public final class HelperInliner {
      * no exception.
      */
     private Hir.FnDef valueSpread(Hir.Var name) {
-        if (!(name.answered() instanceof Hir.Var.Denoting spread)
+        if (!(name instanceof Hir.Var.Denoting spread)
                 || !(spread.denotes() instanceof ValueName.Helper)) {
             return null;
         }

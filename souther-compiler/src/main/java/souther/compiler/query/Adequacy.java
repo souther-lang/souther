@@ -3322,11 +3322,10 @@ public final class Adequacy {
                                                   List<Hir.Expr> inputs) {
             Map<String, Generator.Baseline.Named> at = new LinkedHashMap<>();
             for (int p = 0; p < inputs.size() && p < spec.params().size(); p++) {
-                if (inputs.get(p) instanceof Hir.Var written
-                        && written.answered() instanceof Hir.Var.Denoting denoting
+                if (inputs.get(p) instanceof Hir.Var.Denoting denoting
                         && denoting.denotes() instanceof souther.compiler.types.ValueName.Helper helper) {
                     at.put(spec.params().get(p).name(),
-                            new Generator.Baseline.Named(helper.module(), written.name()));
+                            new Generator.Baseline.Named(helper.module(), denoting.name()));
                 }
             }
             return new Generator.Baseline(at);
