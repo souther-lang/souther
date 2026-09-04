@@ -152,9 +152,14 @@ public record UndividedPosition(TermPath at, Why why) {
          *
          * <p>Nothing is claimed about which capability would make it interpretable. That is what
          * separates it from the first: an author sent after a form to rewrite would be looking for
-         * one nothing complained about, and the rule may be perfectly ordinary and read in full
-         * somewhere else. What is known is that the rule is here, that a question of it is
-         * standing, and that nothing answered it.
+         * one nothing complained about, and the rule may well have been read in full right here.
+         * What is known is that the rule is here, that a question of it is standing, and that
+         * nothing answered it.
+         *
+         * <p><b>The word promises more than the state it carries.</b> What reaches it is a rule read
+         * from end to end whose exact answer ran past what the reading may build, and "nothing
+         * established an interpretation" is not that. Where an answer-level limit belongs in this
+         * vocabulary is #1335.
          */
         RULE_NOT_INTERPRETED_HERE,
 

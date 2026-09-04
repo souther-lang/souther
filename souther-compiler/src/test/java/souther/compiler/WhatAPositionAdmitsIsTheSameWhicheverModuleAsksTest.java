@@ -16,7 +16,6 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 /**
@@ -209,20 +208,20 @@ class WhatAPositionAdmitsIsTheSameWhicheverModuleAsksTest {
     }
 
     /**
-     * The helper's clause is the other outcome, and it is the same outcome on both sides.
+     * The helper's clause is read as far as the literal one, from either module.
      *
-     * <p>Kept apart from the literal on purpose. How far a reading gets into an expanded helper is
-     * a limit of the reading and nothing this closed, so this holds that the limit is reached from
-     * both modules rather than that it is gone — and it holds that the two outcomes are still
-     * different from each other, which is what says the comparison above is looking at something.
+     * <p>Which is the other half of what this file holds, and it moved. A clause stating its rule
+     * through a helper reaches the reading as that rule under a binding, and the reading goes inside
+     * the binding now (ADR-0106) — so the outcome is the literal's, and agreeing across modules is
+     * agreeing about something read rather than about a limit met twice.
      */
     @Test
-    void theClauseCallingAHelperReachesTheSameLimitFromBoth() {
+    void theClauseCallingAHelperIsReadAsFarAsTheLiteralOne() {
         Map<String, JsonNode> read = howFarTheRulesWereRead();
         assertEquals(read.get("owner/fromAHelper"), read.get("importer/fromAHelper"),
                 "the reading gets as far from one module as from the other");
-        assertNotEquals(read.get("owner/fromALiteral"), read.get("owner/fromAHelper"),
-                "and it is a different outcome from the one a clause this reads to the end gets,"
-                        + " so the agreement above is not two readings that both said nothing");
+        assertEquals(read.get("owner/fromALiteral"), read.get("owner/fromAHelper"),
+                "and as far as it gets into the same rule written out, which is what says the"
+                        + " agreement above is about a rule that was read");
     }
 }

@@ -93,12 +93,14 @@ public final class ReportedReason {
             case BlockReason.PatternTooDeeplyNested _ ->
                     UndividedPosition.Reason.PATTERN_TOO_DEEPLY_NESTED;
             // Its own word, and not the one above. That one promises a rule was read and could not
-            // be used, which is a reader having engaged with it and given up; here none did, and an
-            // author sent after the form their clause is written in would be looking for a
+            // be used, which sends an author after the form their clause is written in; here the
+            // rule was read and nothing complained of the form, so they would be looking for a
             // complaint nobody made. Neither is it the rule never having been reached — it was.
             // The published words had these two and the state between them is one a model reaches,
             // so the partition is one finer rather than the state going out under a word whose
-            // promise it does not meet.
+            // promise it does not meet. What the word itself should be is #1335: it says nothing
+            // established an interpretation, and what happened is that the interpretations were
+            // established and building what they come to together ran past the allowance.
             case BlockReason.NoReadingTookItIn _ ->
                     UndividedPosition.Reason.RULE_NOT_INTERPRETED_HERE;
             // Its own word, and not the one above. Both are rules this reading did not turn into a

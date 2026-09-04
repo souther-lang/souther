@@ -19,9 +19,15 @@ import java.util.Map;
  * two answers are the same map at a record and are not the same question: a value of a sum is a
  * value of one of its cases, and a product of the shared fields is a value of none of them. Read
  * from there, a plan would compose a sum out of the part its cases have in common; read from here,
- * a walk into what a row wrote would go somewhere no row writes anything. The coincidence at a
- * record is a law over the two answers and is not a reason for either to be the other's
- * implementation.
+ * a walk deciding where to <em>write</em> a value would go somewhere no row writes anything. The
+ * coincidence at a record is a law over the two answers and is not a reason for either to be the
+ * other's implementation.
+ *
+ * <p><b>And this is what a walk over a value already written asks.</b> Reading is what such a walk
+ * does: the case is settled in the value it holds, so what it may take is what every value of the
+ * position carries, and a name only some case declares is not readable however many rows turn out
+ * to be that case. The written relation answers nothing at a sum's shared name, so a walk that took
+ * it read no value at every name a model reads through a sum.
  *
  * <p><b>Asked of a {@link Shape} and not of a {@link Type}.</b> How far to look through the names a
  * value wears is the reader's own policy — the elaboration of a field read looks through none of
@@ -38,9 +44,6 @@ import java.util.Map;
  */
 public record ReadableFields(List<TypeSymbol> declaredBy, Map<String, Type> fields) {
 
-    /** Nothing is readable off a value here without narrowing it first. */
-    private static final ReadableFields NONE = new ReadableFields(List.of(), Map.of());
-
     public ReadableFields {
         declaredBy = List.copyOf(declaredBy);
         fields = Collections.unmodifiableMap(new LinkedHashMap<>(fields));
@@ -54,24 +57,65 @@ public record ReadableFields(List<TypeSymbol> declaredBy, Map<String, Type> fiel
      * works out again.
      */
     public static ReadableFields of(Shape shape) {
+        Readable here = readableOn(shape);
+        return new ReadableFields(here.declaredBy(), here.fields());
+    }
+
+    /**
+     * What {@code name} is declared to be where it is readable off a value of this shape, or null
+     * where nothing of that name is.
+     *
+     * <p>The same question as {@link #of} asked about one name, for a reader that has one in hand
+     * and no use for the rest — a walk taking a step of a path is asking whether it may take this
+     * one. Answered off the same map rather than beside it, so there is no second rule about which
+     * names are readable and no answer here that {@link #of} does not also give.
+     *
+     * <p>Here rather than at the caller because the map {@link #of} hands back is a copy: what a
+     * reader after one name would otherwise do is have every name at the position copied out to
+     * index one of them, once per step of every path walked over every row.
+     */
+    public static Type at(Shape shape, String name) {
+        return readableOn(shape).fields().get(name);
+    }
+
+    /** What is readable, as the declarations hold it. Beside {@link ReadableFields} and not one:
+     *  the maps here are the declarations' own, which is what lets a reader after one name index
+     *  one without every name at the position being copied out first. */
+    private record Readable(List<TypeSymbol> declaredBy, Map<String, Type> fields) {}
+
+    private static final Readable NOTHING = new Readable(List.of(), Map.of());
+
+    /**
+     * What is readable off a value of this shape, and what declares it.
+     *
+     * <p>Exhaustive over {@link Shape}, with no {@code default}. A shape admitted later is answered
+     * for here or stops this compiling, rather than arriving as a position whose names each reader
+     * works out again.
+     *
+     * <p>One switch and not one per projection. Which names are readable and what they are written
+     * on are answered together because they are one reading of the shape — asked apart, a shape
+     * admitted later could have names here and nothing declaring them there, and what a rule over
+     * one of those fields is written on would be missing with nothing refusing it.
+     */
+    private static Readable readableOn(Shape shape) {
         return switch (shape) {
-            case Shape.Product product -> new ReadableFields(List.of(product.name()),
-                    product.fields());
+            case Shape.Product product -> new Readable(List.of(product.name()), product.fields());
             // Read without opening a case, so what a value here carries whichever case it turned
             // out to be — and nothing where the cases share no spread. A field two cases happen to
             // declare alike is not shared: the sharing is nominal, and what is written on the sum
             // is what was written once and spread.
             case Shape.Sum sum -> switch (sum.common()) {
                 case Shape.CommonProduct.Shared shared ->
-                        new ReadableFields(shared.origins(), shared.fields());
-                case Shape.CommonProduct.None _ -> NONE;
+                        new Readable(shared.origins(), shared.fields());
+                case Shape.CommonProduct.None _ -> NOTHING;
             };
             // A newtype's contents are read where the names are taken off, which is TypeView's; what
             // a container holds is reached by holding it and not by naming it; and the rest carry no
             // names at all. None of them is a field access anybody may write here.
             case Shape.Scalar _, Shape.Unit _, Shape.Sequence _, Shape.Mapping _, Shape.Optional _,
                  Shape.Unresolved _, Shape.Cases _, Shape.Tuple _, Shape.Function _,
-                 Shape.Uninhabited _, Shape.Bottom _, Shape.Erroneous _, Shape.Undecided _ -> NONE;
+                 Shape.Uninhabited _, Shape.Bottom _, Shape.Erroneous _, Shape.Undecided _ ->
+                    NOTHING;
         };
     }
 }

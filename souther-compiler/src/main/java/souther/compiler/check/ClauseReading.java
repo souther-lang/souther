@@ -17,21 +17,38 @@ import souther.compiler.core.Core;
  * between a branch no order admits and a branch no set of values admits came out open, each language
  * having found nothing wrong with the branch the other one refused.
  *
+ * <p><b>What a clause states is answered upward and what its names mean is handed downward.</b> A
+ * reading composes its leaves into one answer, and that answer is a function of the leaves; the
+ * environment a leaf is read in is a function of the bindings above it, which is the other
+ * direction. Carried only upward, there was nowhere for a binding to be, so a clause under one was
+ * a shape every reading had no word for — and since almost every binding this check meets is one a
+ * helper's expansion made, a rule stated through a helper was read less than the same rule written
+ * out.
+ *
+ * <p>So {@code E} is handed down and {@code S} comes back up, and a leaf is read at the environment
+ * it stands in. What a binding does to that environment is not asked of a reading: the fold finds
+ * the boundary and {@link ClauseScope} answers it, which is what keeps a binder's meaning the
+ * environment's (ADR-0106) rather than something each of three readings works out again.
+ *
  * @param <S> what a reading of a clause comes to
+ * @param <E> what the reading carries into a binding — what its leaves are read at
  */
-interface ClauseReading<S> {
+interface ClauseReading<S, E> {
 
     /** What a clause this reading has no word for leaves, which is everything it had. */
     S nothingSaid();
 
     /**
      * What one clause of no connective says, stated where {@code positive} and denied where it is
-     * not.
+     * not, read at the environment {@code at} it stands in.
      *
      * <p>Reached with the denials already counted, so a reading of a comparison is a reading of the
-     * comparison it states rather than of the one that was written.
+     * comparison it states rather than of the one that was written. And reached with the bindings
+     * above it entered, so a name a helper's expansion introduced denotes what it was given — a
+     * reading that answered from the environment the whole clause began in would be reading one
+     * value's rule at another value's names.
      */
-    S leaf(Core e, boolean positive);
+    S leaf(Core e, boolean positive, E at);
 
     /** Both readings holding at once. */
     S both(S one, S other);
@@ -40,15 +57,16 @@ interface ClauseReading<S> {
     S either(S one, S other);
 
     /**
-     * What {@code e} leaves, stated where {@code positive} and denied where it is not.
+     * What {@code e} leaves, stated where {@code positive} and denied where it is not, read from
+     * {@code at} with {@code scope} answering for the bindings inside it.
      *
      * <p>A denial is carried to the leaves rather than applied to what a branch came to. What a
      * state says is a fact per position, and the denial of that is not one — the values a
      * conjunction rules out are a choice between the positions it named, which no map of positions
      * holds. Carried down, every denial meets a leaf, where it is one.
      */
-    default S read(Core e, boolean positive) {
-        return read(e, positive, null);
+    default S read(Core e, boolean positive, E at, ClauseScope<E> scope) {
+        return read(e, positive, at, scope, null);
     }
 
     /**
@@ -59,16 +77,13 @@ interface ClauseReading<S> {
      * reader is a second reading of the part, and two readings of one conjunct agree only for as
      * long as nobody changes one of them.
      */
-    default S read(Core e, boolean positive, java.util.function.BiConsumer<Core, S> per) {
-        S out = from(e, readInto(e, positive, per));
+    default S read(Core e, boolean positive, E at, ClauseScope<E> scope,
+                   java.util.function.BiConsumer<Core, S> per) {
+        S out = from(e, over(ClauseExpr.of(e, positive), at, scope, per));
         if (per != null) {
             per.accept(e, out);
         }
         return out;
-    }
-
-    private S readInto(Core e, boolean positive, java.util.function.BiConsumer<Core, S> per) {
-        return over(ClauseExpr.of(e, positive), per);
     }
 
     /**
@@ -79,17 +94,24 @@ interface ClauseReading<S> {
      * place and every reading agrees about it by having been given the answer. Two readings that
      * each recognised {@code &&} for themselves agreed until one of them learned something.
      */
-    private S over(ClauseExpr shape, java.util.function.BiConsumer<Core, S> per) {
+    private S over(ClauseExpr shape, E at, ClauseScope<E> scope,
+                   java.util.function.BiConsumer<Core, S> per) {
         S out = switch (shape) {
-            case ClauseExpr.Leaf it -> leaf(it.of(), it.positive());
+            case ClauseExpr.Leaf it -> leaf(it.of(), it.positive(), at);
             case ClauseExpr.Joined it -> switch (it.how()) {
-                case BOTH -> both(over(it.left(), per), over(it.right(), per));
-                case EITHER -> either(over(it.left(), per), over(it.right(), per));
+                case BOTH -> both(over(it.left(), at, scope, per), over(it.right(), at, scope, per));
+                case EITHER -> either(over(it.left(), at, scope, per),
+                        over(it.right(), at, scope, per));
             };
+            // The one place the environment changes, and it changes for what is under the binding
+            // alone. What the binding means is not worked out here and not by the reading either.
+            case ClauseExpr.Scoped it ->
+                    over(it.body(), scope.inside(it.binding(), at), scope, per);
         };
         // Every node that was written as this shape, so a reader asking about the node it is
         // holding finds what this made of it — the denial as well as what is under it, since the
-        // two are one shape.
+        // two are one shape, and the binding as well as the clause under it, since a binding states
+        // what the clause under it states.
         for (Core each : shape.spelled()) {
             out = from(each, out);
             if (per != null) {

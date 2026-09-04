@@ -6,7 +6,7 @@ Build from the reactor root. Never `-pl`, never `clean`, never `CI=1` or
 `-Plint`.
 
     mvn -o test -Dtest=<Class> -Dsurefire.failIfNoSpecifiedTests=false   # iterating
-    mvn -o test                                                          # before pushing
+    mvn -o test                                                          # the module
     mvn -o test -Dtest.excluded.groups=                                  # and the population
 
 `mvn -o test` leaves out the tests tagged `population` — the ones whose subjects

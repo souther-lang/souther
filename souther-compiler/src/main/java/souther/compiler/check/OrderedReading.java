@@ -48,21 +48,23 @@ import java.util.Map;
  * end, and the values a denial leaves are a set rather than a range. Under a denial the two swap
  * places, which is the same rule read once.
  */
-final class OrderedReading implements ClauseReading<OrderedIntervals<FactSubject>> {
+final class OrderedReading implements ClauseReading<OrderedIntervals<FactSubject>, Denotations> {
 
     private final Terms terms;
-    private final Denotations at;
     /** What each position's values are ordered on, for the positions that are ordered at all. */
     private final Map<FactSubject, Carrier> carriers;
 
-    private OrderedReading(Terms terms, Denotations at, Map<FactSubject, Carrier> carriers) {
+    private OrderedReading(Terms terms, Map<FactSubject, Carrier> carriers) {
         this.terms = terms;
-        this.at = at;
         this.carriers = carriers;
     }
 
-    /** The reading of one value's positions, for {@link StatedByClauses} to take the leaves of. */
-    static OrderedReading of(Terms terms, Denotations at, Map<FactSubject, Type> byName, Symbols symbols) {
+    /** The reading of one value's positions, for {@link StatedByClauses} to take the leaves of.
+     *
+     *  <p>No environment is held. Which environment a leaf is read at is where the leaf stands,
+     *  which the fold hands down — kept here, a rule under a binding would be read at the names the
+     *  clause began with. */
+    static OrderedReading of(Terms terms, Map<FactSubject, Type> byName, Symbols symbols) {
         Map<FactSubject, Carrier> carriers = new LinkedHashMap<>();
         byName.forEach((name, type) -> {
             Carrier carrier = Carrier.ofValue(type, symbols);
@@ -70,7 +72,7 @@ final class OrderedReading implements ClauseReading<OrderedIntervals<FactSubject
                 carriers.put(name, carrier);
             }
         });
-        return new OrderedReading(terms, at, carriers);
+        return new OrderedReading(terms, carriers);
     }
 
     @Override
@@ -97,23 +99,24 @@ final class OrderedReading implements ClauseReading<OrderedIntervals<FactSubject
      * step.
      */
     @Override
-    public OrderedIntervals<FactSubject> leaf(Core e, boolean positive) {
-        return e instanceof Core.Binary bin ? comparison(bin, positive) : OrderedIntervals.top();
+    public OrderedIntervals<FactSubject> leaf(Core e, boolean positive, Denotations at) {
+        return e instanceof Core.Binary bin ? comparison(bin, positive, at) : OrderedIntervals.top();
     }
 
     /** Where one comparison leaves the position it names, or nothing where it names none. */
-    private OrderedIntervals<FactSubject> comparison(Core.Binary bin, boolean positive) {
+    private OrderedIntervals<FactSubject> comparison(Core.Binary bin, boolean positive,
+                                                     Denotations at) {
         Comparison read = Comparison.of(bin).orElse(null);
         if (read == null) {
             return OrderedIntervals.top();
         }
         // The position-bearing side read as the left one, as `0 <= value` says what `value >= 0`
         // says.
-        FactSubject position = positionIn(bin.left());
+        FactSubject position = positionIn(bin.left(), at);
         Core bound = bin.right();
         ComparisonClaim claim = read.claim();
         if (position == null) {
-            position = positionIn(bin.right());
+            position = positionIn(bin.right(), at);
             bound = bin.left();
             claim = claim.turned();
         }
@@ -121,7 +124,7 @@ final class OrderedReading implements ClauseReading<OrderedIntervals<FactSubject
         if (carrier == null) {
             return OrderedIntervals.top();
         }
-        Hir.Expr written = Terms.asWrittenValue(bound);
+        Hir.Expr written = Terms.asWrittenValue(bound, at);
         // Denied, a comparison is the one that leaves what it leaves out. `!(value /= x)` is an
         // equality and is read; `!(value == x)` is a disequality and is not, which is the same
         // answer the disequality gets when it is written directly.
@@ -176,7 +179,7 @@ final class OrderedReading implements ClauseReading<OrderedIntervals<FactSubject
     }
 
     /** The position {@code e} is, or null where it is not one this is reading for. */
-    private FactSubject positionIn(Core e) {
+    private FactSubject positionIn(Core e, Denotations at) {
         FactSubject named = terms.subjectOf(e, at);
         return named != null && carriers.containsKey(named) ? named : null;
     }

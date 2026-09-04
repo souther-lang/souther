@@ -181,36 +181,49 @@ class AStandingQuestionSaysWhatItStandsForTest {
     }
 
     /**
-     * A question no reading claimed says what is known of it, and no more.
+     * A question a rule reaching through a helper leaves says what the same rule written out says.
      *
-     * <p>The invariant is a call, and what it comes to is a rule about a field of the value its
-     * helper was handed — a position none of the readings here is filed under, so none of them
-     * claimed the rule and none recorded why.
+     * <p>The invariant is a call, and what it comes to is a rule about a field of the value the
+     * helper was handed. The reading goes inside the binding the expansion made (ADR-0106), so the
+     * position is named and the rule is read at it — and what stands is the reading's own word for
+     * the form it could not take apart, which is the word the rule written where the clause is
+     * would leave.
      *
-     * <p>Neither of the words beside it is true of that. One promises a rule was read and could not
-     * be used, which sends an author after the form they wrote and nothing here complained of the
-     * form; the other promises the rule was never arrived at, and it was. What is known is that the
-     * rule is here, that a question of it stands, and that nothing worked out what it says — so
-     * that is the word, and it claims nothing about which capability would lift it.
+     * <p>Held as one line and not as two readings agreeing, because the line is what a person is
+     * shown: a word that turned on which of the two spellings an author reached for would be
+     * reporting this compiler's arrangement rather than their model.
      */
     @Test
-    void aQuestionNoReadingClaimedSaysWhatIsKnownOfIt() {
+    void aQuestionARuleThroughAHelperLeavesSaysWhatTheRuleWrittenOutSays() {
+        String throughAHelper = about(reportOf("""
+                module probe.helper
+
+                data Range = { min: String, max: String }
+
+                data Checked = { range: Range }
+                    invariant valid(range)
+
+                behavior read : (c: Checked) -> Ok
+
+                let valid (r: Range) : Bool = UNREAD_MAX
+                """.replace("UNREAD_MAX", ARuleNoReadingTakesIn.about("r.max"))),
+                "invariant Checked #1");
+
         assertEquals("      · not accounted for: invariant Checked #1"
                         + " — which values may stand at c.range.max:"
-                        + " it was reached, and nothing worked out what it says about the values"
-                        + " here",
-                about(reportOf("""
-                        module probe.helper
+                        + " written in a form this compiler does not read",
+                throughAHelper);
+        assertEquals(about(reportOf("""
+                module probe.helper
 
-                        data Range = { min: Int, max: Int }
+                data Range = { min: String, max: String }
 
-                        data Checked = { range: Range }
-                            invariant valid(range)
+                data Checked = { range: Range }
+                    invariant UNREAD_MAX
 
-                        behavior read : (c: Checked) -> Ok
-
-                        let valid (r: Range) : Bool = r.max >= 0
-                        """), "invariant Checked #1"));
+                behavior read : (c: Checked) -> Ok
+                """.replace("UNREAD_MAX", ARuleNoReadingTakesIn.about("range.max"))),
+                "invariant Checked #1"), throughAHelper);
     }
 
     /**

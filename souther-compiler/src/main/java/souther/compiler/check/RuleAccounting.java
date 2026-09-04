@@ -232,11 +232,14 @@ public final class RuleAccounting {
      * which is the sentence #842 is about, one level down.
      *
      * <p><b>And one arm that names no reading.</b> A question stands where no reading adopted the
-     * rule, which is not the same as a reading having been asked and fallen short: the readings a
-     * clause reaches are the ones that recognise the positions it names, and a clause about a
-     * position none of them knows is claimed by none of them. Answered with a reading's arm, such a
-     * question is attributed to a reader that never held the rule — and the account then says which
-     * capability of that reader would lift it, which is a sentence about the wrong reader.
+     * rule, and what stopped things is then not always a fact about the rule: a reading may consume
+     * the rule entirely and still be unable to build the exact answer its rules come to within its
+     * allowance. Answered with a reading's arm, such a question is attributed to a reader that was
+     * not short of anything — and the account then says which capability of that reader would lift
+     * it, which is a sentence about the wrong thing.
+     *
+     * <p>A question with neither is the accounting disagreeing with itself and is refused where it
+     * is made ({@link FieldDomains.AStandingQuestionWithNoAccount}).
      */
     public sealed interface Why {
 
@@ -321,12 +324,21 @@ public final class RuleAccounting {
         }
 
         /**
-         * No reading took the rule in, and none of them recorded why.
+         * The question stands, and no reading has a reason attributable to the rule that raised it.
          *
-         * <p>Nothing to carry, and that is what it says. The readings that record a reason are the
-         * ones that recognised the position and gave up on the rule about it; where the position is
-         * one none of them knows, the rule is claimed by nobody and there is no reader whose
-         * account this could be.
+         * <p>Nothing to carry, and that is what it says. The arms beside it are a reading's own
+         * words for where it gave up on <em>this rule</em>; here there are none, and what stands in
+         * their place is a fact about something other than the rule.
+         *
+         * <p>One way this happens is that the rule was read in full and composing the exact answer
+         * ran past the allowance. That loss is about the answer rather than about any rule that paid
+         * into it — the same rules met in another order would have been built — so it is refused
+         * where reasons are filed under rules ({@link ReadingEvidence#stoppedBy}) and reaches the
+         * question as this.
+         *
+         * <p>Said as "no reading" rather than "no reason about the rule", which is what it is. The
+         * name is older than the state it now holds and the reading did take the rule in; see the
+         * issue on what an answer-level limit should be called out there.
          */
         record NothingTookItIn() implements Why {}
     }
