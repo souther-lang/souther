@@ -1062,7 +1062,7 @@ final class Coverages {
         return switch (unknown.why()) {
             case NOTHING_COMPOSED_ONE -> souther.compiler.partition.Generator
                     .UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE;
-            case THE_SEARCH_RAN_OUT -> souther.compiler.partition.Generator
+            case THE_SEARCH_LEFT_SOMETHING_UNTRIED -> souther.compiler.partition.Generator
                     .UnresolvedCombination.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED;
         };
     }

@@ -260,8 +260,9 @@ public final class PublicationOrders {
      * <p>A value that was built and did not come back whole is nearer an answer than one that was
      * never built, which is the order the reasons inside each of them are in as well.
      *
-     * <p>The arms and not what they hold. Which observation codes an arm says, and which budgets,
-     * are the orders above; said again here they would be a second order over kinds that have one.
+     * <p>The arms and not what they hold. Which observation codes an arm says, which figures and
+     * which populations, are the orders above; said again here they would be a second order over
+     * kinds that have one.
      */
     public static final CanonicalSelection.Order<EstablishmentGap> ESTABLISHMENT_GAPS =
             CanonicalSelection.Order.overFamilies(List.<Class<? extends EstablishmentGap>>of(

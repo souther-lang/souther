@@ -507,7 +507,7 @@ public final class Generator {
             public Realization.Unknown.Reason asAWalksAnswer() {
                 return switch (this) {
                     case NOTHING_COMPOSES_ONE -> Realization.Unknown.Reason.NOTHING_COMPOSED_ONE;
-                    case THE_SEARCH_LEFT_SOMETHING_UNTRIED -> Realization.Unknown.Reason.THE_SEARCH_RAN_OUT;
+                    case THE_SEARCH_LEFT_SOMETHING_UNTRIED -> Realization.Unknown.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED;
                     // What a walk of a coverage item comes back with is what it did, and these are
                     // what somebody else did: the model settling the point, a candidate refused, a
                     // module with no classes, a position held back, a group never offered.
@@ -2557,16 +2557,7 @@ public final class Generator {
             Edge edge = edgeAt(subject, each.getKey(), each.getValue(),
                     fixing.size() > 1, reaching.region());
             if (edge.values().isEmpty()) {
-                // What stopped the composing where a budget of this compiler's did, and the word
-                // for a search that came to nothing where none did. The two license different
-                // sentences and only the first names something anybody could raise.
-                return edge.stoppedBy().isEmpty()
-                        ? new BoundaryAttempt.Unresolved(
-                                new UnresolvedCombination(List.of(label), edge.reason(),
-                                        edge.detail()),
-                                where.unrepresented())
-                        : BoundaryAttempt.Stopped.at(label, edge.stoppedBy(),
-                                where.unrepresented());
+                return edge.cameToNothing(label, where.unrepresented());
             }
             TermPath at = each.getKey().writeRoot();
             // Two terms at one location is that location asked for two things at once — a string of
@@ -2632,8 +2623,15 @@ public final class Generator {
             // reading of it: an offer still holding values means nothing has been exhausted, and a
             // plan short of the point is not yet anything a reader is owed.
             Outcome answered = switch (tried) {
-                // Neither is a search that came back empty over an offer. One named a figure that
-                // stopped it, and one never ran.
+                // None of these is a search claiming every candidate was refused, which is the one
+                // claim what the edge held back bears on ({@link #whatTheEdgeHeldBack}). A search
+                // that stopped, one that ran to the end of what this compiler writes, and one that
+                // never ran are already saying the point is open on this compiler, and adding what
+                // an edge was short of would be a second account of the same emptiness.
+                //
+                // Which is true in both vocabularies and not only in the figures. What the edge was
+                // short of travels with the answer that is about it, and never onto one that was
+                // settled before the edge's offer was in question.
                 case Outcome.Built _, Outcome.Stopped _, Outcome.Unexhausted _,
                      Outcome.Unplanned _ -> tried;
                 case Outcome.Unresolved(UnresolvedCombination.Reason word, String said) -> {
@@ -4779,6 +4777,32 @@ public final class Generator {
                 case TermRealizations.Realization.Built _ -> throw new IllegalStateException(
                         "an edge that offered values asked why it offered none");
             };
+        }
+
+        /**
+         * What an edge that offered nothing comes to, as the outcome an account is handed.
+         *
+         * <p><b>Which arm it is decided here and nowhere else.</b> An edge is short of everything
+         * there is in two vocabularies, and a caller choosing the arm by asking one of them whether
+         * it is empty is a caller that has to be taught every vocabulary there will ever be — which
+         * is how the second of them came to be dropped at the one place that asked about the first.
+         * Asked of the edge, a vocabulary added is a case here rather than a silence at every
+         * caller.
+         *
+         * <p>The figures first, because only they name something anybody could raise; what is
+         * walked in part travels with them all the same, since a stop does not make it untrue.
+         */
+        BoundaryAttempt cameToNothing(String label,
+                                      List<ReachabilityGap.Uncomposed> unrepresented) {
+            if (!stoppedBy().isEmpty()) {
+                return BoundaryAttempt.Stopped.at(label, detail(), stoppedBy(), notAllOf(),
+                        unrepresented);
+            }
+            if (!notAllOf().isEmpty()) {
+                return BoundaryAttempt.Unexhausted.at(label, detail(), notAllOf(), unrepresented);
+            }
+            return new BoundaryAttempt.Unresolved(
+                    new UnresolvedCombination(List.of(label), reason(), detail()), unrepresented);
         }
 
         /**

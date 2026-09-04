@@ -22,12 +22,13 @@ import java.util.List;
  * number, or somebody writing the rest of what this walks — and that is a vocabulary the gap
  * carries rather than a case it is.
  *
- * <p><b>Made where the establishing stopped, and never worked out afterwards.</b> The outcome a
- * search comes back with says that nothing came of it; which budget ran out is known only where it
- * ran out, and a reader recovering it from the outcome would be recovering it from something that
- * has already lost it — one reason a search comes back with is written wherever a search can stop,
- * by files that stop for nothing like each other. So a producer that stops hands this over, and one
- * that has nothing to hand over says so by there being no gap rather than by a gap nobody made.
+ * <p><b>Made where the establishing fell short, and never worked out afterwards.</b> The outcome a
+ * search comes back with says that nothing came of it; which figure was reached, and which
+ * population was walked in part, are known only where that happened, and a reader recovering either
+ * from the outcome would be recovering it from something that has already lost it — one reason a
+ * search comes back with is written wherever a search can fall short, by files that fall short for
+ * nothing like each other. So a producer that falls short hands this over, and one that has nothing
+ * to hand over says so by there being no gap rather than by a gap nobody made.
  *
  * <p>Two cases, and what tells them apart is how far this compiler had got when it stopped. An
  * observation is of a value that exists and did not come back whole; a composing is of a value that
@@ -72,11 +73,11 @@ public sealed interface EstablishmentGap {
      * than the point had. Written the other way, a reader is told a figure caused an emptiness it
      * may have had nothing to do with.
      *
-     * <p>Made where the figure was reached and carried out, never worked out afterwards. What a
-     * search comes back with is a word, and two of this compiler's budgets come back with the same
-     * word while one of them is written wherever a walk stops for any reason at all — so a reader
-     * recovering a budget from that word would be recovering one that may never have been reached.
-     * Some of the figures written here come back with no word at all.
+     * <p>Made where the figure was reached, or where the walk ran to the end of what this compiler
+     * writes, and carried out from there — never worked out afterwards. What a search comes back
+     * with is a word, and one word covers both of those and more besides, so a reader recovering
+     * either from the word would be recovering something that may never have happened. Some of the
+     * figures written here come back with no word at all.
      *
      * <p><b>Only where nothing was composed.</b> A budget that cut an offering short after a value
      * was built took nothing away from the point: the value is there, and what was lost is the rest
