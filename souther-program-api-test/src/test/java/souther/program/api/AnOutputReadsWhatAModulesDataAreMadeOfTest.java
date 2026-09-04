@@ -133,8 +133,8 @@ class AnOutputReadsWhatAModulesDataAreMadeOfTest {
         return data.stream().map(each -> each.name().name()).toList();
     }
 
-    private static List<String> fieldNames(CheckedData.Product product) {
-        return product.fields().stream().map(ValueShape.Field::name).toList();
+    private static List<String> fieldNames(CheckedData.WithFields built) {
+        return built.fields().stream().map(ValueShape.Field::name).toList();
     }
 
     /**
@@ -175,16 +175,18 @@ class AnOutputReadsWhatAModulesDataAreMadeOfTest {
     }
 
     /**
-     * A newtype is the one-field product it is.
+     * A newtype is its own arm, made of the one field it wraps.
      *
-     * <p>Held to deliberately. What differs about a newtype is how it is written outside the
-     * program, which is no part of what a value is made of, so a reader laying one out has nothing
-     * to tell it from any other single-field product.
+     * <p>Both halves at once. A reader laying a value out is answered as it is for any other data
+     * built field by field — the field is there, with the type it wraps — and a reader writing a
+     * value is told which form was declared, which is the thing the fields do not say.
      */
     @Test
-    void aNewtypeIsAProductOfTheOneFieldItWraps() {
-        CheckedData.Product amount = product(demo(), "Amount");
+    void aNewtypeIsItsOwnArmMadeOfTheOneFieldItWraps() {
+        CheckedData.Newtype amount =
+                assertInstanceOf(CheckedData.Newtype.class, declared(demo(), "Amount"));
 
+        assertEquals(Type.INT, amount.wrapped());
         assertEquals(List.of("value"), fieldNames(amount));
         assertEquals(Type.INT, amount.fields().get(0).type());
     }
@@ -273,9 +275,13 @@ class AnOutputReadsWhatAModulesDataAreMadeOfTest {
      * Every construction fills the declared fields, in the order they are laid out.
      *
      * <p>A property of the checked program and not how a reader places a field — that is
-     * {@link CheckedData.Product#positionOf}, which reads the name a construction wrote. Held here
-     * because a store and a load that came to disagree would disagree silently, and this is the one
-     * place both readings are visible at once.
+     * {@link CheckedData.WithFields#positionOf}, which reads the name a construction wrote. Held
+     * here because a store and a load that came to disagree would disagree silently, and this is
+     * the one place both readings are visible at once.
+     *
+     * <p>Over both forms a construction can build. {@code Amount(n)} builds a newtype and writes
+     * the one field it wraps, so a reading that asked only about products would leave a
+     * construction this module writes unaccounted for.
      */
     @Test
     void everyConstructionFillsTheDeclaredFieldsInTheOrderTheyAreLaidOut() {
@@ -290,7 +296,7 @@ class AnOutputReadsWhatAModulesDataAreMadeOfTest {
         assertEquals(2, constructions.size(), () -> "the constructions this module writes: "
                 + constructions.stream().map(each -> each.typeName().name()).toList());
         for (Core.Construct construction : constructions) {
-            CheckedData.Product built = assertInstanceOf(CheckedData.Product.class,
+            CheckedData.WithFields built = assertInstanceOf(CheckedData.WithFields.class,
                     layout(program, construction.typeName()), construction.typeName()::toString);
             assertEquals(fieldNames(built),
                     construction.values().stream().map(Core.FieldValue::field).toList(),
@@ -303,8 +309,10 @@ class AnOutputReadsWhatAModulesDataAreMadeOfTest {
      *
      * <p>The other half of the same reading, and the half a construction cannot stand in for: a
      * module may read a field of a product it never builds, and that read is what a backend has to
-     * place. Two shapes can be read from — a product, and a sum every case of which carries the
-     * field — and the second is answered by the leaves the sum already descended to.
+     * place. What can be read from is a data built field by field — either form of one, since
+     * {@code x.value} reads a newtype the way {@code w.extra} reads a product — and a sum every
+     * case of which carries the field, which is answered by the leaves the sum already descended
+     * to.
      */
     @Test
     void everyFieldReadNamesAFieldOfWhatItReadsFrom() {
@@ -319,7 +327,7 @@ class AnOutputReadsWhatAModulesDataAreMadeOfTest {
         assertEquals(2, reads.size(), () -> "the field reads this module writes: "
                 + reads.stream().map(Core.FieldAccess::field).toList());
         int offSums = 0;
-        int offProducts = 0;
+        int offFields = 0;
         List<Core.FieldAccess> unaccounted = new ArrayList<>();
         for (Core.FieldAccess read : reads) {
             if (!(read.target().type() instanceof Type.Ref(TypeSymbol.AtModule named))) {
@@ -328,9 +336,9 @@ class AnOutputReadsWhatAModulesDataAreMadeOfTest {
             }
             switch (layout(program, named)) {
                 // Answering at all is the assertion: a name that is no field of it is refused.
-                case CheckedData.Product product -> {
-                    offProducts++;
-                    product.positionOf(read.field());
+                case CheckedData.WithFields built -> {
+                    offFields++;
+                    built.positionOf(read.field());
                 }
                 case CheckedData.Sum sum -> {
                     offSums++;
@@ -338,7 +346,8 @@ class AnOutputReadsWhatAModulesDataAreMadeOfTest {
                             sum.cases().stream().map(TypeSymbol::name).toList(),
                             () -> "the cases " + named + " is read across");
                     for (TypeSymbol leaf : sum.cases()) {
-                        CheckedData.Product carrying = assertInstanceOf(CheckedData.Product.class,
+                        CheckedData.WithFields carrying = assertInstanceOf(
+                                CheckedData.WithFields.class,
                                 layout(program, assertInstanceOf(TypeSymbol.AtModule.class, leaf)),
                                 leaf::toString);
                         carrying.positionOf(read.field());
@@ -349,7 +358,8 @@ class AnOutputReadsWhatAModulesDataAreMadeOfTest {
             }
         }
         assertEquals(1, offSums, "the read off a sum is the one this module writes");
-        assertEquals(1, offProducts, "the read off a product is the one this module writes");
+        assertEquals(1, offFields,
+                "the read off a data built field by field is the one this module writes");
         // Every read is accounted for, so a read of a shape this does not know how to place cannot
         // pass by being skipped. The two arms above are what the language admits reading a field
         // off; a read that arrived at neither would be the finding, and going quiet about it is

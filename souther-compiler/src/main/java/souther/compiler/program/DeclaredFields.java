@@ -40,7 +40,10 @@ final class DeclaredFields implements Declarations {
         Map<TypeSymbol, Composed> byOwner = new LinkedHashMap<>();
         for (CheckedData each : declarations) {
             byOwner.put(each.name(), switch (each) {
-                case CheckedData.Product product -> new Composed.OfFields(fieldsOf(product));
+                // What a value is made of, which is the question a newtype answers as the one-field
+                // product it is made like. How one is written is the other question, and a
+                // comparison of two values does not ask it.
+                case CheckedData.WithFields built -> new Composed.OfFields(fieldsOf(built));
                 // A sum is its cases and a unit carries nothing, so neither is a place a field
                 // stands under.
                 case CheckedData.Sum _, CheckedData.Unit _ -> Composed.NOTHING;
@@ -49,9 +52,9 @@ final class DeclaredFields implements Declarations {
         return new DeclaredFields(byOwner);
     }
 
-    private static Map<String, Type> fieldsOf(CheckedData.Product product) {
+    private static Map<String, Type> fieldsOf(CheckedData.WithFields built) {
         Map<String, Type> fields = new LinkedHashMap<>();
-        for (ValueShape.Field field : product.fields()) {
+        for (ValueShape.Field field : built.fields()) {
             fields.put(field.name(), field.type());
         }
         return fields;

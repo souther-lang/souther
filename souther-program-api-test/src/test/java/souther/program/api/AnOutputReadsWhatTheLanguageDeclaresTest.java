@@ -302,8 +302,8 @@ class AnOutputReadsWhatTheLanguageDeclaresTest {
     private static ValueShape.Field fieldOf(CheckedModule module, String data, String field) {
         for (CheckedData declared : module.data()) {
             if (declared.name().name().equals(data)) {
-                for (ValueShape.Field each : assertInstanceOf(CheckedData.Product.class, declared)
-                        .fields()) {
+                for (ValueShape.Field each
+                        : assertInstanceOf(CheckedData.WithFields.class, declared).fields()) {
                     if (each.name().equals(field)) {
                         return each;
                     }
@@ -328,8 +328,8 @@ class AnOutputReadsWhatTheLanguageDeclaresTest {
             for (CheckedData declared : module.data()) {
                 named.add(declared.name());
                 switch (declared) {
-                    case CheckedData.Product product -> {
-                        for (ValueShape.Field field : product.fields()) {
+                    case CheckedData.WithFields built -> {
+                        for (ValueShape.Field field : built.fields()) {
                             namesIn(field.type(), named);
                         }
                     }

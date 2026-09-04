@@ -51,12 +51,19 @@ class WhatASnapshotSaysAModuleDeclaresIsWhatTheCheckerResolvedAgainstTest {
      * newtype, whose applications are rewritten below the declarations; a data carrying an
      * invariant, which is settled and rewritten between the two trees; an include; a sum of sums;
      * and units a case list declares rather than a line of its own.
+     *
+     * <p>{@code Wrapper} is the newtype's twin and is here so that the form is compared both ways.
+     * A snapshot deciding the form by the shape it was left with — one field, called {@code value} —
+     * answers as the declaration does for {@code Amount} and would go unremarked if nothing was
+     * declared that the shape says the same thing about and the language does not.
      */
     private static final String MODULE = """
             module demo
 
             data Amount = Int
                 invariant value >= 0
+
+            data Wrapper = { value: Int }
 
             data Common = { id: Int, tag: String }
             data Wide   = { ...Common, extra: Int }
@@ -89,6 +96,11 @@ class WhatASnapshotSaysAModuleDeclaresIsWhatTheCheckerResolvedAgainstTest {
      * from. A product's fields and a sum's cases are read here the way every reader below the check
      * reads them, so a snapshot built over a tree that had drifted answers differently at the first
      * declaration the drift touched.
+     *
+     * <p>And which form it was written in, which the fields do not say. A newtype and a product of
+     * one member are made of the same field of the same type, and the arm is where they part; read
+     * off {@code Hir.Data.newtype()}, which is what the derived codec is generated from, so the
+     * form an output writes a value by and the form the JVM's codec writes it by are one answer.
      */
     @Test
     void andIsMadeOfWhatTheCheckerWouldSayItIsMadeOf() {
@@ -98,12 +110,15 @@ class WhatASnapshotSaysAModuleDeclaresIsWhatTheCheckerResolvedAgainstTest {
             CheckedData published = read.snapshot().get(declared.getKey());
             assertNotNull(published, () -> "not in the snapshot: " + declared.getKey());
             switch (declared.getValue()) {
-                case Hir.Data data -> assertEquals(
-                        new ArrayList<>(TypeOps.fieldTypes(data, read.symbols()).keySet()),
-                        assertInstanceOf(CheckedData.Product.class, published,
-                                declared.getKey()::toString)
-                                .fields().stream().map(ValueShape.Field::name).toList(),
-                        () -> "the fields of " + declared.getKey());
+                case Hir.Data data -> {
+                    CheckedData.WithFields built = assertInstanceOf(CheckedData.WithFields.class,
+                            published, declared.getKey()::toString);
+                    assertEquals(new ArrayList<>(TypeOps.fieldTypes(data, read.symbols()).keySet()),
+                            built.fields().stream().map(ValueShape.Field::name).toList(),
+                            () -> "the fields of " + declared.getKey());
+                    assertEquals(data.newtype(), built instanceof CheckedData.Newtype,
+                            () -> "which form " + declared.getKey() + " was declared in");
+                }
                 case Hir.SumData sum -> assertEquals(
                         souther.compiler.check.AtomSpace.subjectAtoms(
                                 souther.compiler.types.Type.ref(sum.declares()), read.symbols()),
@@ -116,17 +131,17 @@ class WhatASnapshotSaysAModuleDeclaresIsWhatTheCheckerResolvedAgainstTest {
         }
     }
 
-    /** The three declarations a module can write, so that neither side is compared over a set that
+    /** The four declarations a module can write, so that neither side is compared over a set that
      *  happens to hold only one of them. */
     @Test
-    void andAllThreeShapesAreAmongThem() {
+    void andAllFourShapesAreAmongThem() {
         Set<Class<?>> shapes = new LinkedHashSet<>();
         for (CheckedData published : read().snapshot().values()) {
             shapes.add(published.getClass());
         }
 
-        assertEquals(Set.of(CheckedData.Product.class, CheckedData.Sum.class,
-                CheckedData.Unit.class), shapes);
+        assertEquals(Set.of(CheckedData.Product.class, CheckedData.Newtype.class,
+                CheckedData.Sum.class, CheckedData.Unit.class), shapes);
     }
 
     /** The declaration world the checker resolves against, the snapshot taken of the same compile,

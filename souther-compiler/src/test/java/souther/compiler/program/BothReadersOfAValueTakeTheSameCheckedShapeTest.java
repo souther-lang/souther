@@ -161,10 +161,10 @@ class BothReadersOfAValueTakeTheSameCheckedShapeTest {
         CheckedProgram program = CheckedProgram.of(List.of(MODULE));
         int named = 0;
         for (CheckedData each : declarationsOf(program)) {
-            if (!(each instanceof CheckedData.Product product)) {
+            if (!(each instanceof CheckedData.WithFields built)) {
                 continue;
             }
-            for (souther.compiler.core.ValueShape.Field field : product.fields()) {
+            for (souther.compiler.core.ValueShape.Field field : built.fields()) {
                 for (TypeSymbol reached : declarationsIn(field.type())) {
                     if (reached instanceof TypeSymbol.AtModule at) {
                         named++;
