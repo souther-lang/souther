@@ -1476,6 +1476,22 @@ public final class InvariantChecker {
                         Map<FieldDomains.BoundaryQuestion,
                                 FieldDomains.BoundaryStanding> standing,
                         PartsLeftOut withoutParts) {
+        // A binding is crossed, and what is under it is one part however it is written. The body is
+        // what the clause states, read inside it (ADR-0106) — so a rule stating its end through a
+        // helper places the line the same rule written out places, where it used to reach no
+        // comparison at all and the declaration came back with no line drawn on it.
+        //
+        // And crossed rather than descended into: the conjuncts of a clause are what its author
+        // wrote ({@link ClauseHelpers#conjunctsOf}, over the tree before any expansion), so a
+        // helper whose body joins two rules is one conjunct. Split here, this reading would number
+        // parts the reading beside it does not, and a line drawn here would be recognised as
+        // another one's.
+        if (clause instanceof Core.LetIn li) {
+            underABinding(li.body(), from, conjunct, terms.inside(li, at), byName, out, noLines,
+                    withoutAnEnd, naming, namingTheStrings, narrowers, raised, took, typeAt, parts,
+                    raisedByPart, standing, withoutParts);
+            return;
+        }
         if (clause instanceof Core.Binary and
                 && ConditionJoin.of(and.op()).orElse(null) == ConditionJoin.BOTH) {
             // One rule the author wrote, so what it raises is what its conjuncts raise together.
@@ -1489,6 +1505,39 @@ public final class InvariantChecker {
             direct(and.right(), from, conjunct, at, byName, out, noLines, withoutAnEnd, naming,
                     namingTheStrings, narrowers, raised, took, typeAt, parts, raisedByPart,
                     standing, withoutParts);
+            return;
+        }
+        underABinding(clause, from, conjunct, at, byName, out, noLines, withoutAnEnd, naming,
+                namingTheStrings, narrowers, raised, took, typeAt, parts, raisedByPart, standing,
+                withoutParts);
+    }
+
+    /**
+     * One conjunct of the clause, read where it stands.
+     *
+     * <p>Apart from {@link #direct} because what is above it is the conjunct topology and what is
+     * here is one part of it. A binding is crossed here too — a helper calling a helper is bindings
+     * all the way down — and crossing one never makes another part: which parts a clause has is
+     * what its author wrote, and an expansion writes nothing.
+     */
+    private void underABinding(Core clause, RuleRef.Invariant from, int[] conjunct, Denotations at,
+                        Map<FactSubject, Coordinate> byName, List<Direct> out,
+                        List<FieldDomains.NoLine> noLines,
+                        List<FieldDomains.WithoutAnEnd> withoutAnEnd,
+                        List<FieldDomains.AboutOneCoordinate> naming,
+                        List<FieldDomains.AboutOneCoordinate> namingTheStrings,
+                        Map<RuleKey, List<TypeSymbol.AtModule>> narrowers,
+                        Map<RuleRef, Required> raised, ReadingEvidence took,
+                        Map<RuleKey, Type> typeAt,
+                        PartsRead parts,
+                        Map<RuleRef, Map<Core, Required>> raisedByPart,
+                        Map<FieldDomains.BoundaryQuestion,
+                                FieldDomains.BoundaryStanding> standing,
+                        PartsLeftOut withoutParts) {
+        if (clause instanceof Core.LetIn li) {
+            underABinding(li.body(), from, conjunct, terms.inside(li, at), byName, out, noLines,
+                    withoutAnEnd, naming, namingTheStrings, narrowers, raised, took, typeAt, parts,
+                    raisedByPart, standing, withoutParts);
             return;
         }
         // Which conjunct of the clause this is, taken here so that every one of them is numbered —
