@@ -37,6 +37,9 @@ class EveryWayASearchFallsShortIsBuiltHereTest {
     /** Something whose only field is itself. Made of a thing with no equality, because a container
      *  that holds itself has an {@code equals} that never comes back. */
     private static final class Loop {
+        /** Left null and never read: what the walk is meant to meet is the field, not a value in
+         *  it. */
+        @SuppressWarnings("UnusedVariable")
         private Loop again;
     }
 

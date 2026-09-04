@@ -8,7 +8,6 @@ import souther.compiler.check.Sig;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.msg.DeclarationMessage;
-import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
@@ -152,15 +151,9 @@ final class JvmLimits {
      * wanted, and refusing to write the pool out says how many entries there are.
      */
     enum Limit {
-        CODE_SIZE(DiagnosticCode.E2102),
-        CONSTANT_POOL_INDEX(DiagnosticCode.E2103),
-        CONSTANT_POOL_SIZE(DiagnosticCode.E2103);
-
-        private final DiagnosticCode code;
-
-        Limit(DiagnosticCode code) {
-            this.code = code;
-        }
+        CODE_SIZE,
+        CONSTANT_POOL_INDEX,
+        CONSTANT_POOL_SIZE
     }
 
     /**

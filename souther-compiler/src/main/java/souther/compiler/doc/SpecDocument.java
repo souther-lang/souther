@@ -43,14 +43,6 @@ public final class SpecDocument {
      */
     private static final Pattern INLINE_ANCHOR = Pattern.compile("\\[\\[([a-zA-Z0-9_-]+)]]");
     private static final Pattern HEADING = Pattern.compile("^(={2,})\\s+(.*\\S)\\s*$");
-    /**
-     * The delimiter of a block AsciiDoc takes as it stands: listing {@code ----}, literal
-     * {@code ....}, passthrough {@code ++++}, and the comment block {@code ////}. Four or more of
-     * the character repeated, and the block runs to the line that repeats it exactly — a shorter
-     * run, or a different character, is content rather than the end of it.
-     */
-    private static final Pattern OPAQUE_DELIMITER = Pattern.compile("^([-.+/])\\1{3,}$");
-
     /** A section: the first anchor written above its heading, its title, heading level (2 for
      *  {@code ==}), and body up to the next heading of the same or a higher level. */
     public record Section(String anchor, String title, int level, String body) {}

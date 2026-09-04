@@ -50,13 +50,11 @@ import static souther.compiler.codegen.JvmTypes.*;
 final class ValueClassGen {
 
     private final CodegenContext ctx;
-    private final String pkg;
     private final DerivedSymbols symbols;
     private final CodecGen codec;
 
     ValueClassGen(CodegenContext ctx, CodecGen codec) {
         this.ctx = ctx;
-        this.pkg = ctx.pkg;
         this.symbols = ctx.symbols;
         this.codec = codec;
     }

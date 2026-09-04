@@ -81,7 +81,8 @@ class AWalkOfWhatIsDeclaredStopsWhereNothingSettlesItTest {
     private static final class AMapOfItsOwn extends java.util.AbstractMap<String, String> {
 
         /** What it answers with beside its entries, which is the whole reason it is not one of the
-         *  language's own maps. */
+         *  language's own maps. Read by the walk and by nothing here. */
+        @SuppressWarnings("UnusedVariable")
         private final ArrayDeque<String> beside = new ArrayDeque<>();
 
         @Override

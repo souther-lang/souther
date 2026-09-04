@@ -73,13 +73,8 @@ public final class ValueArrivals<P> {
     private final Set<Core> walked =
             java.util.Collections.newSetFromMap(new IdentityHashMap<>());
 
-    /** Which ways a comparison has a value behind it, which is not this reading's to work out. */
-    private final ComparisonWays ways;
-
-    private ValueArrivals(Naming<P> naming, ComparisonWays ways,
-                          ValueArrivals<AnonymousPath> semantics) {
+    private ValueArrivals(Naming<P> naming, ValueArrivals<AnonymousPath> semantics) {
         this.naming = naming;
-        this.ways = ways;
         this.semantics = semantics;
     }
 
@@ -98,7 +93,7 @@ public final class ValueArrivals<P> {
     public static <P> ValueArrivals<P> ofBody(Core body, Naming<P> naming, ComparisonWays ways) {
         ValueArrivals<AnonymousPath> semantics =
                 naming == Anonymous.NAMING ? null : ofBody(body, Anonymous.NAMING, ways);
-        ValueArrivals<P> reading = new ValueArrivals<>(naming, ways, semantics);
+        ValueArrivals<P> reading = new ValueArrivals<>(naming, semantics);
         if (body != null) {
             reading.fill(body, naming, ways, Map.of());
         }

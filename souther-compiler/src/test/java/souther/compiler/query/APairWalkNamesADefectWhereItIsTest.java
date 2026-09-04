@@ -458,6 +458,9 @@ class APairWalkNamesADefectWhereItIsTest {
 
     /** Something with a part, whose own equality is its address. */
     private static final class OwnIdentity {
+        /** Read by the walk and by nothing here: carrying a part its equality does not compare is
+         *  the whole of what this stands for. */
+        @SuppressWarnings("UnusedVariable")
         private final Address held;
 
         private OwnIdentity(Address held) {
@@ -530,6 +533,9 @@ class APairWalkNamesADefectWhereItIsTest {
 
     /** Something whose only field is itself, so a walk of it finds nothing and gets nowhere. */
     private static final class Loop {
+        /** Left null and never read: what the walk is meant to meet is the field, not a value in
+         *  it. */
+        @SuppressWarnings("UnusedVariable")
         private Loop again;
     }
 
