@@ -222,10 +222,6 @@ class EveryPlacementEndsSomewhereSaidOutLoudTest {
                 .toList();
     }
 
-    private static void assertThrows(Class<? extends Throwable> expected, Runnable run) {
-        org.junit.jupiter.api.Assertions.assertThrows(expected, run::run);
-    }
-
     /**
      * Where the filings among a placement's outcomes are, as this test wants to read them.
      *

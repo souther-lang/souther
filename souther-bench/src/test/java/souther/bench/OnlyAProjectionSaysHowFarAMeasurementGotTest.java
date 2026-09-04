@@ -235,13 +235,4 @@ class OnlyAProjectionSaysHowFarAMeasurementGotTest {
         return n;
     }
 
-    /** Every main source of every module, as one string. Read rather than parsed: what these rules
-     *  are about is whether somebody wrote a thing down. */
-    private static String allMainSources() throws IOException {
-        StringBuilder out = new StringBuilder();
-        for (Path each : Reactor.mainJavaSources()) {
-            out.append(Files.readString(each, StandardCharsets.UTF_8));
-        }
-        return out.toString();
-    }
 }

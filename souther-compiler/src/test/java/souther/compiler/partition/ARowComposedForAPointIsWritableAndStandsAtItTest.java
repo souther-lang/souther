@@ -7,7 +7,6 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ItemAssessment;
-import souther.compiler.query.PartitionEvidence;
 import souther.compiler.source.SourceId;
 
 import java.util.ArrayList;
@@ -179,15 +178,4 @@ class ARowComposedForAPointIsWritableAndStandsAtItTest {
         return lines;
     }
 
-    private static PartitionEvidence measured(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        Map<String, PartitionEvidence> coverage =
-                compilation.db().ask(new Adequacy.Coverage("demo")).value();
-        assertNotNull(coverage, () -> "the model under test compiles: " + source);
-        PartitionEvidence measured = coverage.get("f");
-        assertNotNull(measured, () -> "f was measured: " + source);
-        return measured;
-    }
 }

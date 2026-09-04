@@ -10,7 +10,6 @@ import souther.compiler.check.Sig;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.SiteNumbering;
 import souther.compiler.inputs.InputDomain;
-import souther.compiler.reading.Interaction;
 import souther.compiler.reading.CoverageRead;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
@@ -184,10 +183,6 @@ class ASearchThatStoppedSaysSoRatherThanNamingItsLastRefusalTest {
                          SiteNumbering numbering) {
 
         /** The groups of the one reading, for a caller asking about the combinations alone. */
-        List<Interaction> groups() {
-            return read.interactions();
-        }
-
         static Model of(String source, String behavior) {
             Compilation compilation = Compilation.ofSource(source, "Main");
             compilation.answerEverything();

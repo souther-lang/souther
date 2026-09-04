@@ -8,7 +8,6 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.partition.FixtureTemplate;
 import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.Compilation;
-import souther.compiler.report.AdequacyReport;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -569,10 +568,6 @@ class ABorderSaysWhyItOwesNoRowAtAPointTest {
         Map<String, BorderAssessment> out = new java.util.LinkedHashMap<>();
         boundaries.values().forEach(each -> each.forEach(b -> out.put(b.label(), b)));
         return out;
-    }
-
-    private static String report(String model) {
-        return AdequacyReport.of(compiled(model)).human(SourceNameResolver.identity());
     }
 
     private static Compilation compiled(String model) {

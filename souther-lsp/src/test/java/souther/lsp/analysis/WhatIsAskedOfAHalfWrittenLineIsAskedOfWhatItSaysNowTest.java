@@ -158,7 +158,4 @@ class WhatIsAskedOfAHalfWrittenLineIsAskedOfWhatItSaysNowTest {
         throw new AssertionError("the module has no `let` whose body is a field access");
     }
 
-    private static String fieldOf(Hir.Expr expr) {
-        return ((Hir.FieldAccess) expr).name().canonical();
-    }
 }

@@ -2,11 +2,9 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.PartitionEvidence;
-import souther.compiler.report.AdequacyReport;
 
 import java.util.List;
 import java.util.Map;
@@ -221,11 +219,6 @@ class ARuleAboutATotalOfASequenceIsMeasuredTest {
     private static Map<String, PartitionEvidence> evidence() {
         Compilation compilation = measured();
         return compilation.db().ask(new Adequacy.Coverage(MODULE)).value();
-    }
-
-    private static String report() {
-        Compilation compilation = measured();
-        return AdequacyReport.of(compilation).human(SourceNameResolver.identity());
     }
 
     private static Compilation measured() {

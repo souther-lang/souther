@@ -12,9 +12,7 @@ import souther.compiler.report.AdequacyReport;
 
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
 import java.util.LinkedHashSet;
-import java.util.List;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -116,13 +114,6 @@ class EveryKeyThisWritesIsOneTheSchemaDeclaresTest {
         assertTrue(items.has("additionalProperties")
                         && !items.get("additionalProperties").asBoolean(),
                 "the object is closed, which is what makes an undeclared key a refusal");
-        return out;
-    }
-
-    /** Which objects of this document are checked, and where the schema declares each. */
-    private static List<String[]> checked() {
-        List<String[]> out = new ArrayList<>();
-        out.add(new String[] {"findings", "findings"});
         return out;
     }
 

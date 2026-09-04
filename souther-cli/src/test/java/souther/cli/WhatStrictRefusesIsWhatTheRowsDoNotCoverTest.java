@@ -7,7 +7,6 @@ import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.BorderAssessment;
-import souther.compiler.query.PartitionEvidence;
 import souther.compiler.report.AdequacyReport;
 
 import java.io.ByteArrayOutputStream;
@@ -570,12 +569,6 @@ class WhatStrictRefusesIsWhatTheRowsDoNotCoverTest {
         assertEquals(AdequacyReport.AdequacyStatus.SATISFIED,
                 AReportOfOneBorder.verdictOf(lines, Adequacy.AdequacyBar.RELIABLE_DOMAIN),
                 "and a bar that asks nothing of the classes reads only the lines");
-    }
-
-    /** This one asks nothing about the criterion, so it is held to the one a build asks for by
-     *  default; {@link AReportOfOneBorder} is where the report itself is built. */
-    private static PartitionEvidence partition(souther.compiler.query.Measurement<List<BorderAssessment>> border) {
-        return AReportOfOneBorder.partition(border);
     }
 
     private static AdequacyReport.AdequacyStatus verdictOf(

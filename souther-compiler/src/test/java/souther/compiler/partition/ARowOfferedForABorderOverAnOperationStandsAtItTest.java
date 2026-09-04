@@ -6,7 +6,6 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ItemAssessment;
-import souther.compiler.query.PartitionEvidence;
 
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
@@ -276,18 +275,6 @@ class ARowOfferedForABorderOverAnOperationStandsAtItTest {
         assertEquals(2, dates.size(), () -> "and there are two of them: " + inputs);
         return "    | (" + String.join(", ", inputs) + ") -> "
                 + (ChronoUnit.DAYS.between(dates.get(0), dates.get(1)) > 10 ? "Ok" : "No");
-    }
-
-    private static PartitionEvidence measured(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        Map<String, PartitionEvidence> coverage = compilation.db()
-                .ask(new Adequacy.Coverage(compilation.modules().get(0))).value();
-        assertNotNull(coverage, () -> "the model under test compiles: " + source);
-        PartitionEvidence measured = coverage.get("f");
-        assertNotNull(measured, () -> "f was measured: " + source);
-        return measured;
     }
 
     /** The lines the behavior's positions met, whosever the row at each point is. */

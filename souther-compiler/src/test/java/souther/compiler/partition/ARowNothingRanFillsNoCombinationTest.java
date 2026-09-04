@@ -9,16 +9,13 @@ import souther.compiler.check.RuleReadings;
 import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
 import souther.compiler.core.Core;
-import souther.compiler.coverage.AlignedObservation;
 import souther.compiler.coverage.ControlClaim;
 import souther.compiler.coverage.ControlPointId;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.coverage.SiteNumbering;
-import souther.compiler.coverage.Runs;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.reading.Interaction;
 import souther.compiler.reading.CoverageRead;
-import souther.compiler.observe.Classification;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Shapes;
@@ -326,41 +323,6 @@ class ARowNothingRanFillsNoCombinationTest {
                 .map(Generator.Purpose.ForAnArm.class::cast)
                 .map(Generator.Purpose.ForAnArm::probe)
                 .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
-    }
-
-    /** One class per divided position, taken from the one class the combination leaves there. */
-    private static Map<AxisId, Classification> at(List<Axis> axes, CellSelection selection) {
-        Map<AxisId, Classification> out = new java.util.LinkedHashMap<>();
-        for (int i = 0; i < axes.size(); i++) {
-            out.put(axes.get(i).id(), Classification.in(axes.get(i).classes().get(only(selection, i))
-                    .id()));
-        }
-        return out;
-    }
-
-    /** Which single class the combination leaves the position, the model having one per outcome. */
-    private static int only(CellSelection selection, int axis) {
-        for (int c = 0; c < selection.cell().allowed()[axis].length; c++) {
-            if (selection.cell().admits(axis, c)) {
-                return c;
-            }
-        }
-        throw new AssertionError("a combination leaves every position something");
-    }
-
-    /** How the generator names a row sitting at these classes. */
-    private static String labelOf(List<Axis> axes, Map<AxisId, Classification> sitting) {
-        List<String> parts = axes.stream()
-                .map(axis -> axis.term() + "="
-                        + String.join("|", ((Classification.Classified) sitting.get(axis.id())).classIds()))
-                .toList();
-        return String.join(" x ", parts);
-    }
-
-    /** A run that did everything {@code claims} names and nothing else. */
-    private static AlignedObservation doing(SiteNumbering numbering,
-                                           List<ControlClaim> claims) {
-        return Runs.doing(numbering, claims);
     }
 
     private record Model(MeasuredInput subject, CoverageRead.Read read,

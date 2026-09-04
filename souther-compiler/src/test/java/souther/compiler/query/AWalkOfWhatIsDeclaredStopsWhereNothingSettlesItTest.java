@@ -27,6 +27,9 @@ class AWalkOfWhatIsDeclaredStopsWhereNothingSettlesItTest {
 
         private final String said;
 
+        /** Nothing builds one: what this stands for is a shape the walk is asked about by name, and
+         *  the field it holds is what makes it that shape. */
+        @SuppressWarnings("UnusedMethod")
         OpenToAnything(String said) {
             this.said = said;
         }

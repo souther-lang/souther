@@ -159,11 +159,6 @@ class AClosedReadingIsOneThatDrewEveryLineItFoundTest {
         return PositionAccount.at("f", TermPath.of("h").then("a"), Type.INT);
     }
 
-    private static Axis anAxis() {
-        return new Axis(AT, AT_A,
-                List.of(), List.of(Cut.at(Carrier.WHOLE, Count.of(5), bound("cap"))));
-    }
-
     private static BoundaryTarget aLine() {
         return BoundaryTarget.at(
                 new BorderQuantity.OfACoordinate(AT.behavior(), AT_A,
