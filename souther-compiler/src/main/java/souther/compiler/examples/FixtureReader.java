@@ -44,7 +44,6 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.function.Supplier;
 
 /**
  * Reads a written fixture as the value it states, against the type of the position it is written in.
@@ -252,10 +251,10 @@ public final class FixtureReader {
     /**
      * Whether {@code position} holds {@code value} as it stands at run time, at every depth.
      *
-     * <p>The one reading of a built value, which the stand-in a row writes and the value a helper
-     * answered with are both put through: a scalar is the class its values arrive in, a name is any
-     * of the leaves it holds — a sum has no class of its own — an optional is absence or what it
-     * holds, and a collection of the right container holds what its element type holds.
+     * <p>The one reading of a built value, which the stand-in a row writes is put through: a scalar
+     * is the class its values arrive in, a name is any of the leaves it holds — a sum has no class
+     * of its own — an optional is absence or what it holds, and a collection of the right container
+     * holds what its element type holds.
      *
      * <p>A position that says none of those holds anything. There is nothing here to refuse it with:
      * a type variable is decided by each call and a position with no declared type says nothing, and
@@ -1331,17 +1330,13 @@ public final class FixtureReader {
      */
     private final Deque<ValueName> expanding = new ArrayDeque<>();
 
+    /**
+     * The body a name stands for, read where the name is written — with the name held open while it
+     * is, so a value defined in terms of itself is reported as the cycle it is rather than read
+     * until the stack runs out.
+     */
     private Object expandedValue(ValueName named, Hir.Expr body, Position at,
                                  Admission admission) {
-        return expanding(named, () -> raw(body, at, admission));
-    }
-
-    /**
-     * The cycle check every expansion of a name goes through, whatever reading is doing the
-     * expanding. One check, so a cycle reached through a field taken off a value is reported as the
-     * cycle it is rather than as whatever the second walk happened to make of it.
-     */
-    private <T> T expanding(ValueName named, Supplier<T> read) {
         if (expanding.contains(named)) {
             List<String> cycle = new ArrayList<>();
             expanding.forEach(open -> cycle.add(open.name()));
@@ -1351,7 +1346,7 @@ public final class FixtureReader {
         }
         expanding.addLast(named);
         try {
-            return read.get();
+            return raw(body, at, admission);
         } finally {
             expanding.removeLast();
         }
