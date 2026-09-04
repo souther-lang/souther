@@ -10,6 +10,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -200,16 +201,39 @@ class ThisReadingSeesAReadingOfRawStructureTest {
      */
     @Test
     void anAuthorityStandingNowhereIsNotMet() throws IOException {
-        PositionReadings.Over over = model();
-        List<Authority> withOneMore = new ArrayList<>(over.authorities());
-        withOneMore.add(new Authority("a question nothing in the model asks any more",
-                "souther.bench.readings.Opaque#spellingAsItWasCalled", Traversal.OPAQUE));
-        PositionReadings.Over stale = new PositionReadings.Over(over.classes(), over.stage(),
-                over.declaration(), over.lookup(), over.compound(), over.held(), withOneMore);
-
-        assertFalse(PositionReadings.of(stale).encountered()
+        assertFalse(alsoNaming("souther.bench.readings.Opaque#spellingAsItWasCalled")
                         .contains("souther.bench.readings.Opaque#spellingAsItWasCalled"),
                 "nothing of that name is there to be met");
+    }
+
+    /**
+     * Nor is one that answers on a way the stage is not on.
+     *
+     * <p>The harder half, and the one a name that is not there cannot ask about. This authority is
+     * written, reached, and reads the declarations — everything a walk backwards from a reading
+     * meets on the way. What it is not is anywhere the stage arrives, and the sentence beside the
+     * rule says from the stage. Met and standing are two answers, and only the second is the one
+     * being made.
+     */
+    @Test
+    void anAuthorityOnAWayTheStageIsNotOnIsNotStanding() throws IOException {
+        assertFalse(alsoNaming("souther.bench.readings.Elsewhere").contains(
+                        "souther.bench.readings.Elsewhere"),
+                "it answers for a reader of its own, and the stage reaches neither");
+        assertTrue(alsoNaming("souther.bench.readings.Elsewhere")
+                        .contains("souther.bench.readings.Opaque"),
+                "while the one the stage does arrive at is still standing");
+    }
+
+    /** What the walk records as standing, with one more entry named. */
+    private static Set<String> alsoNaming(String owns) throws IOException {
+        PositionReadings.Over over = model();
+        List<Authority> withOneMore = new ArrayList<>(over.authorities());
+        withOneMore.add(new Authority("a question nothing on a way from the stage asks", owns,
+                Traversal.OPAQUE));
+        return PositionReadings.of(new PositionReadings.Over(over.classes(), over.stage(),
+                over.declaration(), over.lookup(), over.compound(), over.held(), withOneMore))
+                .encountered();
     }
 
     /**

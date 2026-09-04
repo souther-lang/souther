@@ -104,18 +104,21 @@ final class PositionReadings {
      * What the classes hold and what follows from it.
      *
      * @param observers the methods whose own code reads raw structure
-     * @param inTheStage every compiled method of the stage
-     * @param reached   what the stage calls, one step out
-     * @param encountered the authorities the walk met on a way from the stage to a reading. Where
-     *                  an authority stands is what the table decides and reachability cannot: a
-     *                  helper on the same way is on the way and not an answer to it. What is
-     *                  checked is that each one the table names is standing somewhere
+     * @param inTheStage the stage's compiled methods that call something, which is every one a way
+     *                  out of the stage could start at. One that calls nothing reaches nothing
+     * @param encountered the authorities standing on a way from the stage to a reading: met by the
+     *                  walk back from a reading, and reachable forwards from the stage. Two
+     *                  questions and both of them, because either alone is about a wider set than
+     *                  the sentence — a place on a way to a reading somewhere is not on a way from
+     *                  here, and a place the stage can reach is not thereby on the way to anything.
+     *                  Where an authority stands is the table's to say and reachability's to
+     *                  confirm: a helper on the same way is on the way and not an answer to it
      * @param madeOfNonRecords the cases of the compound sum whose components this cannot read,
      *                  because they are not records. What holds another type would be invisible
      * @param bypassing the stage's methods that reach raw structure with no authority between
      * @param bypasses  the same, each with the path that gets there, for a reader to go and look
      */
-    record Reading(Set<String> observers, Set<String> inTheStage, Set<String> reached,
+    record Reading(Set<String> observers, Set<String> inTheStage,
                    Set<String> encountered, List<String> madeOfNonRecords,
                    List<String> bypassing, List<String> bypasses) {
 
@@ -142,20 +145,41 @@ final class PositionReadings {
 
         Set<String> observers = new LinkedHashSet<>();
         Set<String> stage = new LinkedHashSet<>();
-        Set<String> reached = new LinkedHashSet<>();
         Map<String, Set<String>> callersOf = new LinkedHashMap<>();
+        Map<String, Set<String>> callsOf = new LinkedHashMap<>();
+        Map<String, Set<String>> named = new LinkedHashMap<>();
         Map<String, String> why = new LinkedHashMap<>();
         for (Compiled.Site site : Compiled.sitesIn(over.classes())) {
             if (site.from().startsWith(over.stage())) {
                 stage.add(site.at());
-                reached.add(site.owner() + "#" + site.member());
             }
+            named.computeIfAbsent(site.at().substring(0, site.at().indexOf('(')),
+                    k -> new LinkedHashSet<>()).add(site.at());
             callersOf.computeIfAbsent(site.owner() + "#" + site.member(),
                     k -> new LinkedHashSet<>()).add(site.at());
+            callsOf.computeIfAbsent(site.at(), k -> new LinkedHashSet<>())
+                    .add(site.owner() + "#" + site.member());
             String read = observation(site, declarations, apart, over.lookup());
             if (read != null) {
                 observers.add(site.at());
                 why.putIfAbsent(site.at(), read);
+            }
+        }
+
+        // Which methods the stage can arrive at, forwards, whatever answers on the way. Asked
+        // apart from the walk below and answered before it: stopping the walk where an authority
+        // answers is one question, and whether the stage can arrive at a place at all is another.
+        // Read off the walk alone, a place on a way to a reading in some other part of this
+        // compiler would count as standing on a way from here.
+        Set<String> fromTheStage = new LinkedHashSet<>(stage);
+        Deque<String> forwards = new ArrayDeque<>(stage);
+        while (!forwards.isEmpty()) {
+            for (String call : callsOf.getOrDefault(forwards.poll(), Set.of())) {
+                for (String at : named.getOrDefault(call, Set.of())) {
+                    if (fromTheStage.add(at)) {
+                        forwards.add(at);
+                    }
+                }
             }
         }
 
@@ -165,7 +189,7 @@ final class PositionReadings {
         Set<String> encountered = new LinkedHashSet<>();
         Deque<String> queue = new ArrayDeque<>();
         for (String at : observers) {
-            if (!standing(over, at, encountered)
+            if (!standing(over, at, encountered, fromTheStage)
                     && through.putIfAbsent(at, new Step.Reading(why.get(at))) == null) {
                 queue.add(at);
             }
@@ -174,7 +198,7 @@ final class PositionReadings {
             String at = queue.poll();
             for (String caller
                     : callersOf.getOrDefault(at.substring(0, at.indexOf('(')), Set.of())) {
-                if (standing(over, caller, encountered)
+                if (standing(over, caller, encountered, fromTheStage)
                         || through.putIfAbsent(caller, new Step.Through(at)) != null) {
                     continue;
                 }
@@ -192,7 +216,7 @@ final class PositionReadings {
         }
         bypassing.sort(null);
         bypasses.sort(null);
-        return new Reading(observers, stage, reached, encountered,
+        return new Reading(observers, stage, encountered,
                 madeOfNonRecords(models, descendantsOf(models, over.compound())),
                 bypassing, bypasses);
     }
@@ -233,12 +257,21 @@ final class PositionReadings {
      *
      * <p>One that carries on is met all the same. It owns the question and says so; what it does
      * not do is finish before the caller's own code runs, which is why the walk goes past it.
+     *
+     * <p><b>Stopping and standing are two answers.</b> The walk stops wherever an authority is,
+     * because taint that goes no further can reach no method of the stage either way; what is
+     * recorded as standing is only what the stage can arrive at. Recorded on meeting alone, a place
+     * answering for some other part of this compiler would be credited with standing on a way from
+     * here — which is a wider set than the sentence names.
      */
-    private static boolean standing(Over over, String at, Set<String> encountered) {
+    private static boolean standing(Over over, String at, Set<String> encountered,
+                                    Set<String> fromTheStage) {
         boolean stops = false;
         for (Authority each : over.authorities()) {
             if (each.answersFor(at)) {
-                encountered.add(each.owns());
+                if (fromTheStage.contains(at)) {
+                    encountered.add(each.owns());
+                }
                 stops |= each.traversal() == Traversal.OPAQUE;
             }
         }

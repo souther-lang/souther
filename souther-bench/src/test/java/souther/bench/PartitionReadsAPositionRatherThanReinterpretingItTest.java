@@ -127,7 +127,8 @@ class PartitionReadsAPositionRatherThanReinterpretingItTest {
                         + " stage: the walk or the sums it derives from are wrong rather than the"
                         + " compiler clean");
         assertFalse(read.inTheStage().isEmpty(),
-                "the stage has no compiled methods, so nothing was checked");
+                "nothing compiled in the stage calls anything, so there is no way out of it for"
+                        + " this to have followed and nothing below was checked");
 
         assertEquals(List.of(), read.bypasses(),
                 "a path from the partitioning stage to raw structure that no authority answers"
