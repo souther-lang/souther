@@ -231,7 +231,7 @@ public final class Front {
                          Map<SourceId, String> exampleFileTargets) {}
 
         @Override
-        public Answer<Of> compute(Db db) {
+        public Answer<Layout.Of> compute(Db db) {
             List<SourceId> ids = db.ask(new Ids()).value();
             if (ids == null) {
                 return Answer.absent();
@@ -252,7 +252,7 @@ public final class Front {
                 }
                 idOfModule.putIfAbsent(m.name(), id);
             }
-            return Answer.of(new Of(Ordered.map(idOfModule), Ordered.map(exampleFilesOf),
+            return Answer.of(new Layout.Of(Ordered.map(idOfModule), Ordered.map(exampleFilesOf),
                     Ordered.map(exampleFileTargets)));
         }
     }
@@ -462,11 +462,11 @@ public final class Front {
         public record Of(Map<String, OnThePath> modules, Set<String> refused) {}
 
         @Override
-        public Answer<Of> compute(Db db) {
+        public Answer<FromPath.Of> compute(Db db) {
             Layout.Of layout = db.ask(new Layout()).value();
             ModulePath path = db.ask(new Path()).value();
             if (layout == null || path == null) {
-                return Answer.of(new Of(Map.of(), Set.of()));
+                return Answer.of(new FromPath.Of(Map.of(), Set.of()));
             }
             // Read the graph, work out where each of its modules is reached from, and only then say
             // anything. Each of the three needs the one before it finished: a module is read once
@@ -569,7 +569,7 @@ public final class Front {
             }
             SequencedSet<String> notRead = new LinkedHashSet<>(refused.keySet());
             notRead.addAll(unreadable.keySet());
-            return Answer.of(new Of(Ordered.map(found), Ordered.set(notRead)), reports);
+            return Answer.of(new FromPath.Of(Ordered.map(found), Ordered.set(notRead)), reports);
         }
     }
 

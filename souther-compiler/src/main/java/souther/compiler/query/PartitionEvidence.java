@@ -526,7 +526,7 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
 
         /** A space nobody counted. It keeps its size, which the model settles, and has no counts. */
         public static PairSpace noRows(int total) {
-            return new PairSpace(total, new Measurement.NotMeasured<>(NoRows.NO_ROWS));
+            return new PairSpace(total, new Measurement.NotMeasured<>(PairSpace.NoRows.NO_ROWS));
         }
 
         /** The same, where nobody asked for a measurement at all. */
@@ -684,7 +684,7 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
         public static AxisCoverage noRows(souther.compiler.partition.AxisId at, String path,
                                           List<String> classes, Reading read) {
             return new AxisCoverage(at, path, classes, read,
-                    new Measurement.NotMeasured<>(NoRows.NO_ROWS));
+                    new Measurement.NotMeasured<>(AxisCoverage.NoRows.NO_ROWS));
         }
 
         /** The same, where nobody asked for a measurement at all. */

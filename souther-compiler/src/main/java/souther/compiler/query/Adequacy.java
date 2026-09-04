@@ -2255,7 +2255,7 @@ public final class Adequacy {
                     WeakeningSet.of(new Weakening.BodiesNotElaborated(module))));
         }
 
-        public static BranchEvidence notAsked(NotAsked reason) {
+        public static BranchEvidence notAsked(BranchEvidence.NotAsked reason) {
             return new BranchEvidence(new Measurement.NotMeasured<>(reason));
         }
 
@@ -2558,7 +2558,7 @@ public final class Adequacy {
         /** Nothing was asked of a behavior's rows, which is not a reading that found none. An
          *  answer, for the reason {@link #NONE} is. */
         public static final RowReading NOT_ASKED =
-                new RowReading(new Measurement.NotMeasured<>(NotAsked.ROWS_NOT_ASKED));
+                new RowReading(new Measurement.NotMeasured<>(RowReading.NotAsked.ROWS_NOT_ASKED));
 
         /** Why a reading was not made. Its own enum: what the level did not ask for is not one of
          *  the ways a reading that was made came out. */
@@ -3859,19 +3859,20 @@ public final class Adequacy {
          * the kinds a second time, so what a report marks and what a build refuses over cannot come
          * apart.
          */
-        public Disposition disposition(AdequacyBar held) {
+        public Finding.Disposition disposition(AdequacyBar held) {
             if (!held.refuses(kind())) {
-                return Disposition.REPORTED;
+                return Finding.Disposition.REPORTED;
             }
             // What the measurement that found this went without, and not a word for how far it
             // got. A build refuses over a gap a measure established; where something the measure
             // reads could not be read, what it did not find is undecided rather than absent.
-            return weakenedBy.isEmpty() ? Disposition.REFUSED : Disposition.UNDECIDED;
+            return weakenedBy.isEmpty()
+                    ? Finding.Disposition.REFUSED : Finding.Disposition.UNDECIDED;
         }
 
         /** Whether a build held to {@code held} is entitled to refuse over this. */
         public boolean isAdequacyGap(AdequacyBar held) {
-            return disposition(held) == Disposition.REFUSED;
+            return disposition(held) == Finding.Disposition.REFUSED;
         }
 
         public Optional<DiagnosticCode> code() {

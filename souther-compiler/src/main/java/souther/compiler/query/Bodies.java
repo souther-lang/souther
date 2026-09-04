@@ -1333,7 +1333,7 @@ public final class Bodies {
         }
 
         @Override
-        public Answer<Of> compute(Db db) {
+        public Answer<Expanding.Of> compute(Db db) {
             Answer<Hir.Module> settled = db.ask(new Settled(name));
             Answer<Map<String, Hir.FnDef>> imported = db.ask(new ImportedDefinitions(name));
             if (!settled.present() || !imported.present()) {
@@ -1346,7 +1346,7 @@ public final class Bodies {
             // would answer that it does not.
             HelperTable table = HelperTable.of(settled.value(), imported.value(), policy,
                     db.ask(new Front.Library()).value());
-            return Answer.of(new Of(table, HelperGraph.of(table)));
+            return Answer.of(new Expanding.Of(table, HelperGraph.of(table)));
         }
     }
 
@@ -2109,7 +2109,7 @@ public final class Bodies {
         }
 
         @Override
-        public Answer<Of> compute(Db db) {
+        public Answer<ModuleCheck.Of> compute(Db db) {
             Answer<Lower.Lowered> lowering = db.ask(new Lowering(name));
             Answer<DerivedSymbols> scope = Names.derivedSymbols(db, name);
             // The signatures the check reads are the ones every other reader reads. Asked for here
@@ -2179,7 +2179,7 @@ public final class Bodies {
             Map<String, Core> helperBodies = new LinkedHashMap<>();
             reported.emittedHelpers().forEach((h, core) ->
                     helperBodies.put(h, GrowingFold.rewrite(core, scope.value().theWalk())));
-            return Answer.of(new Of(helperBodies, sound, reported.stopped()), reports);
+            return Answer.of(new ModuleCheck.Of(helperBodies, sound, reported.stopped()), reports);
         }
     }
 

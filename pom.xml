@@ -396,69 +396,23 @@
                                      to an error so that the next one stops the build it arrived
                                      in. The check reads documentation too, so an import only a
                                      {@link} mentions is not one of these. -->
-                                <!-- ReferenceEquality is off. It reports a comparison written `==`
-                                     on a type that overrides `equals`, and this compiler asks that
-                                     question on purpose in several shapes, none of which the check
-                                     can be told about. A rewrite answers `child == node.child() ?
-                                     node : new ...`, where equality would rebuild a tree that
-                                     already means what it means. A primitive type and an emitted
-                                     call target are enum constants held in a field the interface
-                                     declares, so the check sees `Type` and `CallTarget` where the
-                                     comparison is against an enum constant and cannot be wrong. A
-                                     sentinel is the one object it is — a not-found and a failed
-                                     read are each a bare `Object`, which has nothing but its
-                                     identity to be compared by. And a node's occurrence is what a
-                                     walk keys on: two structurally equal subtrees are two places,
-                                     and `equals` would make them one.
-
-                                     The shape that is not one of those is a constant that is the
-                                     only instance of a record: two of those are equal without being
-                                     the same object, so the comparison holds on the strength of
-                                     nobody writing a second one. Every one the check found is now
-                                     asked with `instanceof`, which is how the rest of this compiler
-                                     asks it, so no comparison left here rests on that.
-
-                                     What going off costs is the report it would make about the next
-                                     `==` written on a type whose values can be equal without being
-                                     the same. Nothing else here catches one; the way to ask again
-                                     is to turn the check back on for a run and read what it says,
-                                     which is how the comparisons above were read. -->
-                                <!-- BadInstanceof is off. It reports an `instanceof` whose operand
-                                     already has the type asked for, which it reads as a null check
-                                     wearing a type test, and it was right about a whole family of
-                                     them: a name was asked `name.answered() instanceof Denoting`,
-                                     which projects the two forms of a name down to the answered one
-                                     or null and then narrows that back. Those now ask the name.
-
-                                     What is left is a call whose result is bound and null-checked
-                                     in one condition. Inside an expression there is no other
-                                     spelling — a declaration is a statement, and the condition is
-                                     not — so the check would be asking for the question to be
-                                     asked somewhere it cannot be. That those methods answer an
-                                     absence with null is a thing to fix in the methods, not at the
-                                     conditions reading them, and it is not what this reports. -->
-                                <!-- StringSplitter is off. What it reports is that `String.split`
-                                     drops the empty strings at the end, so `"a,b,,".split(",")`
-                                     answers two, and its remedy is Guava's `Splitter`, which
-                                     nothing here depends on.
-
-                                     Every text this splits on a newline now asks `lines()`, which
-                                     is what "the lines of this" is called and reads a carriage
-                                     return the way a file written elsewhere writes one. What is
-                                     left splits on a delimiter — a path separator, a slash between
-                                     the commands an option belongs to, whitespace between words —
-                                     where a run ending in one is a run with nothing after it, and
-                                     dropping that is the reading wanted. Where it is not, the
-                                     answer is `split(regex, -1)` and not a library. -->
-                                <!-- ObjectToString and DuplicateBranches are errors. Each found a
-                                     place written as though it said something and saying nothing:
-                                     an exception message that named an end and printed its identity
-                                     hash, an assertion whose left side asked a `toString` nothing
-                                     wrote and so could not hold, and a condition whose two branches
-                                     were the same number. What they report is cheap to answer and
-                                     silent to miss, which is the pairing that earns a build
-                                     failure rather than a line in a log. -->
-                                <arg>-Xplugin:ErrorProne -Xep:UnicodeInCode:OFF -Xep:BadInstanceof:OFF -Xep:ReferenceEquality:OFF -Xep:StringSplitter:OFF -Xep:RemoveUnusedImports:ERROR -Xep:ObjectToString:ERROR -Xep:DuplicateBranches:ERROR -Xep:UnusedVariable:ERROR -Xep:UnusedMethod:ERROR ${nullaway.args}</arg>
+                                <!-- Off, because what each reports this compiler writes on purpose
+                                     and the check cannot be told so:
+                                     ReferenceEquality — identity is the question a rewrite, an enum
+                                     constant reached through its interface, a sentinel and an
+                                     occurrence-keyed walk each ask;
+                                     BadInstanceof — a call whose result is bound and null-checked
+                                     in one condition, which inside an expression has no other
+                                     spelling;
+                                     StringSplitter — its remedy is Guava's `Splitter`, and what is
+                                     left splits on a delimiter, where dropping what follows the
+                                     last one is the reading wanted. -->
+                                <!-- Errors, because each is cheap to answer and silent to miss:
+                                     ObjectToString, DuplicateBranches, UnusedVariable, UnusedMethod
+                                     and SameNameButDifferent. The last is not against writing one
+                                     name for one distinction at two levels — it is against a use
+                                     that does not say which of them it means. -->
+                                <arg>-Xplugin:ErrorProne -Xep:UnicodeInCode:OFF -Xep:BadInstanceof:OFF -Xep:ReferenceEquality:OFF -Xep:StringSplitter:OFF -Xep:RemoveUnusedImports:ERROR -Xep:ObjectToString:ERROR -Xep:DuplicateBranches:ERROR -Xep:UnusedVariable:ERROR -Xep:UnusedMethod:ERROR -Xep:SameNameButDifferent:ERROR ${nullaway.args}</arg>
                             </compilerArgs>
                             <annotationProcessorPaths>
                                 <path>
