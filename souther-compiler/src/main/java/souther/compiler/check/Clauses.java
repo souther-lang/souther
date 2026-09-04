@@ -89,7 +89,7 @@ final class Clauses {
      * them answer alike.
      */
     Map<String, BindingId> bindingsOf(TypeSymbol.AtModule named, Hir.Data data) {
-        return bindings.computeIfAbsent(named, name -> TypeOps.fieldBindings(name, data, symbols));
+        return bindings.computeIfAbsent(named, name -> TypeOps.fieldBindings(name, symbols));
     }
 
     /**

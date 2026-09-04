@@ -42,7 +42,7 @@ class UnsupportedInformationNeverShrinksTheModelSetTest {
         compilation.answerEverything();
         Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
         return FieldDomains.of(TypeSymbols.declared(new TypeKey(symbols.module(), name)),
-                data(compilation, name), RuleReadings.of(compilation, "demo"),
+                RuleReadings.of(compilation, "demo"),
                 souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
     }
 

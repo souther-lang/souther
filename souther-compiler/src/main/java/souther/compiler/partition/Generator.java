@@ -9,8 +9,9 @@ import souther.compiler.check.RuleReadingSource;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.RuleKey;
 import souther.compiler.check.FieldDomains;
+import souther.compiler.check.Shape;
 import souther.compiler.check.Symbols;
-import souther.compiler.check.TypeOps;
+import souther.compiler.check.TypeView;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.reading.PathAccess;
 import souther.compiler.inputs.Refinement;
@@ -2248,10 +2249,15 @@ public final class Generator {
      * spread would drop the included ones with it.
      */
     private static List<String> fieldsOf(MeasuredInput subject, TypeSymbol built) {
-        return subject.symbols().declaredNode(built) instanceof Hir.Data data
-                && !data.newtype()
-                ? List.copyOf(TypeOps.fieldTypes(data, subject.symbols()).keySet())
-                : null;
+        // A value written under a name is not written field by field: what the row writes is the
+        // name round a value, and the fields belong to what the name wraps. So the position has to
+        // wear no name as well as be a record — read where a position's reading is made, which
+        // answers both, rather than walked from the declaration a second time.
+        TypeView view = TypeView.of(Type.ref(built), subject.symbols());
+        return !view.isWrapped()
+                        && view.shape() instanceof Shape.Product(TypeSymbol _,
+                                Map<String, Type> fields)
+                ? List.copyOf(fields.keySet()) : null;
     }
 
     /**
@@ -4286,10 +4292,13 @@ public final class Generator {
      */
     private static FieldDomains rulesOf(Type type, RuleReadingSource source, ReadingPolicy policy,
                                         Map<RuleKey, Count> settled) {
-        return type instanceof Type.Ref(TypeSymbol.AtModule named)
-                && source.symbols().declaredNode(named) instanceof Hir.Data data
-                && !data.newtype()
-                ? FieldDomains.of(named, data, source, policy, settled) : FieldDomains.NONE;
+        // Whether the position is a record, and which record, are one answer and it is the
+        // reading's. The rules are then read on the declaration the fields came off — a position
+        // written under a name takes its fields from what that name wraps, and reading the rules on
+        // the name instead would be asking a declaration that has no such field.
+        return TypeView.of(type, source.symbols()).shape()
+                        instanceof Shape.Product(TypeSymbol.AtModule declared, Map<String, Type> _)
+                ? FieldDomains.of(declared, source, policy, settled) : FieldDomains.NONE;
     }
 
     /**

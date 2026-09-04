@@ -296,11 +296,19 @@ public final class FieldDomains {
         return READINGS.get();
     }
 
-    /** What {@code data}, declared as {@code named}, leaves its fields able to hold. */
-    public static FieldDomains of(TypeSymbol.AtModule named, Hir.Data data, RuleReadingSource source,
+    /**
+     * What the record declared as {@code named} leaves its fields able to hold.
+     *
+     * <p>The declaration is read here rather than handed in. What is written about a record's
+     * fields is this reading's question, so the body it is written on is this reading's to fetch —
+     * a caller made to fetch one has a declaration in its hands for a question that was never its
+     * own, and can read the record's structure back out of it.
+     */
+    public static FieldDomains of(TypeSymbol.AtModule named, RuleReadingSource source,
                                   ReadingPolicy policy) {
-        return of(named, data, source, policy, Map.of());
+        return of(named, source, policy, Map.of());
     }
+
 
     /**
      * The same, with some fields already settled at a value.
@@ -310,10 +318,16 @@ public final class FieldDomains {
      * not read off {@code endsAt}'s own range — which still runs from 1 — but off what is left of it
      * once the other end is fixed, which is 1440 and nothing else.
      */
-    public static FieldDomains of(TypeSymbol.AtModule named, Hir.Data data, RuleReadingSource source,
+    public static FieldDomains of(TypeSymbol.AtModule named, RuleReadingSource source,
                                   ReadingPolicy policy, Map<RuleKey, Count> settled) {
-        return of(named, data, source, policy, atValues(settled),
-                InvariantChecker.Reach.EVERYTHING);
+        // A name declaring no record leaves nothing about fields it has not got, which is what
+        // nothing written comes to here. The same answer the other readers of a declaration give
+        // when handed such a name, because it is the same fact about the name rather than three
+        // opinions about the caller.
+        return source.symbols().declaredNode(named.key()) instanceof Hir.Data data
+                ? of(named, data, source, policy, atValues(settled),
+                        InvariantChecker.Reach.EVERYTHING)
+                : NONE;
     }
 
     /** Settlings written as names, read as what stands at each. What a caller naming a place means

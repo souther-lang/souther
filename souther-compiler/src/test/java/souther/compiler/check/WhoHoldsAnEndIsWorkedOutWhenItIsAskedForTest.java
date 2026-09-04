@@ -2,7 +2,6 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.ast.Hir;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Scopes;
 import souther.compiler.types.TypeKey;
@@ -115,7 +114,6 @@ class WhoHoldsAnEndIsWorkedOutWhenItIsAskedForTest {
         Symbols symbols = Scopes.derived(compilation.db(), compilation.modules().get(0)).value();
         TypeSymbol.AtModule held = TypeSymbols.declared(new TypeKey("demo", "Held"));
         return FieldDomains.of(held,
-                (Hir.Data) symbols.declaredNode(held.key()),
                 RuleReadings.of(compilation, compilation.modules().get(0)),
                 souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
     }

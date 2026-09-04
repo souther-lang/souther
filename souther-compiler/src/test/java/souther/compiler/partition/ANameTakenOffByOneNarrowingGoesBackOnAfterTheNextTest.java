@@ -7,13 +7,13 @@ import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
-import souther.compiler.check.TypeOps;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
 import souther.compiler.query.Shapes;
+import souther.compiler.types.TypeSymbol;
 
 import java.util.List;
 import java.util.Map;
@@ -131,13 +131,13 @@ class ANameTakenOffByOneNarrowingGoesBackOnAfterTheNextTest {
     }
 
     private static List<String> names(ConstructionPlan.Node node) {
-        List<TypeOps.Layer> worn = switch (node) {
+        List<TypeSymbol> worn = switch (node) {
             case ConstructionPlan.Slot slot -> slot.worn();
             case ConstructionPlan.Exact exact -> exact.worn();
             case null -> throw new AssertionError("the plan builds nothing at that position");
             default -> throw new AssertionError("not a position a value is put at: " + node);
         };
-        return worn.stream().map(each -> each.named().name()).toList();
+        return worn.stream().map(TypeSymbol::name).toList();
     }
 
     private record Read(String parameter, Sig sig, RuleReadingSource rules, InputDomain domain) {}

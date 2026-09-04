@@ -4,7 +4,6 @@ import souther.compiler.query.ReadAs;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.query.Scopes;
-import souther.compiler.ast.Hir;
 import souther.compiler.query.Compilation;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
@@ -75,7 +74,6 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
         Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
         TypeSymbol.AtModule name = TypeSymbols.declared(new TypeKey(symbols.module(), named));
         return new Read(FieldDomains.of(name,
-                (Hir.Data) symbols.declaredNode(name.key()),
                 RuleReadings.of(compilation, "demo"), policy), symbols);
     }
 
@@ -100,7 +98,6 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
         Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
         TypeSymbol.AtModule name = TypeSymbols.declared(new TypeKey(symbols.module(), named));
         return FieldDomains.of(name,
-                (Hir.Data) symbols.declaredNode(name.key()),
                 RuleReadings.of(compilation, "demo"),
                 ReadAs.THE_COMPILATION_DOES);
     }

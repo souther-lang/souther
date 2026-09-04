@@ -1720,8 +1720,7 @@ public final class ExampleVerifier {
      */
     private TypeSymbol caseWritten(FixtureReader fixtures, Hir.Expr fixture, Type position) {
         try {
-            return fixtures.caseUnder(TypeView.of(position, symbols).wrappers().stream()
-                    .map(TypeOps.Layer::named).toList(), fixture);
+            return fixtures.caseUnder(TypeView.of(position, symbols).wrappers(), fixture);
         } catch (RuntimeException e) {
             if (overspending(e) != null) {
                 throw e;   // the row's budget is gone; it is not a form that could not be read

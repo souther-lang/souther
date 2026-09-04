@@ -2,7 +2,6 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.ast.Hir;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.query.Compilation;
@@ -53,9 +52,8 @@ class WhatMakesARangeExactIsNotWhatAnswersACoverageQuestionTest {
         Symbols symbols = Scopes.derived(compilation.db(), module).value();
         assertNotNull(symbols);
         TypeSymbol.AtModule named = TypeSymbols.declared(new TypeKey(module, type));
-        Hir.Data data = (Hir.Data) symbols.declaredNode(named.key());
-        assertNotNull(data, "no `" + type + "` declared");
-        return FieldDomains.of(named, data, RuleReadings.of(compilation, module),
+        assertNotNull(symbols.declaredNode(named.key()), "no `" + type + "` declared");
+        return FieldDomains.of(named, RuleReadings.of(compilation, module),
                 souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
     }
 

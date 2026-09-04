@@ -3,7 +3,6 @@ package souther.compiler.partition;
 import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.check.ReadingPolicy;
 import souther.compiler.check.RuleReadingSource;
-import souther.compiler.ast.Hir;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.RuleKey;
 import souther.compiler.check.DeclaredBounds;
@@ -11,7 +10,6 @@ import souther.compiler.check.StringPredicates;
 import souther.compiler.check.DeclaredClauses;
 import souther.compiler.inputs.Distinctions;
 import souther.compiler.check.Shape;
-import souther.compiler.check.TypeOps;
 import souther.compiler.check.TypeView;
 import souther.compiler.check.FieldDomains;
 import souther.compiler.check.NarrowedBounds;
@@ -1272,8 +1270,8 @@ public final class Partitions {
         // itself and there is nothing to hand back. Which is the answer and not a limit: no value of
         // such a type exists.
         java.util.Set<TypeSymbol> inside = new LinkedHashSet<>(expanding);
-        for (TypeOps.Layer layer : view.wrappers()) {
-            if (!inside.add(layer.named())) {
+        for (TypeSymbol wears : view.wrappers()) {
+            if (!inside.add(wears)) {
                 return List.of();
             }
         }
@@ -1537,7 +1535,7 @@ public final class Partitions {
                                           ReadingPolicy policy,
                                           java.util.Set<TypeSymbol> expanding,
                                           Map<String, FixtureTemplate> given) {
-        if (expanding.contains(record) || !(ruleSource.symbols().declaredNode(record) instanceof Hir.Data data)) {
+        if (expanding.contains(record)) {
             return List.of();
         }
         Map<String, FixtureTemplate> chosen =
@@ -1560,18 +1558,27 @@ public final class Partitions {
                                                  RuleReadingSource ruleSource, ReadingPolicy policy,
                                                  java.util.Set<TypeSymbol> expanding,
                                                  Map<String, FixtureTemplate> given) {
-        if (expanding.contains(record)
-                || !(ruleSource.symbols().declaredNode(record) instanceof Hir.Data data)) {
+        // What the record is made of, read where a position's reading is made. A walk from the
+        // declaration to its fields is that same reading taken a second time, and the two part
+        // wherever one of them reaches through a name the other stops at.
+        //
+        // And the name has to be the record's own, because the rules below are read on the name
+        // the caller gave. Read through a name to another declaration's fields, the fields would
+        // be one declaration's and the rules another's, and every field would be chosen against
+        // rules that name nothing it has.
+        TypeView view = TypeView.of(Type.ref(record), ruleSource.symbols());
+        if (expanding.contains(record) || view.isWrapped()
+                || !(view.shape() instanceof Shape.Product(TypeSymbol _,
+                        Map<String, Type> fields))) {
             return null;
         }
-        Map<String, Type> fields = TypeOps.fieldTypes(data, ruleSource.symbols());
         if (fields.isEmpty()) {
             return null;   // a unit has no fields to compose, and is named rather than built
         }
         java.util.Set<TypeSymbol> inside = new LinkedHashSet<>(expanding);
         inside.add(record);
         Map<RuleKey, Count> settled = new LinkedHashMap<>();
-        FieldDomains left = FieldDomains.of(record, data, ruleSource, policy, settled);
+        FieldDomains left = FieldDomains.of(record, ruleSource, policy, settled);
         Map<String, FixtureTemplate> chosen = new LinkedHashMap<>();
         if (!fields.keySet().containsAll(given.keySet())) {
             return null;
@@ -1594,7 +1601,7 @@ public final class Partitions {
             // which leaves `b` its whole range and takes the bottom of it.
             if (Counts.writtenIn(at.value()) instanceof Count count) {
                 settled.put(RuleKey.of(field.getKey()), count);
-                left = FieldDomains.of(record, data, ruleSource, policy, settled);
+                left = FieldDomains.of(record, ruleSource, policy, settled);
             }
         }
         return chosen;

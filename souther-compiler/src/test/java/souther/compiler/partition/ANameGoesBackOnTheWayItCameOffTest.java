@@ -78,7 +78,7 @@ class ANameGoesBackOnTheWayItCameOffTest {
     void theNamesAreReadOffOutermostFirst() {
         assertEquals(List.of("DecisionNN", "DecisionN"),
                 TypeView.of(Type.ref(named("DecisionNN")), rules.symbols()).wrappers().stream()
-                        .map(layer -> layer.named().name()).toList());
+                        .map(TypeSymbol::name).toList());
     }
 
     // --- and put back on -------------------------------------------------------------------------

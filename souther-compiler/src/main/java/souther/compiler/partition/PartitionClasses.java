@@ -1,9 +1,8 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.ReadingPolicy;
-import souther.compiler.ast.Hir;
 import souther.compiler.check.RuleReadingSource;
-import souther.compiler.check.TypeOps;
+import souther.compiler.check.Shape;
 import souther.compiler.check.TypeView;
 import souther.compiler.inputs.Case;
 import souther.compiler.inputs.Distinctions;
@@ -56,7 +55,7 @@ final class PartitionClasses {
         if (cases.isEmpty()) {
             return List.of();
         }
-        List<TypeSymbol> worn = view.wrappers().stream().map(TypeOps.Layer::named).toList();
+        List<TypeSymbol> worn = view.wrappers();
         // The same names twice over, because two different questions are asked of them. Whether an
         // observed value is under this class is asked of the declarations, and what a row writes it
         // under is asked of the module doing the writing — one of these is an identity and the other
@@ -226,13 +225,14 @@ final class PartitionClasses {
         // A case of a primitive-headed union is a primitive or one of the language's own, which
         // no module declares and nothing composes field by field: naming it builds it, the same as
         // a unit data. So the two are told apart here, where the declaration is asked for.
-        if (!(leaf instanceof TypeSymbol.AtModule declared)
-                || !(ruleSource.symbols().declaredNode(declared) instanceof Hir.Data data)) {
-            return PartitionClass.of(idOfCase(leaf), leaf.name(), is,   // naming it builds it
-                    RepresentativeSource.under(writes,
-                            RepresentativeSource.of(FixtureTemplate.unitCase(names))));
+        if (!(leaf instanceof TypeSymbol.AtModule declared)) {
+            return namingItBuildsIt(leaf, is, writes, names);
         }
-        if (data.newtype()) {
+        TypeView held = TypeView.of(Type.ref(declared), ruleSource.symbols());
+        if (!held.isWrapped() && !(held.shape() instanceof Shape.Product)) {
+            return namingItBuildsIt(leaf, is, writes, names);
+        }
+        if (held.isWrapped()) {
             // Values of the case, which is a position of its own: it is read like any other, and
             // what comes back already wears the case's own name. Under the position's names as well,
             // since a case of a `data DecisionN = Decision` is written inside that name too.
@@ -251,6 +251,22 @@ final class PartitionClasses {
         // { id = 1 })`.
         return PartitionClass.of(idOfCase(leaf), leaf.name(), is,
                 RepresentativeSource.under(writes, new RepresentativeSource.Composed(declared)));
+    }
+
+    /**
+     * The class of a case whose value is written by naming it.
+     *
+     * <p>What a unit data is, and what a case of a primitive-headed union is: neither is composed
+     * field by field, because there are no fields to compose. Written once because the two arrive
+     * at it by different questions — one has no declaration of this module's at all, and the other
+     * has one that makes no record — and what they come to is the same class.
+     */
+    private static PartitionClass namingItBuildsIt(TypeSymbol leaf, Recognition is,
+                                                   List<TypeReachName.Written> writes,
+                                                   TypeReachName.Written names) {
+        return PartitionClass.of(idOfCase(leaf), leaf.name(), is,
+                RepresentativeSource.under(writes,
+                        RepresentativeSource.of(FixtureTemplate.unitCase(names))));
     }
 
     private PartitionClasses() {}

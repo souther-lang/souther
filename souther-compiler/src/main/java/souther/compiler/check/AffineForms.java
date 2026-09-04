@@ -612,16 +612,17 @@ public final class AffineForms {
                     answered(e, at, reading, following, stopped);
             case Core.Call _ when formSaidOf(e) != null ->
                     answered(e, at, reading, following, stopped);
-            // A newtype's construction is the value it wraps. What makes it one is the declaration
-            // and never the shape, which is what `isSingleValueNewtype` is asked — a data of one
-            // field that is not a newtype wraps its value rather than being it, and its
-            // construction is a value of its own.
+            // A newtype's construction is the value it wraps. Whether the name is one is asked of
+            // the reading of the position, which says the names a value is written under: a
+            // newtype puts one there and a data of one field does not — that one wraps its value
+            // rather than being it, and its construction is a value of its own. Asked of the
+            // declarations again instead, this would be a second answer to how far a name reaches.
             // A carrier takes the same names off to find a value written down, and answers above
             // for `Yen(100)` before this is reached. The two agree where they overlap and are not
             // one rule: that one asks what a written value counts as and stops where nothing is
             // written, and this one asks what the arithmetic under the name comes to.
             case Core.Construct nd when !nd.values().isEmpty()
-                    && TypeOps.isSingleValueNewtype(Type.ref(nd.typeName()), reading.symbols()) ->
+                    && TypeView.of(Type.ref(nd.typeName()), reading.symbols()).isWrapped() ->
                     formOf(nd.values().get(0).value(), at, reading, following, stopped);
             // One arm, holding two proofs that this projection is the value it reads. The
             // structural one is asked first and is asked as whether it produced a successor rather

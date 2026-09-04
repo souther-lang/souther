@@ -1,6 +1,5 @@
 package souther.compiler.partition;
 
-import souther.compiler.ast.Hir;
 import souther.compiler.check.Comparison;
 import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.Location;
@@ -171,11 +170,8 @@ public final class DeclaredThresholds {
         // further down than the position it is at.
         for (souther.compiler.types.TypeSymbol.AtModule declaration
                 : List.of(clause.rule().clause().id().declaredOn(), clause.readUnder())) {
-            if (!(symbols.declaredNode(declaration) instanceof Hir.Data data)) {
-                continue;
-            }
             Type of = Type.ref(declaration);
-            TypeOps.fieldBindings(declaration, data, symbols).forEach((field, binding) ->
+            TypeOps.fieldBindings(declaration, symbols).forEach((field, binding) ->
                     roots.putIfAbsent(binding, Location.isStep(of, field, symbols)
                             ? clause.at().then(field) : clause.at()));
         }
