@@ -958,8 +958,6 @@ public sealed interface BorderQuantity {
                     new WhatATermRead.Number(value);
             case NumericTerm.Reading.Missing(Incompleteness.Code code) ->
                     new WhatATermRead.CameToNothing(ReadingGap.of(code));
-            case NumericTerm.Reading.NoValue _ ->
-                    new WhatATermRead.CameToNothing(ReadingGap.NO_VALUE);
             case NumericTerm.Reading.NotNumber _ -> new WhatATermRead.NoNumberOfTheValue();
         };
     }

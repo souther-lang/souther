@@ -2881,7 +2881,6 @@ public final class Generator {
         // readings does; a number over a run is read of all of them at once, since that is what the
         // walk was given and any one of them is not it.
         Set<Incompleteness.Code> unread = EnumSet.noneOf(Incompleteness.Code.class);
-        boolean nothing = false;
         boolean stands = switch (target) {
             case RealizationTarget.AtOnePosition _ -> {
                 boolean any = false;
@@ -2890,10 +2889,6 @@ public final class Generator {
                         case NumericTerm.Reading.Number number ->
                                 any |= number.value().compareTo(at) == 0;
                         case NumericTerm.Reading.Missing missing -> unread.add(missing.code());
-                        // Nothing at this occurrence, which the walk answers with and another
-                        // occurrence may not. Neither placed nor elsewhere, and not something an
-                        // observation stopped either.
-                        case NumericTerm.Reading.NoValue _ -> nothing = true;
                         case NumericTerm.Reading.NotNumber _ -> { }
                     }
                 }
@@ -2905,10 +2900,6 @@ public final class Generator {
                     unread.add(missing.code());
                     yield false;
                 }
-                case NumericTerm.Reading.NoValue _ -> {
-                    nothing = true;
-                    yield false;
-                }
                 case NumericTerm.Reading.NotNumber _ -> false;
             };
         };
@@ -2917,9 +2908,6 @@ public final class Generator {
         }
         if (!unread.isEmpty()) {
             return new RealizationReadback.CouldNotTell(new ReadbackGap.Observation(unread));
-        }
-        if (nothing) {
-            return new RealizationReadback.CouldNotTell(new ReadbackGap.NoValueAtThePosition());
         }
         return new RealizationReadback.Elsewhere("it was composed to put " + target.term()
                 + " at " + at + " and does not stand there");

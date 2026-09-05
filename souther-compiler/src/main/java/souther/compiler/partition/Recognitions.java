@@ -110,6 +110,9 @@ public final class Recognitions {
      * <p>The three answers a reading has, in one place. A value that is not a number is a value the
      * class does not hold; a number that could not be read is why nobody can say; and only a number
      * that arrived reaches the question the class is actually about.
+     *
+     * <p>Asked of a value, so there is no fourth. Whether there is a value here was settled by
+     * whatever walked to the position, and a class is put to the ones that stand.
      */
     private static Membership counted(Recognition.OfACount count, ObservedValue value) {
         // Read on the order the value is written on; asked on the order the count is compared
@@ -118,10 +121,6 @@ public final class Recognitions {
             case NumericTerm.Reading.Number number -> Membership.of(
                     holds(count.is(), number.value(), count.carrier()));
             case NumericTerm.Reading.Missing missing -> new Membership.Incomplete(missing.code());
-            // Nothing to place, which no class holds and none refuses either. Said in this
-            // classifier's word for it, as the value that never arrived is above.
-            case NumericTerm.Reading.NoValue _ ->
-                    new Membership.Incomplete(Incompleteness.Code.VALUE_UNREADABLE);
             case NumericTerm.Reading.NotNumber _ -> Membership.NO_MATCH;
         };
     }
