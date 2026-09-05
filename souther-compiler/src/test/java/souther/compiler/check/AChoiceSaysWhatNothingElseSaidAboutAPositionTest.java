@@ -111,6 +111,23 @@ class AChoiceSaysWhatNothingElseSaidAboutAPositionTest {
                 invariant r = (x == "A" || UNREAD_X) && y == "Q"
             """.replace("UNREAD_X", souther.compiler.ARuleNoReadingTakesIn.about("x"));
 
+    /**
+     * A form nothing reads inside a branch of an inner choice that nobody can be in.
+     *
+     * <p>The inner alternative holds two rules nothing satisfies together, so it is a branch there
+     * is no reading of; what it could not read goes with it. The outer choice does offer an
+     * alternative nothing could read, and what it is answerable for has to come from that and not
+     * from a branch the reading has already given up on.
+     */
+    private static final String THE_UNREAD_FORM_IS_IN_A_BRANCH_NOBODY_CAN_BE_IN = """
+            module demo
+
+            data N = { x: String, y: String }
+                invariant r =
+                    ((x == "A" && x == "B" && UNREAD_Y) || x == "C") || UNREAD_X
+            """.replace("UNREAD_Y", souther.compiler.ARuleNoReadingTakesIn.about("y"))
+            .replace("UNREAD_X", souther.compiler.ARuleNoReadingTakesIn.about("x"));
+
     /** An alternative that constrains the position and holds a form nothing reads beside it. */
     private static final String THE_UNREAD_FORM_IS_UNDER_AN_ALTERNATIVE = """
             module demo
@@ -274,6 +291,26 @@ class AChoiceSaysWhatNothingElseSaidAboutAPositionTest {
                 whatARuleIsAnswerableFor(THE_UNREAD_FORM_IS_UNDER_AN_ALTERNATIVE, "x"),
                 "the form nothing reads stands under one alternative, which is what makes that"
                         + " alternative one nothing could read");
+    }
+
+    /**
+     * And a branch nobody can be in leaves the choice above it nothing to be answerable for.
+     *
+     * <p>What such a branch could not read is not a rule of this declaration that went unread —
+     * there is no branch for an author to go and look at — so it is no part of what the choice
+     * above it offered either. Decided before the branches are, the alternative holding the dead
+     * one comes out as one nothing could read, and the choice above says so at a position that
+     * branch is the only thing to have reached.
+     */
+    @Test
+    void aBranchNobodyCanBeInLeavesTheChoiceAboveItNothingToAnswerFor() {
+        assertEquals(Set.of(UnreadReason.FORM_NOT_READ),
+                whatARuleIsAnswerableFor(THE_UNREAD_FORM_IS_IN_A_BRANCH_NOBODY_CAN_BE_IN, "x"),
+                "the alternative nothing could read is the form written beside the brackets, and"
+                        + " an author lifting it has everything there is to do here");
+        assertEquals(Set.of(),
+                whatARuleIsAnswerableFor(THE_UNREAD_FORM_IS_IN_A_BRANCH_NOBODY_CAN_BE_IN, "y"),
+                "and the form inside the branch nobody can be in went with it");
     }
 
     /** What a rule of the declaration is answerable for at {@code field}. */

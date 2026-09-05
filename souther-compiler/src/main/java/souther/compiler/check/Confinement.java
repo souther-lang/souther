@@ -334,11 +334,17 @@ sealed interface Confinement<A> {
                     eitherShown(admission(), other.admission()));
         }
 
-        /** Either of them, as each reading says it. Both sides are ones somebody can be in, so
-         *  nothing has shown the choice empty. */
-        Planned<A> either(Planned<A> other, boolean apart) {
+        /**
+         * Either of them, as each reading says it. Both sides are ones somebody can be in, so
+         * nothing has shown the choice empty.
+         *
+         * @param opened the positions this choice's unread alternative left open, decided where
+         *               the alternatives an author wrote are in hand and handed here
+         */
+        Planned<A> either(Planned<A> other, boolean apart, Set<A> opened) {
             return new Planned<>(
-                    apart ? values.joinApart(other.values) : values.join(other.values),
+                    apart ? values.joinApart(other.values, opened)
+                            : values.join(other.values, opened),
                     ordered.join(other.ordered),
                     Confinement.both(carriers, other.carriers));
         }

@@ -55,7 +55,7 @@ class AnUnreadRuleWidensAndSaysThatItDidTest {
     /** Stated as alternatives the same two leave both values, and refuse nothing. */
     @Test
     void theSameTwoAsAlternativesLeaveBoth() {
-        AdmissibleValues<String> either = says(VALUE, A).join(says(VALUE, B), sets);
+        AdmissibleValues<String> either = says(VALUE, A).join(says(VALUE, B), sets, Set.of());
         assertEquals(ValueSet.oneOf(Set.of(A, B)), either.at(VALUE));
         assertFalse(either.isBottom());
         assertTrue(either.speaksFor(VALUE));
@@ -101,7 +101,8 @@ class AnUnreadRuleWidensAndSaysThatItDidTest {
     void anUnreadAlternativeTakesBackWhatTheOtherSaid() {
         AdmissibleValues<String> either =
                 says(VALUE, A).join(
-                        AdmissibleValues.unreadable(Set.of(), UnreadReason.FORM_NOT_READ), sets);
+                        AdmissibleValues.unreadable(Set.of(), UnreadReason.FORM_NOT_READ), sets,
+                        Set.of(VALUE));
         assertEquals(ValueSet.ANY, either.at(VALUE));
         assertFalse(either.isBottom());
     }
@@ -115,17 +116,18 @@ class AnUnreadRuleWidensAndSaysThatItDidTest {
     @Test
     void aPositionLeftOpenByAnUnreadAlternativeIsNotOneNothingWasSaidAbout() {
         assertFalse(says(VALUE, A)
-                .join(AdmissibleValues.unreadable(Set.of(), UnreadReason.FORM_NOT_READ), sets)
+                .join(AdmissibleValues.unreadable(Set.of(), UnreadReason.FORM_NOT_READ), sets,
+                        Set.of(VALUE))
                 .speaksFor(VALUE));
         assertFalse(AdmissibleValues.<String>unreadable(Set.of(), UnreadReason.FORM_NOT_READ)
-                .join(says(VALUE, A), sets).speaksFor(VALUE));
+                .join(says(VALUE, A), sets, Set.of(VALUE)).speaksFor(VALUE));
     }
 
     /** A position neither alternative spoke about is open because neither said anything, which this
      * can speak for. */
     @Test
     void aPositionNeitherAlternativeSpokeAboutIsOpenAndSpokenFor() {
-        AdmissibleValues<String> either = says(VALUE, A).join(says(VALUE, B), sets);
+        AdmissibleValues<String> either = says(VALUE, A).join(says(VALUE, B), sets, Set.of());
         assertEquals(ValueSet.ANY, either.at(OTHER));
         assertTrue(either.speaksFor(OTHER));
     }
@@ -138,7 +140,7 @@ class AnUnreadRuleWidensAndSaysThatItDidTest {
      */
     @Test
     void aPositionOneAlternativeLeftOpenIsOpenBecauseTheModelLeavesItSo() {
-        AdmissibleValues<String> either = says(VALUE, A).join(AdmissibleValues.top(), sets);
+        AdmissibleValues<String> either = says(VALUE, A).join(AdmissibleValues.top(), sets, Set.of());
         assertEquals(ValueSet.ANY, either.at(VALUE));
         assertTrue(either.speaksFor(VALUE));
     }
@@ -187,7 +189,7 @@ class AnUnreadRuleWidensAndSaysThatItDidTest {
     void aPositionTakenBackByAnAlternativeSaysAnAlternativeTookItBack() {
         AdmissibleValues<String> either = says(VALUE, A)
                 .join(AdmissibleValues.unreadable(Set.of(OTHER),
-                        UnreadReason.RELATES_TWO_POSITIONS), sets);
+                        UnreadReason.RELATES_TWO_POSITIONS), sets, Set.of(VALUE));
 
         assertEquals(List.of(UnreadReason.ALTERNATIVE_NOT_READ), either.whyUnread(VALUE));
         assertTrue(either.speaksFor(OTHER),
@@ -202,8 +204,10 @@ class AnUnreadRuleWidensAndSaysThatItDidTest {
                 AdmissibleValues.<String>unreadable(Set.of(VALUE),
                                 UnreadReason.RELATES_TWO_POSITIONS)
                         .meet(says(OTHER, A), sets)
+                        // The alternative beside the unread one holds a clause nothing read as
+                        // well, so it promised nothing for the other to take back.
                         .join(AdmissibleValues.unreadable(Set.of(), UnreadReason.FORM_NOT_READ),
-                                sets);
+                                sets, Set.of());
 
         assertEquals(List.of(UnreadReason.RELATES_TWO_POSITIONS), either.whyUnread(VALUE));
     }
@@ -222,8 +226,8 @@ class AnUnreadRuleWidensAndSaysThatItDidTest {
         AdmissibleValues<String> possible = says(OTHER, A);
 
         assertTrue(impossible.isBottom(), "the first alternative admits nothing");
-        assertEquals(ValueSet.just(A), impossible.join(possible, sets).at(OTHER));
-        assertEquals(ValueSet.just(A), possible.join(impossible, sets).at(OTHER),
+        assertEquals(ValueSet.just(A), impossible.join(possible, sets, Set.of()).at(OTHER));
+        assertEquals(ValueSet.just(A), possible.join(impossible, sets, Set.of()).at(OTHER),
                 "and either way round");
     }
 
@@ -239,10 +243,10 @@ class AnUnreadRuleWidensAndSaysThatItDidTest {
         AdmissibleValues<String> here = says(VALUE, A).meet(says(VALUE, B), sets);
         AdmissibleValues<String> there = says(OTHER, A).meet(says(OTHER, B), sets);
 
-        assertTrue(here.join(there, sets).isBottom());
-        assertTrue(there.join(here, sets).isBottom(), "and either way round");
-        assertTrue(here.join(there, sets).at(VALUE).isEmpty()
-                        == there.join(here, sets).at(VALUE).isEmpty(),
+        assertTrue(here.join(there, sets, Set.of()).isBottom());
+        assertTrue(there.join(here, sets, Set.of()).isBottom(), "and either way round");
+        assertTrue(here.join(there, sets, Set.of()).at(VALUE).isEmpty()
+                        == there.join(here, sets, Set.of()).at(VALUE).isEmpty(),
                 "and says the same about each position either way round");
     }
 

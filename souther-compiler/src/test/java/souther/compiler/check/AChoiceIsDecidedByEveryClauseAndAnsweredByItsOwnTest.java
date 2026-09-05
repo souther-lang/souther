@@ -185,7 +185,7 @@ class AChoiceIsDecidedByEveryClauseAndAnsweredByItsOwnTest {
                         UnreadReason.ALTERNATIVE_NOT_READ,
                         choice)),
                 theBranchRead(java.util.Set.of())
-                        .either(choice, theBranchNothingRead(java.util.Set.of()))
+                        .either(choice, opened(choice), theBranchNothingRead(java.util.Set.of()))
                         .ruleShortfalls(),
                 "an author is sent to the choice that offered the alternative, and to nothing"
                         + " about the position the branch settled");
@@ -209,7 +209,8 @@ class AChoiceIsDecidedByEveryClauseAndAnsweredByItsOwnTest {
                         UnreadReason.ALTERNATIVE_NOT_READ,
                         choice)),
                 theBranchRead(java.util.Set.of(brought))
-                        .either(choice, theBranchNothingRead(java.util.Set.of(brought)))
+                        .either(choice, opened(choice),
+                                theBranchNothingRead(java.util.Set.of(brought)))
                         .ruleShortfalls(),
                 "what stands whichever way the choice goes does not account for its alternative"
                         + " going unread");
@@ -220,10 +221,12 @@ class AChoiceIsDecidedByEveryClauseAndAnsweredByItsOwnTest {
     void aShortfallOnlyTheUnreadBranchHoldsAnswersForThePosition() {
         RuleShortfall inside = new RuleShortfall(CONSTRAINED, UnreadReason.ALTERNATIVE_NOT_READ,
                 aChoice());
+        RuleShortfall.Site.AtAChoice choice = aChoice();
 
         assertEquals(java.util.Set.of(inside),
                 theBranchRead(java.util.Set.of())
-                        .either(aChoice(), theBranchNothingRead(java.util.Set.of(inside)))
+                        .either(choice, opened(choice),
+                                theBranchNothingRead(java.util.Set.of(inside)))
                         .ruleShortfalls(),
                 "answering it settles the position through this branch, which takes the choice's"
                         + " shortfall with it");
@@ -241,9 +244,10 @@ class AChoiceIsDecidedByEveryClauseAndAnsweredByItsOwnTest {
         RuleShortfall form = new RuleShortfall(CONSTRAINED, UnreadReason.FORM_NOT_READ,
                 new RuleShortfall.Site.AtALeaf(new Core.Bool(true, Type.BOOL, new SourcePos(1, 1))));
 
+        RuleShortfall.Site.AtAChoice first = aChoice();
         assertEquals(java.util.Set.of(form),
                 theBranchRead(java.util.Set.of())
-                        .either(aChoice(), theBranchNothingRead(java.util.Set.of(form)))
+                        .either(first, opened(first), theBranchNothingRead(java.util.Set.of(form)))
                         .ruleShortfalls(),
                 "a form only the unread branch holds accounts for the position");
         RuleShortfall.Site.AtAChoice choice = aChoice();
@@ -251,9 +255,65 @@ class AChoiceIsDecidedByEveryClauseAndAnsweredByItsOwnTest {
                         UnreadReason.ALTERNATIVE_NOT_READ,
                         choice)),
                 theBranchRead(java.util.Set.of(form))
-                        .either(choice, theBranchNothingRead(java.util.Set.of(form)))
+                        .either(choice, opened(choice),
+                                theBranchNothingRead(java.util.Set.of(form)))
                         .ruleShortfalls(),
                 "and the same form standing in both branches does not");
+    }
+
+    /**
+     * What a choice left open, decided over the two alternatives as they were written.
+     *
+     * <p>Two answers of one decision, and they are not the same set. An author has to look at the
+     * choice wherever the alternative beside the unread one reached a position; a position is
+     * reported wider than the rules only where that alternative promised it something. What neither
+     * of them holds is a position the alternative merely settled — a branch nobody can be in
+     * settles what it named, and a choice imposes nothing extra there.
+     */
+    @Test
+    void whatAChoiceLeftOpenIsWhatTheAlternativeBesideTheUnreadOneReachedAndPromised() {
+        StatedByClauses.AlternativeOpening opened = StatedByClauses.opens(new ChoiceId(),
+                theBranchRead(java.util.Set.of()).byValues(),
+                theBranchNothingRead(java.util.Set.of()).byValues());
+
+        assertEquals(java.util.Set.of(CONSTRAINED), opened.byTheRightGoingUnread(),
+                "an author is sent here about the position the branch beside it constrained, and"
+                        + " not about the one it settled");
+        assertEquals(java.util.Set.of(CONSTRAINED), opened.positions(),
+                "and the position hears about it for the same reason");
+        assertEquals(java.util.Set.of(), opened.byTheLeftGoingUnread(),
+                "the left alternative was read, so nothing is open by its going unread");
+    }
+
+    /**
+     * And an alternative holding a clause nothing could read promises nothing.
+     *
+     * <p>What a branch promises is what it promises having read everything it was given, so a
+     * choice between two such branches leaves the positions whatever account they already had —
+     * {@code (P(a) && f(b)) || (P(a) && f(b))} holds {@code a} exactly where {@code P} does.
+     */
+    @Test
+    void anAlternativeHoldingSomethingUnreadPromisesNothingForTheOtherToTakeBack() {
+        StatedByClauses.AlternativeOpening opened = StatedByClauses.opens(new ChoiceId(),
+                theBranchNothingRead(java.util.Set.of()).byValues(),
+                theBranchNothingRead(java.util.Set.of()).byValues());
+
+        assertEquals(java.util.Set.of(), opened.positions(),
+                "neither alternative promised anything, so neither has anything taken back");
+    }
+
+    /**
+     * What that choice left open, which the branches below are read against.
+     *
+     * <p>The constrained position and not the settled one: a branch nobody can be in settles the
+     * positions it named, and a choice imposes nothing extra there. Which positions a choice opens
+     * is worked out over the clause as its author wrote it and handed here, so what these tests
+     * hold is the other half — which of them a rule is still answerable for.
+     */
+    private static StatedByClauses.AlternativeOpening opened(
+            RuleShortfall.Site.AtAChoice choice) {
+        return new StatedByClauses.AlternativeOpening(choice.id(), java.util.Set.of(),
+                java.util.Set.of(CONSTRAINED), java.util.Set.of(CONSTRAINED));
     }
 
     /** One choice somebody wrote, told from every other by being this one. */

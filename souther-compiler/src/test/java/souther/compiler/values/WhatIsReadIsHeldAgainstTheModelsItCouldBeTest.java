@@ -69,9 +69,14 @@ class WhatIsReadIsHeldAgainstTheModelsItCouldBeTest {
      *                  a position holds is read across a choice one position at a time and comes
      *                  out wider than the model with every rule read — which is a defect of its
      *                  own and not one an unread rule is answerable for
+     * @param holdsSomethingUnread whether any clause of it is one this reading has no word for.
+     *                  What a choice between such a clause and one that was read leaves open is a
+     *                  fact about the clause as it is written here, so it is decided here and
+     *                  handed to the join rather than worked out from what the readings hold
      */
     private record Rule(String wrote, AdmissibleValues<String> read, List<Integer> leaves,
-                        Set<String> readAbout, boolean choicesOverOnePosition) {}
+                        Set<String> readAbout, boolean choicesOverOnePosition,
+                        boolean holdsSomethingUnread) {}
 
     /** Which values stand at {@code atom} in {@code records}, as a pair of bits. */
     private static int standingAt(String atom, int records) {
@@ -103,7 +108,7 @@ class WhatIsReadIsHeldAgainstTheModelsItCouldBeTest {
     /** A rule read in full: one set of records and no doubt about it. */
     private static Rule read(String wrote, AdmissibleValues<String> read, String about,
                              int records) {
-        return new Rule(wrote, read, List.of(records), Set.of(about), true);
+        return new Rule(wrote, read, List.of(records), Set.of(about), true, false);
     }
 
     /**
@@ -117,7 +122,7 @@ class WhatIsReadIsHeldAgainstTheModelsItCouldBeTest {
                 could.add(records);
             }
         }
-        return new Rule(wrote, AdmissibleValues.unreadable(names, why), could, Set.of(), true);
+        return new Rule(wrote, AdmissibleValues.unreadable(names, why), could, Set.of(), true, true);
     }
 
     /** Whether {@code records} is settled by the named positions alone. */
@@ -147,6 +152,17 @@ class WhatIsReadIsHeldAgainstTheModelsItCouldBeTest {
                 unread("f()", Set.of(), UnreadReason.FORM_NOT_READ));
     }
 
+    /**
+     * What an alternative promised, which is what an unread one beside it takes back.
+     *
+     * <p>Nothing where it holds a clause nothing read: what a rule promises is what it promises
+     * having read everything it was given, so there is nothing there for the alternative beside it
+     * to widen.
+     */
+    private static Set<String> promisedBy(Rule alternative) {
+        return alternative.holdsSomethingUnread() ? Set.of() : alternative.readAbout();
+    }
+
     private static Rule both(Rule left, Rule right) {
         return compose(left, right, "&&");
     }
@@ -163,10 +179,23 @@ class WhatIsReadIsHeldAgainstTheModelsItCouldBeTest {
         about.addAll(right.readAbout());
         boolean overOne = left.choicesOverOnePosition() && right.choicesOverOnePosition()
                 && (by.equals("&&") || about.size() <= 1);
+        // What a choice between these two leaves open, said where the two of them are what was
+        // written: the positions the alternative beside an unread one reached. A conjunction leaves
+        // nothing open, since both of its clauses hold.
+        Set<String> opened = new LinkedHashSet<>();
+        if (by.equals("||")) {
+            if (left.holdsSomethingUnread()) {
+                opened.addAll(promisedBy(right));
+            }
+            if (right.holdsSomethingUnread()) {
+                opened.addAll(promisedBy(left));
+            }
+        }
         return new Rule("(" + left.wrote() + " " + by + " " + right.wrote() + ")",
                 by.equals("&&") ? left.read().meet(right.read(), SETS)
-                        : left.read().join(right.read(), SETS),
-                List.copyOf(could), about, overOne);
+                        : left.read().join(right.read(), SETS, opened),
+                List.copyOf(could), about, overOne,
+                left.holdsSomethingUnread() || right.holdsSomethingUnread());
     }
 
     /**
