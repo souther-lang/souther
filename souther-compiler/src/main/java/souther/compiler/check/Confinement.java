@@ -8,7 +8,6 @@ import souther.compiler.values.AdmissibleValues;
 import souther.compiler.values.Allowance;
 import souther.compiler.values.AskedOfEachBlock;
 import souther.compiler.values.ConjoinedAdmissibleValues;
-import souther.compiler.values.Emptiness;
 import souther.compiler.values.PlannedValues;
 import souther.compiler.values.Realized;
 import souther.compiler.values.Sameness;
@@ -40,8 +39,8 @@ import java.util.function.Function;
  *
  * <p><b>Nothing is admitted where the ranges refuse every alternative, and something is admitted
  * only where they were asked.</b> That asymmetry is the whole of what went wrong. Either half
- * holding nothing leaves the pair nothing, so {@link Emptiness#EMPTY} is sound from either of them;
- * {@link Emptiness#NONEMPTY} is a claim about the pair and can only come out of the walk that was
+ * holding nothing leaves the pair nothing, so {@link souther.compiler.values.Emptiness#EMPTY} is sound from either of them;
+ * {@link souther.compiler.values.Emptiness#NONEMPTY} is a claim about the pair and can only come out of the walk that was
  * handed the ranges. A reading that answered it from the values alone settled a branch as one
  * somebody can be in before anything asked where its positions stop.
  *
@@ -78,13 +77,13 @@ sealed interface Confinement<A> {
     }
 
     /** Whether anything satisfies both readings. */
-    default Emptiness admits() {
+    default souther.compiler.values.Emptiness admits() {
         return admission().emptiness();
     }
 
     /** Whether it is settled that nothing does. */
     default boolean holdsNothing() {
-        return admits() == Emptiness.EMPTY;
+        return admits() == souther.compiler.values.Emptiness.EMPTY;
     }
 
     /**
@@ -120,28 +119,28 @@ sealed interface Confinement<A> {
      *             between two dead branches would intersect those sets and claim a lack about
      *             whatever the two happened to share
      */
-    record Admission<A>(Emptiness emptiness, EmptyBy by, Set<Sameness.Block<A>> at, Shown how) {
+    record Admission<A>(souther.compiler.values.Emptiness emptiness, EmptyBy by, Set<Sameness.Block<A>> at, Shown how) {
 
         public Admission {
             at = Set.copyOf(at);
         }
 
         /** The same, where what was refused is places rather than values several of them share. */
-        static <A> Admission<A> at(Emptiness emptiness, EmptyBy by, Set<A> positions, Shown how) {
+        static <A> Admission<A> at(souther.compiler.values.Emptiness emptiness, EmptyBy by, Set<A> positions, Shown how) {
             Set<Sameness.Block<A>> blocks = new LinkedHashSet<>();
             positions.forEach(each -> blocks.add(Sameness.Block.of(each)));
             return new Admission<>(emptiness, by, blocks, how);
         }
 
         /** Something may satisfy the pair, so nothing emptied it. */
-        static <A> Admission<A> left(Emptiness emptiness) {
+        static <A> Admission<A> left(souther.compiler.values.Emptiness emptiness) {
             return new Admission<>(emptiness, EmptyBy.NOTHING_SHOWN, Set.of(),
                     Shown.BY_THE_READINGS);
         }
 
         /** Whether it is settled that nothing satisfies what was asked. */
         boolean holdsNothing() {
-            return emptiness == Emptiness.EMPTY;
+            return emptiness == souther.compiler.values.Emptiness.EMPTY;
         }
 
         /** Whether these two readings are the whole of what showed it. */
@@ -165,7 +164,7 @@ sealed interface Confinement<A> {
             // however these two were shown. Nothing hands a branch's fate a restriction from
             // outside today ({@link StatedByClauses.Reading}), so both of these are the readings'
             // own; said the other way, this would be a fact about the pair that neither half is.
-            return new Admission<>(Emptiness.EMPTY,
+            return new Admission<>(souther.compiler.values.Emptiness.EMPTY,
                     one.by == other.by ? one.by : EmptyBy.RULES_TOGETHER, both,
                     one.byTheReadings() && other.byTheReadings()
                             ? Shown.BY_THE_READINGS : Shown.ONCE_THE_POSITIONS_ARE_PLACED);
@@ -226,7 +225,7 @@ sealed interface Confinement<A> {
      * The one implementation of the question, whatever the values are held as.
      *
      * <p>The ranges reach every position of every alternative, so what comes back is about the pair
-     * — which is what makes {@link Emptiness#NONEMPTY} sayable at all. A holder whose values are
+     * — which is what makes {@link souther.compiler.values.Emptiness#NONEMPTY} sayable at all. A holder whose values are
      * still descriptions answers as much of it as needs no machine and leaves the rest open; a
      * holder whose values are sets answers all of it.
      *
@@ -235,14 +234,14 @@ sealed interface Confinement<A> {
      */
     static <A> Admission<A> admission(OrderedIntervals<A> ordered, Map<A, Carrier> carriers,
                                       PositionEnvelope.Restrictions<A> outside,
-                                      Function<AskedOfEachBlock<A>, Emptiness> admitting,
+                                      Function<AskedOfEachBlock<A>, souther.compiler.values.Emptiness> admitting,
                                       Function<AskedOfEachBlock<A>, Set<Sameness.Block<A>>> refused,
                                       Set<Sameness.Block<A>> heldAsOneAndEmptied) {
         // The ends holding a position nothing, which is that reading's own answer whatever else
         // places the position: a reading left with no range at all names none, and where it names
         // one, that is where the lack is.
         if (ordered.isBottom()) {
-            return Admission.at(Emptiness.EMPTY, EmptyBy.ORDER, ordered.holdingNothing(),
+            return Admission.at(souther.compiler.values.Emptiness.EMPTY, EmptyBy.ORDER, ordered.holdingNothing(),
                     Shown.BY_THE_READINGS);
         }
         // A meter of this asking, spent on every question asked in it. What may be built to decide
@@ -265,8 +264,8 @@ sealed interface Confinement<A> {
         // One walk, and it is asked where the positions are: what a reading leaves is what it
         // leaves once everything that places its positions has been met with it, and a walk per
         // asking would be an alternative visited twice by two questions that have to agree.
-        Emptiness said = admitting.apply(placed);
-        if (said != Emptiness.EMPTY) {
+        souther.compiler.values.Emptiness said = admitting.apply(placed);
+        if (said != souther.compiler.values.Emptiness.EMPTY) {
             // And a position with nowhere to be once everything placing it is met, which is a lack
             // the alternatives never hear about: a position no alternative names is not one they
             // are asked about, so where what is required of it does not reach where its own ends
@@ -283,7 +282,7 @@ sealed interface Confinement<A> {
                 }
             });
             return nowhere.isEmpty() ? Admission.left(said)
-                    : Admission.at(Emptiness.EMPTY, EmptyBy.ORDER, nowhere,
+                    : Admission.at(souther.compiler.values.Emptiness.EMPTY, EmptyBy.ORDER, nowhere,
                             Shown.ONCE_THE_POSITIONS_ARE_PLACED);
         }
         // What showed it, which is a second question and is asked where a proof is written rather
@@ -291,20 +290,20 @@ sealed interface Confinement<A> {
         // where they do, that is what an author is told — read off the walk that was answered, a
         // pair whose own set and range share no value would be reported against bounds derived
         // somewhere else, which is true and is not what they wrote.
-        Shown how = outside.saysNothing() || admitting.apply(byTheReadings) == Emptiness.EMPTY
+        Shown how = outside.saysNothing() || admitting.apply(byTheReadings) == souther.compiler.values.Emptiness.EMPTY
                 ? Shown.BY_THE_READINGS : Shown.ONCE_THE_POSITIONS_ARE_PLACED;
         // The values holding no alternative at all is the values' own answer, and asking anything
         // of the ranges would not have changed it. Told apart here rather than by a second reader
         // reassembling the same three facts — and said to be the readings' whichever asking reached
         // it, since a proof that consults no range is one no placing of a position took part in.
-        if (admitting.apply((_, _) -> Emptiness.NONEMPTY) == Emptiness.EMPTY) {
+        if (admitting.apply((_, _) -> souther.compiler.values.Emptiness.NONEMPTY) == souther.compiler.values.Emptiness.EMPTY) {
             // With the places where what the values were left nothing at is a value several
             // positions share. Each of them holds something on its own, so the general answer —
             // that the values admit nothing — is true and says less than what was shown.
             return heldAsOneAndEmptied.isEmpty()
-                    ? new Admission<>(Emptiness.EMPTY, EmptyBy.VALUES, Set.of(),
+                    ? new Admission<>(souther.compiler.values.Emptiness.EMPTY, EmptyBy.VALUES, Set.of(),
                             Shown.BY_THE_READINGS)
-                    : new Admission<>(Emptiness.EMPTY, EmptyBy.POSITIONS_HELD_AS_ONE,
+                    : new Admission<>(souther.compiler.values.Emptiness.EMPTY, EmptyBy.POSITIONS_HELD_AS_ONE,
                             heldAsOneAndEmptied, Shown.BY_THE_READINGS);
         }
         // The blocks it was asked at, which is what the question was about. A block of several
@@ -314,7 +313,7 @@ sealed interface Confinement<A> {
         //
         // Asked of the question that showed it, so that the blocks named are the ones refused by
         // what the proof says refused them.
-        return new Admission<>(Emptiness.EMPTY, EmptyBy.SET_AND_RANGE,
+        return new Admission<>(souther.compiler.values.Emptiness.EMPTY, EmptyBy.SET_AND_RANGE,
                 refused.apply(how == Shown.BY_THE_READINGS ? byTheReadings : placed), how);
     }
 
@@ -335,14 +334,14 @@ sealed interface Confinement<A> {
         // about the very blocks the walk that reached it did — by the set in hand and not by what
         // a set is equal to, since two sets that are equal are two answers only if somebody built
         // them twice.
-        Map<Sameness.Block<A>, Map<ValueSet, Emptiness>> asked = new LinkedHashMap<>();
+        Map<Sameness.Block<A>, Map<ValueSet, souther.compiler.values.Emptiness>> asked = new LinkedHashMap<>();
         return (block, set) -> asked
                 .computeIfAbsent(block, _ -> new IdentityHashMap<>())
                 .computeIfAbsent(set, it -> answered(carriers, sits, meter, block, it));
     }
 
     /** Whether {@code block} admits anything where {@code sits} puts its positions. */
-    private static <A> Emptiness answered(Map<A, Carrier> carriers,
+    private static <A> souther.compiler.values.Emptiness answered(Map<A, Carrier> carriers,
                                           Function<A, OrderedInterval> sits, Meter meter,
                                           Sameness.Block<A> block, ValueSet set) {
         // What the block is ordered on, and where it stops. Positions an alternative holds as
@@ -367,7 +366,7 @@ sealed interface Confinement<A> {
             }
             within = within.meet(sits.apply(position));
         }
-        return carrier == null ? Emptiness.NONEMPTY : carrier.meets(set, within, meter);
+        return carrier == null ? souther.compiler.values.Emptiness.NONEMPTY : carrier.meets(set, within, meter);
     }
 
     /** Whether anything outside these readings places a position of {@code block}. */
@@ -378,10 +377,10 @@ sealed interface Confinement<A> {
 
     /** What showed a conjunction of two readings empty, where either of them was. */
     static <A> Admission<A> eitherShown(Admission<A> one, Admission<A> other) {
-        if (one.emptiness() != Emptiness.EMPTY) {
-            return other.emptiness() == Emptiness.EMPTY ? other : null;
+        if (one.emptiness() != souther.compiler.values.Emptiness.EMPTY) {
+            return other.emptiness() == souther.compiler.values.Emptiness.EMPTY ? other : null;
         }
-        return other.emptiness() == Emptiness.EMPTY ? Admission.bothShown(one, other) : one;
+        return other.emptiness() == souther.compiler.values.Emptiness.EMPTY ? Admission.bothShown(one, other) : one;
     }
 
     /** What each position is ordered on, both tables put together. */
@@ -462,12 +461,12 @@ sealed interface Confinement<A> {
          * together. What it may spend is the answer's own allowance, so what is asked is what is
          * established and a branch nothing established is kept.
          */
-        Emptiness alreadyEstablished(Allowance<A> by) {
-            Emptiness said = admits();
-            if (said != Emptiness.UNDECIDED) {
+        souther.compiler.values.Emptiness alreadyEstablished(Allowance<A> by) {
+            souther.compiler.values.Emptiness said = admits();
+            if (said != souther.compiler.values.Emptiness.UNDECIDED) {
                 return said;
             }
-            return values.holdsNothingAsBuilt(by) ? Emptiness.EMPTY : Emptiness.UNDECIDED;
+            return values.holdsNothingAsBuilt(by) ? souther.compiler.values.Emptiness.EMPTY : souther.compiler.values.Emptiness.UNDECIDED;
         }
 
         /**
@@ -607,8 +606,8 @@ sealed interface Confinement<A> {
             // A position nobody could build is one what stands there is wider than the rules, so a
             // pair the ranges did not refuse may still hold nothing. Settled empty is settled all
             // the same: a narrower reading refuses no less.
-            return said.emptiness() == Emptiness.NONEMPTY && !made.unbuilt().isEmpty()
-                    ? Admission.left(Emptiness.UNDECIDED) : said;
+            return said.emptiness() == souther.compiler.values.Emptiness.NONEMPTY && !made.unbuilt().isEmpty()
+                    ? Admission.left(souther.compiler.values.Emptiness.UNDECIDED) : said;
         }
 
         /** The positions the order leaves no value at, for a reader writing down where. */

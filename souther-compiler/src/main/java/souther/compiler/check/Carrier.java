@@ -19,7 +19,6 @@ import souther.compiler.regex.Meter;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
-import souther.compiler.values.Emptiness;
 import souther.compiler.values.Value;
 import souther.compiler.values.ValueSet;
 
@@ -819,40 +818,40 @@ public sealed interface Carrier {
      * is one position's, so that a carrier added later answers what a carrier has to answer and not
      * what a reading does.
      *
-     * <p>{@link Emptiness#UNDECIDED} where this order cannot say. A pattern over a carrier that is
+     * <p>{@link souther.compiler.values.Emptiness#UNDECIDED} where this order cannot say. A pattern over a carrier that is
      * not the strings is a set belonging to no position of this order rather than one this refuses,
      * and a machine the allowance will not pay for is a question that waits — neither of them is a
      * value being ruled out.
      *
      * @param meter what may be built to answer, where answering takes a machine
      */
-    default Emptiness meets(ValueSet set, OrderedInterval range, Meter meter) {
+    default souther.compiler.values.Emptiness meets(ValueSet set, OrderedInterval range, Meter meter) {
         if (range.holdsNothing()) {
-            return Emptiness.EMPTY;
+            return souther.compiler.values.Emptiness.EMPTY;
         }
         return switch (set) {
             case ValueSet.Finite it -> anyOf(it.values(), range);
             // Every value of the order is admitted, and the range holds one.
             case ValueSet.Cofinite it -> it.excluded().isEmpty()
-                    ? Emptiness.NONEMPTY : somethingNotExcluded(it.excluded(), range);
+                    ? souther.compiler.values.Emptiness.NONEMPTY : somethingNotExcluded(it.excluded(), range);
             case ValueSet.Matching it -> this instanceof Text
-                    ? stringsInside(it.language(), range, meter) : Emptiness.UNDECIDED;
+                    ? stringsInside(it.language(), range, meter) : souther.compiler.values.Emptiness.UNDECIDED;
         };
     }
 
     /** Whether one of {@code values} is inside {@code range}, undecided where a value of the set is
      *  not one this order places at all. */
-    private Emptiness anyOf(java.util.Set<Value> values, OrderedInterval range) {
+    private souther.compiler.values.Emptiness anyOf(java.util.Set<Value> values, OrderedInterval range) {
         boolean placed = true;
         for (Value each : values) {
             Place at = placeOf(each);
             if (at == null) {
                 placed = false;
             } else if (range.admits(at)) {
-                return Emptiness.NONEMPTY;
+                return souther.compiler.values.Emptiness.NONEMPTY;
             }
         }
-        return placed ? Emptiness.EMPTY : Emptiness.UNDECIDED;
+        return placed ? souther.compiler.values.Emptiness.EMPTY : souther.compiler.values.Emptiness.UNDECIDED;
     }
 
     /**
@@ -862,10 +861,10 @@ public sealed interface Carrier {
      * excluded: a range holding more than that holds one of them whatever the exclusions are, and
      * counting further would be enumerating an order to answer a question about a handful of values.
      */
-    private Emptiness somethingNotExcluded(Set<Value> excluded, OrderedInterval range) {
+    private souther.compiler.values.Emptiness somethingNotExcluded(Set<Value> excluded, OrderedInterval range) {
         List<Place> held = firstPlacesIn(range, excluded.size() + 1);
         if (held == null) {
-            return Emptiness.NONEMPTY;
+            return souther.compiler.values.Emptiness.NONEMPTY;
         }
         List<Place> away = new ArrayList<>(excluded.size());
         excluded.forEach(each -> {
@@ -876,10 +875,10 @@ public sealed interface Carrier {
         });
         for (Place each : held) {
             if (away.stream().noneMatch(each::sameAs)) {
-                return Emptiness.NONEMPTY;
+                return souther.compiler.values.Emptiness.NONEMPTY;
             }
         }
-        return Emptiness.EMPTY;
+        return souther.compiler.values.Emptiness.EMPTY;
     }
 
     /**
@@ -942,7 +941,7 @@ public sealed interface Carrier {
      * or they do not. Said as a projection of the language onto the ends instead, a rule whose
      * strings are not one stretch of the order would have no ends to be compared with.
      */
-    private Emptiness stringsInside(Language language, OrderedInterval range, Meter meter) {
+    private souther.compiler.values.Emptiness stringsInside(Language language, OrderedInterval range, Meter meter) {
         OrderedInterval held = extent().meet(range);
         Language inside = language;
         if (held.high() != null) {
@@ -960,9 +959,9 @@ public sealed interface Carrier {
             inside = above == null ? null : inside.and(above, meter);
         }
         if (inside == null) {
-            return Emptiness.UNDECIDED;
+            return souther.compiler.values.Emptiness.UNDECIDED;
         }
-        return inside.isEmpty() ? Emptiness.EMPTY : Emptiness.NONEMPTY;
+        return inside.isEmpty() ? souther.compiler.values.Emptiness.EMPTY : souther.compiler.values.Emptiness.NONEMPTY;
     }
 
     /**
