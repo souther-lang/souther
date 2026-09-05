@@ -445,6 +445,27 @@ public final class InputReads {
         }
     }
 
+    /**
+     * The string {@code e} stands for here, or null where nothing here says it is one.
+     *
+     * <p>What a name stands for is this reading's question and is answered here rather than by
+     * whoever wants the string. A rule written {@code String.startsWith(prefix, code)} under
+     * {@code let prefix = "JP"} states the same thing as one written with the string in it, and a
+     * reader that took the argument as it was written would have the two mean different things —
+     * not because the compiler cannot work the second out, but because the reader did not take the
+     * answer this already has.
+     *
+     * <p>Through the names and no further ({@link #standing}). What comes back is the value the
+     * expression stands for once the names have been followed, and a string is what it is where
+     * that value is one written down. An expression that stands for something computed is a string
+     * nothing here works out, and it is null the way anything else this cannot answer is —
+     * arithmetic over the values is not a question a naming answers.
+     */
+    public String writtenStringOf(Core e, Symbols symbols) {
+        return standing(new Denotation(e, this), symbols, new java.util.HashSet<>())
+                .value() instanceof Core.Str written ? written.value() : null;
+    }
+
     /** Where an element handed to {@code binding} stands ({@link InputPath#elementAt}). */
     public PathResolution elementAt(BindingId binding, Symbols symbols) {
         return InputPath.elementAt(binding, names, symbols);
