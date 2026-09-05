@@ -414,6 +414,20 @@ sealed interface Confinement<A> {
             return made.values();
         }
 
+        /**
+         * The same answer, unable to speak for {@code these} because a choice offered an
+         * alternative nothing could read.
+         *
+         * <p>Which positions those are turns on which branches anybody can be in, so it is known
+         * only once this is — see {@link AdmissibleValues#alsoOpenedAt}. What comes back is what a
+         * reader is handed; nothing reads how wide a position is off the answer before it.
+         */
+        Worked<A> alsoOpenedAt(Set<A> these) {
+            return these.isEmpty() ? this
+                    : new Worked<>(new Realized<>(made.values().alsoOpenedAt(these),
+                            made.aboutARule(), made.aboutTheAnswer()), ordered, carriers, shown);
+        }
+
         @Override
         public Map<A, Carrier> carriers() {
             return carriers;

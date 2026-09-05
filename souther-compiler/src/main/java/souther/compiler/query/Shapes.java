@@ -59,7 +59,7 @@ public final class Shapes {
      *
      * <p>Which clauses govern a declaration is a separate question and is not answered here:
      * a clause of a type this one spreads stays that type's, and
-     * {@link souther.compiler.check.TypeOps#settledInvariants} composes them where one is asked
+     * {@link souther.compiler.check.TypeOps#expandedInvariants} composes them where one is asked
      * for.
      *
      * <p>Settling substitutes what the modules this one imports publish to it, as lowering a body
@@ -491,7 +491,7 @@ public final class Shapes {
                     for (Hir.InvariantClause declared : data.invariants()) {
                         for (ClausesForDischarge.ClauseReading written
                                 : declaring.conjunctsOf(declared.expr(), new BindingOwner.OfData(named))) {
-                            clauses.add(InvariantChecker.capabilityOf(written, named, data,
+                            clauses.add(InvariantChecker.capabilityOf(written, named,
                                     reading.value(),
                                     db.ask(new Front.Reading()).value()).named(declared.name()));
                         }

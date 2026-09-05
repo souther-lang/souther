@@ -96,7 +96,6 @@ import java.util.Set;
  */
 public record AdmissibleValues<A>(Held<A> held, Map<A, ValueSet> perPosition,
                                   Standing<A> standing,
-                                  boolean dropped,
                                   Map<Sameness.Block<A>, ValueSet> guaranteed,
                                   ValueSet defaultGuaranteed,
                                   boolean guaranteedTogether,
@@ -126,7 +125,6 @@ public record AdmissibleValues<A>(Held<A> held, Map<A, ValueSet> perPosition,
                 case "perPosition" -> PlanOrder.written(perPosition, out);
                 case "guaranteed" -> PlanOrder.written(guaranteed, out);
                 case "defaultGuaranteed" -> PlanOrder.write(defaultGuaranteed, out);
-                case "dropped" -> out.append(dropped).append(';');
                 case "guaranteedTogether" -> out.append(guaranteedTogether).append(';');
                 case "tangled" -> named(tangled, out);
                 case "widened" -> named(widened, out);
@@ -506,12 +504,9 @@ public record AdmissibleValues<A>(Held<A> held, Map<A, ValueSet> perPosition,
      *                answerable for, and it is held all the same, since whether they still cover it
      *                turns on rules stated beside the choice that have not been read yet.
      *                {@link #speaksFor} and {@link #whyUnread} are the readings; this is what they
-     *                are read from
-     * @param dropped whether a rule was left unread anywhere in this reading, which is what a
-     *                disjunction needs in order to know that a branch widened it. What stopped that
-     *                rule is not carried: a position the other branch spoke about is spoiled by
-     *                there having been an alternative it could not read, and not by whatever the
-     *                rule in that alternative was about
+     *                are read from, and it holds both kinds of evidence there are: a rule of the
+     *                positions that went unread, and a position an alternative nothing could read
+     *                left open
      * @param guaranteed which values each position is guaranteed to admit — read through
      *                {@link #guaranteedAt} rather than off this map, which holds a position whose
      *                guarantee is the default as well. Held that way on purpose: the keys are
@@ -520,10 +515,11 @@ public record AdmissibleValues<A>(Held<A> held, Map<A, ValueSet> perPosition,
      *                rules happened to leave a position where it started. A choice reads it twice
      *                over, and both readings would follow the brackets
      * @param defaultGuaranteed what a position this holds no guarantee for is guaranteed to admit.
-     *                Not {@link #dropped} said another way: {@code value == 5} joined with a rule
-     *                nothing could read has this at {@link ValueSet#ANY} and {@code dropped} set,
-     *                because the alternative that was read guarantees every value at every position
-     *                it says nothing about, while a rule of the choice did go unread
+     *                Which is why what a choice left open is carried and not read off this:
+     *                {@code value == 5} joined with a rule nothing could read has this at
+     *                {@link ValueSet#ANY}, because the alternative that was read guarantees every
+     *                value at every position it says nothing about — and that a rule of the choice
+     *                went unread is a different fact, which nothing about the guarantee says
      * @param guaranteedTogether whether one value may be taken from each position's guarantee and
      *                the whole of them stand together in this reading. What a conjunction needs of
      *                its sides and what a choice over more than one position does not leave
@@ -700,7 +696,7 @@ public record AdmissibleValues<A>(Held<A> held, Map<A, ValueSet> perPosition,
 
     /** Nothing read and nothing missed, which is what a reading starts from. */
     public static <A> AdmissibleValues<A> top() {
-        return new AdmissibleValues<>(one(Box.at(Map.of())), Map.of(), Standing.nothing(), false,
+        return new AdmissibleValues<>(one(Box.at(Map.of())), Map.of(), Standing.nothing(),
                 Map.of(), ValueSet.ANY, true, Set.of(), Set.of());
     }
 
@@ -716,7 +712,7 @@ public record AdmissibleValues<A>(Held<A> held, Map<A, ValueSet> perPosition,
         // has, which are the positions on their own: there are no alternatives left to agree that
         // two of them hold one value.
         return isBottom() ? this
-                : new AdmissibleValues<>(new Held.Nothing<>(), Map.of(), standing, dropped,
+                : new AdmissibleValues<>(new Held.Nothing<>(), Map.of(), standing,
                         Map.of(), ValueSet.NONE, true, eachApart(tangled), eachApart(widened));
     }
 
@@ -748,7 +744,7 @@ public record AdmissibleValues<A>(Held<A> held, Map<A, ValueSet> perPosition,
     public static <A> AdmissibleValues<A> at(A atom, ValueSet set) {
         Map<A, ValueSet> said = Map.of(atom, set);
         return new AdmissibleValues<>(set.isEmpty() ? new Held.Nothing<>() : one(Box.at(said)),
-                said, Standing.nothing(), false, Map.of(Sameness.Block.of(atom), set),
+                said, Standing.nothing(), Map.of(Sameness.Block.of(atom), set),
                 ValueSet.ANY, true, Set.of(), Set.of());
     }
 
@@ -769,7 +765,7 @@ public record AdmissibleValues<A>(Held<A> held, Map<A, ValueSet> perPosition,
         // choice between two equalities would be a union of two relations that no product holds
         // and would say it lost nothing, since what it reads to decide that is this key set.
         return new AdmissibleValues<>(one(new Box<>(Map.of(block, ValueSet.ANY))), Map.of(),
-                Standing.nothing(), false, Map.of(block, ValueSet.ANY), ValueSet.ANY, true,
+                Standing.nothing(), Map.of(block, ValueSet.ANY), ValueSet.ANY, true,
                 Set.of(), Set.of());
     }
 
@@ -778,14 +774,19 @@ public record AdmissibleValues<A>(Held<A> held, Map<A, ValueSet> perPosition,
      * names.
      *
      * <p>{@code named} may be empty — a rule reaching no position this can name is still a rule that
-     * was not read, and what that costs is settled where it is joined rather than here.
+     * was not read, and that it was is a fact about the clause somebody wrote rather than about any
+     * position of this reading ({@code Adoption}).
+     *
+     * <p>Nothing here was opened by an alternative. What this leaves at the positions it names is
+     * its own account of them, said directly; that a choice above holds this clause in one of its
+     * branches is that choice's fact, and reaches the positions from where the choice is.
      */
     public static <A> AdmissibleValues<A> unreadable(Set<A> named, UnreadReason why) {
         // Nothing is guaranteed anywhere, and at the positions it does not name as much as at the
         // ones it does: what a rule this has no word for admits is not known, so a choice offering
         // it as an alternative is offering nothing that can be counted on.
         return new AdmissibleValues<>(one(Box.at(Map.of())), Map.of(),
-                Standing.of(named, why), true, Map.of(),
+                Standing.of(named, why), Map.of(),
                 ValueSet.NONE, true, Set.of(), Set.of());
     }
 
@@ -850,6 +851,11 @@ public record AdmissibleValues<A>(Held<A> held, Map<A, ValueSet> perPosition,
      * take in is not an account of the part written beside it, so a caller choosing among them is
      * choosing which of an author's rules to tell them about — and the choice would be made here,
      * where the only thing to choose by is which came first.
+     *
+     * <p>Which is why a choice that left the position open is what a position with no rule of its
+     * own is told about, and nothing a position does have a rule of its own hears
+     * ({@link Standing#across}): that is a choice between two kinds of thing rather than among an
+     * author's rules, and it is made on what is held rather than on what arrived first.
      */
     public List<UnreadReason> whyUnread(A atom) {
         return unreadAffecting(atom);
@@ -1058,7 +1064,7 @@ public record AdmissibleValues<A>(Held<A> held, Map<A, ValueSet> perPosition,
             case Held.Alternatives<A> alternatives -> alternatives.renamed(naming);
         };
         return new AdmissibleValues<>(renamedHeld, renamedKeys(perPosition, naming),
-                standing.renamed(naming), dropped,
+                standing.renamed(naming),
                 renamedBlocks(guaranteed, naming), defaultGuaranteed, guaranteedTogether,
                 renamedNames(tangled, naming), renamedNames(widened, naming));
     }
@@ -1133,7 +1139,7 @@ public record AdmissibleValues<A>(Held<A> held, Map<A, ValueSet> perPosition,
         Set<Sameness.Block<A>> widened = new LinkedHashSet<>();
         read.forEach(each -> widened.addAll(mapped(each.widened, sameness())));
         widened.addAll(this.widened);
-        return new AdmissibleValues<>(held, perPosition, out, dropped, guaranteed,
+        return new AdmissibleValues<>(held, perPosition, out, guaranteed,
                 defaultGuaranteed, guaranteedTogether, tangled, widened);
     }
 
@@ -1155,7 +1161,7 @@ public record AdmissibleValues<A>(Held<A> held, Map<A, ValueSet> perPosition,
                 ? it.commonSameness() : Sameness.discrete();
         return new AdmissibleValues<>(both,
                 narrowed(perPosition, other.perPosition, sets, heldAsOne, gaveUp),
-                alsoStanding(standing.and(other.standing), gaveUp), dropped || other.dropped,
+                alsoStanding(standing.and(other.standing), gaveUp),
                 // Either way what comes out is a promise about whole values, which is why a
                 // conjunction never has to say it is not one. Two of them met is one — a value
                 // taken from each position of both stands in both readings — and nothing promised
@@ -1270,12 +1276,31 @@ public record AdmissibleValues<A>(Held<A> held, Map<A, ValueSet> perPosition,
      * Either reading holding.
      *
      * <p>Over the positions both spoke about, since a position one of them left open is one the two
-     * of them together leave open. And over the positions the other spoke about, where this branch
-     * had something it could not read: those are open too, and open because of the reading rather
-     * than because of the model.
+     * of them together leave open.
+     *
+     * <p>What an alternative nothing could read left open is not said here, and cannot be. Which
+     * positions those are turns on which branches anybody can be in, and that is settled over the
+     * whole declaration — after this join, out of what it and every other one came to. So it
+     * arrives afterwards ({@link #alsoOpenedAt}), from the one walk that knows both the alternatives
+     * an author wrote and what became of them.
      */
     public AdmissibleValues<A> join(AdmissibleValues<A> other, Allowance<A> sets) {
         return joining(other, false, sets);
+    }
+
+    /**
+     * The same reading, also unable to speak for {@code these} because a choice offered an
+     * alternative nothing could read.
+     *
+     * <p>Evidence and not an explanation: {@link #speaksFor} weighs it exactly as it weighs a rule
+     * of the positions that went unread, and what a reader is told is the nearer of the two
+     * ({@link #whyUnread}). Added once, where the answer is finished — a reading handed on before
+     * it would speak for a position it cannot.
+     */
+    public AdmissibleValues<A> alsoOpenedAt(Set<A> these) {
+        return these.isEmpty() ? this
+                : new AdmissibleValues<>(held, perPosition, standing.alsoOpenedAt(these),
+                        guaranteed, defaultGuaranteed, guaranteedTogether, tangled, widened);
     }
 
     /**
@@ -1298,7 +1323,8 @@ public record AdmissibleValues<A>(Held<A> held, Map<A, ValueSet> perPosition,
         return joining(other, true, sets);
     }
 
-    private AdmissibleValues<A> joining(AdmissibleValues<A> other, boolean apart, Allowance<A> sets) {
+    private AdmissibleValues<A> joining(AdmissibleValues<A> other, boolean apart,
+                                        Allowance<A> sets) {
         Set<Sameness.Block<A>> gaveUp = new LinkedHashSet<>();
         // An alternative nobody can take leaves the answer to the others. Both being that is a
         // different case: no side speaks for the other, and meeting them would state a conjunction
@@ -1312,7 +1338,7 @@ public record AdmissibleValues<A>(Held<A> held, Map<A, ValueSet> perPosition,
             Set<Sameness.Block<A>> emptied = new LinkedHashSet<>(emptiedBlocks());
             emptied.retainAll(other.emptiedBlocks());
             return new AdmissibleValues<>(new Held.Nothing<>(emptied), emptyInBoth(other),
-                    standing.and(other.standing), dropped || other.dropped,
+                    standing.and(other.standing),
                     Map.of(), ValueSet.NONE, true,
                     eachApart(both(tangled, other.tangled)),
                     eachApart(both(widened, other.widened)));
@@ -1337,16 +1363,6 @@ public record AdmissibleValues<A>(Held<A> held, Map<A, ValueSet> perPosition,
         ValueSet coveredElsewhere =
                 sets.joinPromised(null, defaultGuaranteed, other.defaultGuaranteed).set();
         Standing<A> spoiled = standing.and(other.standing);
-        // Spoiled by there having been an alternative this could not read, which is what happened
-        // to them: a value satisfying that branch is under no obligation from this one. Not by what
-        // the unread rule was about — a rule relating two other positions relates this one to
-        // nothing, and lending its reason here would say that it did.
-        if (other.dropped) {
-            spoiled = spoiled.leftOpenAt(promisedAtPositions());
-        }
-        if (dropped) {
-            spoiled = spoiled.leftOpenAt(other.promisedAtPositions());
-        }
         // What each rule left standing is kept whole. Whether a position is answerable for it is
         // read off the two ends where the question is asked ({@link #speaksFor}) rather than
         // settled here: what covers a position is an alternative, and a rule stated beside the
@@ -1369,7 +1385,7 @@ public record AdmissibleValues<A>(Held<A> held, Map<A, ValueSet> perPosition,
         return new AdmissibleValues<>(held,
                 widenedBy(perPosition, other.perPosition, sets, heldAsOne, gaveUp),
                 alsoStanding(spoiled, gaveUp),
-                dropped || other.dropped, covered, coveredElsewhere,
+                covered, coveredElsewhere,
                 guaranteedTogether && other.guaranteedTogether && shapedBy.size() <= 1,
                 // Merging a union back into one product loses a relation among the blocks the
                 // alternatives are written at, and outside those the two of them agree on
@@ -1582,14 +1598,6 @@ public record AdmissibleValues<A>(Held<A> held, Map<A, ValueSet> perPosition,
      */
     private Set<Sameness.Block<A>> promisedAt() {
         return guaranteed.keySet();
-    }
-
-    /** The same, as the positions those blocks are of, for a reader writing reasons down against
-     *  the places an author wrote. */
-    private Set<A> promisedAtPositions() {
-        Set<A> out = new LinkedHashSet<>();
-        members(promisedAt(), out);
-        return out;
     }
 
 }

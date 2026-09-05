@@ -101,7 +101,8 @@ class AnUnreadRuleWidensAndSaysThatItDidTest {
     void anUnreadAlternativeTakesBackWhatTheOtherSaid() {
         AdmissibleValues<String> either =
                 says(VALUE, A).join(
-                        AdmissibleValues.unreadable(Set.of(), UnreadReason.FORM_NOT_READ), sets);
+                        AdmissibleValues.unreadable(Set.of(), UnreadReason.FORM_NOT_READ), sets)
+                        .alsoOpenedAt(Set.of(VALUE));
         assertEquals(ValueSet.ANY, either.at(VALUE));
         assertFalse(either.isBottom());
     }
@@ -116,9 +117,10 @@ class AnUnreadRuleWidensAndSaysThatItDidTest {
     void aPositionLeftOpenByAnUnreadAlternativeIsNotOneNothingWasSaidAbout() {
         assertFalse(says(VALUE, A)
                 .join(AdmissibleValues.unreadable(Set.of(), UnreadReason.FORM_NOT_READ), sets)
+                .alsoOpenedAt(Set.of(VALUE))
                 .speaksFor(VALUE));
         assertFalse(AdmissibleValues.<String>unreadable(Set.of(), UnreadReason.FORM_NOT_READ)
-                .join(says(VALUE, A), sets).speaksFor(VALUE));
+                .join(says(VALUE, A), sets).alsoOpenedAt(Set.of(VALUE)).speaksFor(VALUE));
     }
 
     /** A position neither alternative spoke about is open because neither said anything, which this
@@ -187,7 +189,8 @@ class AnUnreadRuleWidensAndSaysThatItDidTest {
     void aPositionTakenBackByAnAlternativeSaysAnAlternativeTookItBack() {
         AdmissibleValues<String> either = says(VALUE, A)
                 .join(AdmissibleValues.unreadable(Set.of(OTHER),
-                        UnreadReason.RELATES_TWO_POSITIONS), sets);
+                        UnreadReason.RELATES_TWO_POSITIONS), sets)
+                .alsoOpenedAt(Set.of(VALUE));
 
         assertEquals(List.of(UnreadReason.ALTERNATIVE_NOT_READ), either.whyUnread(VALUE));
         assertTrue(either.speaksFor(OTHER),
@@ -202,6 +205,9 @@ class AnUnreadRuleWidensAndSaysThatItDidTest {
                 AdmissibleValues.<String>unreadable(Set.of(VALUE),
                                 UnreadReason.RELATES_TWO_POSITIONS)
                         .meet(says(OTHER, A), sets)
+                        // The alternative beside the unread one holds a clause nothing read as
+                        // well, so it promised nothing for the other to take back and the choice
+                        // opened nowhere.
                         .join(AdmissibleValues.unreadable(Set.of(), UnreadReason.FORM_NOT_READ),
                                 sets);
 

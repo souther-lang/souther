@@ -48,6 +48,7 @@ class HowAlternativesRelateTwoPositionsIsPartOfWhatAReadingCostsTest {
         ValueSet c = matching("x|c{300}");
         ValueSet d = matching("x|d{300}");
         return crossed
+                // Every alternative here was read whole, so the choice left nothing open.
                 ? pair(a, d, by).joinApart(pair(c, b, by), by)
                 : pair(a, b, by).joinApart(pair(c, d, by), by);
     }

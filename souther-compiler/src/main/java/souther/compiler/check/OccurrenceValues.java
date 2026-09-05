@@ -1,6 +1,5 @@
 package souther.compiler.check;
 
-import souther.compiler.ast.Hir;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.NumericDomain;
@@ -39,10 +38,10 @@ public final class OccurrenceValues {
         this.seeded = seeded;
     }
 
-    /** What {@code data}, declared as {@code named}, leaves the values at each of its names. */
-    public static OccurrenceValues of(TypeSymbol.AtModule named, Hir.Data data,
+    /** What the declaration {@code named} is leaves the values at each of its names. */
+    public static OccurrenceValues of(TypeSymbol.AtModule named,
                                       RuleReadingSource source, ReadingPolicy policy) {
-        return of(named, data, source, policy, _ -> false);
+        return of(named, source, policy, _ -> false);
     }
 
     /**
@@ -52,11 +51,11 @@ public final class OccurrenceValues {
      * rules are what say it has none — its own, and the ones under whatever it wraps — so supposing
      * it has a value is not reading it at all.
      */
-    static OccurrenceValues of(TypeSymbol.AtModule named, Hir.Data data, RuleReadingSource source,
+    static OccurrenceValues of(TypeSymbol.AtModule named, RuleReadingSource source,
                                  ReadingPolicy policy,
                                  java.util.function.Predicate<TypeSymbol> granted) {
         return new OccurrenceValues(
-                InvariantChecker.seedFields(named, data, source, policy, java.util.Map.of(),
+                InvariantChecker.seedFields(named, source, policy, java.util.Map.of(),
                         InvariantChecker.Reach.stoppingAt(granted)));
     }
 

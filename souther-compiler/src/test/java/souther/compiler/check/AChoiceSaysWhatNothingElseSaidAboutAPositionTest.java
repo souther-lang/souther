@@ -83,6 +83,88 @@ class AChoiceSaysWhatNothingElseSaidAboutAPositionTest {
             """.replace("UNREAD_A", souther.compiler.ARuleNoReadingTakesIn.about("a"));
 
     /**
+     * A form nothing reads, written beside the brackets rather than inside them.
+     *
+     * <p>Both alternatives read perfectly well. What nothing reads is the conjunct written next to
+     * the whole choice, and taking it away leaves the rule with no such reason at all.
+     */
+    private static final String BESIDE_THE_BRACKET = """
+            module demo
+
+            data N = { x: String, y: String }
+                invariant r = (x == "A" || x == "B") && UNREAD_Y
+            """.replace("UNREAD_Y", souther.compiler.ARuleNoReadingTakesIn.about("y"));
+
+    /** The same form inside one alternative, with a read conjunct beside the brackets. */
+    private static final String INSIDE_ONE_ALTERNATIVE = """
+            module demo
+
+            data N = { x: String, y: String }
+                invariant r = (x == "A" || UNREAD_Y) && y /= "Z"
+            """.replace("UNREAD_Y", souther.compiler.ARuleNoReadingTakesIn.about("y"));
+
+    /** And an alternative nothing reads, beside a conjunct that is the only thing to name `y`. */
+    private static final String THE_CONJUNCT_NAMES_A_POSITION_OF_ITS_OWN = """
+            module demo
+
+            data N = { x: String, y: String }
+                invariant r = (x == "A" || UNREAD_X) && y == "Q"
+            """.replace("UNREAD_X", souther.compiler.ARuleNoReadingTakesIn.about("x"));
+
+    /**
+     * A form nothing reads inside a branch of an inner choice that nobody can be in.
+     *
+     * <p>The inner alternative holds two rules nothing satisfies together, so it is a branch there
+     * is no reading of; what it could not read goes with it. The outer choice does offer an
+     * alternative nothing could read, and what it is answerable for has to come from that and not
+     * from a branch the reading has already given up on.
+     */
+    private static final String THE_UNREAD_FORM_IS_IN_A_BRANCH_NOBODY_CAN_BE_IN = """
+            module demo
+
+            data N = { x: String, y: String }
+                invariant r =
+                    ((x == "A" && x == "B" && UNREAD_Y) || x == "C") || UNREAD_X
+            """.replace("UNREAD_Y", souther.compiler.ARuleNoReadingTakesIn.about("y"))
+            .replace("UNREAD_X", souther.compiler.ARuleNoReadingTakesIn.about("x"));
+
+    /**
+     * A form nothing reads inside a branch a clause written elsewhere shows nobody can be in.
+     *
+     * <p>Nothing here says so until every rule of the value has been read: the inner alternative
+     * holds a rule this reading takes in, and it is a neighbouring rule that leaves nobody able to
+     * be in it. Once that is settled the branch takes what it could not read with it, and the
+     * choice above has been offered no alternative anything failed to read.
+     */
+    private static final String A_NEIGHBOUR_SHOWS_THE_INNER_BRANCH_EMPTY = """
+            module demo
+
+            data N = { x: String, y: String }
+                invariant one =
+                    ((x == "A" && UNREAD_Y) || x == "B")
+                    || x == "C"
+                invariant two = x /= "A"
+            """.replace("UNREAD_Y", souther.compiler.ARuleNoReadingTakesIn.about("y"));
+
+    /** The same without the neighbour, where the inner branch stands. */
+    private static final String THE_SAME_WITH_THE_INNER_BRANCH_STANDING = """
+            module demo
+
+            data N = { x: String, y: String }
+                invariant one =
+                    ((x == "A" && UNREAD_Y) || x == "B")
+                    || x == "C"
+            """.replace("UNREAD_Y", souther.compiler.ARuleNoReadingTakesIn.about("y"));
+
+    /** An alternative that constrains the position and holds a form nothing reads beside it. */
+    private static final String THE_UNREAD_FORM_IS_UNDER_AN_ALTERNATIVE = """
+            module demo
+
+            data N = { x: String, y: String }
+                invariant r = x == "A" || (x == "B" && UNREAD_Y)
+            """.replace("UNREAD_Y", souther.compiler.ARuleNoReadingTakesIn.about("y"));
+
+    /**
      * Eight clauses about one position that nothing reads, written along one line.
      *
      * <p>Enough of them that an order arrived at by hashing would be some other order.
@@ -168,6 +250,131 @@ class AChoiceSaysWhatNothingElseSaidAboutAPositionTest {
         assertEquals(8, columns.size(), "one for each clause nothing reads");
         assertEquals(columns.stream().sorted().toList(), columns,
                 "they were met along the line, and nothing between there and here rearranged them");
+    }
+
+    /**
+     * A form nothing reads written beside the brackets leaves the choice answerable for nothing.
+     *
+     * <p>A conjunction of a choice is also the choice between the conjunctions, and the values are
+     * worked out that way — so read over that tree, both alternatives hold a form nothing reads and
+     * the choice comes out offering an alternative nothing could read. Neither alternative holds
+     * one. An author following it is sent to a choice that reads perfectly well, to lift something
+     * written somewhere else.
+     */
+    @Test
+    void aChoiceIsAnswerableForNothingWhereTheUnreadFormIsBesideIt() {
+        assertEquals(Set.of(), whatARuleIsAnswerableFor(BESIDE_THE_BRACKET, "x"),
+                "both alternatives were read, so the choice offered no alternative nothing could"
+                        + " read — whatever was written beside the brackets");
+        assertEquals(Set.of(UnreadReason.FORM_NOT_READ),
+                whatARuleIsAnswerableFor(BESIDE_THE_BRACKET, "y"),
+                "and what the conjunct beside them left is the conjunct's own, at the leaf it was"
+                        + " written as");
+    }
+
+    /**
+     * And the same form written inside one alternative leaves it answerable.
+     *
+     * <p>The control that makes the one above a claim rather than a spelling: the two models differ
+     * in where the form stands and in nothing else.
+     */
+    @Test
+    void aChoiceIsAnswerableWhereTheUnreadFormIsInsideAnAlternative() {
+        assertEquals(Set.of(UnreadReason.ALTERNATIVE_NOT_READ),
+                whatARuleIsAnswerableFor(INSIDE_ONE_ALTERNATIVE, "x"),
+                "the alternative beside the one naming `x` is one nothing could read, so what that"
+                        + " branch said of `x` binds nothing");
+    }
+
+    /**
+     * And a position only the conjunct beside the brackets names is not the choice's to answer for.
+     *
+     * <p>The other way the same rewriting is read as an author's work: distributed, the conjunct is
+     * part of each alternative, and the positions it reached are read as positions the alternative
+     * left open.
+     */
+    @Test
+    void aChoiceIsAnswerableForNothingAtAPositionItsAlternativesNeverReach() {
+        assertEquals(Set.of(),
+                whatARuleIsAnswerableFor(THE_CONJUNCT_NAMES_A_POSITION_OF_ITS_OWN, "y"),
+                "neither alternative names `y`, so nothing about it turns on which of them"
+                        + " anybody is in");
+        assertEquals(Set.of(UnreadReason.FORM_NOT_READ),
+                whatARuleIsAnswerableFor(THE_CONJUNCT_NAMES_A_POSITION_OF_ITS_OWN, "x"),
+                "while `x` is left by the form nothing reads, at the leaf it was written as");
+    }
+
+    /**
+     * And an alternative that constrains the position is still one nothing could read.
+     *
+     * <p>Held so that the three above are not answered by making a rule's account agree with what
+     * the position finally admits. Here the position comes out held to two strings and the choice is
+     * answerable all the same: had the branch been read, it might have turned out one nobody can be
+     * in, and then the position would be held to one. What a rule is answerable for and how wide a
+     * position ended up are two questions.
+     */
+    @Test
+    void anAlternativeThatConstrainsThePositionIsStillOneNothingCouldRead() {
+        assertEquals(Set.of(UnreadReason.ALTERNATIVE_NOT_READ),
+                whatARuleIsAnswerableFor(THE_UNREAD_FORM_IS_UNDER_AN_ALTERNATIVE, "x"),
+                "the form nothing reads stands under one alternative, which is what makes that"
+                        + " alternative one nothing could read");
+    }
+
+    /**
+     * And a branch nobody can be in leaves the choice above it nothing to be answerable for.
+     *
+     * <p>What such a branch could not read is not a rule of this declaration that went unread —
+     * there is no branch for an author to go and look at — so it is no part of what the choice
+     * above it offered either. Decided before the branches are, the alternative holding the dead
+     * one comes out as one nothing could read, and the choice above says so at a position that
+     * branch is the only thing to have reached.
+     */
+    @Test
+    void aBranchNobodyCanBeInLeavesTheChoiceAboveItNothingToAnswerFor() {
+        assertEquals(Set.of(UnreadReason.FORM_NOT_READ),
+                whatARuleIsAnswerableFor(THE_UNREAD_FORM_IS_IN_A_BRANCH_NOBODY_CAN_BE_IN, "x"),
+                "the alternative nothing could read is the form written beside the brackets, and"
+                        + " an author lifting it has everything there is to do here");
+        assertEquals(Set.of(),
+                whatARuleIsAnswerableFor(THE_UNREAD_FORM_IS_IN_A_BRANCH_NOBODY_CAN_BE_IN, "y"),
+                "and the form inside the branch nobody can be in went with it");
+    }
+
+    /**
+     * And a branch a neighbouring rule shows empty leaves the choice above it nothing either.
+     *
+     * <p>Which branches anybody can be in is the whole declaration's answer, so what an alternative
+     * nothing could read left open is not knowable until that is. Asked while the clauses are being
+     * read, the alternative holding the branch comes out as one nothing could read — the reading of
+     * it has given something up — and the choice above says so at a position that branch was the
+     * only thing to reach.
+     */
+    @Test
+    void aBranchANeighbourShowsEmptyLeavesTheChoiceAboveItNothingToAnswerFor() {
+        assertEquals(Set.of(), whatARuleIsAnswerableFor(A_NEIGHBOUR_SHOWS_THE_INNER_BRANCH_EMPTY,
+                        "x"),
+                "nobody can be in the branch the form nothing reads is in, so the alternative"
+                        + " holding it is one that was read whole");
+        assertEquals(Set.of(), whatARuleIsAnswerableFor(A_NEIGHBOUR_SHOWS_THE_INNER_BRANCH_EMPTY,
+                        "y"),
+                "and the form itself went with the branch");
+    }
+
+    /**
+     * And the same clauses without that neighbour keep it, which is what makes the one above a
+     * claim.
+     *
+     * <p>Nothing shows the inner branch empty here, so the alternative holding it is one nothing
+     * could read and the choice above is answerable at the position the other alternative
+     * promised. A reading that dropped what a nested choice left open would answer both models
+     * alike.
+     */
+    @Test
+    void andTheSameClausesWithoutThatNeighbourKeepIt() {
+        assertEquals(Set.of(UnreadReason.ALTERNATIVE_NOT_READ),
+                whatARuleIsAnswerableFor(THE_SAME_WITH_THE_INNER_BRANCH_STANDING, "x"),
+                "the branch stands, so the alternative holding it is one nothing could read");
     }
 
     /** What a rule of the declaration is answerable for at {@code field}. */

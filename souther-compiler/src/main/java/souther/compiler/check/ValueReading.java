@@ -38,7 +38,7 @@ sealed interface ValueReading {
 
     /** A declaration whose clauses hold of every value standing here, and the name it was reached
      *  by — which is what a clause of it resolves its fields against. */
-    record Owner(TypeSymbol.AtModule named, Hir.Data data) {}
+    record Owner(TypeSymbol.AtModule named) {}
 
     /** The declaration standing here, which a walk files what it has entered under and a reader
      *  supposing values names, or null where no declaration stands here. */
