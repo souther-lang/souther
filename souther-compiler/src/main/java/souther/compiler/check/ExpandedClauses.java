@@ -32,14 +32,20 @@ public final class ExpandedClauses {
 
     private final TypeKey declaration;
     private final List<Hir.InvariantClause> clauses;
+    private final CallsLeftStanding standing;
 
     /** Closed, for the reason written above. */
-    ExpandedClauses(TypeKey declaration, List<Hir.InvariantClause> clauses) {
+    ExpandedClauses(TypeKey declaration, List<Hir.InvariantClause> clauses,
+                    CallsLeftStanding standing) {
         if (declaration == null) {
             throw new IllegalArgumentException("expanded clauses are some declaration's");
         }
+        if (standing == null) {
+            throw new IllegalArgumentException("an expansion says what it left standing");
+        }
         this.declaration = declaration;
         this.clauses = List.copyOf(clauses);
+        this.standing = standing;
     }
 
     /**
@@ -52,7 +58,7 @@ public final class ExpandedClauses {
      * declaration's kind through a question about its rules.
      */
     static ExpandedClauses nothingToExpand(TypeKey declaration) {
-        return new ExpandedClauses(declaration, List.of());
+        return new ExpandedClauses(declaration, List.of(), CallsLeftStanding.NONE);
     }
 
     /** Which declaration these are the clauses of. */
@@ -66,6 +72,17 @@ public final class ExpandedClauses {
     }
 
     /**
+     * Which calls the expansion that produced these left standing.
+     *
+     * <p>Not read off the clauses. A helper applied in one of them is a call the expansion meant to
+     * leave or one it was supposed to remove, and the tree is the same either way; which it is was
+     * settled here and is carried rather than guessed at ({@link CallsLeftStanding}).
+     */
+    CallsLeftStanding standing() {
+        return standing;
+    }
+
+    /**
      * Two of these are one where they are the same clauses of the same declaration.
      *
      * <p>An answer of a query, so what settles it decides what downstream is asked to do again:
@@ -75,12 +92,13 @@ public final class ExpandedClauses {
     @Override
     public boolean equals(Object other) {
         return other instanceof ExpandedClauses each
-                && declaration.equals(each.declaration) && clauses.equals(each.clauses);
+                && declaration.equals(each.declaration) && clauses.equals(each.clauses)
+                && standing.equals(each.standing);
     }
 
     @Override
     public int hashCode() {
-        return declaration.hashCode() * 31 + clauses.hashCode();
+        return (declaration.hashCode() * 31 + clauses.hashCode()) * 31 + standing.hashCode();
     }
 
     @Override

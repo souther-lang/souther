@@ -1,0 +1,252 @@
+package souther.compiler.check;
+
+import souther.compiler.Compiler;
+import souther.compiler.ast.Hir;
+import souther.compiler.check.InvariantChecker.GaveUp;
+import souther.compiler.core.Core;
+import souther.compiler.query.Compilation;
+import souther.compiler.query.Scopes;
+import souther.compiler.types.BindingId;
+import souther.compiler.types.BindingOwner;
+import souther.compiler.types.Type;
+import souther.compiler.types.TypeKey;
+import souther.compiler.types.TypeSymbol;
+import souther.compiler.types.TypeSymbols;
+import souther.compiler.diag.SourcePos;
+
+import org.junit.jupiter.api.Test;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+/**
+ * The discharge check falls open on the limits it named and on nothing else.
+ *
+ * <p>It used to fall open on whatever a walk threw, so a representation refusing to be built and a
+ * shape the walk has no rule for arrived as one thing: both a {@code RuntimeException} from the same
+ * call, both read as "nothing could be analysed here", and the compile went on with the invariant
+ * quietly undischarged. A reader of what came out had no way back to which of the two it was.
+ *
+ * <p>What is held here is the other direction. A limit exists because something with the standing to
+ * say so made one, and a failure nobody made one of is not a limit — it leaves the analysis as what
+ * it is. The two halves of that are held apart, because either alone is satisfied by a check that
+ * gives up on everything or by one that gives up on nothing.
+ */
+class WhatFallsOpenIsWhatSomebodyNamedALimitTest {
+
+    /** A recursive helper is admissible in an invariant and is left standing by the expansion, and
+     *  a clause is read over the declaration's fields, which name no helper. */
+    private static final String STANDING = """
+            module demo
+            data 木 = { 子: Option<木> }
+            let 深さ (t: 木): Int = match t.子 with
+                | Some c -> 深さ(c) + 1
+                | None -> 0
+            data 制限木 = { root: 木 } invariant 深さ(root) >= 0
+            """;
+
+    /**
+     * The same helper left standing in a behavior's rule, where the reading is over the behavior's
+     * signature and reaches the helper's own.
+     */
+    private static final String STANDING_AND_READABLE = """
+            module demo
+            data 木 = { 子: Option<木> }
+            let 深さ (t: 木): Int = match t.子 with
+                | Some c -> 深さ(c) + 1
+                | None -> 0
+            data Depth = Int
+            behavior measure : (t: 木) -> Depth
+                constructs Depth
+                ensures deep = value.value == 深さ(t)
+            let measure (t) = Depth { value = 深さ(t) }
+            """;
+
+    /** The same shape with nothing standing: the clause reads a field and the language's own
+     *  operations, which is what the analysis has rules about. */
+    private static final String READABLE = """
+            module demo
+            data 制限木 = { root: Int } invariant root >= 0
+            """;
+
+    private static final SourcePos POS = new SourcePos(1, 1);
+
+    private static final ReadingPolicy POLICY = new ReadingPolicy(64, 12,
+            souther.compiler.values.AsACompilationAllows.admittedValues(),
+            souther.compiler.values.AsACompilationAllows.whatARuleLeaves());
+
+    private static List<GaveUp> compiling(String source) {
+        List<GaveUp> gaveUp = Collections.synchronizedList(new ArrayList<>());
+        InvariantChecker.GAVE_UP = gaveUp;
+        try {
+            Compiler.compileWithWarnings(source);
+        } finally {
+            InvariantChecker.GAVE_UP = null;
+        }
+        return gaveUp;
+    }
+
+    // --- what is a limit -------------------------------------------------------------------------
+
+    /**
+     * A call the expansion left standing that the clause's own reading cannot name.
+     *
+     * <p>Both halves are what makes it one. The expansion left the call standing because the helper
+     * recurses, which says the tree is the one it meant to produce; the reading is over the
+     * declaration's fields, which name no helper. Neither on its own is a limit, and the negative
+     * control below is a clause of the same shape with nothing standing in it.
+     */
+    @Test
+    void aStandingCallThisReadingCannotNameIsALimitItFallsOpenOn() {
+        List<GaveUp> gaveUp = compiling(STANDING);
+
+        assertFalse(gaveUp.isEmpty(), "the reading stopped on the standing call");
+        assertTrue(gaveUp.stream().allMatch(each -> each.why().said().contains("深さ")),
+                () -> "and every limit it met names that call: "
+                        + gaveUp.stream().map(GaveUp::why).toList());
+    }
+
+    /** And a clause with nothing standing in it is read to the end, so the answer above is about
+     *  the standing call and not about every clause this check meets. */
+    @Test
+    void andAClauseWithNothingStandingIsReadToTheEnd() {
+        assertTrue(compiling(READABLE).isEmpty(),
+                "nothing was left standing and nothing was refused, so nothing was owed");
+    }
+
+    /**
+     * And a standing call the reading <em>can</em> name is read like any other.
+     *
+     * <p>The half that keeps the answer above from being "a standing call stops this reading". The
+     * expansion leaves the same helper standing in a behavior's rule, and there the reading is over
+     * the behavior's signature, which reaches that helper's own — so nothing stops, and being left
+     * standing is not on its own a reason to.
+     */
+    @Test
+    void andAStandingCallThisReadingCanNameIsReadLikeAnyOther() {
+        assertTrue(compiling(STANDING_AND_READABLE).stream()
+                        .noneMatch(each -> each.where().startsWith("typing measure")),
+                () -> "the rule reaches the helper's signature, so reading it stops on nothing: "
+                        + compiling(STANDING_AND_READABLE));
+    }
+
+    // --- what is not ------------------------------------------------------------------------------
+
+    /**
+     * A failure nobody named a limit leaves the analysis rather than being recorded as one.
+     *
+     * <p>Raised where this compiler reads its own answers — a lookup of a declaration's expanded
+     * clauses — because that is what the swallowed failures were: not the program being unreadable,
+     * but this compiler failing to produce what it says it produces. Swallowed, it would leave a
+     * behavior with no findings, which is what a behavior whose every construction is proven leaves.
+     */
+    @Test
+    void aFailureNobodyNamedALimitLeavesTheAnalysis() {
+        Compilation c = answered(READABLE);
+        Core body = new Core.Int(1, Type.INT, POS);
+        // A parameter of a declared type, which is what makes the analysis read that declaration's
+        // clauses before it walks anything.
+        Scope params = heldTo(new Type.Ref(TypeSymbols.declared(new TypeKey("demo", "制限木"))));
+
+        assertEquals(InvariantChecker.Status.COMPLETE,
+                InvariantChecker.analyze(body, lookupOf(c), Map.of(), params, symbolsOf(c), POLICY)
+                        .status(),
+                "the control: read through a lookup that answers, this analysis runs to the end");
+
+        ExpandedClauseLookup broken = _ -> {
+            throw new IllegalStateException("this compiler could not read its own answer");
+        };
+        IllegalStateException why = assertThrows(IllegalStateException.class,
+                () -> InvariantChecker.analyze(body, broken, Map.of(), params, symbolsOf(c),
+                        POLICY),
+                "the analysis has no rule that makes this the program's problem");
+
+        assertEquals("this compiler could not read its own answer", why.getMessage(),
+                "and it arrives as what it is, rather than as an analysis that read nothing");
+    }
+
+    private static Scope heldTo(Type type) {
+        BindingId id = new BindingId(new BindingOwner.OfValue("demo", "f"), 0);
+        return Scope.of(Map.of(id, new Scope.Binding("v", type)));
+    }
+
+    /**
+     * A call standing in a tree no expansion named is not one of these limits either.
+     *
+     * <p>The same clause and the same reading, differing only in whether the expansion says it left
+     * the call there. Told that it did, this reading stops and the run-time check stands; told that
+     * it did not, the tree is one this compiler failed to expand, and the elaborator says so.
+     */
+    @Test
+    void aStandingCallNoExpansionNamedIsNotALimitButAFailure() {
+        Compilation c = answered(STANDING);
+        TypeSymbol.AtModule named = TypeSymbols.declared(new TypeKey("demo", "制限木"));
+        Hir.Data data = declarationOf(c, named);
+        TypeOps.Declared clause = expandedClauseOf(c, named, data);
+        Scope over = DataChecker.fieldScope(named, data, symbolsOf(c));
+        CheckContext ctx = CheckContext.of(symbolsOf(c)).forData(data).forDischarge();
+
+        assertInstanceOf(TypedClause.Stopped.class,
+                SecondaryClauseReading.of(clause.clause().expr(), clause.standing(), over, ctx,
+                        "a test"),
+                "the expansion says it left the call standing, so this reading stops on it");
+
+        assertThrows(IllegalStateException.class,
+                () -> SecondaryClauseReading.of(clause.clause().expr(), CallsLeftStanding.NONE,
+                        over, ctx, "a test"),
+                "and where no expansion left it there, it is this compiler that failed");
+    }
+
+    // --- what the expansion answers ---------------------------------------------------------------
+
+    /** The standing calls travel with the tree the expansion produced, rather than being worked out
+     *  again by a reader looking at a helper applied. */
+    @Test
+    void anExpansionSaysWhatItLeftStanding() {
+        Compilation c = answered(STANDING);
+        TypeSymbol.AtModule named = TypeSymbols.declared(new TypeKey("demo", "制限木"));
+        Hir.Data data = declarationOf(c, named);
+
+        assertFalse(expandedClauseOf(c, named, data).standing().leftNothing(),
+                "the recursive helper the clause names is left standing");
+    }
+
+    // --- reading the compilation ------------------------------------------------------------------
+
+    private static Compilation answered(String source) {
+        Compilation c = Compilation.ofSource(source, "Main");
+        c.answerEverything();
+        return c;
+    }
+
+    private static Symbols symbolsOf(Compilation c) {
+        return Scopes.derived(c.db(), c.modules().get(0)).value();
+    }
+
+    private static ExpandedClauseLookup lookupOf(Compilation c) {
+        return RuleReadings.declaredBy(c.db(), c.modules().get(0));
+    }
+
+    private static Hir.Data declarationOf(Compilation c, TypeSymbol.AtModule named) {
+        Hir.Data data = symbolsOf(c).declaredNode(named) instanceof Hir.Data it ? it : null;
+        assertNotNull(data, () -> named + " is declared by the source this reads");
+        return data;
+    }
+
+    private static TypeOps.Declared expandedClauseOf(Compilation c, TypeSymbol.AtModule named,
+                                                     Hir.Data data) {
+        List<TypeOps.Declared> reached = TypeOps.expandedInvariants(named, data, symbolsOf(c),
+                lookupOf(c)).reached();
+        assertEquals(1, reached.size(), () -> named + " writes the one clause this reads");
+        return reached.get(0);
+    }
+}

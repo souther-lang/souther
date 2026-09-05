@@ -99,10 +99,16 @@ public final class ClauseHelpers {
             // construction that appears only inside a helper's body written as an application
             // here and as a construction there, and what tells the two representations apart is
             // what {@link InliningPolicy} says and nothing else.
+            // What this one declaration's expansion left standing, taken from the run that made it.
+            // The inliner's own answer is about every declaration it was driven over, and a clause
+            // told that a call standing in another declaration stands in it would be read as one
+            // this cannot follow when nothing in it is.
+            Expansion<Hir.Def> expanded = inliner.expanding(() -> withInlinedInvariants(inliner, def));
+            CallsLeftStanding standing = CallsLeftStanding.of(expanded.standing());
             out.put(declares,
-                    NewtypeDesugar.rewriteInvariantsOf(withInlinedInvariants(inliner, def), symbols)
+                    NewtypeDesugar.rewriteInvariantsOf(expanded.value(), symbols)
                             instanceof Hir.Data d
-                            ? new ExpandedClauses(declares, d.invariants())
+                            ? new ExpandedClauses(declares, d.invariants(), standing)
                             : ExpandedClauses.nothingToExpand(declares));
         }
         return Map.copyOf(out);

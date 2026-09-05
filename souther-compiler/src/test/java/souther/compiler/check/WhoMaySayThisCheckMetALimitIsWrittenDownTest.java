@@ -1,0 +1,235 @@
+package souther.compiler.check;
+
+import org.junit.jupiter.api.Test;
+
+import java.io.IOException;
+import java.lang.classfile.ClassFile;
+import java.lang.classfile.ClassModel;
+import java.lang.classfile.MethodModel;
+import java.lang.classfile.instruction.InvokeInstruction;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.TreeMap;
+import java.util.TreeSet;
+import java.util.stream.Stream;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+
+/**
+ * Who may say that this check met a limit, and what each of them met.
+ *
+ * <p>The discharge check falls open on a limit and never on a failure, and which of the two
+ * something is, is decided where it was met rather than at the boundary that records it. So what
+ * matters is who may make one of these — a {@link WhatTheCheckCannotRead} — and that is a decision
+ * about the analysis rather than something an access modifier settles: a factory a package can reach
+ * is one anything in that package can call.
+ *
+ * <p><b>What this holds and what it does not.</b> It says who makes a limit today and what each of
+ * them is for; a new maker lands here and has to be written down as one of them, which is where the
+ * decision gets read. It does not say that a broad {@code catch} can never come back — a
+ * {@code catch} of everything inside an existing maker would leave these numbers where they are.
+ * That is held by the shape of the ways in instead: every one of them names what was met, and none
+ * takes a {@code Throwable}, so wrapping an arbitrary failure means writing a way in that says it
+ * does.
+ */
+class WhoMaySayThisCheckMetALimitIsWrittenDownTest {
+
+    private static final String LIMIT = "souther/compiler/check/WhatTheCheckCannotRead";
+
+    /** What hands back a limit: the class it is declared on, and its name. */
+    private record Producer(String owner, String name) implements Comparable<Producer> {
+
+        String shown() {
+            return owner.replace('/', '.').replace('$', '.') + "." + name;
+        }
+
+        @Override
+        public int compareTo(Producer other) {
+            return shown().compareTo(other.shown());
+        }
+    }
+
+    /** A way in, and what a caller of it has met. */
+    private record Licence(String who, String why) { }
+
+    /**
+     * Every way to come by a limit, and what each of them says was met.
+     *
+     * <p>Declared because the assertions below are only as wide as this is. A new factory lands here
+     * first, and writing it down is saying what an analysis may now fall open on.
+     */
+    private static final List<Licence> WAYS_IN = List.of(
+            new Licence("souther.compiler.check.WhatTheCheckCannotRead.standingCallHasNoSignatureHere",
+                    "a call the expansion left standing that this reading has no signature for"),
+            new Licence("souther.compiler.check.WhatTheCheckCannotRead.secondaryTypingDidNotFinish",
+                    "a clause the reading below the authoritative check could not type"),
+            new Licence("souther.compiler.check.WhatTheCheckCannotRead.theWalkLeftAnAnswerUnmade",
+                    "a walk that ran to the end and made none of the answers it is written to"
+                            + " produce"));
+
+    /**
+     * The ones that hand on a limit somebody else made.
+     *
+     * <p>Held apart from the ways in because they are a different finding. One more of these is one
+     * more reader of an answer already given; one more way in is a new thing an analysis may stop
+     * on, which is what the assertions below are watching for.
+     */
+    private static final List<Licence> HANDS_ON = List.of(
+            new Licence("souther.compiler.check.InvariantChecker.GaveUp.why",
+                    "what a recorded stop was, read back by a test in this package"),
+            new Licence("souther.compiler.check.SecondaryClauseReading.standingCallNothingHereNames",
+                    "the first standing call in a tree that nothing here names, or none"));
+
+    /**
+     * Who may say one was met. Adding to this is deciding that something else may make an analysis
+     * stop without the compile failing.
+     */
+    private static final List<Licence> MAY_SAY = List.of(
+            new Licence("souther.compiler.check.SecondaryClauseReading.of",
+                    "types a clause below the check that answers for the program"),
+            new Licence("souther.compiler.check.SecondaryClauseReading.standingCallNothingHereNames",
+                    "asks the expansion and the reading's own scope about a standing call"),
+            new Licence("souther.compiler.check.PathReachability.lambda$of$0",
+                    "reads which of a plan's comparisons the walk settled nothing about"));
+
+    @Test
+    void everyMethodThatHandsBackALimitIsWrittenDownAsOneOfTheTwo() throws IOException {
+        assertEquals(declared(WAYS_IN, HANDS_ON), shown(producers()),
+                "a method handing back a limit either makes one or hands on one that was made, and"
+                        + " which it is has to be said before anything asks who may call it. What"
+                        + " each of these is: " + why(WAYS_IN, HANDS_ON));
+    }
+
+    /** And that a limit is made only on the limit itself, so the ways in are all of them. */
+    @Test
+    void nothingMakesOneExceptTheWaysIn() throws IOException {
+        assertEquals(declared(WAYS_IN), shown(assembling()),
+                "a limit made anywhere else is one whose making nothing decided");
+    }
+
+    /**
+     * And that no way in takes an arbitrary failure.
+     *
+     * <p>This is the half that keeps a {@code catch} of everything from becoming a limit again in
+     * one line. A factory taking a {@code Throwable} would let any failure through while the count
+     * above stayed exactly where it is, and a census reading the same number would say nothing was
+     * decided.
+     */
+    @Test
+    void andNoneOfThemTakesAFailureItWasHandedRatherThanSomethingItMet() throws IOException {
+        Map<String, String> taking = new TreeMap<>();
+        for (ClassModel model : compiled()) {
+            if (!model.thisClass().asInternalName().equals(LIMIT)) {
+                continue;
+            }
+            for (MethodModel method : model.methods()) {
+                method.methodTypeSymbol().parameterList().forEach(each -> {
+                    if (each.descriptorString().equals("Ljava/lang/Throwable;")
+                            || each.descriptorString().equals("Ljava/lang/RuntimeException;")
+                            || each.descriptorString().equals("Ljava/lang/Exception;")) {
+                        taking.put(method.methodName().stringValue(), each.descriptorString());
+                    }
+                });
+            }
+        }
+        assertEquals(Map.of(), taking,
+                "a way in that takes whatever a caller caught is a way in that decides nothing");
+    }
+
+    @Test
+    void onlyAReaderThatMetOneSaysThisCheckMetALimit() throws IOException {
+        assertEquals(declared(MAY_SAY), callers(assembling()),
+                "a limit is made where one was met and nowhere else. What each of these met: "
+                        + why(MAY_SAY));
+    }
+
+    /** And that something does make one, so the rule above is not read over no classes at all. */
+    @Test
+    void andSomethingDoesSaySo() throws IOException {
+        assertFalse(callers(assembling()).isEmpty(),
+                "nothing makes a limit, so the rule above saw nothing");
+    }
+
+    @SafeVarargs
+    private static Map<String, String> declared(List<Licence>... licences) {
+        Map<String, String> out = new TreeMap<>();
+        for (List<Licence> each : licences) {
+            each.forEach(one -> out.put(one.who(), ""));
+        }
+        return out;
+    }
+
+    /** The ways in, which are the methods declared on the limit itself. */
+    private static Set<Producer> assembling() throws IOException {
+        return new TreeSet<>(producers().stream()
+                .filter(each -> each.owner().equals(LIMIT)).toList());
+    }
+
+    private static Map<String, String> shown(Set<Producer> producers) {
+        Map<String, String> out = new TreeMap<>();
+        producers.forEach(each -> out.put(each.shown(), ""));
+        return out;
+    }
+
+    @SafeVarargs
+    private static Map<String, String> why(List<Licence>... licences) {
+        Map<String, String> out = new LinkedHashMap<>();
+        for (List<Licence> each : licences) {
+            each.forEach(one -> out.put(one.who(), one.why()));
+        }
+        return out;
+    }
+
+    /** Everything the compiler declares that hands one back. */
+    private static Set<Producer> producers() throws IOException {
+        Set<Producer> out = new TreeSet<>();
+        for (ClassModel model : compiled()) {
+            String owner = model.thisClass().asInternalName();
+            for (MethodModel method : model.methods()) {
+                if (method.methodTypeSymbol().returnType().descriptorString()
+                        .equals("L" + LIMIT + ";")) {
+                    out.add(new Producer(owner, method.methodName().stringValue()));
+                }
+            }
+        }
+        assertFalse(out.isEmpty(), "nothing hands one back at all, so this says nothing");
+        return out;
+    }
+
+    /** Which methods call any of {@code watched}. */
+    private static Map<String, String> callers(Set<Producer> watched) throws IOException {
+        assertFalse(watched.isEmpty(), "no producer was watched, so this says nothing");
+        Map<String, String> calls = new TreeMap<>();
+        for (ClassModel model : compiled()) {
+            String from = model.thisClass().asInternalName().replace('/', '.').replace('$', '.');
+            for (MethodModel method : model.methods()) {
+                method.code().ifPresent(code -> code.forEach(element -> {
+                    if (element instanceof InvokeInstruction call
+                            && watched.contains(new Producer(call.owner().asInternalName(),
+                                    call.name().stringValue()))) {
+                        calls.put(from + "." + method.methodName().stringValue(), "");
+                    }
+                }));
+            }
+        }
+        return calls;
+    }
+
+    private static List<ClassModel> compiled() throws IOException {
+        Path root = Path.of("target", "classes").toAbsolutePath();
+        List<ClassModel> out = new ArrayList<>();
+        try (Stream<Path> walk = Files.walk(root)) {
+            for (Path each : walk.filter(p -> p.toString().endsWith(".class")).toList()) {
+                out.add(ClassFile.of().parse(Files.readAllBytes(each)));
+            }
+        }
+        assertFalse(out.isEmpty(), "no compiled class was read at all, so this says nothing");
+        return out;
+    }
+}

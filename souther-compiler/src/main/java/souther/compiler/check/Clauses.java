@@ -99,22 +99,13 @@ final class Clauses {
      * not, and it never was — the elaborator does not answer null of its own accord, so every one of
      * those was an exception caught here and dropped.
      */
-    TypedClause typed(Hir.Expr clause, TypeSymbol.AtModule named, Hir.Data data) {
+    TypedClause typed(Hir.Expr clause, CallsLeftStanding standing, TypeSymbol.AtModule named,
+                      Hir.Data data) {
         return typed.computeIfAbsent(named, _ -> new IdentityHashMap<>())
-                .computeIfAbsent(clause, written -> {
-                    try {
-                        return new TypedClause.Typed(Elaborator.elaborate(written,
-                                DataChecker.fieldScope(named, data, symbols),
-                                CheckContext.of(symbols).forData(data).forDischarge(),
-                                Type.BOOL));
-                    } catch (RuntimeException why) {
-                        // Recorded rather than dropped. Measured over the whole suite, every null
-                        // this used to answer was one of these — the elaborator never answers null
-                        // of its own accord — so what was being lost was the whole of it.
-                        InvariantChecker.gaveUp("typing a clause of " + named, why);
-                        return new TypedClause.Stopped();
-                    }
-                });
+                .computeIfAbsent(clause, written -> SecondaryClauseReading.of(written, standing,
+                        DataChecker.fieldScope(named, data, symbols),
+                        CheckContext.of(symbols).forData(data).forDischarge(),
+                        "typing a clause of " + named));
     }
 
     /**
@@ -125,11 +116,12 @@ final class Clauses {
      * that is not there, and the clause is left to the run-time check rather than read against
      * nothing.
      */
-    Core statedAt(Hir.Expr clause, TypeSymbol.AtModule named, Hir.Data data, Map<BindingId, Core> given) {
+    Core statedAt(Hir.Expr clause, CallsLeftStanding standing, TypeSymbol.AtModule named,
+                  Hir.Data data, Map<BindingId, Core> given) {
         // Fail-open: a clause with no form leaves its run-time check standing, whichever way the
         // form went missing. Which of the two it was matters to a reader that publishes a sentence
         // about the clause, and this is not one.
-        Core stated = typed(clause, named, data).orNull();
+        Core stated = typed(clause, standing, named, data).orNull();
         if (stated == null) {
             return null;
         }
@@ -149,7 +141,7 @@ final class Clauses {
         List<Stated> stated = new ArrayList<>();
         List<RuleRef.Invariant> lost = new ArrayList<>();
         for (TypeOps.Declared inv : declared(named, data)) {
-            Core one = statedAt(inv.clause().expr(), named, data, given);
+            Core one = statedAt(inv.clause().expr(), inv.standing(), named, data, given);
             if (one != null) {
                 stated.add(new Stated(Clause.of(inv), one));
             } else {

@@ -1252,7 +1252,21 @@ public final class TypeOps {
      * same thing in each.
      */
     public record Declared(TypeSymbol.AtModule declaredOn, int ordinal,
-                           Hir.InvariantClause clause) {}
+                           Hir.InvariantClause clause, CallsLeftStanding standing) {
+
+        public Declared {
+            if (standing == null) {
+                throw new IllegalArgumentException("a clause says what its expansion left standing");
+            }
+        }
+
+        /** A clause as its author wrote it, which no expansion has been over: every helper it names
+         *  is one nothing left standing, and a reading meeting one is reading a tree it was not
+         *  handed. */
+        Declared(TypeSymbol.AtModule declaredOn, int ordinal, Hir.InvariantClause clause) {
+            this(declaredOn, ordinal, clause, CallsLeftStanding.NONE);
+        }
+    }
 
     /**
      * The same clauses {@link #settledInvariants} answers, each with the declaration it was written
@@ -1315,7 +1329,8 @@ public final class TypeOps {
             case ExpandedClauseResult.Found(ExpandedClauses clauses) -> {
                 List<Declared> out = new ArrayList<>();
                 for (int ordinal = 0; ordinal < clauses.clauses().size(); ordinal++) {
-                    out.add(new Declared(named, ordinal, clauses.clauses().get(ordinal)));
+                    out.add(new Declared(named, ordinal, clauses.clauses().get(ordinal),
+                            clauses.standing()));
                 }
                 yield new ExpandedRules(out, true);
             }

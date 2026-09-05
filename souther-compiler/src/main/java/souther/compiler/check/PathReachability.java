@@ -213,30 +213,25 @@ public final class PathReachability {
         Map<ControlPointId, Reachability> out = new LinkedHashMap<>();
         Map<souther.compiler.coverage.ComparisonOccurrence,
                 souther.compiler.reach.ComparisonArrival> arriving = new LinkedHashMap<>();
-        boolean walked = false;
-        try {
-            PathEngine.Entered in = PathEngine.Entered.nothing();
-            for (Map.Entry<BindingId, Scope.Binding> p : params.bindings().entrySet()) {
-                in = engine.enter(new Core.Read(p.getValue().name(), p.getKey(),
-                        p.getValue().type(), body.pos()), in.known(), in.at());
-            }
-            PathReachability reading =
-                    new PathReachability(engine, plan, read, source.symbols(), out, arriving);
-            reading.entry = in.known();
-            reading.entered = in.at();
-            reading.walk(body, in.known(), in.at(),
-                            InputReads.ofParameters(read.parameterReads(), ElementBindings.NONE),
-                            List.of(), true);
-            walked = true;
-        } catch (RuntimeException why) {
-            // The run-time check is the backstop for the analysis this borrows, and it is the
-            // backstop for this too: what was not read leaves an obligation standing.
-            InvariantChecker.gaveUp("reachability", why);
+        PathEngine.Entered in = PathEngine.Entered.nothing();
+        for (Map.Entry<BindingId, Scope.Binding> p : params.bindings().entrySet()) {
+            in = engine.enter(new Core.Read(p.getValue().name(), p.getKey(),
+                    p.getValue().type(), body.pos()), in.known(), in.at());
         }
-        if (walked) {
-            unanswered(body, plan, out, arriving).ifPresent(why ->
-                    InvariantChecker.gaveUp("reachability", new IllegalStateException(why)));
-        }
+        PathReachability reading =
+                new PathReachability(engine, plan, read, source.symbols(), out, arriving);
+        reading.entry = in.known();
+        reading.entered = in.at();
+        reading.walk(body, in.known(), in.at(),
+                        InputReads.ofParameters(read.parameterReads(), ElementBindings.NONE),
+                        List.of(), true);
+        // A walk that ran to the end and made none of the answers it is written to produce. Its own
+        // limit and said as one: the analysis this borrows is open about what it reads, so a
+        // comparison it reached and settled nothing about leaves the obligation standing. A failure
+        // of the walk itself is not this and is not caught — it is this compiler's.
+        unanswered(body, plan, out, arriving).ifPresent(why ->
+                InvariantChecker.gaveUp("reachability",
+                        WhatTheCheckCannotRead.theWalkLeftAnAnswerUnmade(why)));
         return new Answers(out, arriving);
     }
 
