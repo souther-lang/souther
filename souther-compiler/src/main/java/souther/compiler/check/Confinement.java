@@ -33,7 +33,7 @@ import java.util.function.Function;
  * that something exists whenever the reading that was asked had nothing to say about the rules, and
  * that sentence was written in five places. Forbidding the spelling leaves a sixth to be written; so
  * the halves are not separately in hand, and the question has one implementation
- * ({@link #admitted}) that no holder can answer around.
+ * ({@link #admission(OrderedIntervals, Map, Function, Function)}) that no holder can answer around.
  *
  * <p><b>Nothing is admitted where the ranges refuse every alternative, and something is admitted
  * only where they were asked.</b> That asymmetry is the whole of what went wrong. Either half
