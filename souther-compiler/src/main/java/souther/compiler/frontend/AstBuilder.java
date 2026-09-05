@@ -153,13 +153,26 @@ public final class AstBuilder {
         for (SyntaxNode n : file.childNodes()) {
             switch (n.kind()) {
                 case IMPORT_DECL -> imports.add(importDecl(n));
-                case DATA_DEF -> defs.add(readingOfData(n).dataDef(n));
-                case BEHAVIOR_DEF -> behaviors.add(readingOfBehavior(n).behaviorDef(n));
-                case FN_DEF -> fns.add(readingOfDefinition(n).fnDef(n));
+                case DATA_DEF -> {
+                    WrittenName declared = nameOf(firstIdentToken(n));
+                    defs.add(reading(new WrittenOwner.Declaration(
+                            new TypeKey(moduleName, declared.canonical()))).dataDef(n, declared));
+                }
+                case BEHAVIOR_DEF -> {
+                    WrittenName declared = nameOf(firstIdentToken(n));
+                    behaviors.add(reading(new WrittenOwner.Stated(moduleName, declared.canonical()))
+                            .behaviorDef(n, declared));
+                }
+                case FN_DEF -> {
+                    WrittenName declared = nameOf(firstIdentToken(n));
+                    fns.add(reading(new WrittenOwner.Body(moduleName, declared.canonical()))
+                            .fnDef(n, declared));
+                }
                 case EXAMPLE_DEF -> {
-                    String target = exampleTarget(n);
-                    examples.add(reading(new WrittenOwner.Examples(text, moduleName, target))
-                            .example(n, target));
+                    SyntaxToken target = exampleTarget(n);
+                    String named = target == null ? "" : ident(target);
+                    examples.add(reading(new WrittenOwner.Examples(text, moduleName, named))
+                            .example(n, target, named));
                 }
                 case FAKE_DEF -> {
                     Ast.Var target = behaviorNameAfter(n, 1);
@@ -197,9 +210,10 @@ public final class AstBuilder {
         for (SyntaxNode n : file.childNodes()) {
             switch (n.kind()) {
                 case EXAMPLE_DEF -> {
-                    String exampled = exampleTarget(n);
-                    examples.add(reading(new WrittenOwner.Examples(text, moduleName, exampled))
-                            .example(n, exampled));
+                    SyntaxToken exampled = exampleTarget(n);
+                    String named = exampled == null ? "" : ident(exampled);
+                    examples.add(reading(new WrittenOwner.Examples(text, moduleName, named))
+                            .example(n, exampled, named));
                 }
                 case FAKE_DEF -> {
                     Ast.Var stoodInFor = behaviorNameAfter(n, 1);
@@ -208,7 +222,9 @@ public final class AstBuilder {
                 }
                 case EXAMPLES_FILE_HEADER -> { /* the header itself */ }
                 case FN_DEF -> {
-                    Ast.FnDef fn = readingOfDefinition(n).fnDef(n);
+                    WrittenName declared = nameOf(firstIdentToken(n));
+                    Ast.FnDef fn = reading(new WrittenOwner.Body(moduleName, declared.canonical()))
+                            .fnDef(n, declared);
                     if (!fn.params().isEmpty()) {
                         throw onlyExamples(n);
                     }
@@ -299,35 +315,23 @@ public final class AstBuilder {
         return out;
     }
 
-    /** Which behavior an {@code example} block writes rows for. The contextual {@code example} lexes
-     *  as an identifier, so the target is the second identifier token. */
-    private String exampleTarget(SyntaxNode n) {
+    /** Which token names the behavior an {@code example} block writes rows for. The contextual
+     *  {@code example} lexes as an identifier, so the target is the second identifier token; where
+     *  the parser recovered from a block with no target there is none. */
+    private SyntaxToken exampleTarget(SyntaxNode n) {
         List<SyntaxToken> idents = identTokens(n);
-        return idents.size() >= 2 ? ident(idents.get(1)) : "";
+        return idents.size() >= 2 ? idents.get(1) : null;
     }
 
     // --- who a top-level item is written by ---
     //
-    // The name is read here, before the item is, because what numbers the item's constructs is
-    // settled by which item it is. Each is the address the syntax gives, which is what a parse has:
-    // whether a `let` implements a behavior is a question about the module around it.
-
-    private Reading readingOfData(SyntaxNode n) {
-        return reading(new WrittenOwner.Declaration(
-                new TypeKey(moduleName, nameOf(firstIdentToken(n)).canonical())));
-    }
-
-    /** A behavior's declaration of itself. Its own owner and not its body's: the two are read as two
-     *  questions, and one owner for both would give the first construct of each one number. */
-    private Reading readingOfBehavior(SyntaxNode n) {
-        return reading(new WrittenOwner.Stated(moduleName,
-                nameOf(firstIdentToken(n)).canonical()));
-    }
-
-    private Reading readingOfDefinition(SyntaxNode n) {
-        return reading(new WrittenOwner.Body(moduleName,
-                nameOf(firstIdentToken(n)).canonical()));
-    }
+    // Read once, here, and handed to the reading and to what it builds. What numbers an item's
+    // constructs is settled by which item it is, so the two are one reading of one token: read
+    // again below, the owner counting the numbers and the declaration carrying them could be told
+    // apart by nothing.
+    //
+    // The address is the one the syntax gives, which is what a parse has. Whether a `let`
+    // implements a behavior is a question about the module around it.
 
     // --- types ---
     //
@@ -535,8 +539,7 @@ public final class AstBuilder {
 
     // --- data ---
 
-    private Ast.Def dataDef(SyntaxNode n) {
-        WrittenName declared = nameOf(firstIdentToken(n));
+    private Ast.Def dataDef(SyntaxNode n, WrittenName declared) {
         String name = declared.canonical();
         SourcePos pos = pos(n);
         List<Ast.InvariantClause> clauses = invariants(n, name);
@@ -647,8 +650,7 @@ public final class AstBuilder {
 
     // --- behavior ---
 
-    private Ast.BehaviorDef behaviorDef(SyntaxNode n) {
-        WrittenName declared = nameOf(firstIdentToken(n));
+    private Ast.BehaviorDef behaviorDef(SyntaxNode n, WrittenName declared) {
         SourcePos pos = pos(n);
         Optional<SyntaxNode> sig = n.child(SyntaxKind.BEHAVIOR_SIG);
         if (sig.isPresent()) {
@@ -733,8 +735,7 @@ public final class AstBuilder {
 
     // --- fn ---
 
-    private Ast.FnDef fnDef(SyntaxNode n) {
-        WrittenName declared = nameOf(firstIdentToken(n));
+    private Ast.FnDef fnDef(SyntaxNode n, WrittenName declared) {
         SourcePos pos = pos(n);
         List<Ast.FnParam> params = new ArrayList<>();
         // parallel to params: the pattern a parameter was written as, or null where it was a name
@@ -1538,15 +1539,16 @@ public final class AstBuilder {
 
     // --- example rows and stand-ins ---
 
-    /** {@code example <target> | rows...}, read for the owner {@code target} names. */
-    private Ast.Example example(SyntaxNode n, String target) {
-        List<SyntaxToken> idents = identTokens(n);
-        SourcePos pos = idents.size() >= 2 ? posOf(idents.get(1)) : pos(n);
+    /** {@code example <target> | rows...}, read for the owner the target names. Which token that is
+     *  was settled where the owner was, so the name and the place a report about the block is sent
+     *  are one reading of one token. */
+    private Ast.Example example(SyntaxNode n, SyntaxToken target, String named) {
+        SourcePos pos = target == null ? pos(n) : posOf(target);
         List<Ast.ExampleRow> rows = new ArrayList<>();
         for (SyntaxNode row : childNodes(n, SyntaxKind.EXAMPLE_ROW)) {
             rows.add(exampleRow(row));
         }
-        return new Ast.Example(target, rows, pos);
+        return new Ast.Example(named, rows, pos);
     }
 
     /** {@code [ "name" : ] ( inputs ) -> expected}. The name is a leading string token; the inputs are

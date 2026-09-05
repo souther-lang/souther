@@ -1,6 +1,7 @@
 package souther.compiler.frontend;
 
 import souther.compiler.ast.Ast;
+import souther.compiler.diag.SourcePos;
 import souther.test.RepositoryLayout;
 
 import org.junit.jupiter.api.Test;
@@ -52,35 +53,68 @@ class WhatIsWrittenBesideADefinitionDoesNotNumberItTest {
     /** What the probe is filed under among what a module declares. */
     private static final String THE_PROBE = "let aProbeThatNumbersNothing";
 
+    /**
+     * The sources this asks nothing of, and why: they declare nothing, so there is nothing for a
+     * definition written ahead of them to number.
+     *
+     * <p>Written down rather than passed over. A source dropped where it is met leaves the property
+     * holding over whatever was left and says nothing about which sources those were, which is the
+     * shape of an answer that shrinks without anybody noticing.
+     */
+    private static final List<String> DECLARES_NOTHING =
+            List.of("souther-compiler/src/main/resources/souther/instant.sou");
+
     @Test
     void aDefinitionIsReadTheSameWhateverIsWrittenBeforeIt() {
-        List<String> corpus = everySourceTheRepositoryCarries();
+        Map<String, String> corpus = everySourceTheRepositoryCarries();
         assertFalse(corpus.isEmpty(), "a property over no source would hold for any reason");
 
         List<String> moved = new ArrayList<>();
+        List<String> refused = new ArrayList<>();
+        List<String> declaringNothing = new ArrayList<>();
         int compared = 0;
-        for (String source : corpus) {
-            Ast.Module numbersNothing = parsed(withAProbe(source, NUMBERS_NOTHING));
-            Ast.Module numbersOneMore = parsed(withAProbe(source, NUMBERS_ONE_MORE));
+        for (Map.Entry<String, String> each : corpus.entrySet()) {
+            String source = each.getValue();
+            Ast.Module written = parsed(source);
+            if (written == null || whereItsDefinitionsBegin(written).isEmpty()) {
+                // A source that declares nothing has nothing for a definition written ahead of it
+                // to number, and one the parser refuses as it stands is not this property's to ask
+                // about. Both are said below rather than passed over here.
+                declaringNothing.add(each.getKey());
+                continue;
+            }
+            Ast.Module numbersNothing = parsed(withAProbe(written, source, NUMBERS_NOTHING));
+            Ast.Module numbersOneMore = parsed(withAProbe(written, source, NUMBERS_ONE_MORE));
             if (numbersNothing == null || numbersOneMore == null) {
-                continue;   // not a source this asks about: the parser refused it
+                // Said rather than passed over. A source dropped here leaves the property holding
+                // over whatever was left, and nothing would say which sources that was.
+                refused.add(each.getKey());
+                continue;
             }
             Map<String, Object> before = whatItDeclares(numbersNothing);
             Map<String, Object> after = whatItDeclares(numbersOneMore);
-            for (Map.Entry<String, Object> each : before.entrySet()) {
-                Object beside = after.get(each.getKey());
+            for (Map.Entry<String, Object> declared : before.entrySet()) {
+                Object beside = after.get(declared.getKey());
                 // The probe is what differs between the two, and is the one definition this asks
                 // nothing about.
-                if (beside == null || each.getKey().equals(THE_PROBE)) {
+                if (beside == null || declared.getKey().equals(THE_PROBE)) {
                     continue;
                 }
                 compared++;
-                if (!each.getValue().equals(beside)) {
-                    moved.add(numbersNothing.name() + " " + each.getKey());
+                if (!declared.getValue().equals(beside)) {
+                    moved.add(numbersNothing.name() + " " + declared.getKey());
                 }
             }
         }
 
+        assertEquals(List.of(), refused,
+                "these are sources this repository carries and the property was not asked of them,"
+                        + " so what it holds is about the rest. A source that cannot be read with a"
+                        + " definition written ahead of it belongs here with the reason");
+        assertEquals(DECLARES_NOTHING, declaringNothing,
+                "a source this asks nothing of is named here with the reason. One that has left the"
+                        + " list has definitions now and is asked about; one that has joined it"
+                        + " stopped declaring anything, and either is a thing to know");
         assertTrue(compared > 0, "nothing was compared, so nothing was held");
         assertEquals(List.of(), moved,
                 "these are read differently for a definition written before them that numbers one"
@@ -96,24 +130,52 @@ class WhatIsWrittenBesideADefinitionDoesNotNumberItTest {
      */
     @Test
     void andTheTwoProbesAreToldApartByWhatTheyNumber() {
-        Ast.Module numbersNothing = parsed(withAProbe("module probe exposing ( )\n",
-                NUMBERS_NOTHING));
-        Ast.Module numbersOneMore = parsed(withAProbe("module probe exposing ( )\n",
-                NUMBERS_ONE_MORE));
+        String declaringOne = "module probe exposing ( )\n\nlet beside = 1\n";
+        Ast.Module written = parsed(declaringOne);
+        Ast.Module numbersNothing =
+                parsed(withAProbe(written, declaringOne, NUMBERS_NOTHING));
+        Ast.Module numbersOneMore =
+                parsed(withAProbe(written, declaringOne, NUMBERS_ONE_MORE));
 
         assertNotEquals(whatItDeclares(numbersNothing).get(THE_PROBE),
                 whatItDeclares(numbersOneMore).get(THE_PROBE),
                 "the probe that numbers one more is the same definition either way");
     }
 
-    /** {@code source} with {@code probe} written as its first definition — after the header, so that
-     *  the header is still the first line and one line is added either way. */
-    private static String withAProbe(String source, String probe) {
-        int firstLine = source.indexOf('\n');
-        if (firstLine < 0) {
-            return source + "\n" + probe + "\n";
+    /**
+     * {@code source} with {@code probe} written as its first definition.
+     *
+     * <p>Placed where the source says its definitions begin and not at a line counted from the top:
+     * a file may open with anything the grammar lets it open with — a comment, a header written over
+     * several lines, imports — and a probe written into the middle of that is a source the parser
+     * refuses. Where it goes is read off the parse, and one line is added either way, so nothing
+     * moves between the two.
+     *
+     * <p>Null where the source declares nothing, there being no definition for one written ahead of
+     * it to number.
+     */
+    private static String withAProbe(Ast.Module written, String source, String probe) {
+        int firstDefinition = Integer.MAX_VALUE;
+        for (SourcePos pos : whereItsDefinitionsBegin(written)) {
+            firstDefinition = Math.min(firstDefinition, pos.line());
         }
-        return source.substring(0, firstLine + 1) + probe + "\n" + source.substring(firstLine + 1);
+        if (firstDefinition == Integer.MAX_VALUE) {
+            return null;
+        }
+        List<String> lines = new ArrayList<>(List.of(source.split("\n", -1)));
+        lines.add(firstDefinition - 1, probe);
+        return String.join("\n", lines);
+    }
+
+    /** Where each thing the module declares is written. */
+    private static List<SourcePos> whereItsDefinitionsBegin(Ast.Module module) {
+        List<SourcePos> begins = new ArrayList<>();
+        module.defs().forEach(it -> begins.add(it.pos()));
+        module.behaviors().forEach(it -> begins.add(it.pos()));
+        module.fns().forEach(it -> begins.add(it.pos()));
+        module.examples().forEach(it -> begins.add(it.pos()));
+        module.fakes().forEach(it -> begins.add(it.pos()));
+        return begins;
     }
 
     /** The module, or null where the parser refused the source. */
@@ -146,17 +208,17 @@ class WhatIsWrittenBesideADefinitionDoesNotNumberItTest {
         return declared;
     }
 
-    /** Every {@code .sou} file the repository carries: the corpora, the models written to be worked
-     *  with, and the library the language ships. */
-    private static List<String> everySourceTheRepositoryCarries() {
+    /** Every {@code .sou} file the repository carries, by where it is written: the corpora, the
+     *  models written to be worked with, and the library the language ships. */
+    private static Map<String, String> everySourceTheRepositoryCarries() {
         Path root = RepositoryLayout.ofWorkingDirectory().root();
-        List<String> sources = new ArrayList<>();
+        Map<String, String> sources = new LinkedHashMap<>();
         try (Stream<Path> walk = Files.walk(root)) {
             for (Path each : walk.filter(Files::isRegularFile)
                     .filter(it -> it.getFileName().toString().endsWith(".sou"))
                     .filter(it -> !it.toString().contains("/target/"))
                     .sorted().toList()) {
-                sources.add(Files.readString(each));
+                sources.put(root.relativize(each).toString(), Files.readString(each));
             }
         } catch (IOException e) {
             throw new UncheckedIOException(e);
