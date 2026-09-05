@@ -104,6 +104,13 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
         // them was too much would be told about whichever the building reached last. One word with
         // `PatternTooCostly` out there, where both are a set the rules name not being worked out.
         table.put("RulesNotHandedOnAsSets", "EXACT_VALUES_TOO_COSTLY/MAY_CHANGE");
+        // The same shape of row and its own word, which is the point of it. That one is a position
+        // that could not hand on what its declarations leave, and this is a behavior's own rules
+        // about the position not being told apart — so a position answered to the letter by its
+        // declaration still lands here, and an author given that word would go and simplify a
+        // declaration that was never the matter. A group again, so no rule is named as the
+        // expensive one, and a run allowed more may get past it.
+        table.put("BehaviorDistinctionsTooCostly", "BEHAVIOR_DISTINCTIONS_TOO_COSTLY/MAY_CHANGE");
         // One word with `ComparisonBetweenPositions` below, and on purpose: they are the two
         // readings of `a < b`, opposite sentences about this compiler, and a document promises
         // its reader which kind of thing stopped a derivation rather than which reader stopped.
@@ -143,6 +150,12 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
         // what it admits for a row to be owed at, so there is nothing to ask an author for.
         table.put("RuleRestrictingToAdmittedValues",
                 "POSITION_RESTRICTED_TO_WHAT_A_RULE_ADMITS/-");
+        // And its own row beside those four. This one is about the position and was read to the
+        // end, and every value the position holds comes out one side of it — so unlike the first
+        // three there is a rule to send an author to, and unlike the fourth the values are left
+        // where they were found. Nothing is owed: the rule states no second class for a row to be
+        // asked for, and no measurement is weakened by it.
+        table.put("PredicateTellingNothingApart", "RULE_TELLS_NOTHING_APART/-");
         return table;
     }
 
@@ -373,6 +386,7 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
                 new BlockReason.OrderedExtentTooCostly(
                         souther.compiler.regex.Meter.Stopped.ONE_MACHINE),
                 new BlockReason.ExactValuesTooCostly(),
+                new BlockReason.BehaviorDistinctionsTooCostly(),
                 new BlockReason.RulesNotHandedOnAsSets(),
                 new BlockReason.ValueRuleRelatingTwoPositions(),
                 new BlockReason.CompetingCoordinates(),
@@ -383,6 +397,7 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
                 new BlockReason.ComparisonBetweenPositions(),
                 new BlockReason.ComparisonOverARun(),
                 new BlockReason.RuleRestrictingToAdmittedValues(),
+                new BlockReason.PredicateTellingNothingApart(),
                 new BlockReason.TypeUnresolved(),
                 new BlockReason.RecursiveExpansion(
                         souther.compiler.types.TypeSymbols.declared(

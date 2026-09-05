@@ -63,7 +63,7 @@ class WhoMayReadWhatAStringPredicateMeansTest {
     /**
      * Every class that reads one, and what it reads it for.
      *
-     * <p>Three, and each asks a different question of the same table.
+     * <p>Four, and each asks a different question of the same table.
      *
      * <p>{@code AdmissibleReading} turns the clause into the strings it admits, which is the one
      * place what a rule means about a position is worked out. Everything a later reader says about
@@ -84,10 +84,11 @@ class WhoMayReadWhatAStringPredicateMeansTest {
      * values it left is a second answer to a question that has an owner. So is a row for
      * {@code InvariantChecker}, which is where the edge was.
      *
-     * <p>The two rows in {@code partition} are the walk that finds a rule in a body and the reading
-     * that offers a value, and neither says what a rule means about a position. What each takes is
-     * written beside it. A row for anything in that package that draws lines, counts classes or
-     * writes a report is the same edge one package over.
+     * <p>The rows in {@code partition} are the walk that finds a rule in a body, what that walk
+     * hands on, the crossing that turns it into sets, and the reading that offers a value. None of
+     * them says what a rule means about a position. What each takes is written beside it, and a row
+     * for anything in that package that draws lines, counts classes or writes a report is the same
+     * edge one package over.
      */
     private static final String READS = "souther/compiler/check/AdmissibleReading -> " + OWNER;
 
@@ -115,6 +116,23 @@ class WhoMayReadWhatAStringPredicateMeansTest {
     /** And what the walk hands on, which names the answer it carries. */
     private static final String A_BODYS_RULE =
             "souther/compiler/partition/PredicateReadings$Reading -> " + OWNER;
+
+    /**
+     * And what does something with that answer, which is the one thing left to do with it.
+     *
+     * <p>Not a fourth reader of what a rule means. Every outcome of the reading was settled by the
+     * table before this holds one, and what happens here is the decision the outcomes were kept
+     * apart for: a rule read as the strings it accepts becomes the two plans for either side of it,
+     * and a rule read no further becomes what a reader is told instead. Handed only the strings, a
+     * reader would have to work out for itself which rules it had not been given, under a word for
+     * a limit nothing reached.
+     *
+     * <p>Which is why the outcomes reach here and the text does not. The strings a rule states are
+     * taken as they came; what an author wrote them in, and how it was reached, are the walk's and
+     * are gone by this point.
+     */
+    private static final String WHAT_A_BODYS_RULE_DIVIDES =
+            "souther/compiler/partition/SetDivisions -> " + OWNER;
 
     private static final String IN_A_DESCRIPTOR = " (in a descriptor)";
 
@@ -152,7 +170,17 @@ class WhoMayReadWhatAStringPredicateMeansTest {
             A_BODYS_RULE + "$Reading",
             A_BODYS_RULE + "$Stated",
             A_BODYS_RULE + "$Stated#reading()L" + OWNER + "$Reading;",
-            A_BODYS_RULE + "$Stated#subject()Lsouther/compiler/core/Core;");
+            A_BODYS_RULE + "$Stated#subject()Lsouther/compiler/core/Core;",
+            WHAT_A_BODYS_RULE_DIVIDES,
+            WHAT_A_BODYS_RULE_DIVIDES + IN_A_DESCRIPTOR,
+            WHAT_A_BODYS_RULE_DIVIDES + "$Reading",
+            WHAT_A_BODYS_RULE_DIVIDES + "$Reading$Accepting",
+            WHAT_A_BODYS_RULE_DIVIDES
+                    + "$Reading$Accepting#accepts()Lsouther/compiler/regex/PatternSyntax;",
+            WHAT_A_BODYS_RULE_DIVIDES + "$Reading$PatternNotRead",
+            WHAT_A_BODYS_RULE_DIVIDES
+                    + "$Reading$PatternNotRead#why()Lsouther/compiler/regex/PatternRead$Unsupported;",
+            WHAT_A_BODYS_RULE_DIVIDES + "$Reading$WrittenArgumentNotKnown");
 
     @Test
     void everyClassThatReadsOneIsWrittenDownWithWhatItReadsItFor() {

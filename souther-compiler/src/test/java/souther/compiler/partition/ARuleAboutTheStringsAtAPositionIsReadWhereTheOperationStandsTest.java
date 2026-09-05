@@ -7,7 +7,6 @@ import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.check.StringPredicates;
 import souther.compiler.inputs.InputDomain;
-import souther.compiler.inputs.InputReads;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
@@ -149,9 +148,8 @@ class ARuleAboutTheStringsAtAPositionIsReadWhereTheOperationStandsTest {
         assertNotNull(body, "the behavior has a body for the analysis to read");
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         InputDomain inputs = compilation.db().ask(new Adequacy.Inputs(module)).value().get("f");
-        return PredicateReadings.of("f", body, inputs.reading(rules),
-                InputReads.ofParameters(inputs.parameterReads(),
-                        checked.elementBindings().get("f")))
+        return PredicateReadings.of("f", body, inputs.reading(rules), inputs.parameterReads(),
+                        checked.elementBindings().get("f"))
                 .predicates();
     }
 }

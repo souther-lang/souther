@@ -159,6 +159,22 @@ public record UndividedPosition(TermPath at, Why why) {
          * less — or take the answer as the upper bound it is.
          */
         EXACT_VALUES_TOO_COSTLY,
+        /**
+         * The compiler read the behavior's rules about the values at this position, and working out
+         * what they tell apart cost more than it allows itself.
+         *
+         * <p>Its own word beside {@link #EXACT_VALUES_TOO_COSTLY}, which is what the position
+         * admits coming out wider than the rules leave it. That is a fact about the declarations,
+         * and this is a fact about a body: a position whose declaration was answered to the letter
+         * still lands here when the behavior's own rules about it are the expensive ones. Told the
+         * other word, an author would go and simplify a declaration that was never the matter.
+         *
+         * <p><b>About the position's distinctions and not about a rule.</b> The rules of one
+         * position are worked out as one group, so that which of them a reader hears about does not
+         * follow the order they were walked in — and what ran out is the group's, which no single
+         * rule is answerable for.
+         */
+        BEHAVIOR_DISTINCTIONS_TOO_COSTLY,
 
         /**
          * A rule is written more deeply nested than this compiler reads.
@@ -268,6 +284,20 @@ public record UndividedPosition(TermPath at, Why why) {
          * completely — there was no line in the rule to draw.
          */
         RULE_CUTS_NOTHING,
+        /**
+         * A rule naming this position was read to the end and puts every value it may hold on one
+         * side of itself.
+         *
+         * <p>What a rule about the values at a position does is tell some of them from the rest,
+         * and that is two classes only where both sides hold a value. One no value satisfies, and
+         * one every value satisfies, leave the position where they found it.
+         *
+         * <p>Its own word beside {@link #RULE_CUTS_NOTHING}, which is a rule that names no quantity
+         * the position appears in. Here the rule is about this position and was read completely;
+         * what came of it is that the model draws no line between any two of its values, and that
+         * is something an author can see in the rule itself.
+         */
+        RULE_TELLS_NOTHING_APART,
         /**
          * A rule naming this position was read to the end and draws its line where the quantity it
          * cuts never runs: three times a length is never negative, and a rule comparing one against

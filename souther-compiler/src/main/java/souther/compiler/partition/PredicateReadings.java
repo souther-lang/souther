@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.AnalysisBody;
+import souther.compiler.check.ElementBindings;
 import souther.compiler.check.RuleCitation;
 import souther.compiler.check.RuleRef;
 import souther.compiler.check.StringPredicates;
@@ -10,8 +11,11 @@ import souther.compiler.diag.Citation;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 
+import souther.compiler.types.BindingId;
+
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 /**
  * One reading of the predicates a body applies to the strings at its positions.
@@ -82,9 +86,17 @@ record PredicateReadings(List<Reading> predicates) {
      * There a reading is of a comparison the catalog named, and the name says whose body it stands
      * in; here there is no catalog and nothing else names the behavior, so a rule this finds could
      * be filed under no behavior at all.
+     *
+     * <p><b>The names are read where this walk starts and are not handed in.</b> Which tree a
+     * reading of the names is of is part of what it answers — an operation standing names no
+     * position here, and says the wrong tree arrived in the body a backend emits — so the walk that
+     * knows which tree it is over is what makes the reading. Taken as a parameter, this walk could
+     * be handed the emitted body's reading and the first rule about a value an operation made would
+     * come back as this compiler having failed to expand something.
      */
     static PredicateReadings of(String behavior, AnalysisBody body, InputReading read,
-                                InputReads reads) {
+                                Map<BindingId, String> parameters, ElementBindings elements) {
+        InputReads reads = InputReads.ofParametersWhereCallsStand(parameters, elements);
         List<Reading> found = new ArrayList<>();
         walk(body.core(), behavior, read, reads, LiveFlow.of(body.core()), true, found);
         return new PredicateReadings(found);

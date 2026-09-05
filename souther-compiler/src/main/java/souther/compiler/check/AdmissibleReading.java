@@ -427,23 +427,10 @@ final class AdmissibleReading implements ClauseReading<PlannedValues<FactSubject
             case StringPredicates.Reading.Accepting _ ->
                     new StringRestriction.Admitting(said.at(position));
             case StringPredicates.Reading.PatternNotRead it ->
-                    new StringRestriction.NotKnown(stoppedAt(it.why()));
+                    new StringRestriction.NotKnown(BlockReason.forAPatternNotRead(it.why()));
             case StringPredicates.Reading.WrittenArgumentNotKnown _ ->
                     new StringRestriction.NotKnown(new BlockReason.UnreadValueRule());
         });
-    }
-
-    /**
-     * What a pattern this reading stopped short of is, in the words a rule left unread is said in.
-     *
-     * <p>The same two answers {@link #stoppedBy} gives the values, said for the other reader. A
-     * construct the subset does not hold is a rule this could not read; one written more deeply
-     * than this reads is the reading's own limit and is said as itself, so that an author is sent to
-     * the brackets rather than to a construct that was never the trouble.
-     */
-    private static BlockReason.RuleReadingStopped stoppedAt(PatternRead.Unsupported why) {
-        return why == PatternRead.Unsupported.NESTED_TOO_DEEPLY
-                ? new BlockReason.PatternTooDeeplyNested() : new BlockReason.UnreadValueRule();
     }
 
     /**

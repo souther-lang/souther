@@ -1675,6 +1675,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             // reader to change something that may not be why.
             case EXACT_VALUES_TOO_COSTLY -> "read to the end, and the values the rules about this"
                     + " position leave between them are more than this compiler will work out";
+            case BEHAVIOR_DISTINCTIONS_TOO_COSTLY -> "read to the end, and what the behavior's rules"
+                    + " about this position tell apart is more than this compiler will work out";
             case PATTERN_TOO_DEEPLY_NESTED ->
                     "written more deeply nested than this compiler reads";
             case UNSUPPORTED_DOMAIN -> "compared against values no line can be drawn on here";
@@ -1700,6 +1702,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                             + " is not worked out";
             case RULE_CUTS_NOTHING ->
                     "it was read to the end and cuts nothing this position appears in";
+            case RULE_TELLS_NOTHING_APART ->
+                    "it was read to the end and every value this position holds comes out one side"
+                            + " of it";
             case RULE_CUTS_OUTSIDE_WHAT_THE_QUANTITY_HOLDS ->
                     "it was read to the end and draws its line outside what the quantity it cuts"
                             + " ever holds";

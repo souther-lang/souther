@@ -85,6 +85,26 @@ public final class InputReads {
     }
 
     /**
+     * The same, at the top of the body the analysis reads.
+     *
+     * <p>Beside {@link #ofParameters} because the two are readings of two trees. That one is of the
+     * body a backend emits, where an operation of the language has been expanded into what it does,
+     * so one standing there says the walk was handed the wrong tree. Here they stand — that is what
+     * the analysis reads the tree for — and a value one of them made names no position, which is an
+     * answer rather than a fault.
+     *
+     * <p>Its own entry point and not a flag on the one above, so that which tree a reading is of is
+     * settled where the walk that reads it is written. Asked for afterwards, a walk of one tree
+     * could be handed the other's reading and the first rule about a value an operation made would
+     * be reported as this compiler failing to expand something.
+     */
+    public static InputReads ofParametersWhereCallsStand(
+            Map<BindingId, String> parameters, souther.compiler.check.ElementBindings elements) {
+        return new InputReads(new BindingEnvironment(BindingEnvironment.rooted(parameters),
+                Map.of(), elements, true), Map.of());
+    }
+
+    /**
      * At the top of a rule the behavior itself declares, which meets the parameters under the
      * bindings the declaration gave them rather than the ones an implementation did.
      *

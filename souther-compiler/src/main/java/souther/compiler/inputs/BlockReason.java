@@ -1,6 +1,7 @@
 package souther.compiler.inputs;
 
 import souther.compiler.observe.RunSensitivity;
+import souther.compiler.regex.PatternRead;
 import souther.compiler.values.UnreadReason;
 
 /**
@@ -75,12 +76,13 @@ public sealed interface BlockReason {
      */
     sealed interface AnswerRealizationStopped extends QuestionStandingReason {
 
-        /** Both are an allowance a reading was granted running out, which is a figure a run may
-         *  allow more of. */
+        /** All three are an allowance a reading was granted running out, which is a figure a run
+         *  may allow more of. */
         @Override
         default RunSensitivity runSensitivity() {
             return switch (this) {
-                case ExactValuesTooCostly _, RulesNotHandedOnAsSets _ -> RunSensitivity.MAY_CHANGE;
+                case ExactValuesTooCostly _, RulesNotHandedOnAsSets _,
+                     BehaviorDistinctionsTooCostly _ -> RunSensitivity.MAY_CHANGE;
             };
         }
     }
@@ -484,6 +486,25 @@ public sealed interface BlockReason {
     record PatternTooDeeplyNested() implements RuleReadingStopped {}
 
     /**
+     * What a pattern nothing read is, in the words a rule left unread is said in.
+     *
+     * <p>Here because two readings ask it. A declaration's clauses and a behavior's body both write
+     * rules whose text is a pattern, and both are stopped by the same things — so what an author is
+     * told is a fact about the pattern and about this compiler's reader, and not about which of the
+     * two tree walks met it. Written once per reader, the day one of them learned that a construct
+     * is the reading's own limit rather than one it has no word for, an author would be sent to the
+     * brackets by one reading and to a construct that was never the trouble by the other.
+     *
+     * <p>Two answers and not one per code. A pattern written more deeply than this reads is the
+     * reading's own limit and is said as itself; every other construct is one the subset does not
+     * hold, which is a rule this could not read like any other.
+     */
+    static RuleReadingStopped forAPatternNotRead(PatternRead.Unsupported why) {
+        return why == PatternRead.Unsupported.NESTED_TOO_DEEPLY
+                ? new PatternTooDeeplyNested() : new UnreadValueRule();
+    }
+
+    /**
      * A rule whose strings this read, and whose place on the order they are measured on would take
      * more machines than this compiler will make.
      *
@@ -524,6 +545,31 @@ public sealed interface BlockReason {
      * answer rather than something missing from it.
      */
     record ExactValuesTooCostly() implements AnswerRealizationStopped {}
+
+    /**
+     * A behavior's rules about the strings at this position were read, and building what they tell
+     * apart is more than this compiler will do.
+     *
+     * <p><b>About the position's distinctions and about none of the rules.</b> The rules of one
+     * position are built as one group, because what a reader is told about the position must not
+     * turn on which of them the building reached first — so what ran out is the allowance for the
+     * group, and naming one rule would say that rule is why when any of the others being cheaper
+     * would have left it affordable.
+     *
+     * <p>Its own case beside {@link ExactValuesTooCostly}, which is what a declaration's answer ran
+     * out on. That one bounds what may stand at a position and this one bounds what a behavior
+     * tells apart there, and they are separate on purpose: a run allowed more of one must not
+     * change the other's answer. Said as that one, a position whose declaration was answered
+     * exactly would be reported as one whose values could not be worked out.
+     *
+     * <p><b>And a rule with no line at the position all the same</b> ({@link StoppedWithoutALine},
+     * as {@link RulesNotHandedOnAsSets} is). What ran out is the group, and the rules of the group
+     * are written at the position — so a reader of the position is owed the sentence about each of
+     * them, and what it says is that the position's distinctions were not built rather than that
+     * this one rule was the expensive one.
+     */
+    record BehaviorDistinctionsTooCostly()
+            implements AnswerRealizationStopped, StoppedWithoutALine {}
 
     /**
      * The rules about the strings at this position were read, what the position admits was worked
@@ -721,6 +767,21 @@ public sealed interface BlockReason {
      * would go out as a fact about the model.
      */
     record RuleRestrictingToAdmittedValues() implements ReadToEndWithoutLine {}
+
+    /**
+     * A rule of a behavior about the strings at a position, read to the end, with nothing on one of
+     * its sides.
+     *
+     * <p>A predicate divides a position by putting the values that satisfy it on one side and the
+     * rest on the other, and that is two classes only where both sides hold a value. A pattern no
+     * string satisfies leaves the first empty and one every string satisfies leaves the second, and
+     * either way a run of the model is on the same side however it is written.
+     *
+     * <p>Nothing here fell short: the predicate was read, the text was worked out and both sides
+     * were built. What came of it is that the model draws no distinction, which is a fact about the
+     * rule and something an author can see in it.
+     */
+    record PredicateTellingNothingApart() implements ReadToEndWithoutLine {}
 
     /**
      * What a derivation would have to be able to reach into.
