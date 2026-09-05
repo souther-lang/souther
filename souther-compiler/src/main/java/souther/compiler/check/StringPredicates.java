@@ -353,7 +353,7 @@ public enum StringPredicates {
         return written == null
                 ? new Stated(subject, new Reading.WrittenArgumentNotKnown(), null)
                 : new Stated(subject, predicate.readingOf(written),
-                        new PredicateStatement(operation.qualified(), written));
+                        new PredicateStatement.Applying(operation.qualified(), written));
     }
 
 }

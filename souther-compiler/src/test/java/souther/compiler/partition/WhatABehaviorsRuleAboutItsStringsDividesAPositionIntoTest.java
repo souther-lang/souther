@@ -49,7 +49,7 @@ class WhatABehaviorsRuleAboutItsStringsDividesAPositionIntoTest {
                 let f (code) = if String.startsWith("JP", code) then Yes else No
                 """);
 
-        assertEquals(List.of(), read.undivided(), "the rule divides the position");
+        assertEquals(List.of(), read.blocked(), "the rule divides the position");
         SetDivision only = divisionIn(read);
         assertEquals(new NumericTerm.ValueOf(souther.compiler.inputs.TermPath.of("code")),
                 only.term(), "the position the rule is written about");
@@ -78,46 +78,10 @@ class WhatABehaviorsRuleAboutItsStringsDividesAPositionIntoTest {
                     else if String.endsWith("X", code) then Yes else No
                 """);
 
-        assertEquals(List.of(), read.undivided(), "both rules divide the position");
+        assertEquals(List.of(), read.blocked(), "both rules divide the position");
         assertEquals(2, read.divided().size(), "and each of them is a division of it");
         assertEquals(1, read.divided().stream().map(PartitionEvidence::at).distinct().count(),
                 "of the one position both are written about");
-    }
-
-    /**
-     * And what two rules about one position leave it divided into is four classes, not two and two.
-     *
-     * <p>A run of the model satisfies each rule or does not, so it falls in exactly one of the four
-     * — and the rows are owed one at each. Taken a rule at a time, the position would be divided
-     * twice over and a reader would hold two partitions of one denominator.
-     */
-    @Test
-    void whatTwoRulesLeaveIsTheClassesTheyComeToBetweenThem() {
-        SetDivisions.Read read = readingsOf("""
-                behavior f : (code: String) -> Answer
-                let f (code) =
-                    if String.startsWith("JP", code) then Yes
-                    else if String.endsWith("X", code) then Yes else No
-                """);
-
-        List<SetDivisions.Cell> cells = read.cells().values().iterator().next();
-        assertEquals(1, read.cells().size(), "one position is divided");
-        assertEquals(4, cells.size(), "into the classes the two rules come to between them");
-        assertEquals(List.of(
-                        "String.startsWith(\"JP\", x) and String.endsWith(\"X\", x)",
-                        "String.startsWith(\"JP\", x) and not String.endsWith(\"X\", x)",
-                        "not String.startsWith(\"JP\", x) and String.endsWith(\"X\", x)",
-                        "not String.startsWith(\"JP\", x) and not String.endsWith(\"X\", x)"),
-                cells.stream().map(each -> said(each)).toList(),
-                "each named by what a value in it satisfies, in the order the body states the"
-                        + " rules");
-        // Exclusive, which is what makes them classes: a value the model may hold is in one.
-        assertEquals(1, cells.stream()
-                        .filter(each -> each.values().has(new Value.Text("JPX"))).count(),
-                "a string satisfying both is in exactly one of them");
-        assertEquals(1, cells.stream()
-                        .filter(each -> each.values().has(new Value.Text("US1"))).count(),
-                "and one satisfying neither is in exactly one of them");
     }
 
     /**
@@ -136,7 +100,7 @@ class WhatABehaviorsRuleAboutItsStringsDividesAPositionIntoTest {
 
         assertEquals(List.of(), read.divided(), "the position is divided by nothing");
         assertEquals(List.of(new BlockReason.PredicateTellingNothingApart()),
-                read.undivided().stream().map(SetDivisions.Undivided::why).toList(),
+                read.blocked().stream().map(ClassingBlocker::why).toList(),
                 "and the rule is answered for as one that tells nothing apart");
     }
 
@@ -165,7 +129,7 @@ class WhatABehaviorsRuleAboutItsStringsDividesAPositionIntoTest {
                 """);
 
         assertEquals(List.of(), read.divided(), "no position is divided");
-        assertEquals(List.of(), read.undivided(),
+        assertEquals(List.of(), read.blocked(),
                 "and nothing is filed, because the value it is about came from no position the"
                         + " reading can name");
     }
@@ -193,15 +157,8 @@ class WhatABehaviorsRuleAboutItsStringsDividesAPositionIntoTest {
         assertEquals(List.of(), read.divided(), "neither rule divides the position");
         assertEquals(List.of(new BlockReason.BehaviorDistinctionsTooCostly(),
                         new BlockReason.BehaviorDistinctionsTooCostly()),
-                read.undivided().stream().map(SetDivisions.Undivided::why).toList(),
+                read.blocked().stream().map(ClassingBlocker::why).toList(),
                 "and both are answered for as the position's distinctions not being built");
-    }
-
-    /** What a cell says, which is what each of the position's rules came to in it. */
-    private static String said(SetDivisions.Cell cell) {
-        return cell.under().stream()
-                .map(each -> each.holds() ? each.states().saidOf("x") : each.states().deniedOf("x"))
-                .reduce((one, other) -> one + " and " + other).orElseThrow();
     }
 
     /** The one division the model under test states. */

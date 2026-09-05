@@ -97,7 +97,8 @@ class WhyAValueCouldNotBePlacedIsTheClassifiersToSayTest {
                 Partitions.of(spec.name(), read, rules, souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
                 read.quantities(rules),
                 GuardThresholds.of(body, plan,
-                compilation.db().ask(new souther.compiler.query.Adequacy.Inputs(module)).value().get("submit"), rules).thresholds(), rules, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+                compilation.db().ask(new souther.compiler.query.Adequacy.Inputs(module)).value().get("submit"), rules).thresholds(), rules, souther.compiler.query.ReadAs.THE_COMPILATION_DOES,
+                souther.compiler.values.Allowance.of(souther.compiler.regex.PatternPlan.Budget.OF_BEHAVIOR_DISTINCTIONS));
         Output.Examples.Of observed = compilation.db()
                 .ask(Output.Examples.asked(compilation.db(), module,
                         compilation.sourceIds().get(0))).value();

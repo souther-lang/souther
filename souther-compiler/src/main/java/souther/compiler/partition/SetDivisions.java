@@ -6,8 +6,6 @@ import souther.compiler.check.PredicateStatement;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.StringPredicates;
 import souther.compiler.inputs.BlockReason;
-import souther.compiler.inputs.FilingCoordinate;
-import souther.compiler.inputs.RuleWithoutALine;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.PathResolution;
@@ -35,12 +33,15 @@ import java.util.Set;
  * machine would be built under whatever allowance that reader happened to hold, and the same rule
  * would divide the position differently depending on who asked.
  *
- * <p><b>The position is the unit, and it is all of them or none of them.</b> Two rules about one
- * position are two distinctions of one denominator, and a reader hearing about one of them is
- * hearing about a partition the model does not draw. So every plan of a position — both sides of
- * every one of its rules — goes to the allowance as one group, and a position whose group cannot be
- * built divides by nothing rather than by the rules that happened to be cheap
- * ({@link Allowance#realizeAll}).
+ * <p><b>One rule at a time, and what a position comes to is not asked here.</b> What several rules
+ * leave a position between them is a question about every rule that reached it, and the rules of a
+ * behavior's body are not all of them — a value singled out by a comparison divides the same
+ * position. Answered here, the denominator would be completed by the reader that can see least of
+ * it, out of the rules it happened to read.
+ *
+ * <p><b>The position is still the unit of what is built.</b> Both sides of every rule of a position
+ * go to the allowance as one group, so which of them a reader hears about does not follow the order
+ * they were walked in ({@link Allowance#realizeAll}).
  *
  * <p><b>Both sides are asked for, and neither is derived from the other.</b> The values a rule does
  * not admit are a plan like the values it does ({@link PatternPlan#notMatching}), so they are built
@@ -64,107 +65,20 @@ public final class SetDivisions {
     /** What a behavior with no body to read comes to, which is no rules and nothing became of
      *  them. Not the same as a body that states none: there the walk ran and found nothing, and
      *  here there was nothing to walk. */
-    public static final Read NONE = new Read(List.of(), List.of(), Map.of());
+    public static final Read NONE = new Read(List.of(), List.of());
 
     /**
      * What the rules came to.
      *
-     * @param divided   the positions divided, as evidence a partition reads like any other
-     * @param undivided the rules that divided nothing, each with what became of it
-     * @param cells     what the divisions of each position leave it divided into, which is the
-     *                  coarsest partition every one of them is a union of cells of
+     * @param divided the positions divided, as evidence a partition reads like any other
+     * @param blocked the rules that would have divided a position and did not, which is what keeps
+     *                its classes from being composed out of the ones that worked
      */
-    public record Read(List<PartitionEvidence> divided, List<Undivided> undivided,
-                       Map<NumericTerm.FromOnePosition, List<Cell>> cells) {
+    public record Read(List<PartitionEvidence> divided, List<ClassingBlocker> blocked) {
 
         public Read {
             divided = List.copyOf(divided);
-            undivided = List.copyOf(undivided);
-            cells = Map.copyOf(cells);
-        }
-    }
-
-    /**
-     * One class the rules about a position leave it divided into.
-     *
-     * <p>A cell of the coarsest partition every rule's two sides are a union of cells of, which is
-     * what several rules about one position come to. {@code startsWith("JP", code)} and
-     * {@code endsWith("X", code)} leave four, and a run of the model is in exactly one of them —
-     * so four is what the rows are owed at, and the two rules taken one at a time would ask for a
-     * distinction the other one already made.
-     *
-     * <p><b>What each rule states and how it came out, in the order the body states them.</b> Where
-     * a run falls is decided by each of the position's rules coming out one way or the other, and
-     * that is what tells a cell from its neighbours — so the assignment is what a cell is, and a
-     * reader names the class out of it. Held as two sets of rules, the order a document lists them
-     * in would come from a set rather than from the model.
-     *
-     * <p>And it is the statements, not the origins. Two copies of one helper state one rule at two
-     * positions, and the class each leaves is called the same thing; which reading produced the
-     * evidence is what the evidence carries and is no part of what a class is.
-     *
-     * @param values the values in it, which no other cell of the position holds
-     * @param under  each of the position's rules and how it came out here, in the order the body
-     *               states them
-     */
-    public record Cell(ValueSet values, List<Answered> under) {
-
-        public Cell {
-            if (values == null || values.isEmpty()) {
-                throw new IllegalArgumentException(
-                        "a class of a position holds a value; an empty one is no class of it");
-            }
-            under = List.copyOf(under);
-            if (under.isEmpty()) {
-                throw new IllegalArgumentException(
-                        "a cell is what the rules of a position left, so some rule made it");
-            }
-        }
-
-        /** The same cell, with one more rule coming out {@code holding} and what that leaves. */
-        Cell and(ValueSet narrowed, PredicateStatement states, boolean holding) {
-            List<Answered> wider = new ArrayList<>(under);
-            wider.add(new Answered(states, holding));
-            return new Cell(narrowed, wider);
-        }
-    }
-
-    /** One of a position's rules, and whether a value in the cell satisfies it. */
-    public record Answered(PredicateStatement states, boolean holds) {
-
-        public Answered {
-            if (states == null) {
-                throw new IllegalArgumentException("a rule that came out one way states something");
-            }
-        }
-    }
-
-    /**
-     * One rule that reached here and divided no position.
-     *
-     * <p>Filed where a reader will look for it, which is the position the rule is about. A rule
-     * written about a value an operation made from a position is filed at the position the value
-     * came from — the rule plainly concerns it, and filed nowhere it would go out as a rule about
-     * nothing while that position came back as one the model states nothing about.
-     *
-     * <p>One of these is only made where there is somewhere to file it. A rule about a value that
-     * came from no position of the input has no reader to be shown it, which is the same answer the
-     * reading of a comparison gives ({@link ComparisonAssessment}).
-     */
-    public record Undivided(PredicateOrigin by, FilingCoordinate at,
-                            BlockReason.RuleWithoutLineReason why) {
-
-        public Undivided {
-            if (by == null || at == null || why == null) {
-                throw new IllegalArgumentException(
-                        "a rule that divided nothing is some rule, somewhere, and something became"
-                                + " of it");
-            }
-        }
-
-        /** The finding a reader is shown, which is what every rule with no line here comes out as. */
-        public RuleWithoutALine reported() {
-            return RuleWithoutALine.of(by.rule(), by.cited(), at, why);
+            blocked = List.copyOf(blocked);
         }
     }
 
@@ -216,9 +130,9 @@ public final class SetDivisions {
     static Read of(PredicateReadings read, Symbols symbols,
                    Allowance<NumericTerm.FromOnePosition> allowance) {
         List<Asked> asked = new ArrayList<>();
-        List<Undivided> undivided = new ArrayList<>();
+        List<ClassingBlocker> blocked = new ArrayList<>();
         for (PredicateReadings.Reading each : read.predicates()) {
-            ask(each, symbols, asked, undivided);
+            ask(each, symbols, asked, blocked);
         }
         // Every plan of a position, gathered before anything is built. A set written into two rules
         // is one plan and is charged once, which is what taking them as a group comes to.
@@ -234,73 +148,9 @@ public final class SetDivisions {
                 answers.put(term, allowance.realizeAll(purseOf(term), plans)));
         List<PartitionEvidence> divided = new ArrayList<>();
         for (Asked each : asked) {
-            divide(each, answers.get(each.term()), divided, undivided);
+            divide(each, answers.get(each.term()), divided, blocked);
         }
-        // And what the divisions of each position leave it divided into, worked out here because
-        // this is where the allowance is. Two rules about one position are not two partitions of
-        // it: a run falls in one cell of what they come to between them, and the cells are met out
-        // of their sides — which is machine work, and machine work outside an allowance is a
-        // measure deciding for itself how long it may take.
-        Map<NumericTerm.FromOnePosition, List<Cell>> cells = new LinkedHashMap<>();
-        for (NumericTerm.FromOnePosition term : byTerm.keySet()) {
-            List<SetDivision> here = divided.stream()
-                    .filter(each -> each.at().equals(term))
-                    .map(each -> ((PartitionEvidence.BySet) each).division()).toList();
-            if (here.isEmpty()) {
-                continue;
-            }
-            List<Cell> made = refined(term, here, allowance);
-            // The position's group again, and for the reason it was a group in the first place.
-            // Cells nobody could finish are a partition of the position this compiler does not
-            // have, and publishing the divisions beside it would leave a reader holding rules
-            // whose classes are not the ones the position is measured at.
-            if (made == null) {
-                divided.removeIf(each -> each.at().equals(term));
-                here.forEach(each -> undivided.add(new Undivided(each.origin(),
-                        FilingCoordinate.at(term.position()),
-                        new BlockReason.BehaviorDistinctionsTooCostly())));
-                continue;
-            }
-            cells.put(term, made);
-        }
-        return new Read(divided, undivided, cells);
-    }
-
-    /**
-     * What {@code divisions} leave {@code term} divided into, or null where the allowance ran out.
-     *
-     * <p>Each rule in turn against what the rules before it left: a cell either satisfies it or
-     * does not, and one that would hold no value is no class of the position and is dropped rather
-     * than published as a class no run is ever counted at.
-     *
-     * <p>Null and not the cells so far. A partition is exclusive and exhaustive or it is not one,
-     * and cells the meets got through before the allowance ran out are neither — read as the
-     * position's classes, the values in the ones nobody finished would be owed no row at all.
-     */
-    private static List<Cell> refined(NumericTerm.FromOnePosition term, List<SetDivision> divisions,
-                                      Allowance<NumericTerm.FromOnePosition> allowance) {
-        SetDivision first = divisions.get(0);
-        List<Cell> cells = new ArrayList<>();
-        cells.add(new Cell(first.whenTrue(), List.of(new Answered(first.statement(), true))));
-        cells.add(new Cell(first.whenFalse(), List.of(new Answered(first.statement(), false))));
-        for (SetDivision each : divisions.subList(1, divisions.size())) {
-            List<Cell> narrower = new ArrayList<>();
-            for (Cell cell : cells) {
-                for (boolean holding : new boolean[] {true, false}) {
-                    ValueSet side = holding ? each.whenTrue() : each.whenFalse();
-                    Allowance.Composed met =
-                            allowance.meet(purseOf(term), cell.values(), side);
-                    if (met.gaveUp()) {
-                        return null;
-                    }
-                    if (!met.set().isEmpty()) {
-                        narrower.add(cell.and(met.set(), each.statement(), holding));
-                    }
-                }
-            }
-            cells = narrower;
-        }
-        return cells;
+        return new Read(divided, blocked);
     }
 
     /**
@@ -310,7 +160,7 @@ public final class SetDivisions {
      * somebody decides about here rather than one that quietly takes its neighbour's answer.
      */
     private static void ask(PredicateReadings.Reading each, Symbols symbols,
-                            List<Asked> asked, List<Undivided> undivided) {
+                            List<Asked> asked, List<ClassingBlocker> blocked) {
         // Where the rule's subject stands, read where the rule stands. A subject no single position
         // answers is a rule about a value made from the position rather than about the position, and
         // there is no denominator for it to divide.
@@ -320,33 +170,33 @@ public final class SetDivisions {
             // came from is where a reader looks for what became of the rule.
             if (each.reads().cameFrom(each.subject(), symbols)
                     instanceof PathResolution.At(var from)) {
-                undivided.add(new Undivided(each.origin(), FilingCoordinate.at(from),
+                blocked.add(new ClassingBlocker(new NumericTerm.ValueOf(from), each.origin(),
                         new BlockReason.RuleAboutADerivedValue()));
             }
             return;
         }
         NumericTerm.FromOnePosition term = new NumericTerm.ValueOf(at.path());
-        FilingCoordinate where = FilingCoordinate.at(at.path());
         switch (each.reading()) {
             case StringPredicates.Reading.Accepting it -> asked.add(new Asked(each.origin(),
                     each.statement(), term,
                     new AdmittedPlan.Pattern(PatternPlan.of(it.accepts())),
                     new AdmittedPlan.Pattern(PatternPlan.notMatching(it.accepts()))));
-            case StringPredicates.Reading.PatternNotRead it -> undivided.add(new Undivided(
-                    each.origin(), where, BlockReason.forAPatternNotRead(it.why())));
+            case StringPredicates.Reading.PatternNotRead it -> blocked.add(new ClassingBlocker(
+                    term, each.origin(), BlockReason.forAPatternNotRead(it.why())));
             // A rule whose text this compiler did not work out is a rule it did not read. Said as
             // anything about the values, it would be a distinction reported as absent from the model
             // when what is absent is this compiler's reading of it.
-            case StringPredicates.Reading.WrittenArgumentNotKnown _ -> undivided.add(
-                    new Undivided(each.origin(), where, new BlockReason.UnreadValueRule()));
+            case StringPredicates.Reading.WrittenArgumentNotKnown _ -> blocked.add(
+                    new ClassingBlocker(term, each.origin(),
+                            new BlockReason.UnreadValueRule()));
         }
     }
 
     /** One rule as the division it came to, out of what its position's group was built to. */
     private static void divide(Asked each, Realizations answer,
-                               List<PartitionEvidence> divided, List<Undivided> undivided) {
+                               List<PartitionEvidence> divided, List<ClassingBlocker> blocked) {
         if (!(answer instanceof Realizations.Exact built)) {
-            undivided.add(new Undivided(each.by(), FilingCoordinate.at(each.term().position()),
+            blocked.add(new ClassingBlocker(each.term(), each.by(),
                     new BlockReason.BehaviorDistinctionsTooCostly()));
             return;
         }
@@ -356,7 +206,7 @@ public final class SetDivisions {
         // is the position undivided. Published, it would put a class in the denominator that no run
         // is ever counted at and every row would be owed one for it.
         if (whenTrue.isEmpty() || whenFalse.isEmpty()) {
-            undivided.add(new Undivided(each.by(), FilingCoordinate.at(each.term().position()),
+            blocked.add(new ClassingBlocker(each.term(), each.by(),
                     new BlockReason.PredicateTellingNothingApart()));
             return;
         }

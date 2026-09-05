@@ -95,7 +95,8 @@ class ABoundaryRowWearsEveryNameThePositionDeclaresTest {
         Partitions.Partitioning p = Partitions.withThresholds(
                 Partitions.of(spec.name(), domain, rules, souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
                 reading,
-                guards.thresholds(), rules, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
+                guards.thresholds(), rules, souther.compiler.query.ReadAs.THE_COMPILATION_DOES,
+                souther.compiler.values.Allowance.of(souther.compiler.regex.PatternPlan.Budget.OF_BEHAVIOR_DISTINCTIONS));
 
         List<String> names = new ArrayList<>();
         spec.params().forEach(each -> names.add(each.name()));

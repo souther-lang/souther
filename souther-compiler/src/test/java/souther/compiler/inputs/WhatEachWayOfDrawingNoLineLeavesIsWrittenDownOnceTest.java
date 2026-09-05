@@ -691,10 +691,21 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
      * on is the half a value reading records, which is what {@link UnreadReason} has words for.
      */
     private static List<BlockReason.AnswerRealizationStopped> everyLimitAQuestionCanStandOn() {
-        return Arrays.stream(UnreadReason.values())
-                .filter(each -> each.about() == UnreadReason.About.THE_ANSWER)
-                .map(BlockReason::ofAQuestionStandingOn)
-                .map(BlockReason.AnswerRealizationStopped.class::cast).toList();
+        List<BlockReason.AnswerRealizationStopped> out = new java.util.ArrayList<>(
+                Arrays.stream(UnreadReason.values())
+                        .filter(each -> each.about() == UnreadReason.About.THE_ANSWER)
+                        .map(BlockReason::ofAQuestionStandingOn)
+                        .map(BlockReason.AnswerRealizationStopped.class::cast).toList());
+        // And every other member of the capability, which is where this used to be short. The
+        // surface a document writes one of these into is the capability's, so a reason that
+        // implements it and is not here is a word a question may carry and the schema refuses —
+        // read off one producer, the population was whatever that producer happened to make.
+        everyReason().stream()
+                .filter(BlockReason.AnswerRealizationStopped.class::isInstance)
+                .map(BlockReason.AnswerRealizationStopped.class::cast)
+                .filter(each -> out.stream().noneMatch(had -> had.getClass() == each.getClass()))
+                .forEach(out::add);
+        return out;
     }
 
     /** And those of them that name a position and no rule. */

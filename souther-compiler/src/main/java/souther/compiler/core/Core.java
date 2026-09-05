@@ -887,8 +887,13 @@ public sealed interface Core {
             case Binary b -> new Binary(b.op(), withoutItsPlace(b.left()),
                     withoutItsPlace(b.right()), null, b.type(), null);
             case Call c -> new Call(c.fn(), allWithoutTheirPlace(c.args()), c.type(), null);
+            // The origin goes the way a fork's does, which is out. It is a module and a count of
+            // the constructs before it, so it moves whenever anything above the declaration is
+            // edited — and what this makes is a value two readings of one contract compare equal,
+            // which an unrelated edit must not reach. Not `unwritten`: a source did write this
+            // call, and what is gone is where.
             case PreservedCall p ->
-                    new PreservedCall(p.declared(), allWithoutTheirPlace(p.args()), p.origin(),
+                    new PreservedCall(p.declared(), allWithoutTheirPlace(p.args()), null,
                             p.type(), null);
             case Apply a -> new Apply(readWithoutItsPlace(a.fn()), allWithoutTheirPlace(a.args()), a.type(), null);
             case If iff -> new If(withoutItsPlace(iff.cond()), withoutItsPlace(iff.then()),

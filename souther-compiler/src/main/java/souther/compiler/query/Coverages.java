@@ -126,12 +126,13 @@ final class Coverages {
         souther.compiler.partition.LinesWhereTheyFall.Filed filed =
                 souther.compiler.partition.LinesWhereTheyFall.of(read,
                         both(both(clauses.evidence(), guards.evidence()), divisions.divided()),
+                        divisions.blocked(),
                         both(declared, both(clauses.between(), guards.between())));
         return new Partitioned(Partitions.withEvidence(partitioning, quantities,
-                filed.evidence(), divisions.cells(), ruleSource, policy,
+                filed.evidence(), filed.blocked(), distinctions, ruleSource, policy,
                 // And the lines this had nowhere to put, which are findings of the same kind: a rule
                 // of the model that came to no line at a position it is about.
-                everyRuleWithNoLine(clauses, guards, filed, divisions),
+                everyRuleWithNoLine(clauses, guards, filed),
                 filed.between(),
                 // What a row had to satisfy to arrive at each comparison, from the walk that
                 // assumed it. A clause of a declaration is not written at a place in a body and has
@@ -148,15 +149,14 @@ final class Coverages {
      */
     private static RulesWithNoLine everyRuleWithNoLine(
             EnsuresThresholds.Clauses clauses, GuardThresholds.Guards guards,
-            LinesWhereTheyFall.Filed filed,
-            souther.compiler.partition.SetDivisions.Read divisions) {
+            LinesWhereTheyFall.Filed filed) {
         // And the rules about the strings that divided no position, which are findings of the same
         // kind. Left out, a rule an author wrote would reach the measure, come to nothing, and be
         // shown to nobody — while the position it names came back as one the model says nothing
         // about.
         souther.compiler.inputs.RulesWithNoLine.Gathered found =
                 new souther.compiler.inputs.RulesWithNoLine.Gathered();
-        divisions.undivided().forEach(each -> found.add(each.reported()));
+        filed.blocked().forEach(each -> found.add(each.reported()));
         return clauses.noLine().and(guards.noLine()).and(filed.notPlaced()).and(found.found());
     }
 

@@ -163,8 +163,7 @@ final class EvidenceAccount {
             // axis carries it is that the classes were composed out of it, which the axis records
             // beside them — read off the classes instead, the question would be whether one set is
             // inside another, and that is a machine nobody paid for.
-            case PartitionEvidence.BySet set ->
-                    axis.divides().contains(set.division().origin());
+            case PartitionEvidence.BySet set -> axis.divides().contains(set.by());
             // A line the position has no value beside is not a cut of it. It parts the values all
             // the same, and where it parts them is what carries the rule — as the authored line,
             // which is the key that side keeps.
@@ -175,8 +174,14 @@ final class EvidenceAccount {
             // singles nothing out is not one of those, so there is always a value here.
             case PartitionEvidence.Divides it ->
                     axis.cuts().stream().anyMatch(each -> each.origins().contains(it.by()));
+            // A cut where the classes are runs of values, and the classes themselves where they
+            // are sets: one value singled out of a string is a set of that value, so what carries
+            // it is whichever vocabulary the position's classes came out in. Asked of the cuts
+            // alone, a position whose classes composed it would be reported as having lost it.
             case PartitionEvidence.Singles it ->
-                    axis.cuts().stream().anyMatch(each -> each.origins().contains(it.by()));
+                    axis.divides().contains(it.by())
+                            || axis.cuts().stream()
+                                    .anyMatch(each -> each.origins().contains(it.by()));
         };
     }
 

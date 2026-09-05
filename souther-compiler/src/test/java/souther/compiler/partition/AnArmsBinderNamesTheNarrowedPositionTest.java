@@ -78,7 +78,8 @@ class AnArmsBinderNamesTheNarrowedPositionTest {
                 ReadAs.THE_COMPILATION_DOES);
         return Partitions.withThresholds(base, read.quantities(rules), guards.thresholds(),
                 rules, ReadAs.THE_COMPILATION_DOES, guards.noLine(), guards.singled(),
-                guards.between()).axes();
+                guards.between(),
+                souther.compiler.values.Allowance.of(souther.compiler.regex.PatternPlan.Budget.OF_BEHAVIOR_DISTINCTIONS)).axes();
     }
 
     /** The comparison inside the arm draws its line on the position under the case. */

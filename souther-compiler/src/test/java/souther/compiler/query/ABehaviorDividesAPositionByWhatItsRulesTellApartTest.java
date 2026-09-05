@@ -117,6 +117,62 @@ class ABehaviorDividesAPositionByWhatItsRulesTellApartTest {
     }
 
     /**
+     * A value singled out and a set told from the rest are one vocabulary, not two.
+     *
+     * <p>{@code code == "JP"} names a set of the position's values as surely as
+     * {@code String.startsWith("J", code)} does — one of them holds a value and the other holds
+     * every string beginning with a letter — so the two compose, and what they leave is the classes
+     * they come to between them.
+     *
+     * <p>Told apart by which reader produced them, a position both reach would lose its classes to
+     * a vocabulary clash that is not there. Which is a distinction being dropped for the shape of
+     * this compiler's evidence rather than for anything the model says.
+     */
+    @Test
+    void aValueSingledOutAndASetToldFromTheRestComposeIntoOneListOfClasses() {
+        Axis axis = dividing("""
+                behavior route : (code: String) -> Where
+                let route (code) = {
+                    guard String.startsWith("J", code) else Abroad
+                    guard code == "JP" else Abroad
+                    Home
+                }
+                """);
+
+        assertTrue(!axis.classes().isEmpty(),
+                "the two rules are sayable together, so the position has classes");
+        assertTrue(axis.classes().stream().allMatch(
+                        each -> each.recognises() instanceof Recognition.OfASet),
+                "and they are the values on either side of what the two rules come to: "
+                        + axis.classes().stream().map(PartitionClass::label).toList());
+    }
+
+    /**
+     * And a rule about a field every case of a sum spreads is measured where the field stands.
+     *
+     * <p>The rule is written inside an arm, about the name the arm binds — which is the position
+     * narrowed to that case. Where the rule stands and where the position is are two places, and
+     * what a position is divided into has to arrive at the one the rule is about.
+     */
+    @Test
+    void aRuleInsideAnArmDividesThePositionTheArmBinds() {
+        Partitions.Partitioning divided = partitioningOf("""
+                data Small = { code: String }
+                data Large = { code: String }
+                data Parcel = Small | Large
+
+                behavior route : (parcel: Parcel) -> Where
+                let route (parcel) = match parcel with
+                    | Small as s -> if String.startsWith("JP", s.code) then Home else Abroad
+                    | Large      -> Abroad
+                """);
+
+        assertTrue(divided.axes().stream().anyMatch(each -> !each.classes().isEmpty()),
+                "the position the arm binds is divided by the rule written about it: "
+                        + divided.axes());
+    }
+
+    /**
      * And a rule that divided nothing is shown to somebody.
      *
      * <p>Every string begins with the empty one, so this rule puts every value the position holds on

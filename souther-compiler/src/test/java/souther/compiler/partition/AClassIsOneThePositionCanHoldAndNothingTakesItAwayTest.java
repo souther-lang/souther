@@ -85,7 +85,8 @@ class AClassIsOneThePositionCanHoldAndNothingTakesItAwayTest {
                 Partitions.of(read.spec().name(), inputs, read.rules(), souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         return classesOf(Partitions.withThresholds(base, inputs.quantities(read.rules()),
                 guards.thresholds(), read.rules(), souther.compiler.query.ReadAs.THE_COMPILATION_DOES,
-                guards.noLine(), guards.singled(), guards.between()));
+                guards.noLine(), guards.singled(), guards.between(),
+                souther.compiler.values.Allowance.of(souther.compiler.regex.PatternPlan.Budget.OF_BEHAVIOR_DISTINCTIONS)));
     }
 
     /**
@@ -409,7 +410,8 @@ class AClassIsOneThePositionCanHoldAndNothingTakesItAwayTest {
                 InputDomain.of(read.spec(), read.sig(), read.rules(), souther.compiler.query.ReadAs.THE_COMPILATION_DOES)
                         .quantities(read.rules()),
                 guards.thresholds(), read.rules(), souther.compiler.query.ReadAs.THE_COMPILATION_DOES,
-                guards.noLine(), guards.singled(), guards.between());
+                guards.noLine(), guards.singled(), guards.between(),
+                souther.compiler.values.Allowance.of(souther.compiler.regex.PatternPlan.Budget.OF_BEHAVIOR_DISTINCTIONS));
     }
 
     /**

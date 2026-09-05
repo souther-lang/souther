@@ -2670,7 +2670,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * <p>Not a name and never shown to a reader. `rule` beside it is what an author is given, and
      * the two are different questions: a handle finds a rule and an identity distinguishes one.
      */
-    private static void ruleId(ObjectNode into, RuleRef rule) {
+    static void ruleId(ObjectNode into, RuleRef rule) {
         into.put("kind", schemaRuleKind(rule));
         // Every part of the identity and not the parts that read well. A declaration is its module
         // and its name — two modules may each declare an `Amount` and they are two types — and a
@@ -2701,14 +2701,14 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 into.put("ordinal", it.origin().ordinal());
                 into.put("lowered", it.origin().lowered());
             }
-            // Nothing publishes one yet, and what one would be written as is a change to what this
-            // document promises. Refused rather than spelled here on a guess: the shape a consumer
-            // is held to is pinned by a version, and a shape written before anything can produce
-            // one would be a promise made about a rule no reader has ever been shown. What reaches
-            // here is the day a predicate's classes are published, and this is where the version
-            // and the spelling are decided together.
-            case RuleRef.Predicate it -> throw new IllegalArgumentException(
-                    "no version of this document writes a predicate's identity: " + it);
+            // The same coordinates as a comparison, because it is the same kind of thing: an
+            // application the author wrote, in a body, told from the others by which application it
+            // is. What differs is what the rule does to the position, which is not an identity.
+            case RuleRef.Predicate it -> {
+                into.put("behavior", it.behavior());
+                into.put("ordinal", it.origin().ordinal());
+                into.put("lowered", it.origin().lowered());
+            }
         }
     }
 
@@ -2735,10 +2735,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             // version 3 carry `guard` here; the word moved with the version rather than under one,
             // because a document already written groups by what it was told.
             case RuleRef.Comparison _ -> "comparison";
-            // For the reason the identity beside it is refused: which word a document writes for a
-            // predicate is a change to what it promises, and nothing publishes one yet.
-            case RuleRef.Predicate it -> throw new IllegalArgumentException(
-                    "no version of this document has a word for a predicate: " + it);
+            // Its own word beside that one, and not the same word. Both are rules a body writes,
+            // and what a reader does about them differs: a comparison puts a line on the order the
+            // values are counted on, and this tells a set of them from the rest.
+            case RuleRef.Predicate _ -> "predicate";
         };
     }
 

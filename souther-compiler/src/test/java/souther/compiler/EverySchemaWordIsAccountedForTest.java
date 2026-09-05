@@ -856,7 +856,14 @@ class EverySchemaWordIsAccountedForTest {
                                         0, 0, on), "Found")),
                         AdequacyReport.schemaRuleKind(new souther.compiler.check.RuleRef.Comparison("f",
                                 new souther.compiler.types.SourceConstructOrigin("m", 0, 0,
-                                        souther.compiler.types.SourceConstruct.IF)))),
+                                        souther.compiler.types.SourceConstruct.IF))),
+                        // A rule a body writes as one of the language's own operations over the
+                        // values at a position, which tells a set of them from the rest and draws
+                        // no line. Its own word beside a comparison because what a reader does
+                        // about them differs.
+                        AdequacyReport.schemaRuleKind(new souther.compiler.check.RuleRef.Predicate("f",
+                                new souther.compiler.types.SourceConstructOrigin("m", 1, 0,
+                                        souther.compiler.types.SourceConstruct.CALL)))),
                 allowedAt(schema(), List.of("$defs", "ruleId", "properties", "kind")));
     }
 

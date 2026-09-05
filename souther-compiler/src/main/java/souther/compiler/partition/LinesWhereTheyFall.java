@@ -56,11 +56,13 @@ public final class LinesWhereTheyFall {
      * place nobody meant and a reason nobody established. So it comes back as a finding naming the
      * rule, and a reader is told what actually happened to it.
      */
-    public record Filed(List<PartitionEvidence> evidence, List<LineDrawn> between,
+    public record Filed(List<PartitionEvidence> evidence, List<ClassingBlocker> blocked,
+                        List<LineDrawn> between,
                         RulesWithNoLine notPlaced) {
 
         public Filed {
             evidence = List.copyOf(evidence);
+            blocked = List.copyOf(blocked);
             between = List.copyOf(between);
         }
 
@@ -78,7 +80,7 @@ public final class LinesWhereTheyFall {
 
     /** Every measurement where its name was filed, and the lines this had nowhere to put. */
     public static Filed of(InputReading read, List<PartitionEvidence> evidence,
-                           List<LineDrawn> between) {
+                           List<ClassingBlocker> blocked, List<LineDrawn> between) {
         InputDomain inputs = read.domain();
         Symbols symbols = read.symbols();
         List<PartitionEvidence> out = new ArrayList<>();
@@ -97,10 +99,23 @@ public final class LinesWhereTheyFall {
                     standingOf(inputs, each.at(), symbols, each.by()).all();
             destinations.forEach(at -> out.add(measuredAt(each, at)));
         }
+        // And the rules that would have divided a position and did not, through the same authority
+        // and in the same act. What a name reaches is one answer, and a blocker filed by anything
+        // else would be at the position the rule was written about while the evidence beside it had
+        // moved — so a position would be composed out of rules one of these was meant to stop.
+        List<ClassingBlocker> outBlocked = new ArrayList<>();
+        for (ClassingBlocker each : blocked) {
+            standingOf(inputs, each.at(), symbols, each.by()).all().forEach(at -> {
+                NumericTerm.FromOnePosition here = at.atOnePosition();
+                if (here != null) {
+                    outBlocked.add(each.measuredAt(here));
+                }
+            });
+        }
         for (LineDrawn each : between) {
             place(read, each, outBetween, notPlaced);
         }
-        return new Filed(out, outBetween, notPlaced.found());
+        return new Filed(out, outBlocked, outBetween, notPlaced.found());
     }
 
 

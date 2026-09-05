@@ -218,9 +218,10 @@
       ]
     },
     "answerRealizationStoppedReason": {
-      "description": "What the answer at a position was short of, which is a fact about what the rules of that position come to between them and about none of them: the same rules met in another order would have been built. Its own vocabulary because it names no rule, so nothing written in one of these sends a reader to a clause. It is one word with something a document could name a rule for — `exact_values_too_costly` is written here and in `ruleStoppedReadingReason`, where it is a rule naming a set of strings whose machine this will not make — and the two stay apart because the fields do: a question carries one of each where it is short in both ways, and which field a word is in says which of the two facts it is about. Schema 12 had `questionStoppedReason`, one vocabulary over both facts, and with it `rule_not_interpreted_here`; a document of that version may carry that word, nothing writes it now, and the state it was written for is an answer that was not built.",
+      "description": "What the answer at a position was short of, which is a fact about what the rules of that position come to between them and about none of them: the same rules met in another order would have been built. Its own vocabulary because it names no rule, so nothing written in one of these sends a reader to a clause. It is one word with something a document could name a rule for — `exact_values_too_costly` is written here and in `ruleStoppedReadingReason`, where it is a rule naming a set of strings whose machine this will not make — and the two stay apart because the fields do: a question carries one of each where it is short in both ways, and which field a word is in says which of the two facts it is about. `behavior_distinctions_too_costly` is the other half of the same kind and stays apart from `exact_values_too_costly` because the two bound different questions: that one is what the position admits coming out wider than its declarations leave it, and this one is what a behavior\u0027s own rules about the position tell apart, so a position answered to the letter by its declaration still carries it. Schema 12 had `questionStoppedReason`, one vocabulary over both facts, and with it `rule_not_interpreted_here`; a document of that version may carry that word, nothing writes it now, and the state it was written for is an answer that was not built.",
       "enum": [
-        "exact_values_too_costly"
+        "exact_values_too_costly",
+        "behavior_distinctions_too_costly"
       ]
     },
     "notReadReason": {
@@ -1203,6 +1204,37 @@
               }
             ]
           }
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "predicate"
+            }
+          },
+          "required": [
+            "behavior",
+            "ordinal",
+            "lowered"
+          ],
+          "not": {
+            "anyOf": [
+              {
+                "required": [
+                  "declaredOn"
+                ]
+              },
+              {
+                "required": [
+                  "clause"
+                ]
+              },
+              {
+                "required": [
+                  "arm"
+                ]
+              }
+            ]
+          }
         }
       ],
       "properties": {
@@ -1210,9 +1242,10 @@
           "enum": [
             "invariant",
             "ensures",
-            "comparison"
+            "comparison",
+            "predicate"
           ],
-          "description": "Which kind of rule of the model this is, and so which coordinates below are written. A rule of a body is a comparison and not the construct it is written in: it may stand in the condition of an `if` or a `guard`, be given a name above the fork that tests it, or be what the behavior answers with, and it is one rule in all of those. Documents of version 3 wrote `guard` here, from the days when a rule was found by finding a fork."
+          "description": "Which kind of rule of the model this is, and so which coordinates below are written. A `predicate` is a rule a body writes as one of the language\u0027s own operations over the values at a position — `String.startsWith(\"JP\", code)` — which tells a set of them from the rest and draws no line; it is identified the way a comparison is, by the application the author wrote. A rule of a body is a comparison and not the construct it is written in: it may stand in the condition of an `if` or a `guard`, be given a name above the fork that tests it, or be what the behavior answers with, and it is one rule in all of those. Documents of version 3 wrote `guard` here, from the days when a rule was found by finding a fork."
         },
         "declaredIn": {
           "type": "string",
