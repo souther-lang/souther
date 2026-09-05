@@ -214,6 +214,11 @@ public final class ReportedReason {
             // of it, and an author looks at the rule.
             case BlockReason.PredicateTellingNothingApart _ ->
                     UndividedPosition.Reason.RULE_TELLS_NOTHING_APART;
+            // Its own word again, and the one that says nothing fell short. Every rule was read and
+            // every set was worked out; what will not go together is the classes, so a reader sent
+            // after what the rules cost would be looking at something that was never the trouble.
+            case BlockReason.ClassesNotComposed _ ->
+                    UndividedPosition.Reason.CLASSES_NOT_COMPOSED;
             // And its own word beside the four collapsed above. Those are what a position admits
             // coming out wider than its rules leave it, which is about the declarations; this is
             // about a body, and a position whose declaration was answered exactly still lands here.

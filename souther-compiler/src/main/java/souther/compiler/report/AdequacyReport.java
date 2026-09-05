@@ -1705,6 +1705,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             case RULE_TELLS_NOTHING_APART ->
                     "it was read to the end and every value this position holds comes out one side"
                             + " of it";
+            case CLASSES_NOT_COMPOSED ->
+                    "it was read to the end, and what it says and what the rules beside it say are"
+                            + " not one list of classes";
             case RULE_CUTS_OUTSIDE_WHAT_THE_QUANTITY_HOLDS ->
                     "it was read to the end and draws its line outside what the quantity it cuts"
                             + " ever holds";

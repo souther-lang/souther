@@ -49,6 +49,19 @@ final class EvidenceAccount {
          */
         record ThePositionIsAlreadyMeasured(souther.compiler.inputs.TermPath at)
                 implements Disposition {}
+
+        /**
+         * The rules about this position are not all sayable as one list of classes, so it has none
+         * here and this rule divided nothing.
+         *
+         * <p>Its own answer beside {@link Measured}, and not a loss. The rule was read and what it
+         * states was worked out; what it did not do is go together with the rules beside it, and
+         * that is a fact about the position's rules taken together rather than about this one.
+         * Left out of the account, a position both kinds of rule reach would look like one whose
+         * evidence went missing.
+         */
+        record TheClassesWereNotComposed(souther.compiler.inputs.NumericTerm.FromOnePosition at)
+                implements Disposition {}
     }
 
     /** One piece of evidence and what became of it, held together so that holding the stage to a
@@ -144,12 +157,12 @@ final class EvidenceAccount {
     private static boolean carries(Axis axis, PartitionEvidence evidence) {
         return switch (evidence) {
             // A set told from the rest is carried by the classes and by nothing below them: there
-            // is no cut it is an origin of and no parting it is an alternative in. Refused rather
-            // than answered `false`, which would file it as a rule this measure said nothing about
-            // while the thing that would have said it is the class vocabulary this cannot read.
-            case PartitionEvidence.BySet set -> throw new IllegalStateException(
-                    "a set division reached the account before the classes could carry one: "
-                            + set.division().origin());
+            // is no cut it is an origin of and no parting it is an alternative in. So what says the
+            // axis carries it is that the classes were composed out of it, which the axis records
+            // beside them — read off the classes instead, the question would be whether one set is
+            // inside another, and that is a machine nobody paid for.
+            case PartitionEvidence.BySet set ->
+                    axis.divides().contains(set.division().origin());
             // A line the position has no value beside is not a cut of it. It parts the values all
             // the same, and where it parts them is what carries the rule — as the authored line,
             // which is the key that side keeps.

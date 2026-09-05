@@ -48,6 +48,12 @@ import java.util.List;
  * @param classes exclusive and exhaustive over the term's values, or empty where the model does
  *                not divide them
  * @param cuts    the values the classes meet at, each carrying every rule that drew it there
+ * @param divides which rules about the strings here the classes were composed out of, each with
+ *                which reading of it this is. The other half of what {@code cuts} is for a line:
+ *                what a class of a set is made of is not read off the class, because a set is what
+ *                it holds and holds nothing about what put a value in it — so the rules that
+ *                composed the classes are recorded beside them, and a stage claiming to have
+ *                measured one can be held to it
  * @param parted  where the rules part this position's values, which is not the same list. A cut is
  *                a value a row can be written against and a bound has one without parting
  *                anything; a rule that wrote a multiple of the position parts its values where the
@@ -56,11 +62,12 @@ import java.util.List;
  *                short of the lines that have no value
  */
 public record Axis(AxisId id, NumericTerm.FromOnePosition term,
-                   List<PartitionClass> classes,
+                   List<PartitionClass> classes, List<PredicateOrigin> divides,
                    List<Cut> cuts, List<Parting> parted, NarrowedBounds narrowed) {
 
     public Axis {
         classes = List.copyOf(classes);
+        divides = List.copyOf(divides);
         cuts = List.copyOf(cuts);
         parted = List.copyOf(parted);
         // A measure is what the rules divided a number into, cut on it, or parted it at, and one
@@ -125,7 +132,7 @@ public record Axis(AxisId id, NumericTerm.FromOnePosition term,
 
     public Axis(AxisId id, NumericTerm.FromOnePosition term,
                 List<PartitionClass> classes, List<Cut> cuts) {
-        this(id, term, classes, cuts, List.of(), NarrowedBounds.NOTHING);
+        this(id, term, classes, List.of(), cuts, List.of(), NarrowedBounds.NOTHING);
     }
 
     /**
@@ -137,9 +144,9 @@ public record Axis(AxisId id, NumericTerm.FromOnePosition term,
      * a reader rebuilding a measure it already has.
      */
     public static Axis of(String behavior, NumericTerm.FromOnePosition term,
-                          List<PartitionClass> classes, List<Cut> cuts, List<Parting> parted,
-                          NarrowedBounds narrowed) {
-        return new Axis(AxisId.of(behavior, term), term, classes, cuts, parted, narrowed);
+                          List<PartitionClass> classes, List<PredicateOrigin> divides,
+                          List<Cut> cuts, List<Parting> parted, NarrowedBounds narrowed) {
+        return new Axis(AxisId.of(behavior, term), term, classes, divides, cuts, parted, narrowed);
     }
 
 

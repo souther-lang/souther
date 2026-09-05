@@ -1,9 +1,12 @@
 package souther.compiler.partition;
 
+import souther.compiler.check.AnalysisBody;
+import souther.compiler.check.ElementBindings;
 import souther.compiler.check.PredicateStatement;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.StringPredicates;
 import souther.compiler.inputs.BlockReason;
+import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.PathResolution;
 import souther.compiler.regex.PatternPlan;
@@ -12,6 +15,7 @@ import souther.compiler.values.Allowance;
 import souther.compiler.values.Realizations;
 import souther.compiler.values.Sameness;
 import souther.compiler.values.ValueSet;
+import souther.compiler.types.BindingId;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -50,10 +54,15 @@ import java.util.Set;
  * that does not comes back as what became of it, so nothing that reached here leaves without a
  * sentence about it.
  */
-final class SetDivisions {
+public final class SetDivisions {
 
     private SetDivisions() {
     }
+
+    /** What a behavior with no body to read comes to, which is no rules and nothing became of
+     *  them. Not the same as a body that states none: there the walk ran and found nothing, and
+     *  here there was nothing to walk. */
+    public static final Read NONE = new Read(List.of(), List.of(), Map.of());
 
     /**
      * What the rules came to.
@@ -63,10 +72,10 @@ final class SetDivisions {
      * @param cells     what the divisions of each position leave it divided into, which is the
      *                  coarsest partition every one of them is a union of cells of
      */
-    record Read(List<PartitionEvidence> divided, List<Undivided> undivided,
-                Map<NumericTerm.FromOnePosition, List<Cell>> cells) {
+    public record Read(List<PartitionEvidence> divided, List<Undivided> undivided,
+                       Map<NumericTerm.FromOnePosition, List<Cell>> cells) {
 
-        Read {
+        public Read {
             divided = List.copyOf(divided);
             undivided = List.copyOf(undivided);
             cells = Map.copyOf(cells);
@@ -96,9 +105,9 @@ final class SetDivisions {
      * @param under  each of the position's rules and how it came out here, in the order the body
      *               states them
      */
-    record Cell(ValueSet values, List<Answered> under) {
+    public record Cell(ValueSet values, List<Answered> under) {
 
-        Cell {
+        public Cell {
             if (values == null || values.isEmpty()) {
                 throw new IllegalArgumentException(
                         "a class of a position holds a value; an empty one is no class of it");
@@ -119,9 +128,9 @@ final class SetDivisions {
     }
 
     /** One of a position's rules, and whether a value in the cell satisfies it. */
-    record Answered(PredicateStatement states, boolean holds) {
+    public record Answered(PredicateStatement states, boolean holds) {
 
-        Answered {
+        public Answered {
             if (states == null) {
                 throw new IllegalArgumentException("a rule that came out one way states something");
             }
@@ -136,9 +145,9 @@ final class SetDivisions {
      * — so what a reader is given is which rule it was, and where the reason is about a position it
      * is the reason that says so.
      */
-    record Undivided(PredicateOrigin by, BlockReason why) {
+    public record Undivided(PredicateOrigin by, BlockReason why) {
 
-        Undivided {
+        public Undivided {
             if (by == null || why == null) {
                 throw new IllegalArgumentException(
                         "a rule that divided nothing is some rule, and something became of it");
@@ -175,6 +184,21 @@ final class SetDivisions {
      * <p>{@code symbols} and the reading each rule carries are what turn its subject into a
      * position: a rule inside an expanded helper is about the argument the call handed it, so where
      * it stands is asked of the reading that stands there and never of the body as a whole.
+     */
+    public static Read of(String behavior, AnalysisBody body, InputReading read,
+                          Map<BindingId, String> parameters, ElementBindings elements,
+                          Allowance<NumericTerm.FromOnePosition> allowance) {
+        return of(PredicateReadings.of(behavior, body, read, parameters, elements),
+                read.symbols(), allowance);
+    }
+
+    /**
+     * The same, of a reading already made.
+     *
+     * <p>Not the way in from outside. Which tree a body's rules are read off is settled here, and a
+     * caller given the choice could hand over a reading of the tree a backend emits — where every
+     * one of these rules has been expanded into what it does, so the behavior would come back
+     * stating nothing about the strings at any of its positions.
      */
     static Read of(PredicateReadings read, Symbols symbols,
                    Allowance<NumericTerm.FromOnePosition> allowance) {

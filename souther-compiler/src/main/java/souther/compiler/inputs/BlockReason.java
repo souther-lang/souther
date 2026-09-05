@@ -784,6 +784,27 @@ public sealed interface BlockReason {
     record PredicateTellingNothingApart() implements ReadToEndWithoutLine {}
 
     /**
+     * Every rule about this position was read, and what they say cannot all be said as one list of
+     * classes.
+     *
+     * <p>A rule can put a line on the order the position's values are counted on, or tell a set of
+     * them from the rest, and the two are not one vocabulary: a run of values has a least and a
+     * next, and a set has neither, so a class written in one of them cannot be written in the
+     * other. A position both kinds reach is one this compiler has no single denominator for.
+     *
+     * <p><b>Nothing here fell short of a rule.</b> Every one of them was read and each says what it
+     * says — which is what keeps this apart from {@link RulesNotHandedOnAsSets} and from
+     * {@link BehaviorDistinctionsTooCostly}. Those are a set the rules leave that was not worked
+     * out; here every set was worked out and the classes are what they will not compose into. A run
+     * allowed more of everything meets this again.
+     *
+     * <p>And it is the classes and not the position. What the lines cut and where the rules part it
+     * are still what they were, because those are separate observations rather than a projection of
+     * the classes.
+     */
+    record ClassesNotComposed() implements ReadToEndWithoutLine {}
+
+    /**
      * What a derivation would have to be able to reach into.
      *
      * <p>What it can reach into is not here. The elements of a {@code List} or a {@code Set} were,

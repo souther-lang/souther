@@ -87,7 +87,11 @@ final class Coverages {
                                       souther.compiler.check.ElementBindings elements,
                                       CoverageSites.Plan plan,
                                       PathReachability.Answers arrives,
-                                      souther.compiler.check.StatedContract stated) {
+                                      souther.compiler.check.StatedContract stated,
+                                      souther.compiler.check.AnalysisBody analysis,
+                                      souther.compiler.values.Allowance<
+                                              souther.compiler.inputs.NumericTerm.FromOnePosition>
+                                              distinctions) {
         RuleReadingSource ruleSource = read.rules();
         ReadingPolicy policy = read.domain().policy();
         souther.compiler.inputs.Quantities quantities = read.quantities();
@@ -102,6 +106,13 @@ final class Coverages {
         // And what the declarations state between two of this input's positions. Such a rule places
         // no end at either of them, so the reading of ends has nothing to draw it from; read here,
         // it is a line like the two above and is arranged with them.
+        // And what the body states about the strings at its positions, read off the tree that has
+        // those rules in it. The emitted body has each of them expanded into what it does, so a
+        // reading of it holds none — which is why this is the other body and not the one above.
+        souther.compiler.partition.SetDivisions.Read divisions = analysis == null
+                ? souther.compiler.partition.SetDivisions.NONE
+                : souther.compiler.partition.SetDivisions.of(behavior.name(), analysis, read,
+                        read.domain().parameterReads(), elements, distinctions);
         List<souther.compiler.partition.LineDrawn> declared =
                 souther.compiler.partition.DeclaredThresholds.between(behavior.name(), read);
         // Every producer of one kind of line, put together before the position is divided. Two
@@ -114,10 +125,10 @@ final class Coverages {
         // the same rule.
         souther.compiler.partition.LinesWhereTheyFall.Filed filed =
                 souther.compiler.partition.LinesWhereTheyFall.of(read,
-                        both(clauses.evidence(), guards.evidence()),
+                        both(both(clauses.evidence(), guards.evidence()), divisions.divided()),
                         both(declared, both(clauses.between(), guards.between())));
         return new Partitioned(Partitions.withEvidence(partitioning, quantities,
-                filed.evidence(), ruleSource, policy,
+                filed.evidence(), divisions.cells(), ruleSource, policy,
                 // And the lines this had nowhere to put, which are findings of the same kind: a rule
                 // of the model that came to no line at a position it is about.
                 everyRuleWithNoLine(clauses, guards, filed),

@@ -156,6 +156,12 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
         // where they were found. Nothing is owed: the rule states no second class for a row to be
         // asked for, and no measurement is weakened by it.
         table.put("PredicateTellingNothingApart", "RULE_TELLS_NOTHING_APART/-");
+        // And its own row again, which is the one that says nothing fell short. Every rule about
+        // the position was read and every set was worked out; what will not go together is the
+        // classes, because a line on the order and a set of the values are two vocabularies and a
+        // class in one cannot be written in the other. So no measure is weakened by a wider run,
+        // and nothing is owed on its account — the position simply has no classes here.
+        table.put("ClassesNotComposed", "CLASSES_NOT_COMPOSED/-");
         return table;
     }
 
@@ -398,6 +404,7 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
                 new BlockReason.ComparisonOverARun(),
                 new BlockReason.RuleRestrictingToAdmittedValues(),
                 new BlockReason.PredicateTellingNothingApart(),
+                new BlockReason.ClassesNotComposed(),
                 new BlockReason.TypeUnresolved(),
                 new BlockReason.RecursiveExpansion(
                         souther.compiler.types.TypeSymbols.declared(

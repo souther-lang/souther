@@ -299,6 +299,23 @@ public record UndividedPosition(TermPath at, Why why) {
          */
         RULE_TELLS_NOTHING_APART,
         /**
+         * The rules about this position were read, and what they say cannot all be said as one list
+         * of classes.
+         *
+         * <p>A rule puts a line on the order the values are counted on, or tells a set of them from
+         * the rest, and a class written in one of those cannot be written in the other. A position
+         * both kinds of rule reach has no single denominator here.
+         *
+         * <p>Its own word because nothing fell short. {@link #EXACT_VALUES_TOO_COSTLY} and
+         * {@link #BEHAVIOR_DISTINCTIONS_TOO_COSTLY} are sets that were not worked out, and a reader
+         * told one of those would go looking at how much the rules cost; here every set was worked
+         * out and what a wider run would change is nothing.
+         *
+         * <p>What the rules cut and where they part the position are unaffected and are still
+         * reported, because those are observations of their own and not a projection of the classes.
+         */
+        CLASSES_NOT_COMPOSED,
+        /**
          * A rule naming this position was read to the end and draws its line where the quantity it
          * cuts never runs: three times a length is never negative, and a rule comparing one against
          * a negative has no value either side of its line.
