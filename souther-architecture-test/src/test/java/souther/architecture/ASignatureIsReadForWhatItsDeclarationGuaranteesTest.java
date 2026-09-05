@@ -8,7 +8,6 @@ import souther.compiler.check.Symbols;
 import org.junit.jupiter.api.Test;
 
 import java.lang.classfile.Attributes;
-import java.lang.classfile.ClassModel;
 import java.lang.classfile.MethodModel;
 import java.lang.classfile.MethodSignature;
 import java.lang.classfile.Signature;
@@ -53,18 +52,26 @@ class ASignatureIsReadForWhatItsDeclarationGuaranteesTest {
         return type.getName().replace('.', '/');
     }
 
-    /** What the arguments of one declaration below reach, read as a rule reads them. */
-    private static boolean takes(String owner, String method, String wanted) {
-        ClassModel model = COMPILED.read(owner);
-        MethodModel found = model.methods().stream()
+    /** One declaration below, read as a rule reads it. */
+    private static MethodSignature signatureOf(String owner, String method) {
+        MethodModel found = COMPILED.read(owner).methods().stream()
                 .filter(each -> each.methodName().equalsString(method))
                 .findFirst().orElseThrow(() -> new AssertionError("no " + method + " in " + owner));
-        MethodSignature signature = found.findAttribute(Attributes.signature())
+        return found.findAttribute(Attributes.signature())
                 .map(SignatureAttribute::asMethodSignature)
                 .orElseGet(() -> MethodSignature.of(found.methodTypeSymbol()));
-        Scope scope = Scope.of(owner, WhatASignatureReaches.typeParametersOf(model))
-                .and(method, signature.typeParameters());
-        return READING.anyOf(signature.arguments(), scope, Set.of(wanted));
+    }
+
+    /** The bindings that declaration is read under: its class's, and its own standing on them. */
+    private static Scope scopeOf(String owner, String method) {
+        return Scope.of(owner, WhatASignatureReaches.typeParametersOf(COMPILED.read(owner)))
+                .and(method, signatureOf(owner, method).typeParameters());
+    }
+
+    /** What the arguments of one declaration below reach. */
+    private static boolean takes(String owner, String method, String wanted) {
+        return READING.anyOf(signatureOf(owner, method).arguments(), scopeOf(owner, method),
+                Set.of(wanted));
     }
 
     private static boolean takes(String method, String wanted) {
@@ -115,6 +122,19 @@ class ASignatureIsReadForWhatItsDeclarationGuaranteesTest {
                             + " letter binds it for what the method writes, never for what its"
                             + " class already said");
         }
+    }
+
+    @Test
+    void aReportNamesEveryFrameAndWhatDeclaredIt() {
+        String shown = scopeOf(HERE + "$BoundedByItsSibling", "throughTheClassesBound").shown();
+
+        assertTrue(shown.contains(
+                        "$BoundedByItsSibling<B extends " + THE_DERIVED_WORLD + ", A extends B>"),
+                "a frame is named by what declared it and by what it declared, so a report about"
+                        + " a letter says which frame is being spoken of: " + shown);
+        assertTrue(shown.contains("throughTheClassesBound<B extends " + THE_RESOLVED_WORLD + ">"),
+                "and the frame standing on it is named too, or a letter both of them declare is"
+                        + " reported as one: " + shown);
     }
 
     @Test
@@ -211,7 +231,7 @@ class ASignatureIsReadForWhatItsDeclarationGuaranteesTest {
         Signature absent = Signature.of(ClassDesc.of("souther.architecture.NothingCompiledThis"));
 
         AssertionError refused = assertThrows(AssertionError.class, () -> READING.reaches(absent,
-                Scope.of("nothing", List.of()), Set.of(THE_DERIVED_WORLD)));
+                Scope.of(HERE, List.of()), Set.of(THE_DERIVED_WORLD)));
 
         assertTrue(refused.getMessage().contains("not built here"),
                 "the same holds of a class whose components a reading has to open and cannot find,"

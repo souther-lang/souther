@@ -13,7 +13,6 @@ import java.lang.classfile.Attributes;
 import java.lang.classfile.ClassModel;
 import java.lang.classfile.MethodModel;
 import java.lang.classfile.MethodSignature;
-import java.lang.classfile.Signature;
 import java.lang.classfile.attribute.SignatureAttribute;
 import java.lang.reflect.AccessFlag;
 import java.util.ArrayList;
@@ -104,7 +103,7 @@ class HowARuleThatGovernsADeclarationIsAskedForTest {
      * half. They are what the variables the two halves write stand for, and a rule that started a
      * reading at them would find a bound the method never uses.
      */
-    private record Read(String name, MethodSignature signature, Scope scope) {
+    private record Read(MethodSignature signature, Scope scope) {
 
         boolean takesOneOf(Set<String> wanted) {
             return READING.anyOf(signature.arguments(), scope, wanted);
@@ -123,34 +122,9 @@ class HowARuleThatGovernsADeclarationIsAskedForTest {
          * type parameter is is settled by the reading, not by whether a reader can see it.
          */
         String shown() {
-            String enclosing = scope.under().map(Read::shown).orElse("");
-            String declared = signature.typeParameters().isEmpty() ? ""
-                    : signature.typeParameters().stream().map(Read::shown)
-                            .collect(Collectors.joining(", ", "<", ">"));
             String takes = signature.arguments().stream().map(Signatures::shown)
                     .collect(Collectors.joining(", "));
-            return enclosing + name + declared + "(" + takes + "): "
-                    + Signatures.shown(signature.result());
-        }
-
-        /** The frames under a method's own, each as what declared it and what it declared. */
-        private static String shown(Scope enclosing) {
-            StringBuilder out = new StringBuilder();
-            for (Scope frame : enclosing.frames()) {
-                if (!frame.declared().isEmpty()) {
-                    out.append(frame.owner()).append(frame.declared().values().stream()
-                            .map(Read::shown).collect(Collectors.joining(", ", "<", ">")))
-                            .append('.');
-                }
-            }
-            return out.toString();
-        }
-
-        private static String shown(Signature.TypeParam declared) {
-            List<Signature.RefTypeSig> bounds = WhatASignatureReaches.boundsOf(declared);
-            return bounds.isEmpty() ? declared.identifier()
-                    : declared.identifier() + " extends " + bounds.stream().map(Signatures::shown)
-                            .collect(Collectors.joining(" & "));
+            return scope.shown() + "(" + takes + "): " + Signatures.shown(signature.result());
         }
     }
 
@@ -179,8 +153,9 @@ class HowARuleThatGovernsADeclarationIsAskedForTest {
             MethodSignature signature = method.findAttribute(Attributes.signature())
                     .map(SignatureAttribute::asMethodSignature)
                     .orElseGet(() -> MethodSignature.of(method.methodTypeSymbol()));
-            String name = method.methodName().stringValue();
-            out.add(new Read(name, signature, ofTheClass.and(name, signature.typeParameters())));
+            // The method's own frame is named for it, which is where a report gets the name from.
+            out.add(new Read(signature, ofTheClass.and(method.methodName().stringValue(),
+                    signature.typeParameters())));
         }
         return out;
     }

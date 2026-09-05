@@ -86,7 +86,7 @@ final class WhatASignatureReaches {
 
     /** What a type parameter declares its variable to be: the class bound where there is one, and
      *  the interface bounds, which is where a variable bounded only by interfaces says so. */
-    static List<Signature.RefTypeSig> boundsOf(Signature.TypeParam declared) {
+    private static List<Signature.RefTypeSig> boundsOf(Signature.TypeParam declared) {
         List<Signature.RefTypeSig> out =
                 new ArrayList<>(declared.classBound().map(List::of).orElse(List.of()));
         out.addAll(declared.interfaceBounds());
@@ -111,7 +111,9 @@ final class WhatASignatureReaches {
         private final Set<String> opened = new LinkedHashSet<>();
 
         /** The bindings already followed, which is a different loop from the one above: a variable
-         *  bounded by its own type is ordinary Java, and the closure of a bound is finite. */
+         *  bounded by its own type is ordinary Java, and the closure of a bound is finite. The
+         *  binding alone is the key because a binding settles the frame its bound is read in, so
+         *  there is no second reading of one to miss. */
         private final Set<Scope.Binding> followed = new LinkedHashSet<>();
 
         private Walk(Set<String> wanted) {
@@ -248,6 +250,36 @@ final class WhatASignatureReaches {
                 out.addAll(frame.declared().keySet());
             }
             return out;
+        }
+
+        /**
+         * These frames as a report names them: what declared each, and what each declared.
+         *
+         * <p>Here because the frames are. A report about {@code S} says what {@code S} was declared
+         * to be, and where two frames declare that letter it says which of them is being spoken of;
+         * a reader that held only the innermost would name one of the two and call it the answer.
+         */
+        String shown() {
+            List<String> named = new ArrayList<>();
+            for (Scope frame : frames()) {
+                named.add(frame.owner() + frame.shownDeclared());
+            }
+            return String.join(".", named);
+        }
+
+        /** What this frame alone declared, or nothing where it declares no variable. */
+        String shownDeclared() {
+            if (declared.isEmpty()) {
+                return "";
+            }
+            List<String> each = new ArrayList<>();
+            for (Signature.TypeParam parameter : declared.values()) {
+                List<Signature.RefTypeSig> bounds = boundsOf(parameter);
+                each.add(bounds.isEmpty() ? parameter.identifier()
+                        : parameter.identifier() + " extends " + String.join(" & ",
+                                bounds.stream().map(Signatures::shown).toList()));
+            }
+            return "<" + String.join(", ", each) + ">";
         }
 
         /** A variable's binding beside the frame it was declared in, which is where its bound is
