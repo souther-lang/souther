@@ -979,14 +979,12 @@ public final class FixtureReader {
                 }
                 yield out;
             }
-            // A row's operand is compiled and run, so a field a row takes is read by the module's
-            // own code and typed by the elaboration like any other. What is read here is a value
-            // composed elsewhere and asked about at this module's boundary, and nothing composes one
-            // of those out of a field access. Read instead of refused, this would be a second
-            // reading of what a `.` names, answering beside the one the language is checked by.
-            case Hir.FieldAccess _ -> throw new IllegalStateException(
-                    "a value asked about at a boundary is composed, and no composition takes a field"
-                            + " off another value");
+            // A field taken off another value is one of the forms this does not read, and it is
+            // refused here as they all are. Reading it would be a second reading of what a `.`
+            // names, answering beside the one the language is checked by: a row's operand is
+            // compiled and run, so the field a row takes is typed by the elaboration like any
+            // other, and what reaches here instead is a value named at a boundary — which stands
+            // for whatever the module wrote, up to and including this.
             default -> throw new FixtureException("an example fixture must be a literal or a construction");
         };
     }

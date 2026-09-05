@@ -83,7 +83,8 @@ class WhatADotMayNameIsOneAnswerForEveryReaderOfItTest {
      * would come back as a setup that could not be built rather than as the surface that moved.
      */
     private final FieldTypes world = new ResolvedFieldTypes(symbols);
-    private final FieldRead read = new FieldRead(symbols, world);
+    private final FieldRead read =
+            new FieldRead(symbols, world, FieldRead.Unreadable.REFUSED);
 
     // --- what one position makes readable -------------------------------------------------------
 
@@ -172,7 +173,8 @@ class WhatADotMayNameIsOneAnswerForEveryReaderOfItTest {
         assertNotNull(ExampleExecutions.of(COMPILATION.db(), "demo"),
                 "the model under test is accepted, or these readers have no program to read");
         FieldTypes checked = ExampleExecutions.of(COMPILATION.db(), "demo").fieldTypes();
-        Type declared = new DeclaredTypeEvidence(symbols, checked, definitions())
+        Type declared = new DeclaredTypeEvidence(
+                new FieldRead(symbols, checked, FieldRead.Unreadable.REFUSED), definitions())
                 .declaredTypeOf(bodyOf("taken"));
         assertEquals(Type.STRING, declared,
                 "the walk over the declarations says `held.deal.id` is a `String`");
@@ -200,6 +202,79 @@ class WhatADotMayNameIsOneAnswerForEveryReaderOfItTest {
         CompileException refused = assertThrows(CompileException.class,
                 () -> Compiler.compile(behaviorAnswering("Int")));
         assertTrue(refused.getMessage().contains("Int"), refused.getMessage());
+    }
+
+    /**
+     * A declaration that does not read is refused where a check reads it and makes nothing readable
+     * where a text is being typed.
+     *
+     * <p>The nominal half of the reading has the two worlds the field half has, and this is where
+     * they part. What a value here is cannot be settled without following the spreads under it, so
+     * a declaration that does not read is found by reading a position and not only by checking the
+     * declaration — and an author who is already being told what is wrong with it is not also told
+     * that the buffer cannot say what may follow a {@code .}.
+     *
+     * <p>Both worlds on each source, so that a reading which simply never refused would fail here
+     * as surely as one that always did.
+     */
+    @Test
+    void aDeclarationThatDoesNotReadIsRefusedForACheckAndAnsweredForAText() {
+        for (String[] each : new String[][] {
+                {"A", """
+                        module demo
+                        data A = { x: Int, x: String }
+                        """},
+                {"Bad", """
+                        module demo
+                        data Open   = { id: String }
+                        data Closed = { id: String }
+                        data Deal   = Open | Closed
+                        data Bad    = { ...Deal }
+                        """},
+                {"Bad", """
+                        module demo
+                        data One = { id: String }
+                        data Two = { id: String }
+                        data Bad = { ...One, ...Two }
+                        """}}) {
+            // Resolved and not checked, which is the state these readings are made in: the check
+            // refuses the module, and an editor is looking at it while it does.
+            Compilation c = Compilation.ofSource(each[1], "Main");
+            Symbols scope = Scopes.derived(c.db(), "demo").value();
+            Type position = Type.ref(TypeSymbols.declared(new TypeKey("demo", each[0])));
+            FieldTypes text = new ResolvedFieldTypes(scope);
+
+            assertEquals(Map.of(),
+                    new FieldRead(scope, text, FieldRead.Unreadable.MAKES_NOTHING_READABLE)
+                            .at(position),
+                    () -> "a text still being typed is answered at " + Type.show(position));
+            assertThrows(CompileException.class,
+                    () -> new FieldRead(scope, text, FieldRead.Unreadable.REFUSED).at(position),
+                    () -> "and a check reads the same position and refuses it, at "
+                            + Type.show(position));
+        }
+    }
+
+    /**
+     * And the editor's own reading is the one that answers.
+     *
+     * <p>Held of the snapshot rather than of a {@code FieldRead} built here, because which of the
+     * two worlds it is in is what the snapshot decides — built with the other, it would compile and
+     * throw a declaration diagnostic out of the one reader whose whole contract is to answer from
+     * what the declarations denote now.
+     */
+    @Test
+    void andTheSnapshotAnAuthorAsksIsTheOneThatAnswers() {
+        Compilation c = Compilation.ofSource("""
+                module demo
+                data A = { x: Int, x: String }
+                """, "Main");
+        Type a = Type.ref(TypeSymbols.declared(new TypeKey("demo", "A")));
+        assertEquals(Map.of(),
+                SemanticSnapshot.of(c.db(), "demo").orElseThrow()
+                        .fieldsOf(new TypeFact(a, new Evidence.Declared())),
+                "an author writing `.` after a declaration that does not read is told nothing,"
+                        + " rather than the buffer refusing to answer");
     }
 
     /** A behavior reading the shared name off the sum and answering with {@code answers}. */

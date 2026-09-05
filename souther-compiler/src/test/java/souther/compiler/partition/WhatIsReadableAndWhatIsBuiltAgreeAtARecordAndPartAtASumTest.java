@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.ConstructionDescent;
 import souther.compiler.check.ReadableFields;
+import souther.compiler.check.ResolvedFieldTypes;
 import souther.compiler.check.Shape;
 import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
@@ -14,6 +15,7 @@ import souther.compiler.inputs.Distinctions;
 import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.StructuralInspection;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.observe.FieldTypes;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Scopes;
@@ -164,7 +166,7 @@ class WhatIsReadableAndWhatIsBuiltAgreeAtARecordAndPartAtASumTest {
     void oneNameIsReadTheWayEveryNameIs() {
         for (Type type : List.of(typeOf("p"), typeOf("r"))) {
             Shape shape = shapeOf(type);
-            Map<String, Type> readable = ReadableFields.of(shape).fields();
+            Map<String, Type> readable = ReadableFields.of(shape).declaredFields();
 
             assertFalse(readable.isEmpty(),
                     () -> "the model under test has names readable at " + Type.show(type));
@@ -173,6 +175,33 @@ class WhatIsReadableAndWhatIsBuiltAgreeAtARecordAndPartAtASumTest {
                         () -> "one name is what every name says it is, at " + name.getKey());
             }
             assertNull(ReadableFields.at(shape, "nothingDeclaresThis"),
+                    () -> "and a name nothing declares is readable nowhere, at "
+                            + Type.show(type));
+        }
+    }
+
+    /**
+     * And the same, of the two ways of asking it in a world.
+     *
+     * <p>What a name holds is the world's answer wherever the reader is reading, and that question
+     * has the same two widths — a surface to list, and one name to look up. So it has the same two
+     * chances to be answered differently, and the narrow one is held to the wide one here rather
+     * than being trusted to fold the declarations in the same order.
+     */
+    @Test
+    void oneNameIsReadInAWorldTheWayEveryNameIs() {
+        FieldTypes world = new ResolvedFieldTypes(symbols());
+        for (Type type : List.of(typeOf("p"), typeOf("r"))) {
+            Shape shape = shapeOf(type);
+            Map<String, Type> readable = ReadableFields.of(shape).in(world);
+
+            assertFalse(readable.isEmpty(),
+                    () -> "the model under test has names readable at " + Type.show(type));
+            for (Map.Entry<String, Type> name : readable.entrySet()) {
+                assertEquals(name.getValue(), ReadableFields.at(shape, name.getKey(), world),
+                        () -> "one name is what every name says it is, at " + name.getKey());
+            }
+            assertNull(ReadableFields.at(shape, "nothingDeclaresThis", world),
                     () -> "and a name nothing declares is readable nowhere, at "
                             + Type.show(type));
         }

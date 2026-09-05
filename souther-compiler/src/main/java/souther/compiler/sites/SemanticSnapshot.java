@@ -153,7 +153,7 @@ public final class SemanticSnapshot {
      * the resolved module here.
      */
     private DeclaredTypeEvidence declarations() {
-        return new DeclaredTypeEvidence(symbols, fields(), Map.of());
+        return new DeclaredTypeEvidence(fieldRead(), Map.of());
     }
 
     /**
@@ -358,7 +358,20 @@ public final class SemanticSnapshot {
      * a name in it is owed what its declarations denote now.
      */
     public Map<String, Type> fieldsOf(TypeFact held) {
-        return new FieldRead(symbols, fields()).at(held.type());
+        return fieldRead().at(held.type());
+    }
+
+    /**
+     * What a {@code .} may name, as the text stands.
+     *
+     * <p>The same reading the compiler types a field access by, in the world an editor reads: a
+     * declaration that does not read yet — one name written twice, a spread of something that is no
+     * product — makes nothing readable rather than being refused here. What is wrong with it is
+     * reported where the module is checked, and an author who is being told that already is not
+     * also told that the buffer cannot answer what may follow a {@code .}.
+     */
+    private FieldRead fieldRead() {
+        return new FieldRead(symbols, fields(), FieldRead.Unreadable.MAKES_NOTHING_READABLE);
     }
 
     /** What a declaration holds, as the text has resolved it so far. */
@@ -392,7 +405,7 @@ public final class SemanticSnapshot {
             return null;
         }
         Map<BindingId, BindingEvidence> parameters = parametersOfEveryBehavior();
-        return new DeclaredTypeEvidence(symbols, fields(), values.value(), parameters)
+        return new DeclaredTypeEvidence(fieldRead(), values.value(), parameters)
                 .declaredTypeOf(e, new HashSet<>(), new HashMap<>(parameters));
     }
 

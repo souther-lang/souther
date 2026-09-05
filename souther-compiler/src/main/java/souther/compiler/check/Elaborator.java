@@ -513,9 +513,11 @@ public final class Elaborator {
     }
 
     /** What a {@code .} may name, in the world an elaboration reads: the declarations as this text
-     *  has resolved them, which is what a check settling them has to go on. */
+     *  has resolved them, which is what a check settling them has to go on — and refusing where one
+     *  of them does not read, which a check is what reports. */
     private static FieldRead fieldRead(CheckContext ctx) {
-        return new FieldRead(ctx.symbols(), new ResolvedFieldTypes(ctx.symbols()));
+        return new FieldRead(ctx.symbols(), new ResolvedFieldTypes(ctx.symbols()),
+                FieldRead.Unreadable.REFUSED);
     }
 
     /**

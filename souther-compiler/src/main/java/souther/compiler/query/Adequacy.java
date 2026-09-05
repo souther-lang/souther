@@ -3362,8 +3362,14 @@ public final class Adequacy {
             // What a value is declared to be, asked of the one walk that answers it. A second
             // reading of a definition's type here would be a second answer about what a row may
             // name, differing from the reading that builds the row at whatever either forgot.
+            // Refusing where a declaration does not read, because this is downstream of a check:
+            // one that does not read was refused there, so meeting one here is this compiler being
+            // wrong rather than a module being written.
             souther.compiler.check.DeclaredTypeEvidence evidence =
-                    new souther.compiler.check.DeclaredTypeEvidence(symbols, fields, values);
+                    new souther.compiler.check.DeclaredTypeEvidence(
+                            new souther.compiler.check.FieldRead(symbols, fields,
+                                    souther.compiler.check.FieldRead.Unreadable.REFUSED),
+                            values);
             Map<TypeSymbol, List<String>> stated = new LinkedHashMap<>();
             for (Map.Entry<String, Hir.FnDef> each : values.entrySet()) {
                 if (!each.getValue().params().isEmpty()
