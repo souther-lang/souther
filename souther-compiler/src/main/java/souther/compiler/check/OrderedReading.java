@@ -19,6 +19,14 @@ import java.util.Map;
  * Which clauses reach a value is settled once, by the walk that gathers them; what each reading
  * makes of a clause is its own.
  *
+ * <p><b>Leaves, and not the connectives over them.</b> What a conjunction or a choice of these
+ * comes to is asked where both languages are held together and where the choices of a declaration
+ * are decided ({@code StatedByClauses}), because a branch nobody can be in is settled by things
+ * neither language holds alone. Answered here as well, that would be a second place deciding what
+ * a choice does to the ranges, and a branch would be dropped only where the ranges were also what
+ * could show it impossible — leaving {@code s < "" || (b == true && b == false)} a choice whose
+ * every branch some language refused and neither refused alone.
+ *
  * <p><b>Why it is not the interval algebra.</b> That one carries one number per position and relates
  * positions to each other by differences, which is worth having and is available only where a model
  * adds and subtracts — so it holds an {@code Int} and a {@code Decimal} and nothing else. This holds
@@ -48,7 +56,7 @@ import java.util.Map;
  * end, and the values a denial leaves are a set rather than a range. Under a denial the two swap
  * places, which is the same rule read once.
  */
-final class OrderedReading implements ClauseReading<OrderedIntervals<FactSubject>, Denotations> {
+final class OrderedReading {
 
     private final Terms terms;
     /** What each position's values are ordered on, for the positions that are ordered at all. */
@@ -87,25 +95,6 @@ final class OrderedReading implements ClauseReading<OrderedIntervals<FactSubject
         return carriers;
     }
 
-    @Override
-    public OrderedIntervals<FactSubject> nothingSaid() {
-        return OrderedIntervals.top();
-    }
-
-    @Override
-    public OrderedIntervals<FactSubject> both(OrderedIntervals<FactSubject> one, OrderedIntervals<FactSubject> other) {
-        return one.meet(other);
-    }
-
-    @Override
-    public OrderedIntervals<FactSubject> either(Core writtenAt,
-                                                OrderedIntervals<FactSubject> one,
-                                                OrderedIntervals<FactSubject> other) {
-        // Where two alternatives leave a position is this reading's rule and turns on nothing an
-        // author wrote, so the node the fold hands over is nothing this has a use for.
-        return one.join(other);
-    }
-
     /**
      * A comparison places an end; nothing else here is read.
      *
@@ -114,8 +103,7 @@ final class OrderedReading implements ClauseReading<OrderedIntervals<FactSubject
      * value sets' answer, and a second account of it kept here would be a second thing to hold in
      * step.
      */
-    @Override
-    public OrderedIntervals<FactSubject> leaf(Core e, boolean positive, Denotations at) {
+    OrderedIntervals<FactSubject> leaf(Core e, boolean positive, Denotations at) {
         return e instanceof Core.Binary bin ? comparison(bin, positive, at) : OrderedIntervals.top();
     }
 

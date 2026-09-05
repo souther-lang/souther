@@ -487,8 +487,8 @@ sealed interface Confinement<A> {
          *  nothing has shown the choice empty. */
         Planned<A> either(Planned<A> other, boolean apart) {
             return new Planned<>(
-                    apart ? values.joinApart(other.values) : values.join(other.values),
-                    ordered.join(other.ordered),
+                    apart ? values.joinLiveApart(other.values) : values.joinLive(other.values),
+                    ordered.joinLive(other.ordered),
                     Confinement.both(carriers, other.carriers));
         }
 
@@ -504,10 +504,16 @@ sealed interface Confinement<A> {
          * <p>What the choice was shown by is what both of them were shown by, and where is where
          * both were refused. Neither speaks for the other: alternatives refused at different
          * positions leave a choice no position is why, which is what the proof has to say.
+         *
+         * <p>Each language is told that its branch is one nobody can take before it is asked what
+         * two such branches come to. Which of them showed it is not the question here — a branch
+         * the values refused is a branch the ranges are also nobody's, and a side left as it was
+         * would answer for a dead choice with the ends of a branch that stands.
          */
         Planned<A> bothDead(Planned<A> other, Admission<A> shown) {
             return new Planned<>(values.leavingNothing().bothDead(other.values.leavingNothing()),
-                    ordered.join(other.ordered), Confinement.both(carriers, other.carriers), shown);
+                    ordered.leavingNothing().bothDead(other.ordered.leavingNothing()),
+                    Confinement.both(carriers, other.carriers), shown);
         }
 
         /** This, holding what working it out could not build. */

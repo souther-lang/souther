@@ -54,9 +54,14 @@ public record OrderedInterval(Endpoint low, Endpoint high) {
      * touch, and the ends around both admit everything either of them does — which is the safe
      * direction here, since what this decides is that a position has no value.
      *
-     * <p>An empty side contributes nothing. A rule that admits nothing is a choice nobody can take,
-     * so the alternatives that remain are what the choice leaves; hulled in as ends, the empty side
-     * would widen the answer to the other side's ends stretched over a range no value is in.
+     * <p>An empty side contributes no value to the hull, so the hull of one with a non-empty side is
+     * the other side. Hulled as ends instead, an empty range would stretch the answer over values
+     * neither side holds — its ends are places on the order all the same, and nothing lies between
+     * them.
+     *
+     * <p>Whether an alternative is one anybody can take is not asked here. That is about a whole
+     * reading rather than about one position, and is answered where the readings are
+     * ({@link OrderedIntervals#bothDead}).
      */
     public OrderedInterval join(OrderedInterval other) {
         if (holdsNothing()) {

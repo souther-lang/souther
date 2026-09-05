@@ -607,12 +607,20 @@ sealed interface StatedByClauses {
          * alternative contains, at a position the rules are fine with, and one the refusal would
          * then be written about.
          *
-         * <p>So each side is taken as leaving nothing ({@link AdmissibleValues#leavingNothing},
-         * {@link OrderedIntervals#leavingNothing}) and the languages are joined as they are for any
-         * other choice. What each of them says the choice leaves empty is what <em>every</em>
-         * alternative leaves empty, and where that is no position, the choice admits nothing with
-         * none of them at fault. That is the rule {@link Emptiness.AcrossEveryCase} states for a
-         * sum — what proves it has none is the whole list — arrived at here for the same reason.
+         * <p><b>So which of four a choice is is decided here, and the languages are told the
+         * answer.</b> Every alternative dead is what both of them leave empty
+         * ({@link Confinement.Planned#bothDead}), where each side is first taken as leaving nothing
+         * ({@link AdmissibleValues#leavingNothing}, {@link OrderedIntervals#leavingNothing}); one
+         * alternative dead is the other alternative, which is held already and asks the languages
+         * nothing; both standing is what two readings somebody can be in come to
+         * ({@link Confinement.Planned#either}); and a fate nothing has settled keeps the choice.
+         * What each language is asked is which of those it is realising, and never which of them it
+         * is.
+         *
+         * <p>What every alternative leaves empty is what the dead choice leaves empty, and where
+         * that is no position, the choice admits nothing with none of them at fault. That is the
+         * rule {@link Emptiness.AcrossEveryCase} states for a sum — what proves it has none is the
+         * whole list — arrived at here for the same reason.
          *
          * <p>A choice this settles is settled once and for the whole rule, because it is settled
          * over the alternatives as written and there is one of those however many places

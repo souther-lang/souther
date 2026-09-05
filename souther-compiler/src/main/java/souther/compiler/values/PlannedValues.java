@@ -489,13 +489,14 @@ public sealed interface PlannedValues<A> {
      * answers to one question, and the one made of values alone would drop a branch the order
      * refused and keep one the values did.
      */
-    default PlannedValues<A> join(PlannedValues<A> other) {
+    default PlannedValues<A> joinLive(PlannedValues<A> other) {
         return joinedLive(other, false);
     }
 
     /** Either reading holding, with the alternatives of the two held apart — see
-     *  {@link AdmissibleValues#joinApart}. */
-    default PlannedValues<A> joinApart(PlannedValues<A> other) {
+     *  {@link AdmissibleValues#joinApart}. Both branches are ones somebody can take, by the rule
+     *  {@link #joinLive} states. */
+    default PlannedValues<A> joinLiveApart(PlannedValues<A> other) {
         return joinedLive(other, true);
     }
 
