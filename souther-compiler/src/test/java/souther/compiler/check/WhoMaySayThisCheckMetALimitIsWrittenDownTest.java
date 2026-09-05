@@ -107,14 +107,23 @@ class WhoMaySayThisCheckMetALimitIsWrittenDownTest {
     /**
      * Who may say one was met. Adding to this is deciding that something else may make an analysis
      * stop without the compile failing.
+     *
+     * <p>Told apart the way the ways in are: by what a method is and not by what it is called. A
+     * second reading written beside one of these under its name would otherwise be the same row,
+     * and the licence granted to the first would cover it.
      */
     private static final List<Licence> MAY_SAY = List.of(
-            new Licence("souther.compiler.check.SecondaryClauseReading.of",
+            new Licence("souther.compiler.check.SecondaryClauseReading"
+                    + ".of(Lsouther/compiler/check/ClauseAsExpanded;Ljava/util/function/Supplier;"
+                    + "Ljava/lang/String;)",
                     "types a clause below the check that answers for the program"),
-            new Licence("souther.compiler.check.SecondaryClauseReading.standingCallNothingHereNames",
+            new Licence("souther.compiler.check.SecondaryClauseReading"
+                    + ".standingCallNothingHereNames(Lsouther/compiler/check/ClauseAsExpanded;"
+                    + "Lsouther/compiler/check/Scope;)",
                     "asks the expansion and the reading's own scope about every call it cannot"
                             + " name"),
-            new Licence("souther.compiler.check.PathReachability.lambda$of$0",
+            new Licence("souther.compiler.check.PathReachability"
+                    + ".lambda$of$0(Ljava/lang/String;)",
                     "reads which of a plan's comparisons the walk settled nothing about"));
 
     @Test
@@ -246,7 +255,8 @@ class WhoMaySayThisCheckMetALimitIsWrittenDownTest {
                             && watched.contains(new Producer(call.owner().asInternalName(),
                                     call.name().stringValue(),
                                     takesOf(call.typeSymbol().parameterList())))) {
-                        calls.put(from + "." + method.methodName().stringValue(), "");
+                        calls.put(from + "." + method.methodName().stringValue()
+                                + takes(method), "");
                     }
                 }));
             }
