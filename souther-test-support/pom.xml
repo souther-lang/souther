@@ -21,6 +21,23 @@
     </description>
 
     <dependencies>
+        <!-- The listener interface `CoverageByClass` implements. The launcher is on every test
+             run's classpath already, brought by surefire's provider; naming it here is what lets
+             the listener compile. -->
+        <dependency>
+            <groupId>org.junit.platform</groupId>
+            <artifactId>junit-platform-launcher</artifactId>
+        </dependency>
+        <!-- The coverage agent's runtime, for the one call that takes its data. Provided: a run
+             under `-Pcoverage-by-class` has it on the system classpath through `-javaagent`, and a
+             plain run never reaches the class that names it. -->
+        <dependency>
+            <groupId>org.jacoco</groupId>
+            <artifactId>org.jacoco.agent</artifactId>
+            <version>${jacoco.version}</version>
+            <classifier>runtime</classifier>
+            <scope>provided</scope>
+        </dependency>
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>
