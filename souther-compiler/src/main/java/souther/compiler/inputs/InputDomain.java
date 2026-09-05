@@ -697,7 +697,7 @@ public final class InputDomain {
             // language reads a value.
             case TermPath.Step.Field field -> under instanceof StructuralInspection.Decomposed made
                     ? made.under().get(field.name())
-                    : ReadableFields.of(shape).fields().get(field.name());
+                    : ReadableFields.of(shape).declaredFields().get(field.name());
             case TermPath.Step.Element _ -> under instanceof StructuralInspection.Retained on
                     && on.continuation() instanceof StructuralInspection.Continuation.Elements held
                     ? held.element() : null;
@@ -1001,7 +1001,7 @@ public final class InputDomain {
      * reached without one.
      */
     private static List<String> sharedAt(ReadablePosition input) {
-        return List.copyOf(ReadableFields.of(input.shape()).fields().keySet());
+        return List.copyOf(ReadableFields.of(input.shape()).declaredFields().keySet());
     }
 
     /**

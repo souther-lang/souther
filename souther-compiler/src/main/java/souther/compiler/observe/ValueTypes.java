@@ -43,7 +43,7 @@ public final class ValueTypes {
      * written with.
      */
     public Position field(TypeSymbol owner, String field) {
-        Type declared = fields.field(owner, field);
+        Type declared = fields.of(owner).get(field);
         return declared == null ? Position.UNREAD : Position.at(declared);
     }
 }

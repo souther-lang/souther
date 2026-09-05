@@ -2,7 +2,6 @@ package souther.compiler.examples;
 
 import souther.compiler.jvm.SoutherJvmAbi;
 import souther.compiler.ast.Hir;
-import souther.compiler.check.AtomSpace;
 import souther.compiler.check.Boundary;
 import souther.compiler.check.DeclaredTypeEvidence;
 import souther.compiler.check.Symbols;
@@ -300,105 +299,6 @@ final class NeutralForm {
     }
 
     /**
-     * A value already in the neutral form of {@code from}, read at {@code to}.
-     *
-     * <p>A neutral form is decided by a position and not only by a type: a newtype is bare where the
-     * position reads it as itself and wears the envelope where the position is a sum that lists it
-     * (<<sum-discrimination>>). So a value that was built at one position and now stands at another
-     * is written the way the second one reads, and a collection's elements move with it.
-     *
-     * <p>Only the widening direction has to be answered, because it is the only one admission lets
-     * through: a case reaches a position typed by a sum that lists it, never the other way.
-     *
-     * <p>Moving to a {@link Position.Unread} leaves the value as it stands. What a position adds is
-     * what it asks to be written beside the case, and a place nothing reads asks for nothing — it
-     * does not ask for what is already there to come off. Re-rendering a value into the case's own
-     * form on the way to one would lose what the form it is in carries: an enumeration's {@code
-     * "Draft"} says which case it is, and the {@code {}} it would become says nothing, with nothing
-     * left to put it back from.
-     *
-     * <p>Moving from one is not a reading. A value whose form nothing decided is in the case's own
-     * form, and that form does not say which case it is — {@code {}} is every unit case — so there is
-     * nothing here to write a discriminator from. Nothing asks for it: a value reaches this having
-     * been built at the type a declaration gave it, and a projection whose target declares nothing is
-     * refused before it gets here. Stated rather than answered with the value, which would be right
-     * only for as long as that stays true.
-     */
-    Object reread(Object value, Position from, Position to) {
-        if (from instanceof Position.At(Type a) && to instanceof Position.At(Type b)) {
-            return reread(value, a, b);
-        }
-        if (from instanceof Position.Unread && to instanceof Position.At) {
-            throw new IllegalStateException("a value nothing read is in the case's own form, which"
-                    + " does not say which case it is, so it cannot be read at " + to);
-        }
-        return value;
-    }
-
-    private Object reread(Object value, Type from, Type to) {
-        if (value == null || from.equals(to)) {
-            return value;
-        }
-        if (from instanceof Type.OptionOf a) {
-            return reread(value, a.element(), to instanceof Type.OptionOf b ? b.element() : to);
-        }
-        if (to instanceof Type.OptionOf b) {
-            return reread(value, from, b.element());
-        }
-        if (sequenceElementOf(from) instanceof Type a && sequenceElementOf(to) instanceof Type b
-                && value instanceof List<?> elements) {
-            List<Object> out = new ArrayList<>(elements.size());
-            for (Object each : elements) {
-                out.add(reread(each, a, b));
-            }
-            return out;
-        }
-        if (from instanceof Type.MapOf a && to instanceof Type.MapOf b
-                && value instanceof Map<?, ?> entries) {
-            Map<Object, Object> out = new LinkedHashMap<>();
-            for (Map.Entry<?, ?> each : entries.entrySet()) {
-                out.put(reread(each.getKey(), a.key(), b.key()),
-                        reread(each.getValue(), a.value(), b.value()));
-            }
-            return out;
-        }
-        if (from instanceof Type.Ref r && isNewtype(r.name())) {
-            // Bare here, because `from` is the newtype's own reference and reads it as itself.
-            return newtypeAt(Position.at(to), r.name(), value);
-        }
-        // A unit case travels as a bare name where its position reads one — an enumeration — and
-        // carries its sum's discriminator where it does not. So a case standing at an enumeration
-        // stops being a name the moment it is admitted into a sum that also lists a product.
-        if (value instanceof String written && from instanceof Type.Ref r
-                && !r.name().isPrimitive()) {
-            // Which case this is, is `from`'s to say. Resolving the name here would answer for
-            // whatever this module declares under that spelling, and the type the value stands at
-            // may be one another module published — the reason the overload above takes a resolved
-            // name rather than one spelled at the call.
-            for (TypeSymbol caseName : AtomSpace.subjectAtoms(from, symbols)) {
-                if (!caseName.name().equals(written)
-                        || symbols.declaredNode(caseName) instanceof Hir.Data) {
-                    continue;
-                }
-                if (readsABareName(Position.at(to))) {
-                    return written;
-                }
-                Map<String, Object> unit = new LinkedHashMap<>();
-                tagged(Position.at(to), caseName, unit);
-                return unit;
-            }
-        }
-        return value;
-    }
-
-    /** The element a list or a set holds, or null where the type holds neither. Narrower than the
-     *  reading a position gives, which opens an optional and reads a map's entry as a pair. */
-    private static Type sequenceElementOf(Type type) {
-        return type instanceof Type.ListOf l ? l.element()
-                : type instanceof Type.SetOf s ? s.element() : null;
-    }
-
-    /**
      * Whether this place reads a unit case as a bare name: it is typed as an enumeration, whose
      * external form is the case's name (spec §sum-discrimination).
      *
@@ -440,7 +340,7 @@ final class NeutralForm {
     /** What a newtype wraps: the one field it is written with (spec §newtype), read like any other
      *  field, so a generic base ({@code data 在庫 = Map<商品ID, Int>}) keeps its type arguments. */
     Type newtypeBaseType(TypeSymbol name) {
-        return fields.field(name, NEWTYPE_FIELD);
+        return fields.of(name).get(NEWTYPE_FIELD);
     }
 
     /** What a newtype's one field is called (spec §newtype). */
