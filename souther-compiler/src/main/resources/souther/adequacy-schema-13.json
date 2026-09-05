@@ -190,6 +190,7 @@
           "row_did_not_finish",
           "border_value_unreadable",
           "border_value_absent",
+          "border_observation_unavailable",
           "rule_unread",
           "position_not_read",
           "question_unanswered",

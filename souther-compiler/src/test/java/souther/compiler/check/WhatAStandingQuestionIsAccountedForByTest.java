@@ -157,8 +157,9 @@ class WhatAStandingQuestionIsAccountedForByTest {
     @Test
     void anAnswerBeyondTheAllowanceIsWhatTheQuestionStandsOn() {
         assertEquals(Map.of("invariant N (r) at y",
-                        List.of(UnreadReason.EXACT_VALUES_TOO_COSTLY)),
-                standingOn(AN_ANSWER_BEYOND_THE_ALLOWANCE));
+                        new StandsOn(List.of(), Set.of(UnreadReason.EXACT_VALUES_TOO_COSTLY))),
+                standingOn(AN_ANSWER_BEYOND_THE_ALLOWANCE),
+                "the rule has nothing of its own, and what the question stands on is the answer's");
     }
 
     /**
@@ -175,11 +176,12 @@ class WhatAStandingQuestionIsAccountedForByTest {
      */
     @Test
     void aRuleShortInBothWaysStandsOnBoth() {
-        assertEquals(List.of(UnreadReason.FORM_NOT_READ, UnreadReason.EXACT_VALUES_TOO_COSTLY),
+        assertEquals(new StandsOn(List.of(UnreadReason.FORM_NOT_READ),
+                        Set.of(UnreadReason.EXACT_VALUES_TOO_COSTLY)),
                 standingOn(A_FORM_NO_READING_TAKES_APART_BESIDE_AN_ANSWER_BEYOND_THE_ALLOWANCE)
                         .get("invariant N (r) at y"),
-                "both, as the reading recorded them — which of the two a document says where is"
-                        + " WhatAQuestionStandsOn's, and no order runs between them");
+                "both, each where it belongs — the form under the rule that wrote it, and the"
+                        + " limit at the position whose answer ran into it");
     }
 
     /**
@@ -191,7 +193,7 @@ class WhatAStandingQuestionIsAccountedForByTest {
      */
     @Test
     void askingThePositionLeavesAQuestionShortInOneWayWhereItWas() {
-        assertEquals(List.of(UnreadReason.FORM_NOT_READ),
+        assertEquals(new StandsOn(List.of(UnreadReason.FORM_NOT_READ), Set.of()),
                 standingOn(A_FORM_NO_READING_TAKES_APART).get("invariant N #1 at range.max"));
     }
 
@@ -200,8 +202,13 @@ class WhatAStandingQuestionIsAccountedForByTest {
      * meet is past what the allowance builds.
      *
      * <p>Both limits are this rule's own, which is what makes it the pair rather than a rule
-     * carrying a neighbour's. The conjunct is refused by every reading of clauses; the choice is
-     * read in full and its two patterns meet at about ninety thousand states.
+     * carrying a neighbour's. The conjunct is refused by every reading of clauses; the two patterns
+     * beside it are read in full and meet at about ninety thousand states.
+     *
+     * <p>A conjunction and no choice in it. A rule whose branch a reading gave up on is answerable
+     * for an alternative nothing read, which is a third thing to say about this rule and not the
+     * pair this is about — held here, the test would move whenever what a choice is answerable for
+     * moved.
      */
     private static final String
             A_FORM_NO_READING_TAKES_APART_BESIDE_AN_ANSWER_BEYOND_THE_ALLOWANCE = """
@@ -209,30 +216,44 @@ class WhatAStandingQuestionIsAccountedForByTest {
 
             data N = { x: String, y: String }
                 invariant r =
-                    ((String.matches("a{300}", y) && String.matches("b{300}", y)) || x == "A")
-                    && UNREAD_Y
+                    String.matches("a{300}", y) && String.matches("b{300}", y) && UNREAD_Y
             """.replace("UNREAD_Y", souther.compiler.ARuleNoReadingTakesIn.about("y"));
 
-    /** And a reason about neither is no account of a question a rule raised. */
+    /**
+     * And a reason about neither is no account of a question a rule raised.
+     *
+     * <p>Asked of the two carriers a question's account is made of, because that is where such a
+     * reason would have to be written down. Neither takes one: what a rule is answerable for is
+     * about a rule by construction, and what an answer was short of is about the answer.
+     */
     @Test
     void aReasonAboutNeitherIsNoAccountOfARulesQuestion() {
         Arrays.stream(UnreadReason.values())
                 .filter(each -> each.about() == UnreadReason.About.NEITHER)
                 .forEach(each -> assertThrows(IllegalArgumentException.class,
-                        () -> new RuleAccounting.Why.TheValueReadingSays(List.of(each)),
-                        () -> each + " reached no rule, so it accounts for no question of one"));
+                        () -> new AnswerShortfalls(Set.of(each)),
+                        () -> each + " reached no position, so the answer was not short of it"));
     }
 
-    /** What every question of every rule that nothing answered stands on. */
-    private static Map<String, List<UnreadReason>> standingOn(String source) {
-        Map<String, List<UnreadReason>> out = new LinkedHashMap<>();
+    /** What one question stands on, held as the two things it is made of. */
+    private record StandsOn(List<UnreadReason> itsRule, Set<UnreadReason> itsAnswer) {}
+
+    /**
+     * What every question of every rule that nothing answered stands on, as its two halves.
+     *
+     * <p>Read apart, because that is how the account holds them. A test flattening the two would be
+     * asserting an order between a form somebody wrote and a limit the rules ran into together,
+     * which is the order this is about there being none of.
+     */
+    private static Map<String, StandsOn> standingOn(String source) {
+        Map<String, StandsOn> out = new LinkedHashMap<>();
         read(source).accounting().values().forEach(accounting ->
                 accounting.answers().forEach((owed, outcome) -> {
                     if (outcome instanceof RuleAccounting.Outcome.Unaccounted unaccounted
                             && unaccounted.why()
                             instanceof RuleAccounting.Why.TheValueReadingSays says) {
                         out.put(((RuleCitation.Named) accounting.cited()).name() + " at " + owed,
-                                says.why());
+                                new StandsOn(says.why(), says.aboutTheAnswer().reasons()));
                     }
                 }));
         return out;
