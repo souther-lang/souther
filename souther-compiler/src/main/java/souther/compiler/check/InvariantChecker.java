@@ -355,23 +355,18 @@ public final class InvariantChecker {
         TypedClause type(Hir.Expr read);
     }
 
-    private ClauseDischarge capabilityOf(ClausesForDischarge.ClauseReading clause,
-                                         Typing typing, Denotations locations, String describing) {
-        return capabilityOf(typed(typing, clause.read(), describing), clause.at(), locations,
-                describing);
-    }
-
     /**
-     * {@code read} as its reader types it, or that typing it did not finish.
+     * What the reading made of {@code clause}, over the tree its reader types it into.
      *
-     * <p>Total. What a clause can stop this reading on is settled where the clause is typed
-     * ({@link SecondaryClauseReading}), and arrives as {@link TypedClause.Stopped}; the reading
+     * <p>The typing is total. What a clause can stop this reading on is settled where the clause is
+     * typed ({@link SecondaryClauseReading}) and arrives as {@link TypedClause.Stopped}; the reading
      * below reaches {@link CapabilityResult.AnalysisStopped} from that answer. A clause that could
      * not be typed is not a clause found to be outside the fragment: being inside it is what was
      * never asked.
      */
-    private TypedClause typed(Typing typing, Hir.Expr read, String describing) {
-        return typing.type(read);
+    private ClauseDischarge capabilityOf(ClausesForDischarge.ClauseReading clause,
+                                         Typing typing, Denotations locations, String describing) {
+        return capabilityOf(typing.type(clause.read()), clause.at(), locations, describing);
     }
 
     /** The obligation {@code at} raises, and what came of reading {@code stated} for it. */
