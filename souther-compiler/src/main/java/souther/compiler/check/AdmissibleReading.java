@@ -29,6 +29,12 @@ import java.util.Set;
  * two readings cannot come to disagree about what they were given; what each of them makes of a
  * clause is its own.
  *
+ * <p><b>Leaves, and not the connectives over them.</b> What a conjunction or a choice of these
+ * comes to is asked where both languages are held together and where the choices of a declaration
+ * are decided ({@code StatedByClauses}), because a branch nobody can be in is settled by things
+ * neither language holds alone. Answered here as well, that would be a second place deciding what
+ * a choice does to the values, and the two would agree until one of them learned something.
+ *
  * <p>Apart from what a construction owes ({@link Predicates}), which is a different question and
  * has a different answer for the same clause. A clause stated as one of two alternatives owes a
  * construction nothing that a guard could discharge, and it says something here — so reading it
@@ -41,7 +47,7 @@ import java.util.Set;
  * the values can be written out ({@link ValueUniverse}) and is kept as a denial where they cannot,
  * so nothing reaches emptiness except through values this had in hand.
  */
-final class AdmissibleReading implements ClauseReading<PlannedValues<FactSubject>, Denotations> {
+final class AdmissibleReading {
 
     private final Terms terms;
     /** What each position of the value is called, and what type stands there. A position is here
@@ -49,8 +55,6 @@ final class AdmissibleReading implements ClauseReading<PlannedValues<FactSubject
      * values an integer has, and the reading that asked the carrier had no word for the first. */
     private final Map<FactSubject, Type> byName;
     private final Symbols symbols;
-    /** How a choice holds what it leaves, settled for the whole declaration before it was read. */
-    private final Alternatives alternatives;
     /**
      * What puts two sets together, and what it is allowed to build doing it.
      *
@@ -78,12 +82,19 @@ final class AdmissibleReading implements ClauseReading<PlannedValues<FactSubject
     private final Map<Core, List<RuleShortfall>> shortfalls = new IdentityHashMap<>();
     /** What each clause asked a machine for, against the clause, and by the same rule again. */
     private final Map<Core, Set<AskedAt>> asked = new IdentityHashMap<>();
+    /**
+     * The clauses this reading gave up on, whatever they were about.
+     *
+     * <p>Beside {@link #shortfalls} and not read off it. A shortfall is one fact per position, so a
+     * clause about no position of this value leaves none — and it is still a clause nothing read,
+     * which is what an alternative holding it turns on.
+     */
+    private final Set<Core> gaveUp = Collections.newSetFromMap(new IdentityHashMap<>());
     private AdmissibleReading(Terms terms, Map<FactSubject, Type> byName,
-                              Symbols symbols, Alternatives alternatives, Allowance<FactSubject> allowed) {
+                              Symbols symbols, Allowance<FactSubject> allowed) {
         this.terms = terms;
         this.byName = byName;
         this.symbols = symbols;
-        this.alternatives = alternatives;
         this.allowed = allowed;
     }
 
@@ -93,40 +104,13 @@ final class AdmissibleReading implements ClauseReading<PlannedValues<FactSubject
      *  reading holding the environment the clause began in would read a rule under a binding at
      *  names that mean nothing there, and every such rule came out as a form nothing reads. */
     static AdmissibleReading of(Terms terms, Map<FactSubject, Type> byName,
-                                Symbols symbols, Alternatives alternatives, Allowance<FactSubject> allowed) {
-        return new AdmissibleReading(terms, byName, symbols, alternatives, allowed);
+                                Symbols symbols, Allowance<FactSubject> allowed) {
+        return new AdmissibleReading(terms, byName, symbols, allowed);
     }
 
     /** What this reading is spending, for whoever meets its answer with the next rule's. */
     Allowance<FactSubject> allowed() {
         return allowed;
-    }
-
-    @Override
-    public PlannedValues<FactSubject> nothingSaid() {
-        return PlannedValues.top();
-    }
-
-    @Override
-    public PlannedValues<FactSubject> both(PlannedValues<FactSubject> one, PlannedValues<FactSubject> other) {
-        return one.meet(other);
-    }
-
-    /**
-     * Either alternative holding, held apart or merged as the declaration was admitted.
-     *
-     * <p>Chosen before the reading and not while it folds. Merging only once some intermediate ran
-     * past a limit would make what a position is answered turn on how the choice was bracketed, and
-     * a model written two ways would be read two ways.
-     */
-    @Override
-    public PlannedValues<FactSubject> either(Core writtenAt, PlannedValues<FactSubject> one,
-                                             PlannedValues<FactSubject> other) {
-        // What two alternatives come to is this reading's rule and turns on nothing an author
-        // wrote. The node the fold hands over is for a reading with something to say about the
-        // choice itself, and this one has not.
-        return alternatives == Alternatives.APART
-                ? one.joinApart(other) : one.join(other);
     }
 
     /**
@@ -143,8 +127,7 @@ final class AdmissibleReading implements ClauseReading<PlannedValues<FactSubject
      * already turned {@code p == false} and {@code p /= true} into this leaf denied
      * ({@link Conditions#restated}), so nothing here asks how the author spelled it.
      */
-    @Override
-    public PlannedValues<FactSubject> leaf(Core e, boolean positive, Denotations at) {
+    PlannedValues<FactSubject> leaf(Core e, boolean positive, Denotations at) {
         if (e instanceof Core.Binary b
                 && Comparison.of(b).map(Comparison::claim).orElse(null)
                         instanceof ComparisonClaim.Singled singled) {
@@ -328,6 +311,11 @@ final class AdmissibleReading implements ClauseReading<PlannedValues<FactSubject
      * reading: nothing looks at what the clause came to in order to work out what was decided.
      */
     private PlannedValues<FactSubject> shortOf(Core e, Set<FactSubject> named, UnreadReason why) {
+        // That this reading gave up here, which is not the same as what it gave up on. A clause
+        // about no position of this value is one nothing read all the same, and a choice needs to
+        // know: had it been read, the alternative holding it might have turned out one nobody can
+        // be in, and then the choice would have been the other branch.
+        gaveUp.add(e);
         List<RuleShortfall> mine = shortfalls.computeIfAbsent(e, _ -> new ArrayList<>());
         RuleShortfall.Site site = new RuleShortfall.Site.AtALeaf(e);
         named.forEach(each -> {
@@ -399,6 +387,11 @@ final class AdmissibleReading implements ClauseReading<PlannedValues<FactSubject
      */
     List<RuleShortfall> shortfallsAt(Core e) {
         return List.copyOf(shortfalls.getOrDefault(e, List.of()));
+    }
+
+    /** Whether this reading gave up on {@code e}, which is what an alternative holding it is. */
+    boolean gaveUpAt(Core e) {
+        return gaveUp.contains(e);
     }
 
     /**

@@ -35,14 +35,14 @@ class APositionsStandingIsNotEvidenceOfWhoseRuleItIsTest {
     /**
      * The one projection down to a place, asked for only where a place is being described.
      *
-     * <p>Both callers hand it to {@code PlannedValues.alsoStanding}, which is what a reading holds
-     * for a position to answer with. A third caller is a reader of a place's reasons somewhere new,
-     * and the question it has to answer first is which of the two directions it is going in.
+     * <p>The caller hands it to {@code PlannedValues.alsoStanding}, which is what a reading holds
+     * for a position to answer with. A second caller is a reader of a place's reasons somewhere
+     * new, and the question it has to answer first is which of the two directions it is going in.
      *
-     * <p><b>Counted and not listed by name.</b> One of these methods hands a branch's own reasons
-     * to the position it is about and hands its parts what each of them asked for, so a rule
-     * permitted by the method it is in is a rule that permits the second of those to be the
-     * position's face as well — which is the whole defect, written one line lower down.
+     * <p>One and not two, because the account of a rule holds no description of a position to put
+     * one into. What a rule's clauses took in is answered over the tree its author wrote, which
+     * carries what each part adopted and nothing about what a position came to; the place is
+     * described where the values are worked out, and that is the one caller here.
      */
     @Test
     void aPositionsFaceIsAskedForWhereAPositionIsDescribedAndNowhereElse() throws Exception {
@@ -54,8 +54,7 @@ class APositionsStandingIsNotEvidenceOfWhoseRuleItIsTest {
             }
         }
 
-        assertEquals(List.of("souther.compiler.check.StatedByClauses$Reading.keptAs",
-                        "souther.compiler.check.StatedByClauses$Reading.keptTogether"),
+        assertEquals(List.of("souther.compiler.check.StatedByClauses$Reading.keptTogether"),
                 asked.stream().sorted().toList(),
                 "a place's own reasons are read somewhere new, or twice where they are read once,"
                         + " and what has to be answered there is whether an account of a rule is"
