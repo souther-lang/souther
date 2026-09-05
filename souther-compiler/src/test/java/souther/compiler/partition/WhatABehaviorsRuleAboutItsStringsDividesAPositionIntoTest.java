@@ -19,6 +19,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -164,6 +165,48 @@ class WhatABehaviorsRuleAboutItsStringsDividesAPositionIntoTest {
                         new BlockReason.BehaviorDistinctionsTooCostly()),
                 read.blocked().stream().map(ClassingBlocker::why).toList(),
                 "and both are answered for as the position's distinctions not being built");
+    }
+
+    /**
+     * And where the allowance runs out after the rules were read, the position has no classes and
+     * every rule that reached it is still answered for.
+     *
+     * <p>The two sides of each rule were built — this stage got that far — and what runs out is
+     * meeting them with what the position itself holds, which is the further work of composing the
+     * classes. So there is a state where a rule reached the measure, became a statement, and the
+     * classes it would have made were never worked out.
+     *
+     * <p>What must not happen there is silence about the rule. The account this stage answers to is
+     * over everything handed to it, so a rule left without a word is not a report that says less —
+     * it is this compiler refusing its own measure. Which is what it did.
+     */
+    @Test
+    void whereTheAllowanceRunsOutComposingTheRulesAreStillAnsweredFor() {
+        // Read under an allowance that affords the rule's two sides, so this stage gets as far as
+        // handing over a statement about the position.
+        SetDivisions.Read read = readingsOf("""
+                behavior f : (code: String) -> Answer
+                let f (code) = if String.matches("[a-z]+", code) then Yes else No
+                """, new PatternPlan.Budget(100, 100));
+        assertEquals(1, read.divided().size(), "the rule was read and both its sides were built");
+        assertEquals(List.of(), read.blocked(), "so nothing was held open before this point");
+
+        // And composed under one that does not afford meeting them with what the position holds.
+        Allowance<NumericTerm.FromOnePosition> spent =
+                Allowance.of(new PatternPlan.Budget(1, 1));
+        Classing.Result answered = Classing.of(read.divided().get(0).at(), read.divided(),
+                List.of(), new souther.compiler.check.Carrier.Text(),
+                // A position whose own declarations leave it a language, which is what an
+                // `invariant String.matches(...)` leaves. Meeting a rule with it is machine work,
+                // and that is the work this allowance cannot afford.
+                ((PartitionEvidence.BySet) read.divided().get(0)).states().whenTrue(),
+                spent, place -> null);
+
+        assertInstanceOf(Classing.Classed.NotComposed.class, answered.classed(),
+                "the position has no classes");
+        assertEquals(read.divided().size(), answered.forEach().size(),
+                "and every rule that reached here is answered for, which is what the account that"
+                        + " follows is owed: " + answered.forEach());
     }
 
     /** The one division the model under test states. */

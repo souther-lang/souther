@@ -54,9 +54,14 @@ import java.util.Set;
  * short still has its body's rules read here, and raising what a declaration may build must not make
  * a class appear ({@link AdequacyPolicy.OfTheMeasures#allowanceForBehaviorDistinctions}).
  *
- * <p>And every rule handed in is answered for. One that divides comes back as a division and one
- * that does not comes back as what became of it, so nothing that reached here leaves without a
- * sentence about it.
+ * <p>And every rule handed in comes back as exactly one outcome ({@link Outcome}), which is a
+ * classification and not what a walk had left over: it states a distinction of a position, or one
+ * this compiler did not get, or nothing about any position it can name.
+ *
+ * <p>The last of those leaves without a sentence, and that is the one thing here nobody is told.
+ * A rule about a value that came from no position the reading can name has nowhere to be shown —
+ * the same answer the reading of a comparison gives the same shape — so what is claimed is that
+ * every rule is classified, and not that every rule is reported.
  */
 public final class SetDivisions {
 

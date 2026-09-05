@@ -596,19 +596,51 @@ public final class Partitions {
                 at.position().admits(), allowance,
                 place -> standing(view, carrier, place, ruleSource));
         Classing.Classed classed = answered.classed();
-        // A rule that makes no class here is reported and stops nothing. Its evidence is answered
-        // for as one the classes were not composed out of, which is what it is: the position is
-        // divided by the rules beside it exactly as it would have been without this one.
-        for (Classing.Told each : answered.doesNotDivide()) {
-            found.add(RuleWithoutALine.of(each.what().by().rule(), each.what().by().cited(),
-                    new FilingCoordinate.AtPosition(term.position()), each.why()));
-            account.disposedOf(each.what(),
-                    new EvidenceAccount.Disposition.TheRuleDividedNothing(term));
+        // What became of each rule, applied and not decided again. The answer is total over what
+        // was handed in, so a rule with nothing said about it is not something this loop can leave
+        // behind — which is what the account below refuses, and what a stage deciding the three
+        // cases for itself was one forgotten branch away from doing.
+        for (Classing.Disposed each : answered.forEach()) {
+            switch (each.outcome()) {
+                // The classes are made out of it. A rule that states a set is measured here, at the
+                // axis they are on; a line and a value singled out are measured by the walk below,
+                // which is where what they leave is worked out.
+                case DIVIDED -> {
+                    if (each.what() instanceof PartitionEvidence.BySet) {
+                        account.measured(each.what(), id);
+                    }
+                }
+                // Read, and tells none of the position's values from the others. Reported, and the
+                // rules beside it divide the position exactly as they would have without it.
+                case TOLD_NOTHING_APART -> {
+                    found.add(RuleWithoutALine.of(each.what().by().rule(),
+                            each.what().by().cited(),
+                            new FilingCoordinate.AtPosition(term.position()), each.why()));
+                    account.disposedOf(each.what(),
+                            new EvidenceAccount.Disposition.TheRuleDividedNothing(term));
+                }
+                // There are no classes, so this rule is among none. Whether this stage got as far
+                // as qualifying it is its own business and not something a reader is told.
+                case NOT_COMPOSED -> account.disposedOf(each.what(),
+                        new EvidenceAccount.Disposition.TheClassesWereNotComposed(term));
+                // A line, or a value singled out that no set class took up. It still cuts the
+                // position, and the walk below is where that is said.
+                case LEFT_TO_THE_WALK -> { }
+            }
         }
         // The answer's own population, and not what is left after taking the rest away. Subtracted
         // here, the same question is answered twice — and the day the two subtract differently the
         // classes are composed out of one list and recorded as composed out of another.
         List<PartitionEvidence> dividing = answered.dividing();
+        // And what the walk below still reads, which is not the same list. Only the classes turn on
+        // whether they composed: where they did not, the lines a rule drew are still lines and the
+        // places it parts the position are still places, so the walk runs over everything that
+        // reached here but the rules proved to tell nothing apart — those state nothing, and a line
+        // read off one would be a line the model does not draw.
+        List<PartitionEvidence> taken = answered.forEach().stream()
+                .filter(each -> each.outcome() == Classing.Outcome.LEFT_TO_THE_WALK
+                        || each.outcome() == Classing.Outcome.DIVIDED)
+                .map(Classing.Disposed::what).toList();
         // One switch and not three conditionals. What each answer means for the classes, for the
         // rules they were composed from and for whether the cuts stand is the answer's, said once;
         // read off it three times, each reading is a place to disagree about what the arm meant.
@@ -627,27 +659,20 @@ public final class Partitions {
             case Classing.Classed.NotComposed(var why) ->
                     new Composition(List.of(), List.of(), true, why);
         };
-        List<SetStatement> composing = PartitionEvidence.statementsIn(dividing);
-        if (!composing.isEmpty()) {
-            if (made.why() != null) {
-                // Into the gathering the whole stage answers with, and not a list of this method's
-                // own: what a reader is told is assembled once, after every position has been
-                // measured, so a finding kept here would be one nobody reads.
-                //
-                // Only where the classes were the group's to compose. A blocker says what became of
-                // its own rule and has already been reported, so a reason copied from it onto the
-                // rules beside it would name them for something that happened to another.
-                if (blocked.isEmpty()) {
-                    composing.forEach(each -> found.add(RuleWithoutALine.of(each.origin().rule(),
+        // What a reader is told about the rules the classes were not composed out of. The account
+        // for them is above, with every other rule's — this is the sentence, and only where the
+        // classes were the group's own to compose: a blocker says what became of its own rule and
+        // has already been reported, so a reason copied from it onto the rules beside it would name
+        // them for something that happened to another.
+        //
+        // Into the gathering the whole stage answers with, and not a list of this method's own:
+        // what a reader is told is assembled once, after every position has been measured, so a
+        // finding kept here would be one nobody reads.
+        if (made.why() != null && blocked.isEmpty()) {
+            PartitionEvidence.statementsIn(answered.notComposed())
+                    .forEach(each -> found.add(RuleWithoutALine.of(each.origin().rule(),
                             each.origin().cited(),
                             new FilingCoordinate.AtPosition(term.position()), made.why())));
-                }
-                composing.forEach(each -> account.disposedOf(new PartitionEvidence.BySet(each),
-                        new EvidenceAccount.Disposition.TheClassesWereNotComposed(term)));
-            } else {
-                composing.forEach(each ->
-                        account.measured(new PartitionEvidence.BySet(each), id));
-            }
         }
         // Said here because this is where they were asked. A blocker carried in and never reached
         // is a denominator this stage closed over the rules that worked, which the account refuses.
@@ -657,7 +682,7 @@ public final class Partitions {
             // Nothing orders this position, so its classes are the values singled out and
             // everything else. Ranges here would ask the rows for a distinction between the two
             // sides of a value the behavior treats alike.
-            dividing.stream().filter(each -> !(each instanceof PartitionEvidence.BySet))
+            taken.stream().filter(each -> !(each instanceof PartitionEvidence.BySet))
                     .forEach(each -> account.measured(each, id));
             return made(out, at, behavior, term,
                     made.classesFor(axis, () -> singledClasses(points, term, type, reading,
@@ -678,7 +703,7 @@ public final class Partitions {
         // which is the thing being fixed here happening again one field over. The end the
         // position stops short of is outside it as much as anything past it is.
         List<Threshold> reachable = new ArrayList<>();
-        for (PartitionEvidence each : dividing) {
+        for (PartitionEvidence each : taken) {
             if (each instanceof PartitionEvidence.BySet) {
                 continue;   // already answered for above, as a class the vocabularies will not hold
             }

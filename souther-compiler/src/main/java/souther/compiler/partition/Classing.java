@@ -143,25 +143,77 @@ final class Classing {
      * the first answer, a rule that states no distinction would close a denominator, which is what
      * a distinction gone missing does and this is the opposite of that.
      *
-     * @param dividing      the rules the classes were made out of, which is this answer's and not
-     *                      a caller's to work out again. Recovered by taking the rules that make
-     *                      none away from everything that arrived, a caller is answering the same
-     *                      question a second time — and the day the two subtract differently, the
-     *                      classes are composed from one population and recorded as composed from
-     *                      another
-     * @param doesNotDivide the rules that make no class here, each with what it came to. Reported,
-     *                      and nothing waits on them
+     * @param forEach what became of each rule that was handed in, one entry each. Total over them
+     *                by construction: a rule this could not finish qualifying is in the same state
+     *                as one it never reached, and both are things a reader is owed — so there is no
+     *                way to answer here and leave a rule with nothing said about it
      */
-    record Result(Classed classed, List<PartitionEvidence> dividing, List<Told> doesNotDivide) {
+    record Result(Classed classed, List<Disposed> forEach) {
 
         Result {
-            dividing = List.copyOf(dividing);
-            doesNotDivide = List.copyOf(doesNotDivide);
+            forEach = List.copyOf(forEach);
+        }
+
+        /** The rules the classes were made out of. */
+        List<PartitionEvidence> dividing() {
+            return of(Outcome.DIVIDED);
+        }
+
+        /** And the rules the classes were not composed out of, because there are none. */
+        List<PartitionEvidence> notComposed() {
+            return of(Outcome.NOT_COMPOSED);
+        }
+
+        private List<PartitionEvidence> of(Outcome outcome) {
+            return forEach.stream().filter(each -> each.outcome() == outcome)
+                    .map(Disposed::what).toList();
         }
     }
 
-    /** One rule of a position that makes no class of it, and what it came to. */
-    record Told(PartitionEvidence what, BlockReason.RuleWithoutLineReason why) {}
+    /**
+     * What became of one rule handed to this.
+     *
+     * <p>Four and not two, because a rule this could not finish qualifying is neither of the
+     * obvious ones, and a line the classes did not take up is none of them. Left out of the answer,
+     * such a rule is one the measure was handed and says nothing about — which the account that
+     * follows refuses, and rightly: a position whose classes nobody could compose still owes a
+     * sentence about every rule that reached it.
+     */
+    enum Outcome {
+
+        /** It tells two of the position's values apart, and the classes are made out of it. */
+        DIVIDED,
+
+        /** It was read and tells none of them apart, so it makes no class and stops nothing. */
+        TOLD_NOTHING_APART,
+
+        /** The position has no classes, so this rule is not among what made any. */
+        NOT_COMPOSED,
+
+        /**
+         * A line or a value singled out that the classes did not take up, whose answer is the
+         * walk's that draws it.
+         *
+         * <p>Here so that this answer is total over what it was handed without claiming rules it
+         * did not decide about. A line makes no class where the classes are sets and none where
+         * there are no classes, and it still cuts the position — so what became of it is settled
+         * where the cut is made, and an answer saying nothing about it would leave a reader unable
+         * to tell "not mine to say" from "forgotten".
+         */
+        LEFT_TO_THE_WALK
+    }
+
+    /** One rule of a position and what became of it. */
+    record Disposed(PartitionEvidence what, Outcome outcome,
+                    BlockReason.RuleWithoutLineReason why) {
+
+        Disposed {
+            if ((why == null) != (outcome != Outcome.TOLD_NOTHING_APART)) {
+                throw new IllegalArgumentException(
+                        "a rule that tells nothing apart says so, and nothing else here does");
+            }
+        }
+    }
 
     /** What the rules of one position came to. */
     sealed interface Classed {
@@ -222,7 +274,7 @@ final class Classing {
         // a class. Left in, a rule that divides nothing would put the position's classes in one
         // algebra or the other, and would stand in every label the classes carry.
         List<PartitionEvidence> active = new ArrayList<>();
-        List<Told> doesNotDivide = new ArrayList<>();
+        List<Disposed> told = new ArrayList<>();
         for (PartitionEvidence each : mine) {
             // Only a rule read as a set of the strings is asked. A line and a value singled out are
             // settled where they were read — the reader that makes one has already held it to what
@@ -234,37 +286,41 @@ final class Classing {
             // could lose its classes to a limit meant for something else.
             if (!(each instanceof PartitionEvidence.BySet set)) {
                 active.add(each);
-                continue;
+                continue;   // filled in below, once it is known whether the classes took it up
             }
             Boolean divides = tellsApart(term, admits,
                     new AsASet(set.states().whenTrue(), set.states().whenFalse(),
                             set.states().statement()),
                     allowance);
+            // What was left to work out is what a run allowed more would have worked out, and the
+            // rules already qualified are qualified all the same — but there are no classes for any
+            // of them to be part of, so what became of every one of them is the same thing. Said as
+            // nothing at all, the account that follows is handed a position whose rules it was owed
+            // an answer about and got none.
             if (divides == null) {
-                return new Result(
-                        new Classed.NotComposed(new BlockReason.BehaviorDistinctionsTooCostly()),
-                        List.of(), List.of());
+                return notComposed(mine, told, new BlockReason.BehaviorDistinctionsTooCostly());
             }
+            told.add(divides
+                    ? new Disposed(each, Outcome.DIVIDED, null)
+                    : new Disposed(each, Outcome.TOLD_NOTHING_APART,
+                            new BlockReason.PredicateTellingNothingApart()));
             if (divides) {
                 active.add(each);
-            } else {
-                doesNotDivide.add(new Told(each, new BlockReason.PredicateTellingNothingApart()));
             }
         }
         // Asked after that, and kept as it was said. A rule missing from the denominator is missing
         // however the rules beside it are written, and what stopped it is a fact about that rule
         // rather than about what the position's rules come to together.
         if (!blocked.isEmpty()) {
-            return new Result(new Classed.NotComposed(blocked.get(0).why()), active,
-                    doesNotDivide);
+            return notComposed(mine, told, blocked.get(0).why());
         }
         switch (vocabularyOf(active, carrier)) {
             case ON_AN_ORDER -> {
-                return new Result(new Classed.OnTheOrder(), active, doesNotDivide);
+                return new Result(new Classed.OnTheOrder(),
+                        filled(mine, told, Outcome.LEFT_TO_THE_WALK));
             }
             case NOT_ONE -> {
-                return new Result(new Classed.NotComposed(new BlockReason.ClassesNotComposed()),
-                        active, doesNotDivide);
+                return notComposed(mine, told, new BlockReason.ClassesNotComposed());
             }
             default -> { }
         }
@@ -272,15 +328,61 @@ final class Classing {
         active.forEach(each -> said.add(asASet(each, carrier)));
         List<Cell> cells = refined(term, admits, said, allowance);
         if (cells == null) {
-            return new Result(
-                    new Classed.NotComposed(new BlockReason.BehaviorDistinctionsTooCostly()),
-                    active, doesNotDivide);
+            return notComposed(mine, told, new BlockReason.BehaviorDistinctionsTooCostly());
         }
         List<PartitionClass> out = new ArrayList<>();
         for (Cell cell : cells) {
             out.add(classOf(term, cell, writing).ofTheNumber(term));
         }
-        return new Result(new Classed.Composed(out), active, doesNotDivide);
+        // The classes are sets, so everything that went into them went into them — a value singled
+        // out of a string is one of these classes rather than a cut beside them.
+        return new Result(new Classed.Composed(out), filled(mine, told, Outcome.DIVIDED));
+    }
+
+    /**
+     * {@code told} with an entry for every rule it does not already answer for.
+     *
+     * <p>What the answer is total over is what it was handed, and the rules it took no position on
+     * are said to be that rather than left out. Left out, a reader cannot tell a rule this decided
+     * nothing about from one it forgot — and the account that follows is the reader.
+     */
+    private static List<Disposed> filled(List<PartitionEvidence> mine, List<Disposed> told,
+                                         Outcome otherwise) {
+        List<Disposed> out = new ArrayList<>();
+        for (PartitionEvidence each : mine) {
+            Disposed already = told.stream().filter(one -> one.what().equals(each))
+                    .findFirst().orElse(null);
+            out.add(already != null ? already : new Disposed(each, otherwise, null));
+        }
+        return out;
+    }
+
+    /**
+     * The position with no classes, and every rule that reached it answered for.
+     *
+     * <p>What was already proved to tell nothing apart keeps that answer — it is a fact about the
+     * rule and stays true whatever became of the rest. A rule read as a set is one the classes were
+     * not composed out of, whether this got as far as qualifying it or not; a line or a value
+     * singled out still cuts the position, and what became of it is settled where the cut is made.
+     *
+     * <p>Written here so that the places that say "no classes" say it the same way: one of them
+     * keeping its own list is one of them able to leave a rule out.
+     */
+    private static Result notComposed(List<PartitionEvidence> mine, List<Disposed> told,
+                                      BlockReason.RuleWithoutLineReason why) {
+        List<Disposed> out = new ArrayList<>();
+        for (PartitionEvidence each : mine) {
+            Disposed already = told.stream().filter(one -> one.what().equals(each))
+                    .findFirst().orElse(null);
+            if (already != null && already.outcome() == Outcome.TOLD_NOTHING_APART) {
+                out.add(already);
+            } else {
+                out.add(new Disposed(each,
+                        each instanceof PartitionEvidence.BySet
+                                ? Outcome.NOT_COMPOSED : Outcome.LEFT_TO_THE_WALK, null));
+            }
+        }
+        return new Result(new Classed.NotComposed(why), out);
     }
 
     /**
