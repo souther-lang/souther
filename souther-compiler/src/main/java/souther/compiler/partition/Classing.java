@@ -146,8 +146,16 @@ final class Classing {
     /** One cell as a class: what it holds, what it is called, and what a row would carry for it. */
     private static PartitionClass classOf(NumericTerm.FromOnePosition term, SetDivisions.Cell cell,
                                           Function<Place, FixtureTemplate> writing) {
-        String id = term + "/set/" + bits(cell);
         String label = said(cell);
+        // The words, and not a name of this method's own. What a document shows a reader is the
+        // class identity — every kind of class here is named by what it means, prefixed by the
+        // number it is a class of — so a name made out of which rules held would be published in
+        // place of the words and a reader would be shown nothing they could act on.
+        //
+        // Which does tie the identity to the wording: a class renamed is a class nothing was
+        // recorded at. That is the arrangement every other class in this measure is already under,
+        // and one kind of class keeping its own would be a document that reads two ways.
+        String id = term + "/" + label;
         Recognition is = new Recognition.OfASet(cell.values());
         Place stands = someValueIn(cell.values());
         FixtureTemplate written =
@@ -172,20 +180,6 @@ final class Classing {
         return cell.under().stream()
                 .map(each -> each.holds() ? each.states().saidOf("x") : each.states().deniedOf("x"))
                 .reduce((one, other) -> one + " and " + other).orElseThrow();
-    }
-
-    /**
-     * Which of the position's rules hold in {@code cell}, as the name a reader never sees.
-     *
-     * <p>Apart from the label because they answer different questions. What a document calls a class
-     * is words, and words are improved; what a run is filed under has to be the same on two compiles
-     * of one model and across a wording anybody changes. Made out of the label, every improvement to
-     * a sentence would be a class nothing had been recorded at.
-     */
-    private static String bits(SetDivisions.Cell cell) {
-        StringBuilder out = new StringBuilder();
-        cell.under().forEach(each -> out.append(each.holds() ? '1' : '0'));
-        return out.toString();
     }
 
     /**
