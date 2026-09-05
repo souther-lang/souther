@@ -53,6 +53,22 @@ public enum CoverageConstruct {
     BINARY,
 
     /**
+     * An application — a helper called, a library operation applied, a name given arguments.
+     *
+     * <p>What was written, and not what is made of it, which is why this is not named after the few
+     * applications an analysis reads. A rule about the strings at a position is written as one of
+     * these, and so is every other call in every body; which of them states a rule is settled by
+     * reading what the name denotes, and that reading happens long after the source is gone. Named
+     * for the applications an analysis cares about, this value would be one the builder could not
+     * hand out — it reads syntax and has not resolved a name.
+     *
+     * <p>Carrying one is not being numbered, the way it is not for the arithmetic among the binary
+     * expressions above: what a probe copies off the stack is settled by
+     * {@link souther.compiler.coverage.SourceOutcome} and never by which construct was written.
+     */
+    CALL,
+
+    /**
      * No source wrote it.
      *
      * <p>What {@link CoverageOrigin#unwritten} carries. A comparison rebuilt for an analysis is a
@@ -77,7 +93,7 @@ public enum CoverageConstruct {
             case IF -> souther.compiler.diag.Localizable.of("construct.if");
             case GUARD -> souther.compiler.diag.Localizable.of("construct.guard");
             case COMPREHENSION -> souther.compiler.diag.Localizable.of("construct.comprehension");
-            case MATCH, BINARY, NOT_WRITTEN -> throw new IllegalStateException(
+            case MATCH, BINARY, CALL, NOT_WRITTEN -> throw new IllegalStateException(
                     "not a fork of a body: " + this);
         };
     }

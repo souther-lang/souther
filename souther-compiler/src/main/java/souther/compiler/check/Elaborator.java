@@ -1499,7 +1499,11 @@ public final class Elaborator {
      * from a call, because nothing downstream asks.
      */
     private static Core keptValue(CompleteSignature settled, SourcePos pos) {
-        return new Core.PreservedCall(settled.declaring(), List.of(), settled.result(), pos);
+        // A name read where a value goes, and no application was written over it. What it is built
+        // as is a call; what an author wrote there is a name, so there is no application of this
+        // source for it to be.
+        return new Core.PreservedCall(settled.declaring(), List.of(),
+                souther.compiler.types.CoverageOrigin.unwritten(), settled.result(), pos);
     }
 
     /**

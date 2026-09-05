@@ -85,14 +85,22 @@ class WhoMaySettleACoverageOriginTest {
      * comprehension's guard is derived where the comprehension is, so that the lowering and the
      * reading that runs before it cannot number the guards differently.
      *
+     * <p>{@code Hir.Apply} and {@code Elaborator} are the two places an application stands where no
+     * source wrote one. A pass composing an application is writing one into a body, and a name read
+     * where a value goes is built as a call of no arguments — an author wrote a name there, not an
+     * application. Each says so rather than taking the number of a construct somebody wrote, which
+     * after an expansion is this compiler's own work standing among the model's.
+     *
      * <p>The constructor is named only from inside {@code CoverageOrigin}. A row naming it elsewhere
      * is a pass making an origin of its own, which after an expansion is two obligations where the
      * author wrote one.
      */
     private static final List<String> NAMING_A_MAKER = List.of(
+            "souther/compiler/ast/Hir$Apply -> " + OWNER + "#unwritten()" + AN_ORIGIN,
             "souther/compiler/ast/Hir$ListComp -> " + OWNER + "#lowered(I)" + AN_ORIGIN,
             "souther/compiler/check/Conditions -> " + OWNER + "#unwritten()" + AN_ORIGIN,
             "souther/compiler/check/Conditions$AsPolar -> " + OWNER + "#unwritten()" + AN_ORIGIN,
+            "souther/compiler/check/Elaborator -> " + OWNER + "#unwritten()" + AN_ORIGIN,
             "souther/compiler/check/Terms -> " + OWNER + "#unwritten()" + AN_ORIGIN,
             "souther/compiler/check/TheOtherCase -> " + OWNER + "#unwritten()" + AN_ORIGIN,
             "souther/compiler/frontend/AstBuilder -> " + OWNER

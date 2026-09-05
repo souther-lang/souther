@@ -8,7 +8,21 @@ package souther.compiler.types;
  * reasoned about on its own — and they are one obligation: the author wrote one {@code match}, and
  * writing rows for it twice covers nothing the first set did not. This is what says they are one.
  *
- * <p>Minted where a source construct a row can be owed for is read, and carried from there on. A pass
+ * <p><b>The identity of a construct the source wrote, and nothing about what is owed for it.</b>
+ * Minted where such a construct is read, and carried from there on. Which of them a coverage
+ * obligation comes from is a later reader's answer and a narrower set than this: an arithmetic
+ * binary expression has one of these and owes nothing, an application has one and owes rows only
+ * where a rule is read off it, and a fork owes an arm either way. Read as "a construct a row can be
+ * owed for", this value would be one nobody could hand to the constructs that are not.
+ *
+ * <p><b>Carrying one is not being instrumented and is not being numbered.</b> What a
+ * probe copies off the stack is {@link souther.compiler.coverage.SourceOutcome}'s answer, and an
+ * arithmetic binary expression has an origin and no number today. A rule about the strings at a
+ * position is the other way round from a fork: it owes rows because it divides the position into
+ * classes, and no run through it is recorded at all. So the two questions are asked separately, and
+ * a reader that took an origin for a probe site would be answering the second with the first.
+ *
+ * <p>A pass
  * that rewrites one keeps the origin it was given; a pass that turns one construct into several forks
  * derives them with {@link #lowered}, so what a comprehension's guards get is a function of the
  * comprehension rather than of when the lowering ran. Nothing else makes one — an origin minted after

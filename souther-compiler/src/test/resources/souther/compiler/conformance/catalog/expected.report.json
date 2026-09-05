@@ -576,7 +576,7 @@
             "kind" : "comparison",
             "declaredIn" : "conformance.catalog",
             "behavior" : "discount",
-            "ordinal" : 8,
+            "ordinal" : 18,
             "lowered" : 0
           },
           "question" : "notDetermined",
@@ -592,7 +592,7 @@
             "kind" : "comparison",
             "declaredIn" : "conformance.catalog",
             "behavior" : "discount",
-            "ordinal" : 8,
+            "ordinal" : 18,
             "lowered" : 0
           },
           "question" : "notDetermined",
@@ -827,7 +827,7 @@
             "kind" : "comparison",
             "declaredIn" : "conformance.catalog",
             "behavior" : "discount",
-            "ordinal" : 8,
+            "ordinal" : 18,
             "lowered" : 0
           }
         }, {
@@ -838,7 +838,7 @@
             "kind" : "comparison",
             "declaredIn" : "conformance.catalog",
             "behavior" : "discount",
-            "ordinal" : 8,
+            "ordinal" : 18,
             "lowered" : 0
           }
         } ]
@@ -848,7 +848,7 @@
         "obligations" : [ {
           "obligationId" : {
             "module" : "conformance.catalog",
-            "construct" : 7,
+            "construct" : 17,
             "lowered" : 0,
             "part" : 0,
             "decidedBy" : "the_declaration"
@@ -868,7 +868,7 @@
         }, {
           "obligationId" : {
             "module" : "conformance.catalog",
-            "construct" : 7,
+            "construct" : 17,
             "lowered" : 0,
             "part" : 1,
             "decidedBy" : "the_declaration"
@@ -900,7 +900,7 @@
           "kind" : "comparison",
           "declaredIn" : "conformance.catalog",
           "behavior" : "discount",
-          "ordinal" : 8,
+          "ordinal" : 18,
           "lowered" : 0
         },
         "reason" : "unsupported_syntax"
@@ -912,7 +912,7 @@
           "kind" : "comparison",
           "declaredIn" : "conformance.catalog",
           "behavior" : "discount",
-          "ordinal" : 8,
+          "ordinal" : 18,
           "lowered" : 0
         },
         "reason" : "unsupported_syntax"
@@ -924,7 +924,7 @@
           "kind" : "comparison",
           "declaredIn" : "conformance.catalog",
           "behavior" : "discount",
-          "ordinal" : 8,
+          "ordinal" : 18,
           "lowered" : 0
         }
       }, {
@@ -935,7 +935,7 @@
           "kind" : "comparison",
           "declaredIn" : "conformance.catalog",
           "behavior" : "discount",
-          "ordinal" : 8,
+          "ordinal" : 18,
           "lowered" : 0
         }
       } ]
@@ -1462,7 +1462,7 @@
             "kind" : "comparison",
             "declaredIn" : "conformance.shipping",
             "behavior" : "出荷する",
-            "ordinal" : 4,
+            "ordinal" : 8,
             "lowered" : 0
           },
           "question" : "notDetermined",
@@ -1478,7 +1478,7 @@
             "kind" : "comparison",
             "declaredIn" : "conformance.shipping",
             "behavior" : "出荷する",
-            "ordinal" : 4,
+            "ordinal" : 8,
             "lowered" : 0
           },
           "question" : "notDetermined",
@@ -1494,7 +1494,7 @@
             "kind" : "comparison",
             "declaredIn" : "conformance.shipping",
             "behavior" : "出荷する",
-            "ordinal" : 8,
+            "ordinal" : 25,
             "lowered" : 0
           },
           "question" : "notDetermined",
@@ -1776,7 +1776,7 @@
                   "kind" : "comparison",
                   "declaredIn" : "conformance.shipping",
                   "behavior" : "出荷する",
-                  "ordinal" : 13,
+                  "ordinal" : 37,
                   "lowered" : 0
                 },
                 "conjunct" : 0,
@@ -1819,7 +1819,7 @@
                 "kind" : "comparison",
                 "declaredIn" : "conformance.shipping",
                 "behavior" : "出荷する",
-                "ordinal" : 13,
+                "ordinal" : 37,
                 "lowered" : 0
               },
               "conjunct" : 0,
@@ -1847,7 +1847,7 @@
             "kind" : "comparison",
             "declaredIn" : "conformance.shipping",
             "behavior" : "出荷する",
-            "ordinal" : 13,
+            "ordinal" : 37,
             "lowered" : 0
           },
           "relation" : "=",
@@ -1871,7 +1871,7 @@
                 "kind" : "comparison",
                 "declaredIn" : "conformance.shipping",
                 "behavior" : "出荷する",
-                "ordinal" : 13,
+                "ordinal" : 37,
                 "lowered" : 0
               },
               "conjunct" : 0,
@@ -1900,7 +1900,7 @@
             "kind" : "comparison",
             "declaredIn" : "conformance.shipping",
             "behavior" : "出荷する",
-            "ordinal" : 13,
+            "ordinal" : 37,
             "lowered" : 0
           },
           "relation" : "=",
@@ -1924,7 +1924,7 @@
                 "kind" : "comparison",
                 "declaredIn" : "conformance.shipping",
                 "behavior" : "出荷する",
-                "ordinal" : 13,
+                "ordinal" : 37,
                 "lowered" : 0
               },
               "conjunct" : 0,
@@ -1965,7 +1965,7 @@
             "kind" : "comparison",
             "declaredIn" : "conformance.shipping",
             "behavior" : "出荷する",
-            "ordinal" : 13,
+            "ordinal" : 37,
             "lowered" : 0
           },
           "relation" : "in",
@@ -1989,7 +1989,7 @@
                 "kind" : "comparison",
                 "declaredIn" : "conformance.shipping",
                 "behavior" : "出荷する",
-                "ordinal" : 13,
+                "ordinal" : 37,
                 "lowered" : 0
               },
               "conjunct" : 0,
@@ -2022,7 +2022,7 @@
             "kind" : "comparison",
             "declaredIn" : "conformance.shipping",
             "behavior" : "出荷する",
-            "ordinal" : 13,
+            "ordinal" : 37,
             "lowered" : 0
           },
           "relation" : "in",
@@ -2046,7 +2046,7 @@
                 "kind" : "comparison",
                 "declaredIn" : "conformance.shipping",
                 "behavior" : "出荷する",
-                "ordinal" : 5,
+                "ordinal" : 10,
                 "lowered" : 0
               },
               "conjunct" : 0,
@@ -2075,7 +2075,7 @@
             "kind" : "comparison",
             "declaredIn" : "conformance.shipping",
             "behavior" : "出荷する",
-            "ordinal" : 5,
+            "ordinal" : 10,
             "lowered" : 0
           },
           "relation" : "=",
@@ -2099,7 +2099,7 @@
                 "kind" : "comparison",
                 "declaredIn" : "conformance.shipping",
                 "behavior" : "出荷する",
-                "ordinal" : 5,
+                "ordinal" : 10,
                 "lowered" : 0
               },
               "conjunct" : 0,
@@ -2127,7 +2127,7 @@
             "kind" : "comparison",
             "declaredIn" : "conformance.shipping",
             "behavior" : "出荷する",
-            "ordinal" : 5,
+            "ordinal" : 10,
             "lowered" : 0
           },
           "relation" : "=",
@@ -2151,7 +2151,7 @@
                 "kind" : "comparison",
                 "declaredIn" : "conformance.shipping",
                 "behavior" : "出荷する",
-                "ordinal" : 5,
+                "ordinal" : 10,
                 "lowered" : 0
               },
               "conjunct" : 0,
@@ -2192,7 +2192,7 @@
             "kind" : "comparison",
             "declaredIn" : "conformance.shipping",
             "behavior" : "出荷する",
-            "ordinal" : 5,
+            "ordinal" : 10,
             "lowered" : 0
           },
           "relation" : "in",
@@ -2216,7 +2216,7 @@
                 "kind" : "comparison",
                 "declaredIn" : "conformance.shipping",
                 "behavior" : "出荷する",
-                "ordinal" : 5,
+                "ordinal" : 10,
                 "lowered" : 0
               },
               "conjunct" : 0,
@@ -2257,7 +2257,7 @@
             "kind" : "comparison",
             "declaredIn" : "conformance.shipping",
             "behavior" : "出荷する",
-            "ordinal" : 5,
+            "ordinal" : 10,
             "lowered" : 0
           },
           "relation" : "in",
@@ -2292,7 +2292,7 @@
             "kind" : "comparison",
             "declaredIn" : "conformance.shipping",
             "behavior" : "出荷する",
-            "ordinal" : 4,
+            "ordinal" : 8,
             "lowered" : 0
           }
         }, {
@@ -2303,7 +2303,7 @@
             "kind" : "comparison",
             "declaredIn" : "conformance.shipping",
             "behavior" : "出荷する",
-            "ordinal" : 4,
+            "ordinal" : 8,
             "lowered" : 0
           }
         }, {
@@ -2314,7 +2314,7 @@
             "kind" : "comparison",
             "declaredIn" : "conformance.shipping",
             "behavior" : "出荷する",
-            "ordinal" : 8,
+            "ordinal" : 25,
             "lowered" : 0
           }
         } ]
@@ -2324,7 +2324,7 @@
         "obligations" : [ {
           "obligationId" : {
             "module" : "conformance.shipping",
-            "construct" : 12,
+            "construct" : 36,
             "lowered" : 0,
             "part" : 0,
             "decidedBy" : "the_declaration"
@@ -2344,7 +2344,7 @@
         }, {
           "obligationId" : {
             "module" : "conformance.shipping",
-            "construct" : 3,
+            "construct" : 5,
             "lowered" : 0,
             "part" : 0,
             "decidedBy" : "the_declaration"
@@ -2364,7 +2364,7 @@
         }, {
           "obligationId" : {
             "module" : "conformance.shipping",
-            "construct" : 3,
+            "construct" : 5,
             "lowered" : 0,
             "part" : 1,
             "decidedBy" : "the_declaration"
@@ -2426,7 +2426,7 @@
         }, {
           "obligationId" : {
             "module" : "conformance.shipping",
-            "construct" : 10,
+            "construct" : 31,
             "lowered" : 0,
             "part" : 0,
             "decidedBy" : "the_declaration"
@@ -2446,7 +2446,7 @@
         }, {
           "obligationId" : {
             "module" : "conformance.shipping",
-            "construct" : 9,
+            "construct" : 30,
             "lowered" : 0,
             "part" : 0,
             "decidedBy" : "the_declaration"
@@ -2466,7 +2466,7 @@
         }, {
           "obligationId" : {
             "module" : "conformance.shipping",
-            "construct" : 9,
+            "construct" : 30,
             "lowered" : 0,
             "part" : 1,
             "decidedBy" : "the_declaration"
@@ -2486,7 +2486,7 @@
         }, {
           "obligationId" : {
             "module" : "conformance.shipping",
-            "construct" : 7,
+            "construct" : 24,
             "lowered" : 0,
             "part" : 0,
             "decidedBy" : "the_declaration"
@@ -2506,7 +2506,7 @@
         }, {
           "obligationId" : {
             "module" : "conformance.shipping",
-            "construct" : 7,
+            "construct" : 24,
             "lowered" : 0,
             "part" : 1,
             "decidedBy" : "the_declaration"
@@ -2526,7 +2526,7 @@
         }, {
           "obligationId" : {
             "module" : "conformance.shipping",
-            "construct" : 10,
+            "construct" : 31,
             "lowered" : 0,
             "part" : 1,
             "decidedBy" : "the_declaration"
@@ -2546,7 +2546,7 @@
         }, {
           "obligationId" : {
             "module" : "conformance.shipping",
-            "construct" : 12,
+            "construct" : 36,
             "lowered" : 0,
             "part" : 1,
             "decidedBy" : "the_declaration"
@@ -2576,7 +2576,7 @@
               "kind" : "comparison",
               "declaredIn" : "conformance.shipping",
               "behavior" : "出荷する",
-              "ordinal" : 13,
+              "ordinal" : 37,
               "lowered" : 0
             },
             "conjunct" : 0,
@@ -2614,7 +2614,7 @@
               "kind" : "comparison",
               "declaredIn" : "conformance.shipping",
               "behavior" : "出荷する",
-              "ordinal" : 5,
+              "ordinal" : 10,
               "lowered" : 0
             },
             "conjunct" : 0,
@@ -2648,7 +2648,7 @@
               "kind" : "comparison",
               "declaredIn" : "conformance.shipping",
               "behavior" : "出荷する",
-              "ordinal" : 5,
+              "ordinal" : 10,
               "lowered" : 0
             },
             "conjunct" : 0,
@@ -2683,7 +2683,7 @@
           "kind" : "comparison",
           "declaredIn" : "conformance.shipping",
           "behavior" : "出荷する",
-          "ordinal" : 4,
+          "ordinal" : 8,
           "lowered" : 0
         },
         "reason" : "rule_about_a_derived_value"
@@ -2695,7 +2695,7 @@
           "kind" : "comparison",
           "declaredIn" : "conformance.shipping",
           "behavior" : "出荷する",
-          "ordinal" : 4,
+          "ordinal" : 8,
           "lowered" : 0
         },
         "reason" : "rule_about_a_derived_value"
@@ -2707,7 +2707,7 @@
           "kind" : "comparison",
           "declaredIn" : "conformance.shipping",
           "behavior" : "出荷する",
-          "ordinal" : 8,
+          "ordinal" : 25,
           "lowered" : 0
         },
         "reason" : "unsupported_syntax"
@@ -2719,7 +2719,7 @@
           "kind" : "comparison",
           "declaredIn" : "conformance.shipping",
           "behavior" : "出荷する",
-          "ordinal" : 4,
+          "ordinal" : 8,
           "lowered" : 0
         }
       }, {
@@ -2730,7 +2730,7 @@
           "kind" : "comparison",
           "declaredIn" : "conformance.shipping",
           "behavior" : "出荷する",
-          "ordinal" : 4,
+          "ordinal" : 8,
           "lowered" : 0
         }
       }, {
@@ -2741,7 +2741,7 @@
           "kind" : "comparison",
           "declaredIn" : "conformance.shipping",
           "behavior" : "出荷する",
-          "ordinal" : 8,
+          "ordinal" : 25,
           "lowered" : 0
         }
       } ]

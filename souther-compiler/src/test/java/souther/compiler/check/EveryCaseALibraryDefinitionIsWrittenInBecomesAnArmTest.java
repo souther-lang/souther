@@ -114,6 +114,7 @@ class EveryCaseALibraryDefinitionIsWrittenInBecomesAnArmTest {
         }
         return new Core.PreservedCall(
                 KeptCalls.declared((ValueName.Stdlib.Operation) operation), args,
+                souther.compiler.types.CoverageOrigin.unwritten(),
                 entry.signature().result(), POS);
     }
 }

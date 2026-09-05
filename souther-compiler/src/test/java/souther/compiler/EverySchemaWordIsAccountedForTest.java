@@ -173,11 +173,24 @@ class EverySchemaWordIsAccountedForTest {
                 .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
     }
 
-    /** The constructs an arm can be an outcome of. Fewer than the kinds an origin carries: a binary
-     *  expression is inside a fork rather than being one, and nothing wrote the last. */
+    /**
+     * The constructs an arm can be an outcome of.
+     *
+     * <p>Fewer than the kinds an origin carries, and the difference is the point: what a source
+     * wrote is a wider vocabulary than what this report has a word for. A binary expression is
+     * inside a fork rather than being one, an application is not a fork at all — a rule read off
+     * one divides a position into classes and has no arm to be an outcome of — and nothing wrote
+     * the last. Each of those has an origin all the same, because an origin says which construct of
+     * a source it is and not what a report calls it.
+     *
+     * <p>Written out rather than read off {@code OutcomeName.of}. That mapping is what decides which
+     * pairs exist, and a population taken from it would move whenever it did — which is the one
+     * thing this is here to notice.
+     */
     private static Set<String> constructWords() {
         return Arrays.stream(souther.compiler.types.CoverageConstruct.values())
                 .filter(c -> c != souther.compiler.types.CoverageConstruct.BINARY
+                        && c != souther.compiler.types.CoverageConstruct.CALL
                         && c != souther.compiler.types.CoverageConstruct.NOT_WRITTEN)
                 .map(AdequacyReport::word)
                 .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));

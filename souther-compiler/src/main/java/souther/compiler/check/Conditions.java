@@ -310,7 +310,11 @@ final class Conditions {
         if (e instanceof Core.PreservedCall call
                 && DischargeRules.sizeMeantBy(call.operation())
                         instanceof BoundOperationFact.MeansTheSameAsASizeOfNought means) {
-            Core size = new Core.PreservedCall(means.size(), call.args(), Type.INT, call.pos());
+            // No source wrote this call. It is the size the written one means, composed so that the
+            // rule can be read as the comparison it states — and giving it the written call's own
+            // construct would put two applications under one identity.
+            Core size = new Core.PreservedCall(means.size(), call.args(),
+                    CoverageOrigin.unwritten(), Type.INT, call.pos());
             return new Core.Binary(BinOp.EQ, size, new Core.Int(0, Type.INT, call.pos()),
                     CoverageOrigin.unwritten(), Type.BOOL, call.pos());
         }

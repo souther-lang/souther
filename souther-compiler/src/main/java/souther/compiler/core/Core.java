@@ -404,8 +404,14 @@ public sealed interface Core {
      * from different declarations — what may say that a name has been read against a declaration is
      * {@link CompleteSignature} and nothing else.
      */
-    record PreservedCall(DeclaredOperation declared, List<Core> args, Type type,
-                         SourcePos pos) implements Core {
+    record PreservedCall(DeclaredOperation declared, List<Core> args, CoverageOrigin origin,
+                         Type type, SourcePos pos) implements Core {
+
+        // `origin` says which application of which source this is, and it is here for the reason a
+        // comparison's is: a rule read off a call is the same rule wherever the call was expanded
+        // to, and the readings of it are several. Nothing about a probe follows from carrying one
+        // — an application leaves no run to record, and a rule read off it owes rows for the
+        // classes it divides a position into.
 
         public PreservedCall {
             // Taken over rather than borrowed. Checking a list the caller goes on holding says what
@@ -775,7 +781,7 @@ public sealed interface Core {
             case PreservedCall p -> {
                 List<Core> args = each(p.args(), atExpr);
                 yield args == p.args() ? p
-                        : new PreservedCall(p.declared(), args, p.type(), p.pos());
+                        : new PreservedCall(p.declared(), args, p.origin(), p.type(), p.pos());
             }
             // what is applied is a binding holding a function, which the backend loads: a name slot
             case Apply a -> {
@@ -882,7 +888,8 @@ public sealed interface Core {
                     withoutItsPlace(b.right()), null, b.type(), null);
             case Call c -> new Call(c.fn(), allWithoutTheirPlace(c.args()), c.type(), null);
             case PreservedCall p ->
-                    new PreservedCall(p.declared(), allWithoutTheirPlace(p.args()), p.type(), null);
+                    new PreservedCall(p.declared(), allWithoutTheirPlace(p.args()), p.origin(),
+                            p.type(), null);
             case Apply a -> new Apply(readWithoutItsPlace(a.fn()), allWithoutTheirPlace(a.args()), a.type(), null);
             case If iff -> new If(withoutItsPlace(iff.cond()), withoutItsPlace(iff.then()),
                     withoutItsPlace(iff.els()), null, iff.type(), null, List.of());

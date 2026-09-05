@@ -36,10 +36,16 @@ public final class KeptCalls {
         return CompleteSignature.ofSettledValue(name, type).declaring();
     }
 
+    /** No source wrote a call a fixture composes, which is what these carry as their construct. A
+     *  written one would be a number this fixture invented, standing for an application in a file
+     *  nobody read. */
+    private static final souther.compiler.types.CoverageOrigin UNWRITTEN =
+            souther.compiler.types.CoverageOrigin.unwritten();
+
     /** A call to {@code operation} over {@code args}, answering {@code type}. */
     public static Core.PreservedCall to(ValueName.Stdlib.Operation operation, List<Core> args,
                                         Type type, SourcePos pos) {
-        return new Core.PreservedCall(declared(operation), args, type, pos);
+        return new Core.PreservedCall(declared(operation), args, UNWRITTEN, type, pos);
     }
 
     /**
@@ -55,7 +61,8 @@ public final class KeptCalls {
             args.add(new Core.Read("arg" + i, new BindingId(OWNER, i), signature.params().get(i),
                     pos));
         }
-        return new Core.PreservedCall(signature.declaring(), args, signature.result(), pos);
+        return new Core.PreservedCall(signature.declaring(), args, UNWRITTEN, signature.result(),
+                pos);
     }
 
     /** What the library declares {@code operation} to be. */

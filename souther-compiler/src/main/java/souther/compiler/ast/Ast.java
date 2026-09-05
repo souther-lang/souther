@@ -1189,13 +1189,21 @@ public interface Ast {
      * <p>Applying a name is the common case and has its own constructors and readers below. A name
      * carries what it denotes — a helper, a library function, an injected behavior, a function-typed
      * binding, or the type a newtype construction wraps — answered once during resolution.
+     *
+     * <p>{@code origin} is which application of this source it is, carried for the reason a
+     * comparison's is: a non-recursive helper is expanded at each call, so one application the
+     * author wrote becomes several in the tree that runs, and a rule read off one of them is the
+     * same rule wherever it is met. What the name turns out to denote is not known here and is no
+     * part of it — every application the source writes takes one, and which of them state a rule is
+     * settled where names are resolved.
      */
-    record Apply(Expr function, List<Expr> args, SourcePos pos, Region region) implements Expr {
+    record Apply(Expr function, List<Expr> args, CoverageOrigin origin, SourcePos pos,
+                 Region region) implements Expr {
 
         /** The same application over rewritten arguments — a pass that touches only the arguments
          *  says so here rather than listing the slots it is not changing. */
         public Apply withArgs(List<Expr> args) {
-            return new Apply(function, args, pos, region);
+            return new Apply(function, args, origin, pos, region);
         }
     }
 
@@ -1232,7 +1240,7 @@ public interface Ast {
             case Neg x -> new Neg(x.operand(), x.pos(), region);
             case FieldAccess x -> new FieldAccess(x.target(), x.name(), x.pos(), region);
             case Binary x -> new Binary(x.op(), x.left(), x.right(), x.origin(), x.pos(), region);
-            case Apply x -> new Apply(x.function(), x.args(), x.pos(), region);
+            case Apply x -> new Apply(x.function(), x.args(), x.origin(), x.pos(), region);
             case If x -> new If(x.cond(), x.then(), x.els(), x.origin(), x.pos(), region);
             case IfConstructed x ->
                     new IfConstructed(x.construct(), x.binder(), x.then(), x.els(), x.origin(), x.pos(),

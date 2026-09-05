@@ -73,34 +73,40 @@ public enum OutcomeName {
                 case IF -> THEN;
                 case GUARD -> CONTINUED;
                 case COMPREHENSION -> KEPT;
-                case MATCH, BINARY, NOT_WRITTEN -> refuse(construct, outcome);
+                case MATCH, BINARY, CALL, NOT_WRITTEN -> refuse(construct, outcome);
             };
             case SourceOutcome.Failed(SourceOutcome.FailedBy.Condition _) -> switch (construct) {
                 case IF, GUARD -> ELSE;
                 case COMPREHENSION -> DROPPED;
-                case MATCH, BINARY, NOT_WRITTEN -> refuse(construct, outcome);
+                case MATCH, BINARY, CALL, NOT_WRITTEN -> refuse(construct, outcome);
             };
             // An attempted construction is a shape either of the two conditionals may be written in,
             // and no other construct has one. What the value was attempted under is said by the
             // construct beside this rather than by a second word here.
             case SourceOutcome.Held(SourceOutcome.HeldBy.Construction _) -> switch (construct) {
                 case IF, GUARD -> CONSTRUCTED;
-                case COMPREHENSION, MATCH, BINARY, NOT_WRITTEN -> refuse(construct, outcome);
+                case COMPREHENSION, MATCH, BINARY, CALL, NOT_WRITTEN ->
+                        refuse(construct, outcome);
             };
             case SourceOutcome.Failed(SourceOutcome.FailedBy.Construction _) -> switch (construct) {
                 case IF, GUARD -> DEPARTURE;
-                case COMPREHENSION, MATCH, BINARY, NOT_WRITTEN -> refuse(construct, outcome);
+                case COMPREHENSION, MATCH, BINARY, CALL, NOT_WRITTEN ->
+                        refuse(construct, outcome);
             };
             case SourceOutcome.Matched _ -> switch (construct) {
                 case MATCH -> CASE;
-                case IF, GUARD, COMPREHENSION, BINARY, NOT_WRITTEN -> refuse(construct, outcome);
+                case IF, GUARD, COMPREHENSION, BINARY, CALL, NOT_WRITTEN ->
+                        refuse(construct, outcome);
             };
             // The one place the two axes meet without naming each other: what was written is a
             // binary expression, and being read as a comparison a row can reach is what happened to
-            // it. Every other binary expression the source wrote has no outcome at all.
+            // it. Every other binary expression the source wrote has no outcome at all, and neither
+            // has any application — a rule read off one of those divides a position into classes
+            // and leaves no run to record.
             case SourceOutcome.Compared _ -> switch (construct) {
                 case BINARY -> COMPARISON;
-                case IF, GUARD, COMPREHENSION, MATCH, NOT_WRITTEN -> refuse(construct, outcome);
+                case IF, GUARD, COMPREHENSION, MATCH, CALL, NOT_WRITTEN ->
+                        refuse(construct, outcome);
             };
         };
     }

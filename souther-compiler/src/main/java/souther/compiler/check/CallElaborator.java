@@ -262,7 +262,9 @@ public final class CallElaborator {
         // The operation as the signature that just typed this call says it: what was applied and
         // what it takes are one answer, and asking anything a second time for the name would be
         // reaching for a declaration this already has in hand.
-        return new Core.PreservedCall(kept.declaring(), ca.cores(),
+        // Which application of which source this is, taken from the node the source was read into.
+        // Worked out here instead, it would be a second answer to a question the frontend settled.
+        return new Core.PreservedCall(kept.declaring(), ca.cores(), call.construct(),
                 TypeOps.substitute(kept.result(), bind), call.pos());
     }
 

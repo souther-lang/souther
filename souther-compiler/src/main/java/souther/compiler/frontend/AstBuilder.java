@@ -109,6 +109,12 @@ public final class AstBuilder {
      * <p>The kind is taken here and nowhere else. This is the one place that has the syntax in front
      * of it — every stage below reads a tree that has already been lowered, where a {@code guard},
      * an {@code if} and a comprehension's condition are the same node.
+     *
+     * <p><b>Taking a number is not placing a probe.</b> What a run is recorded at is settled by the
+     * coverage plan out of what the catalog holds; this hands out the identity a source construct
+     * keeps through every copy of it. A construct numbered here and instrumented nowhere is the
+     * arithmetic among the binary expressions, and it is a rule about the strings at a position —
+     * which owes rows for the classes it divides a position into and has no run to record.
      */
     private CoverageOrigin construct(CoverageConstruct kind) {
         return CoverageOrigin.written(moduleName, constructCounter++, kind);
@@ -845,7 +851,8 @@ public final class AstBuilder {
                 args.add(expr(arg));
             }
         });
-        return new Ast.Apply(expr(callee), args, pos(callee), region(n));
+        return new Ast.Apply(expr(callee), args, construct(CoverageConstruct.CALL), pos(callee),
+                region(n));
     }
 
     private Ast.Expr binary(SyntaxNode n) {
@@ -889,16 +896,21 @@ public final class AstBuilder {
         if (right instanceof Ast.Apply c) {
             List<Ast.Expr> args = new ArrayList<>(c.args());
             args.add(left);
-            return new Ast.Apply(c.function(), args, c.pos(), written);
+            // The application the author already wrote, with the piped value among its arguments.
+            // Its own identity and not a fresh one: `f(a)` is the application here, and `e |>` says
+            // where one of its arguments came from.
+            return new Ast.Apply(c.function(), args, c.origin(), c.pos(), written);
         }
         if (right instanceof Ast.Var v) {
-            return new Ast.Apply(v, List.of(left), v.pos(), written);
+            return new Ast.Apply(v, List.of(left), construct(CoverageConstruct.CALL), v.pos(),
+                    written);
         }
         // `e |> Mod.name`: the read is handed over as the callee it is, rather than reassembled
         // into a name here. Whether it is a namespace member or a field taken off a binding is
         // resolution's to say, and it says it once, for this and for `Mod.name(e)` alike.
         if (right instanceof Ast.FieldAccess fa) {
-            return new Ast.Apply(fa, List.of(left), pos(operands.get(1)), written);
+            return new Ast.Apply(fa, List.of(left), construct(CoverageConstruct.CALL),
+                    pos(operands.get(1)), written);
         }
         throw CompileException.of(Diagnostic.at(right.pos())
                 .say(new DeclarationMessage.TheRightSideOfAValuePipeIsACall()).build());
