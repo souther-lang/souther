@@ -22,7 +22,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class WhatTwoRulesAboutOnePositionLeaveItTest {
 
-    private static final String POSITION = "value";
+    private static final Sameness.Block<String> POSITION = Sameness.Block.of("value");
     private static final Value A = Value.text("A");
     private static final Value B = Value.text("B");
     private static final Value C = Value.text("C");

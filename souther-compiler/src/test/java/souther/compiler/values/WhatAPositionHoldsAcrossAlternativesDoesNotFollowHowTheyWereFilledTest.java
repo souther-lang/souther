@@ -39,7 +39,7 @@ class WhatAPositionHoldsAcrossAlternativesDoesNotFollowHowTheyWereFilledTest {
 
     /** One alternative, holding {@code set} at the one position there is. */
     private static AdmissibleValues.Box<String> box(ValueSet set) {
-        return new AdmissibleValues.Box<>(Map.of("here", set));
+        return AdmissibleValues.Box.at(Map.of("here", set));
     }
 
     /**
@@ -58,7 +58,7 @@ class WhatAPositionHoldsAcrossAlternativesDoesNotFollowHowTheyWereFilledTest {
     @Test
     void everyOrderOfFillingTheSetLeavesOneAnswerAndOneCost() {
         ValueSet first = null;
-        Set<String> gaveUp = null;
+        Set<Sameness.Block<String>> gaveUp = null;
         int spent = -1;
         for (List<Integer> order : List.of(List.of(0, 1, 2), List.of(0, 2, 1), List.of(1, 0, 2),
                 List.of(1, 2, 0), List.of(2, 0, 1), List.of(2, 1, 0))) {
@@ -88,6 +88,7 @@ class WhatAPositionHoldsAcrossAlternativesDoesNotFollowHowTheyWereFilledTest {
 
     /** How much of the position's allowance has gone. */
     private static int spentOn(Allowance<String> by) {
-        return PatternPlan.Budget.OF_ADMITTED_VALUES.mostBuilt() - by.left("here");
+        return PatternPlan.Budget.OF_ADMITTED_VALUES.mostBuilt()
+                - by.left(Sameness.Block.of("here"));
     }
 }

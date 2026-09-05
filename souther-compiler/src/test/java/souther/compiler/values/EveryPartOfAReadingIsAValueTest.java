@@ -89,6 +89,17 @@ class EveryPartOfAReadingIsAValueTest {
         if (type == UnreadReason.class) {
             return new Sample(UnreadReason.FORM_NOT_READ, List.of());
         }
+        // What a rule left standing, which holds its own entries and hands none of them out. There
+        // is nothing here for a caller to write into afterwards, and no way to ask it for one.
+        if (type == Standing.class) {
+            return new Sample(Standing.of(Set.of("a"), UnreadReason.FORM_NOT_READ), List.of());
+        }
+        // A block, which is what an answer of a reading is about. Its own members are a set this
+        // holds, and it makes its own copy of them, so there is nothing here for a caller to write
+        // into afterwards.
+        if (type == Sameness.Block.class) {
+            return new Sample(Sameness.Block.of("a"), List.of());
+        }
         if (type == AdmissibleValues.Held.class) {
             return new Sample(AdmissibleValues.Held.Alternatives.of(
                     new AdmissibleValues.Box<String>(Map.of())), List.of());
@@ -198,18 +209,20 @@ class EveryPartOfAReadingIsAValueTest {
     void andNorMayAnAlternative() {
         Map<String, ValueSet> mine = new LinkedHashMap<>();
         mine.put("a", ValueSet.just(Value.text("5")));
-        AdmissibleValues.Box<String> box = new AdmissibleValues.Box<>(mine);
+        AdmissibleValues.Box<String> box = AdmissibleValues.Box.at(mine);
 
-        assertThrows(UnsupportedOperationException.class, () -> box.at().put("b", ValueSet.ANY));
+        assertThrows(UnsupportedOperationException.class,
+                () -> box.at().put(Sameness.Block.of("b"), ValueSet.ANY));
         mine.put("b", ValueSet.just(Value.text("6")));
-        assertEquals(Set.of("a"), box.at().keySet(), "what was said is what was said then");
+        assertEquals(Set.of(Sameness.Block.of("a")), box.at().keySet(),
+                "what was said is what was said then");
 
         Set<AdmissibleValues.Box<String>> boxes = new LinkedHashSet<>();
         boxes.add(box);
         AdmissibleValues.Held.Alternatives<String> held =
                 AdmissibleValues.Held.Alternatives.of(boxes, AsACompilationAllows.forAdmittedValues()).held();
 
-        boxes.add(new AdmissibleValues.Box<>(Map.of("b", ValueSet.ANY)));
+        boxes.add(AdmissibleValues.Box.at(Map.of("b", ValueSet.ANY)));
         assertEquals(1, held.boxes().size(), "the alternatives are the ones it was made of");
     }
 

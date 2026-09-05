@@ -248,14 +248,48 @@ final class AdmissibleReading implements ClauseReading<PlannedValues<FactSubject
         };
     }
 
-    /** What one comparison of a position with a value says, or nothing where it is not one. */
+    /**
+     * What one comparison says, which is a value named at a position or two positions being one.
+     *
+     * <p>The second is not a narrowing of either of them and is read all the same. What
+     * {@code p == r} says is that the two are one side of the product, so a rule stated of one of
+     * them afterwards is a rule about the other — and the reading that answers what a position
+     * admits is where that has to be said, because it is that reading's product it is about.
+     * Given up on instead, the two stayed two answers with a rule between them that reached
+     * neither, and a declaration whose positions cannot hold one value together was admitted.
+     */
     private PlannedValues<FactSubject> comparison(Core.Binary b, boolean states, Denotations at) {
         PlannedValues<FactSubject> read = sided(b.left(), b.right(), states, at);
         if (read == null) {
             // `"A" == value` says what `value == "A"` says.
             read = sided(b.right(), b.left(), states, at);
         }
+        if (read == null) {
+            read = holdingAsOne(b, states, at);
+        }
         return read != null ? read : unreadable(b, at);
+    }
+
+    /**
+     * The two positions a comparison holds as one value, or null where it holds none.
+     *
+     * <p>Only where the comparison states that they are equal. Which that is has been settled
+     * already — {@code states} is what the comparison claims once the denials it stands under have
+     * been counted — so {@code p /= r} and {@code !(p == r)} arrive here alike and are not this: a
+     * denial removes the diagonal from a product rather than making one side of it, which is not
+     * something this reading can hold.
+     *
+     * <p>And only between two positions. A position compared with itself says nothing, and a
+     * comparison naming one position and something this could not read is not a rule about a pair.
+     */
+    private PlannedValues<FactSubject> holdingAsOne(Core.Binary b, boolean states, Denotations at) {
+        if (!states) {
+            return null;
+        }
+        FactSubject here = positionIn(b.left(), at);
+        FactSubject there = positionIn(b.right(), at);
+        return here == null || there == null || here.equals(there)
+                ? null : PlannedValues.holdingAsOne(here, there);
     }
 
     /**

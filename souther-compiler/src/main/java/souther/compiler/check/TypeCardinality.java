@@ -319,6 +319,7 @@ public final class TypeCardinality {
         return switch (why) {
             case Emptiness.ConflictingRules _, Emptiness.EmptyNumericInterval _,
                  Emptiness.EmptyOrderedInterval _, Emptiness.NoAllowedValueInRange _,
+                 Emptiness.NoCommonValueForEqualPositions _,
                  Emptiness.SetRequiresTooManyDistinctValues _,
                  Emptiness.NoAllowedCollectionSize _ -> true;
             case Emptiness.TheNameHasNone it ->
@@ -329,6 +330,7 @@ public final class TypeCardinality {
             // would mean if it ever were reached.
             case Emptiness.NoBaseInComponent _ -> false;
             case Emptiness.AtAField it -> restsOn(it.under(), within, shown);
+            case Emptiness.AtEqualPositions it -> restsOn(it.under(), within, shown);
             case Emptiness.NonEmptyCollectionWithNoElement it ->
                     restsOn(it.element(), within, shown);
             case Emptiness.AcrossEveryCase it ->

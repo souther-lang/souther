@@ -1,20 +1,22 @@
 package souther.compiler.check;
 
+import souther.compiler.numeric.OrderedInterval;
 import souther.compiler.numeric.OrderedIntervals;
 import souther.compiler.regex.Meter;
 import souther.compiler.regex.PatternPlan;
 import souther.compiler.values.AdmissibleValues;
 import souther.compiler.values.Allowance;
-import souther.compiler.values.AskedOfEachPosition;
+import souther.compiler.values.AskedOfEachBlock;
 import souther.compiler.values.ConjoinedAdmissibleValues;
 import souther.compiler.values.Emptiness;
 import souther.compiler.values.PlannedValues;
 import souther.compiler.values.Realized;
-import souther.compiler.values.UnreadReason;
+import souther.compiler.values.Sameness;
 import souther.compiler.values.ValueSet;
 
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -33,7 +35,7 @@ import java.util.function.Function;
  * that something exists whenever the reading that was asked had nothing to say about the rules, and
  * that sentence was written in five places. Forbidding the spelling leaves a sixth to be written; so
  * the halves are not separately in hand, and the question has one implementation
- * ({@link #admission(OrderedIntervals, Map, Function, Function)}) that no holder can answer around.
+ * ({@link #admission}) that no holder can answer around.
  *
  * <p><b>Nothing is admitted where the ranges refuse every alternative, and something is admitted
  * only where they were asked.</b> That asymmetry is the whole of what went wrong. Either half
@@ -74,13 +76,30 @@ sealed interface Confinement<A> {
      * <p>{@code by} is a fact about the readings and not a sentence about the model. Which proof an
      * author is told is chosen from it in one place, and what is chosen is not decided here.
      *
-     * @param at   where every alternative was refused, empty where no one position is why. Only ever
-     *             read of {@link EmptyBy#SET_AND_RANGE} and {@link EmptyBy#ORDER}
+     * @param at   the blocks every alternative was refused at, empty where no one of them is why.
+     *             Read of {@link EmptyBy#SET_AND_RANGE}, {@link EmptyBy#ORDER} and
+     *             {@link EmptyBy#POSITIONS_HELD_AS_ONE}.
+     *
+     *             <p>Blocks and not the positions they are of. What was refused is the one value a
+     *             block holds, and each of its positions may be left something on its own — taken
+     *             apart here, a pair whose ranges share nothing would be reported at whichever of
+     *             them is declared first, whose own rules are fine with what they leave it. Two
+     *             blocks refused are two of these and stay two: their positions put in one set say
+     *             the rules hold all of them as one value, which no rule states, and a choice
+     *             between two dead branches would intersect those sets and claim a lack about
+     *             whatever the two happened to share
      */
-    record Admission<A>(Emptiness emptiness, EmptyBy by, Set<A> at) {
+    record Admission<A>(Emptiness emptiness, EmptyBy by, Set<Sameness.Block<A>> at) {
 
         public Admission {
             at = Set.copyOf(at);
+        }
+
+        /** The same, where what was refused is places rather than values several of them share. */
+        static <A> Admission<A> at(Emptiness emptiness, EmptyBy by, Set<A> positions) {
+            Set<Sameness.Block<A>> blocks = new LinkedHashSet<>();
+            positions.forEach(each -> blocks.add(Sameness.Block.of(each)));
+            return new Admission<>(emptiness, by, blocks);
         }
 
         /** Something may satisfy the pair, so nothing emptied it. */
@@ -98,7 +117,7 @@ sealed interface Confinement<A> {
          * were written in.
          */
         static <A> Admission<A> bothShown(Admission<A> one, Admission<A> other) {
-            Set<A> both = new java.util.LinkedHashSet<>(one.at);
+            Set<Sameness.Block<A>> both = new LinkedHashSet<>(one.at);
             both.retainAll(other.at);
             return new Admission<>(Emptiness.EMPTY,
                     one.by == other.by ? one.by : EmptyBy.RULES_TOGETHER, both);
@@ -113,6 +132,15 @@ sealed interface Confinement<A> {
 
         /** The values admit nothing, whatever the ranges hold. */
         VALUES,
+
+        /**
+         * Positions the rules hold as one value are left no value they can all hold.
+         *
+         * <p>Nearer than {@link #VALUES}, and told from it by there being a place to name. Each of
+         * those positions is left something on its own; what has nothing is the one value they are
+         * said to be, so the lack is theirs together and the proof says so.
+         */
+        POSITIONS_HELD_AS_ONE,
 
         /** Some position's order holds no value, whatever the values admit. */
         ORDER,
@@ -140,20 +168,41 @@ sealed interface Confinement<A> {
      * no range to share a value with.
      */
     static <A> Admission<A> admission(OrderedIntervals<A> ordered, Map<A, Carrier> carriers,
-                                      Function<AskedOfEachPosition<A>, Emptiness> admitting,
-                                      Function<AskedOfEachPosition<A>, Set<A>> refused) {
+                                      Function<AskedOfEachBlock<A>, Emptiness> admitting,
+                                      Function<AskedOfEachBlock<A>, Set<Sameness.Block<A>>> refused,
+                                      Set<Sameness.Block<A>> heldAsOneAndEmptied) {
         if (ordered.isBottom()) {
-            return new Admission<>(Emptiness.EMPTY, EmptyBy.ORDER, ordered.holdingNothing());
+            return Admission.at(Emptiness.EMPTY, EmptyBy.ORDER, ordered.holdingNothing());
         }
         // A meter of this question's own, spent on this asking of it. What may be built to decide
         // whether a declaration has a value cannot come out of a position's allowance: the same
         // rules would then be decided differently depending on what the readings before them had
         // already built.
         Meter meter = PatternPlan.Budget.OF_WHAT_A_SET_AND_A_RANGE_SHARE.meter();
-        AskedOfEachPosition<A> asked = (position, set) -> {
-            Carrier carrier = carriers.get(position);
-            return carrier == null ? Emptiness.NONEMPTY
-                    : carrier.meets(set, ordered.at(position), meter);
+        AskedOfEachBlock<A> asked = (block, set) -> {
+            // What the block is ordered on, and where it stops. Positions an alternative holds as
+            // one value have one value between them, so the range that value is in is every one of
+            // their ranges at once — asked of one member, {@code p == r && p < d1 && r > d2} would
+            // be answered against half of what the rules say and the pair would come back holding
+            // something.
+            Carrier carrier = null;
+            OrderedInterval within = OrderedInterval.OPEN;
+            for (A position : block.members()) {
+                Carrier here = carriers.get(position);
+                // One carrier, and an assertion because it is about this compiler rather than
+                // about any model: a rule holding two positions as one value is one an equality
+                // between them typed, and an equality types only where the two are of one type. A
+                // block whose members disagreed would be answered by whichever of them the
+                // members happen to be read in the order of, which is a fact about how they are
+                // spelled.
+                assert carrier == null || here == null || carrier.equals(here)
+                        : "positions held as one value are ordered on " + carrier + " and " + here;
+                if (here != null) {
+                    carrier = here;
+                }
+                within = within.meet(ordered.at(position));
+            }
+            return carrier == null ? Emptiness.NONEMPTY : carrier.meets(set, within, meter);
         };
         Emptiness said = admitting.apply(asked);
         if (said != Emptiness.EMPTY) {
@@ -163,8 +212,18 @@ sealed interface Confinement<A> {
         // of the ranges would not have changed it. Told apart here rather than by a second reader
         // reassembling the same three facts.
         if (admitting.apply((_, _) -> Emptiness.NONEMPTY) == Emptiness.EMPTY) {
-            return new Admission<>(Emptiness.EMPTY, EmptyBy.VALUES, Set.of());
+            // With the places where what the values were left nothing at is a value several
+            // positions share. Each of them holds something on its own, so the general answer —
+            // that the values admit nothing — is true and says less than what was shown.
+            return heldAsOneAndEmptied.isEmpty()
+                    ? new Admission<>(Emptiness.EMPTY, EmptyBy.VALUES, Set.of())
+                    : new Admission<>(Emptiness.EMPTY, EmptyBy.POSITIONS_HELD_AS_ONE,
+                            heldAsOneAndEmptied);
         }
+        // The blocks it was asked at, which is what the question was about. A block of several
+        // positions is refused as one value and not as each of them: {@code p == r && p < "b" && r
+        // > "y"} leaves each position a range with something in it, and what has nothing is the
+        // range the two of them share.
         return new Admission<>(Emptiness.EMPTY, EmptyBy.SET_AND_RANGE, refused.apply(asked));
     }
 
@@ -243,7 +302,8 @@ sealed interface Confinement<A> {
         @Override
         public Admission<A> admission() {
             return shown != null ? shown : Confinement.admission(ordered, carriers,
-                    values::anyAlternativeAdmits, values::refusedInEveryAlternativeAt);
+                    values::anyAlternativeAdmits, values::refusedInEveryAlternativeAt,
+                    values.emptiedBlocks());
         }
 
         /**
@@ -302,7 +362,7 @@ sealed interface Confinement<A> {
         }
 
         /** This, holding what working it out could not build. */
-        Planned<A> alsoStanding(Map<A, List<UnreadReason>> standing) {
+        Planned<A> alsoStanding(souther.compiler.values.Standing<A> standing) {
             return new Planned<>(values.alsoStanding(standing), ordered, carriers, shown);
         }
 
@@ -366,7 +426,8 @@ sealed interface Confinement<A> {
             }
             Admission<A> said = Confinement.admission(ordered, carriers,
                     made.values()::anyAlternativeAdmits,
-                    made.values()::refusedInEveryAlternativeAt);
+                    made.values()::refusedInEveryAlternativeAt,
+                    made.values().emptiedBlocks());
             // A position nobody could build is one what stands there is wider than the rules, so a
             // pair the ranges did not refuse may still hold nothing. Settled empty is settled all
             // the same: a narrower reading refuses no less.
@@ -430,7 +491,8 @@ sealed interface Confinement<A> {
         @Override
         public Admission<A> admission() {
             return shown != null ? shown : Confinement.admission(ordered, carriers,
-                    values::anyAlternativeAdmits, values::refusedInEveryAlternativeAt);
+                    values::anyAlternativeAdmits, values::refusedInEveryAlternativeAt,
+                    values.emptiedBlocks());
         }
 
         /** The positions the order leaves no value at. */
@@ -454,10 +516,12 @@ sealed interface Confinement<A> {
         <B> Conjoined<B> renamed(Function<A, B> naming) {
             Map<B, Carrier> out = new LinkedHashMap<>();
             carriers.forEach((position, carrier) -> out.put(naming.apply(position), carrier));
-            Admission<B> said = shown == null ? null : new Admission<>(shown.emptiness(),
-                    shown.by(), shown.at().stream().map(naming)
-                            .collect(java.util.stream.Collectors.toCollection(
-                                    java.util.LinkedHashSet::new)));
+            Set<Sameness.Block<B>> at = new LinkedHashSet<>();
+            if (shown != null) {
+                shown.at().forEach(block -> at.add(block.renamed(naming)));
+            }
+            Admission<B> said = shown == null ? null
+                    : new Admission<>(shown.emptiness(), shown.by(), at);
             return new Conjoined<>(values.renamed(naming), ordered.renamed(naming), out, said);
         }
 

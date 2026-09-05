@@ -1,8 +1,10 @@
 package souther.compiler.values;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -43,27 +45,87 @@ sealed interface PlannedHeld<A> {
     }
 
     /**
-     * One product: what each position may hold, with every combination of them standing.
+     * One product: what each block may hold, with every combination of them standing.
      *
-     * <p>A position admitting every value is left out, as in the settled reading. What is not
-     * refused here is a side admitting nothing: whether a description admits anything is the
+     * <p>Over the positions this alternative holds as one value, for the reason
+     * {@link AdmissibleValues.Box} gives: an equality between two positions is not a narrowing of
+     * either, it is what the product is a product over.
+     *
+     * <p>A block of one position admitting every value is left out, as in the settled reading, and
+     * a block of several is kept whatever it admits — what it says is said by its existing. What
+     * is not refused here is a side admitting nothing: whether a description admits anything is the
      * question this whole arrangement exists to put off, so a box may hold one and be dropped when
      * the answer arrives.
      */
-    record Box<A>(Map<A, AdmittedPlan> at) {
+    record Box<A>(Map<Sameness.Block<A>, AdmittedPlan> at) {
 
         public Box {
-            Map<A, AdmittedPlan> said = new LinkedHashMap<>();
-            at.forEach((atom, plan) -> {
-                if (!(plan instanceof AdmittedPlan.Everything)) {
-                    said.put(atom, plan);
+            Map<Sameness.Block<A>, AdmittedPlan> said = new LinkedHashMap<>();
+            at.forEach((block, plan) -> {
+                if (!block.isOne() || !(plan instanceof AdmittedPlan.Everything)) {
+                    said.put(block, plan);
                 }
             });
             at = Collections.unmodifiableMap(said);
+            // Read as the relation they are the classes of — see {@link AdmissibleValues.Box}.
+            Sameness.of(at.keySet());
         }
 
-        AdmittedPlan get(A atom) {
-            return at.getOrDefault(atom, AdmittedPlan.ANY);
+        /** One alternative over positions that are each their own block. */
+        static <A> Box<A> at(Map<A, AdmittedPlan> said) {
+            Map<Sameness.Block<A>, AdmittedPlan> out = new LinkedHashMap<>();
+            said.forEach((position, plan) -> out.put(Sameness.Block.of(position), plan));
+            return new Box<>(out);
+        }
+
+        /** Which positions this alternative holds as one value, read off what it is a product
+         *  over. */
+        Sameness<A> sameness() {
+            return Sameness.of(at.keySet());
+        }
+
+        AdmittedPlan get(Sameness.Block<A> block) {
+            return at.getOrDefault(block, AdmittedPlan.ANY);
+        }
+
+        /** What is described at {@code position}, which is what the block it is on describes. */
+        AdmittedPlan get(A position) {
+            return get(sameness().blockOf(position));
+        }
+
+        /** Every position this alternative says anything about. */
+        Set<A> positions() {
+            Set<A> out = new LinkedHashSet<>();
+            at.keySet().forEach(block -> out.addAll(block.members()));
+            return out;
+        }
+
+        /**
+         * Both alternatives holding at once, over what the two of them hold as one value.
+         *
+         * <p>{@link AdmissibleValues.Box#narrowedWith}'s rule over descriptions rather than sets:
+         * the equalities are conjoined and closed, and what a block of the conjunction describes
+         * is every description that reached the positions it holds. Nothing is built, so nothing is
+         * charged and nothing can be refused.
+         */
+        Box<A> meet(Box<A> other) {
+            Sameness<A> heldAsOne = sameness().meet(other.sameness());
+            Map<Sameness.Block<A>, List<AdmittedPlan>> parts = new LinkedHashMap<>();
+            gathering(at, heldAsOne, parts);
+            gathering(other.at, heldAsOne, parts);
+            Map<Sameness.Block<A>, AdmittedPlan> out = new LinkedHashMap<>();
+            parts.forEach((block, these) -> out.put(block,
+                    these.size() == 1 ? these.getFirst() : AdmittedPlan.meeting(these)));
+            return new Box<>(out);
+        }
+
+        private static <A> void gathering(Map<Sameness.Block<A>, AdmittedPlan> these,
+                                          Sameness<A> heldAsOne,
+                                          Map<Sameness.Block<A>, List<AdmittedPlan>> parts) {
+            these.forEach((block, plan) -> parts.computeIfAbsent(
+                            heldAsOne.blockOf(block.members().iterator().next()),
+                            _ -> new ArrayList<>())
+                    .add(plan));
         }
     }
 

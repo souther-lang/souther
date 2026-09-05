@@ -173,7 +173,8 @@ class WhatIsGuaranteedIsNeverMoreThanWhatIsAdmittedTest {
     void whatIsGuaranteedIsAdmitted(AdmissibleValues<String> state) {
         for (String atom : List.of(VALUE, OTHER, NEITHER)) {
             ValueSet guaranteed = state.guaranteedAt(atom);
-            assertEquals(guaranteed, SETS.meet(atom, guaranteed, state.at(atom)).set(),
+            assertEquals(guaranteed,
+                    SETS.meet(state.blockOf(atom), guaranteed, state.at(atom)).set(),
                     () -> "at " + atom + ": guaranteed " + guaranteed
                             + " is not within admitted " + state.at(atom));
         }

@@ -105,11 +105,17 @@ guarantee, and it is held where the proposition is quantified:
 
 ```text
 relationExact()       := tangled.isEmpty()
-projectionExactAt(p)  := !widened.contains(p)
+projectionExactAt(p)  := !widened.contains(blockOf(p))
 ```
 
-`tangled` is the positions whose correlations the reading is no longer guaranteed to represent, and
-`widened` the positions whose `at(p)` it cannot guarantee is the true projection.
+`tangled` is the coordinates whose correlations the reading is no longer guaranteed to represent,
+and `widened` the coordinates whose `at(p)` it cannot guarantee is the true projection.
+
+A coordinate is a block of positions the reading holds as one value, which is one position wherever
+no equality was read of it. What stands at a position, what it is promised, and whether either of
+those is exact are answers about the one value its block holds, so a position reaches them through
+`blockOf(p)`. The propositions below are unchanged: they are stated of a position and answered by
+the coordinate it is on.
 
 `relationExact()` means:
 
