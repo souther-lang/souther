@@ -43,7 +43,7 @@ class ASignatureIsReadForWhatItsDeclarationGuaranteesTest {
     private static final String THE_DERIVED_WORLD = internal(DerivedSymbols.class);
     private static final String THE_RESOLVED_WORLD = internal(ResolvedSymbols.class);
 
-    private static final CompiledClasses COMPILED = CompiledClasses.ofRepository();
+    private static final CompiledClasses COMPILED = CompiledClasses.ofEverythingCompiledHere();
 
     private static final WhatASignatureReaches READING = new WhatASignatureReaches(COMPILED);
 
@@ -197,6 +197,16 @@ class ASignatureIsReadForWhatItsDeclarationGuaranteesTest {
         assertTrue(refused.getMessage().contains("not built here"),
                 "the same holds of a class whose components a reading has to open and cannot find:"
                         + " " + refused.getMessage());
+    }
+
+    @Test
+    void whatIsPublishedIsNotWhatWasCompiledBesideIt() {
+        assertTrue(CompiledClasses.ofEverythingCompiledHere().find(DECLARATIONS).isPresent(),
+                "the subjects declared here are compiled where test output goes, which is the"
+                        + " population this test's readings are about");
+        assertTrue(CompiledClasses.ofWhatThisRepositoryPublishes().find(DECLARATIONS).isEmpty(),
+                "and are not in the one a rule about a compiled surface is about, which is why the"
+                        + " two are named apart rather than searched together");
     }
 
     @Test
