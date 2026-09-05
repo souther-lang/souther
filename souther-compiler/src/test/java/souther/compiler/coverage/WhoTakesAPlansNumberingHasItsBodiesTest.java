@@ -31,6 +31,10 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
  * right and is not the answer wanted. A module with no bodies has no numbering, and what a reader
  * without one has is no account of any run.
  *
+ * <p>Which is why a reader that wants a numbering asks the check for the one it issued rather than
+ * for a plan to take one off. Reaching for a plan is what puts a reader one branch away from the
+ * stand-in; the numbering is absent where the bodies are, and there is nothing there to reach for.
+ *
  * <p><b>What this holds is the population, and not that each of them is right.</b> A walk over the
  * compiled classes sees which method takes a numbering off a plan; it does not see which plan, so
  * it cannot tell a reader holding the checked bodies from one holding the stand-in. That is what
@@ -52,15 +56,11 @@ class WhoTakesAPlansNumberingHasItsBodiesTest {
     private record Licence(String who, int calls, String why) { }
 
     private static final List<Licence> MAY_TAKE = List.of(
-            new Licence("souther.compiler.query.Adequacy.numberingOf -> numbering", 1,
-                    "the one place a module is asked for its numbering, which answers with none"
-                            + " where the check produced no bodies rather than with the plan of"
-                            + " nothing's"),
-            new Licence("souther.compiler.query.Adequacy.BranchCoverage.compute -> numbering", 1,
-                    "the checked bodies are in hand for the measure's other halves, so the"
-                            + " numbering is taken off them and is absent where they are"),
-            new Licence("souther.compiler.query.Adequacy.Generated.compute -> numbering", 1,
-                    "the same, where what is being generated for is read off the same bodies"),
+            new Licence("souther.compiler.query.Bodies.Checked.compute -> identity", 1,
+                    "the check decides the numbering by walking the bodies it holds, and takes it"
+                            + " off the plan that walk made. There is no stand-in to have taken it"
+                            + " from: a module whose bodies did not come out is answered for by"
+                            + " there being no answer here at all"),
             new Licence("souther.compiler.query.Output.Evaluated.compute -> identity", 1,
                     "what the classes about to be written are numbered by, taken from the plan"
                             + " that is instrumenting them — one value used for both, so what a"

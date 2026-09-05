@@ -52,10 +52,13 @@ class WhatMakesAPlanIsWhatNumberedItTest {
     private record Licence(String who, int calls, String why) { }
 
     private static final List<Licence> MAY_MAKE = List.of(
-            new Licence("souther.compiler.coverage.CoverageSites.of", 1,
+            new Licence("souther.compiler.coverage.CoverageSites.sites", 1,
                     "the one walk of a module's bodies: it hands the numbers out and says what each"
                             + " addresses in the same breath, so the two cannot have been put"
-                            + " together by anybody who believed they went together"),
+                            + " together by anybody who believed they went together. Whether the"
+                            + " numbering it reads them back under is decided here or was decided"
+                            + " when the bodies were checked is the two ways in, and neither of"
+                            + " them assembles a plan"),
             new Licence("souther.compiler.coverage.CoverageSites.Plan.<clinit>", 1,
                     "the plan of nothing, which is what a module the check has no answer for gets."
                             + " It numbers no place and addresses none, so its parts agree by"
