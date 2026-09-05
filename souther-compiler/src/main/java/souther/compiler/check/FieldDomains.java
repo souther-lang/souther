@@ -1057,7 +1057,7 @@ public final class FieldDomains {
         // What a rule is answerable for, as the facts it is answerable for. Asked for the reasons
         // alone here, the written places they were decided at would be gone one call before the
         // account that names the rule, and two facts about two clauses would arrive as one.
-        java.util.Set<RuleShortfall> why = took.stoppedBy(rule, named);
+        Set<RuleShortfall> why = took.stoppedBy(rule, named);
         if (!why.isEmpty()) {
             return new RuleAccounting.Why.TheValueReadingSays(why);
         }

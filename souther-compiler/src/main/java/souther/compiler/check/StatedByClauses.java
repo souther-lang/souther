@@ -117,7 +117,7 @@ sealed interface StatedByClauses {
     record Part(Adoption<FactSubject> byValues, Adoption<FactSubject> byOrder,
                 Map<FactSubject, java.util.List<souther.compiler.values.UnreadReason>> standing,
                 Map<FactSubject, StringRestriction> aboutStrings,
-                java.util.Set<AdmissibleReading.AskedAt> asked,
+                Set<AdmissibleReading.AskedAt> asked,
                 Set<RuleShortfall> ruleShortfalls) {
 
         /** The same part, in a branch nobody can be in — see {@link Adoption#inADeadBranch}. */
@@ -141,14 +141,14 @@ sealed interface StatedByClauses {
             // The standing branch's own, and nothing from the other. What a rule of a branch
             // nothing satisfies is answerable for is not a rule of this declaration at all.
             return new Part(byValues.beside(gone.byValues()), byOrder.beside(gone.byOrder()),
-                    standing, aboutStrings, both(asked, gone.asked()), ruleShortfalls);
+                    standing, aboutStrings, askedIn(asked, gone.asked()), ruleShortfalls);
         }
 
         /** The same part of two branches, neither of which anybody can be in. */
         Part bothDead(Part other) {
             return new Part(byValues.bothDead(other.byValues()),
                     byOrder.bothDead(other.byOrder()), Map.of(), Map.of(),
-                    both(asked, other.asked()), Set.of());
+                    askedIn(asked, other.asked()), Set.of());
         }
 
         /** The same part of two branches somebody can be in, under the choice between them. */
@@ -181,7 +181,7 @@ sealed interface StatedByClauses {
             }
             return new Part(byValues.either(other.byValues()), byOrder.either(other.byOrder()),
                     why, StringRestriction.over(aboutStrings, other.aboutStrings(), false),
-                    both(asked, other.asked()), Set.copyOf(shortfalls));
+                    askedIn(asked, other.asked()), Set.copyOf(shortfalls));
         }
 
         /**
@@ -189,12 +189,12 @@ sealed interface StatedByClauses {
          * account for, which is one fact about the choice.
          *
          * <p>The alternative nothing could read is what leaves these positions open, and at a
-         * position that branch is already answerable for something it is the same shortfall
+         * position that branch is answerable for something of its own it is the same shortfall
          * arriving by another road: {@code n /= 5 || Int.abs(n) >= 2} is one form nothing reads and
          * not a form and a choice, and counting both would have a reader lift the form and find the
-         * question still there. Where the branch says nothing about the position — the other side
-         * of {@code left /= right || code == "A"} never names {@code code} — the choice is the
-         * first thing to say anything, so it says it.
+         * question still there. Where the branch says nothing of its own about the position — the
+         * other side of {@code left /= right || code == "A"} never names {@code code} — the choice
+         * is the first thing to say anything, so it says it.
          *
          * <p><b>Asked of what that branch is answerable for and never of what the position holds.</b>
          * The place holds the reasons of every rule that reached it, so suppressing by it would
@@ -229,18 +229,6 @@ sealed interface StatedByClauses {
                                             Set<RuleShortfall> beside) {
             return unread.stream()
                     .anyMatch(one -> one.position().equals(at) && !beside.contains(one));
-        }
-
-        /** What either of them asked for, which is what this part asked for. */
-        private static java.util.Set<AdmissibleReading.AskedAt> both(
-                java.util.Set<AdmissibleReading.AskedAt> these,
-                java.util.Set<AdmissibleReading.AskedAt> those) {
-            if (those.isEmpty()) {
-                return these;
-            }
-            java.util.Set<AdmissibleReading.AskedAt> out = new LinkedHashSet<>(these);
-            out.addAll(those);
-            return out;
         }
 
         /** The positions a rule of this copy reached and did not merely settle: what it
@@ -901,7 +889,6 @@ sealed interface StatedByClauses {
         }
 
         /**
-        /**
          * A choice neither branch of which anybody can take.
          *
          * <p>No one of them speaks for the rest: taking the first to be found impossible out of the
@@ -988,8 +975,8 @@ sealed interface StatedByClauses {
     /**
      * A machine that was refused, said at each clause that asked for it.
      *
-     * <p>The refusal knows the pattern and the position it was being built for (#1341), and what
-     * asked for that machine there is what a clause wrote. Two clauses writing one pattern about
+     * <p>The refusal knows the pattern and the position it was being built for, and what asked for
+     * that machine there is what a clause wrote. Two clauses writing one pattern about
      * one position asked for one machine and are two of these — two rules answerable for one
      * refusal, which is what writing the same clause twice comes to.
      */

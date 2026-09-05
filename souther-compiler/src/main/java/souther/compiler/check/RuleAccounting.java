@@ -2,8 +2,10 @@ package souther.compiler.check;
 
 import souther.compiler.values.UnreadReason;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -285,14 +287,13 @@ public final class RuleAccounting {
          * choice among an author's rules, made where the only thing to choose by is which part came
          * first.
          */
-        record TheValueReadingSays(java.util.Set<RuleShortfall> shortfalls) implements Why {
+        record TheValueReadingSays(Set<RuleShortfall> shortfalls) implements Why {
 
             public TheValueReadingSays {
                 if (shortfalls == null || shortfalls.isEmpty()) {
                     throw new IllegalArgumentException("a reading that stopped says why");
                 }
-                shortfalls = java.util.Collections.unmodifiableSet(
-                        new java.util.LinkedHashSet<>(shortfalls));
+                shortfalls = Collections.unmodifiableSet(new LinkedHashSet<>(shortfalls));
             }
 
             /**
@@ -304,7 +305,7 @@ public final class RuleAccounting {
              * reader is sent to would be whichever the walk met first.
              */
             public List<UnreadReason> why() {
-                List<UnreadReason> out = new java.util.ArrayList<>();
+                List<UnreadReason> out = new ArrayList<>();
                 shortfalls.forEach(each -> {
                     if (!out.contains(each.why())) {
                         out.add(each.why());

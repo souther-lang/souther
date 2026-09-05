@@ -305,8 +305,8 @@ final class AdmissibleReading implements ClauseReading<PlannedValues<FactSubject
      *
      * <p>A machine is made far from here, under the position's allowance, and refused there. What
      * asked for it is this clause, and it is known here and nowhere after — every rule reaching the
-     * position pays into that allowance, so the place cannot say which of them asked (#1341), and
-     * the pattern alone is the same pattern wherever somebody wrote it.
+     * position pays into that allowance, so the place cannot say which of them asked, and the
+     * pattern alone is the same pattern wherever somebody wrote it.
      */
     private PlannedValues<FactSubject> asking(Core e, FactSubject position,
                                               AdmittedPlan.Pattern plan) {

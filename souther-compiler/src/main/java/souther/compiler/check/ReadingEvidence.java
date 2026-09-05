@@ -119,8 +119,8 @@ final class ReadingEvidence {
      * <p><b>And only what a rule is answerable for.</b> Everything filed here is filed under a rule,
      * so a reason about no rule may not arrive: an allowance run down by everything a position
      * admits is a fact about the answer, and the same rules in another order would have been built.
-     * Refused rather than dropped, because a caller handing one over has an account of a rule made
-     * out of something that is not about it, and that is worth stopping where it is written.
+     * Nothing is asked here because nothing of the wrong kind can be made: what arrives is refused
+     * where it would be built, which is one fact away from where a caller could have written it.
      */
     void stoppedBy(RuleRef rule, Set<RuleShortfall> read) {
         stopped.computeIfAbsent(rule, _ -> new LinkedHashSet<>()).addAll(read);

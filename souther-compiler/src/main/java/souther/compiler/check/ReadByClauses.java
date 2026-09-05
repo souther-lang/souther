@@ -92,7 +92,7 @@ record ReadByClauses(AdmissibleValues<FactSubject> values, OrderedIntervals<Fact
      *                     what the model admits at a position, made by whoever asked second
      */
     record OfAPart(Adoption<FactSubject> byValues, Adoption<FactSubject> byOrder,
-                   java.util.Set<RuleShortfall> aboutARule,
+                   Set<RuleShortfall> aboutARule,
                    java.util.Map<FactSubject, AdmittedStrings> aboutStrings) {
 
         /** The positions some reading took the whole of this part in at. */
