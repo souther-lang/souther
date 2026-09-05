@@ -43,7 +43,7 @@ import java.util.Map;
  * <p>What such a line owes is not what a body's line owes, and that difference is why an author
  * writes the rule on the data. Nothing outside a declaration's rule can be constructed, so the far
  * side of its line holds no value and no row is asked for there. That answer is read off the rule
- * that drew the line ({@link OriginRef.InvariantOrigin}) and is already right — what was missing was
+ * that drew the line ({@link LineOrigin.InvariantOrigin}) and is already right — what was missing was
  * the line.
  */
 public final class DeclaredThresholds {
@@ -110,7 +110,7 @@ public final class DeclaredThresholds {
      * has always been. Read as an end of a position it would name a position the rule does not
      * divide.
      */
-    private static OriginRef.InvariantOrigin originOf(ClauseWithoutAnEnd clause, Cutting cutting) {
+    private static LineOrigin.InvariantOrigin originOf(ClauseWithoutAnEnd clause, Cutting cutting) {
         // Which end a rule keeps is an order's answer. A clause naming a value of the quantity two
         // positions stand apart keeps neither end of it — what it parts is that number from every
         // other one — so there is no end for this to have placed, and a caller reaching here with
@@ -120,7 +120,7 @@ public final class DeclaredThresholds {
             throw new IllegalStateException("which end a clause keeps, asked of one that names a"
                     + " value: " + clause.rule());
         }
-        return new OriginRef.InvariantOrigin(clause.rule(), clause.conjunct(),
+        return new LineOrigin.InvariantOrigin(clause.rule(), clause.conjunct(),
                 endKept(order), order.holdsAtTheValue());
     }
 

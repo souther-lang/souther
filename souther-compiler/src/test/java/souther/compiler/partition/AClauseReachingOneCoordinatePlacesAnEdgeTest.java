@@ -659,7 +659,7 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
      * `Wrapped`'s clause that took it in, so that is what the line says — read off the value the
      * position sits in, it named a declaration with no clause about the pair at all, and a reader
      * following it finds nothing there. The name is part of what tells one line from another
-     * ({@link OriginRef.Line}) and not only what is printed.
+     * ({@link LineOrigin.Line}) and not only what is printed.
      */
     @Test
     void aNarrowedEdgeNamesTheDeclarationThatMovedItAndNotTheValueItSitsIn() {

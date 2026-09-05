@@ -259,7 +259,7 @@ class ABorderSaysWhyItOwesNoRowAtAPointTest {
         compilation.answerEverything();
         List<Border> drawn = Adequacy.boundariesOf(compilation.db(), "example.owed").values()
                 .stream().flatMap(List::stream).map(BorderAssessment::border)
-                .filter(each -> !(each.origin() instanceof OriginRef.InvariantOrigin)).toList();
+                .filter(each -> !(each.origin() instanceof LineOrigin.InvariantOrigin)).toList();
         assertEquals(1, drawn.size(), () -> "this model draws one line of its own: " + drawn);
         return drawn.get(0);
     }
@@ -275,7 +275,7 @@ class ABorderSaysWhyItOwesNoRowAtAPointTest {
             compilation.answerEverything();
             drawn.add(guard + " -> " + Adequacy.boundariesOf(compilation.db(), "example.owed")
                     .values().stream().flatMap(List::stream)
-                    .filter(each -> !(each.origin() instanceof OriginRef.InvariantOrigin))
+                    .filter(each -> !(each.origin() instanceof LineOrigin.InvariantOrigin))
                     .map(BorderAssessment::label).toList());
         }
         return drawn;

@@ -242,7 +242,7 @@ public final class EnsuresThresholds {
             // reading of the comparison; taken off the level the rule was written with, a rule that
             // wrote a multiple of the position named a class at a number the position never holds.
             case ComparisonAssessment.AtAPosition at -> {
-                OriginRef.EnsuresOrigin origin = originOf(rule, clause, line, at.cutting());
+                LineOrigin.EnsuresOrigin origin = originOf(rule, clause, line, at.cutting());
                 // From the one reading of what the rule placed, the way a body's rule is read:
                 // which kind of evidence this is and what it carries are one answer, and the side
                 // is a question only one of the two kinds has.
@@ -298,9 +298,9 @@ public final class EnsuresThresholds {
 
     /** How a row meets a line this clause drew, which is the clause's own answer and no other
      *  rule's. */
-    private static OriginRef.EnsuresOrigin originOf(StatedContract.StatedRule rule, String clause,
+    private static LineOrigin.EnsuresOrigin originOf(StatedContract.StatedRule rule, String clause,
                                                     int line, Cutting cutting) {
-        return new OriginRef.EnsuresOrigin(new RuleRef.Ensures(rule.id(), clause), line,
+        return new LineOrigin.EnsuresOrigin(new RuleRef.Ensures(rule.id(), clause), line,
                 new LineFacts(cutting.claim()));
     }
 

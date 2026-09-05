@@ -101,11 +101,11 @@ class AnAccountEstablishesItsDenominatorBeforeItCountsTest {
 
     /** One rule, written in one place. Two lines of it are told apart by where they part the
      *  values, which is what the account may not be asked to do by name alone. */
-    private static OriginRef origin() {
-        return new OriginRef.ComparisonOrigin(
+    private static LineOrigin origin() {
+        return new LineOrigin.ComparisonOrigin(
                 new RuleRef.Comparison("f", new souther.compiler.types.CoverageOrigin(
                         "example.one", 2, 0, souther.compiler.types.CoverageConstruct.BINARY)),
-                new OriginRef.ComparisonOrigin.Read(
+                new LineOrigin.ComparisonOrigin.Read(
                         new souther.compiler.coverage.ComparisonOccurrence("example.one", "f", 0),
                         new RuleCitation.WrittenAt(Citation.of(
                                 new souther.compiler.diag.SourcePos(1, 1))),

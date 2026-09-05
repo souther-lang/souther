@@ -3,18 +3,24 @@ package souther.compiler.check;
 /**
  * Which rule of the model, and nothing about how anybody came to be holding it.
  *
- * <p>Three rules and three answers. An author writes a rule as a clause of a {@code data}'s
- * invariant, as a comparison in a body, or as a clause of a behavior's {@code ensures}; a question
- * about coverage is raised by one of those, and what answers it is a fact about that rule and not
- * about the reading that reached it. So this is what a question is filed under, and it is the same
- * value however many times the rule is read.
+ * <p>One answer per way a rule is written. An author writes a rule as a clause of a {@code data}'s
+ * invariant, as a comparison in a body, as a predicate applied in a body, or as a clause of a
+ * behavior's {@code ensures}; a question about coverage is raised by one of those, and what answers
+ * it is a fact about that rule and not about the reading that reached it. So this is what a question
+ * is filed under, and it is the same value however many times the rule is read.
+ *
+ * <p><b>A comparison and a predicate are two of them and not one "rule of a body".</b> They divide a
+ * position differently — one places a line on an order and the other tells a set of values from the
+ * rest — and a reader is shown a different construct for each. Held as one arm, the two would be
+ * told apart by looking at what the rule turned out to do, which is the thing a key must not be
+ * built out of.
  *
  * <p>Nothing here says where a rule was met. A guard inside a helper is read once per call of that
  * helper: the calls are different occurrences, they carry different comparison sites, and they are
  * one rule. Carrying the occurrence, two readings of one rule are two keys — the question would be
  * raised twice and answered twice, which is a reading raising a question rather than the model, and
  * is what a coverage obligation is written against. Where a rule was met is
- * {@link souther.compiler.partition.OriginRef}'s, beside this rather than inside it.
+ * {@link souther.compiler.partition.LineOrigin}'s, beside this rather than inside it.
  *
  * <p>Nothing here says what a rule <em>did</em>, either. Which side of a line the cut value falls
  * on, whether the comparison holds at it, which arms witness it, which declarations took an end in —
@@ -64,6 +70,38 @@ public sealed interface RuleRef {
         public Comparison {
             if (behavior == null || origin == null) {
                 throw new IllegalArgumentException("a comparison of a body is one of some behavior's");
+            }
+        }
+    }
+
+    /**
+     * A predicate applied in a behavior's body — a rule about the strings at a position, written as
+     * a call rather than as a comparison.
+     *
+     * <p>The application and the whole of it, the way a comparison is. Which predicate it is and
+     * what the author wrote in it are read off the call by whoever reads rules; what tells one of
+     * these from another is which application of which source it is, so that a helper holding one
+     * is the same rule at each of its calls.
+     *
+     * @param behavior whose body it is written in. Two behaviors calling one helper each read its
+     *                 predicate, and the readings are what a coverage question is raised per
+     * @param origin   which application of which module the author wrote, which is what tells one
+     *                 from another wherever it is met
+     */
+    record Predicate(String behavior, souther.compiler.types.CoverageOrigin origin)
+            implements RuleRef {
+
+        public Predicate {
+            if (behavior == null || origin == null) {
+                throw new IllegalArgumentException(
+                        "a predicate of a body is one of some behavior's");
+            }
+            // A rule is something an author wrote. An application this compiler composed states
+            // nothing about the model, so a key made from one would file a rule under a construct
+            // no reader can be sent to.
+            if (!origin.isWritten()) {
+                throw new IllegalArgumentException(
+                        "no source wrote this application, so it states no rule: " + origin);
             }
         }
     }
@@ -124,6 +162,8 @@ public sealed interface RuleRef {
             // sentence of its own, and the catalog holds those words in every language. What reaches
             // this is a caller that wanted something to call the rule anyway.
             case Comparison _ -> "the comparison";
+            // A predicate is applied rather than named, so this is what it is, for the reason above.
+            case Predicate _ -> "the predicate";
         };
     }
 }

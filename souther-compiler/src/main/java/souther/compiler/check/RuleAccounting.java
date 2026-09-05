@@ -92,11 +92,13 @@ public final class RuleAccounting {
         return switch (rule) {
             case RuleRef.Invariant it -> RuleCitation.named(it);
             case RuleRef.Ensures it -> RuleCitation.named(it);
-            // A comparison is written rather than named, and it does not come this way at all: what
-            // it raises is answered by the reading that raised it, so there is no accounting of one
-            // for anybody to build. What such a rule leaves is a finding about the position.
-            case RuleRef.Comparison _ -> throw new IllegalArgumentException(
-                    "a comparison raises nothing an accounting is made of: " + rule);
+            // A comparison and a predicate are written rather than named, and neither comes this
+            // way at all: what they raise is answered by the reading that raised it, so there is no
+            // accounting of one for anybody to build. What such a rule leaves is a finding about
+            // the position.
+            case RuleRef.Comparison _, RuleRef.Predicate _ -> throw new IllegalArgumentException(
+                    "a rule written rather than named raises nothing an accounting is made of: "
+                            + rule);
         };
     }
 

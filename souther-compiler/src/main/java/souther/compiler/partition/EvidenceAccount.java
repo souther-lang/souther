@@ -142,7 +142,7 @@ final class EvidenceAccount {
     /** Whether {@code axis} carries what {@code evidence} draws, asked in that evidence's own
      *  terms. */
     private static boolean carries(Axis axis, LineEvidence evidence) {
-        OriginRef by = evidence.by();
+        LineOrigin by = evidence.by();
         return switch (evidence) {
             // A line the position has no value beside is not a cut of it. It parts the values all
             // the same, and where it parts them is what carries the rule — as the authored line,

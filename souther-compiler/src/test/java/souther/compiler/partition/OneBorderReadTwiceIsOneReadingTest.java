@@ -208,8 +208,8 @@ class OneBorderReadTwiceIsOneReadingTest {
     }
 
     /** The clause the bound is written in, which is only an identity here. */
-    private static OriginRef aBound() {
-        return new OriginRef.InvariantOrigin(new RuleRef.Invariant(new Clause.Ref(
+    private static LineOrigin aBound() {
+        return new LineOrigin.InvariantOrigin(new RuleRef.Invariant(new Clause.Ref(
                 new Clause.Id(TypeSymbols.declared(new TypeKey("example.weigh", "Amount")), 0),
                 Optional.of(new ClauseName("cap")))), 0, EndSide.LOWER, true);
     }

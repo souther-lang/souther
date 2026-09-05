@@ -2653,6 +2653,14 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 into.put("ordinal", it.origin().ordinal());
                 into.put("lowered", it.origin().lowered());
             }
+            // Nothing publishes one yet, and what one would be written as is a change to what this
+            // document promises. Refused rather than spelled here on a guess: the shape a consumer
+            // is held to is pinned by a version, and a shape written before anything can produce
+            // one would be a promise made about a rule no reader has ever been shown. What reaches
+            // here is the day a predicate's classes are published, and this is where the version
+            // and the spelling are decided together.
+            case RuleRef.Predicate it -> throw new IllegalArgumentException(
+                    "no version of this document writes a predicate's identity: " + it);
         }
     }
 
@@ -2679,6 +2687,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             // version 3 carry `guard` here; the word moved with the version rather than under one,
             // because a document already written groups by what it was told.
             case RuleRef.Comparison _ -> "comparison";
+            // For the reason the identity beside it is refused: which word a document writes for a
+            // predicate is a change to what it promises, and nothing publishes one yet.
+            case RuleRef.Predicate it -> throw new IllegalArgumentException(
+                    "no version of this document has a word for a predicate: " + it);
         };
     }
 

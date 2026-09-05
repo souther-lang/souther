@@ -77,10 +77,10 @@ class WhatAClauseDrawsALineOnTest {
         assertEquals(1, clauses.thresholds().size(), valuesOf(clauses).toString());
         Threshold line = clauses.thresholds().get(0);
         assertEquals("id", line.path().toString());
-        assertInstanceOf(OriginRef.EnsuresOrigin.class, line.origin());
+        assertInstanceOf(LineOrigin.EnsuresOrigin.class, line.origin());
         assertEquals(new souther.compiler.check.ComparisonClaim.Cut(
                         souther.compiler.numeric.Towards.BELOW, false),
-                ((OriginRef.EnsuresOrigin) line.origin()).facts().claim(),
+                ((LineOrigin.EnsuresOrigin) line.origin()).facts().claim(),
                 "`> 0` puts the zero on the low side and is not met there, so the row beside it is"
                         + " the one above");
     }
@@ -430,7 +430,7 @@ class WhatAClauseDrawsALineOnTest {
         assertEquals("book/from = to",
                 line.cut().named() + " = " + line.cut().right());
         assertEquals("from = to", line.label());
-        assertInstanceOf(OriginRef.EnsuresOrigin.class, line.origin());
+        assertInstanceOf(LineOrigin.EnsuresOrigin.class, line.origin());
         // The line divides neither position and still has two sides: a row where `from` is under
         // `to` is inside it and one where `from` is over `to` is outside, which is as much a
         // coverage item as the row on the line.

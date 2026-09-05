@@ -109,7 +109,7 @@ public final class GuardThresholds {
          * of these — asked for the value beside the line instead, a rule that names no whole number
          * would have put the number beside it in a class it does not satisfy.
          */
-        public record Singled(NumericTerm.FromOnePosition term, Place value, OriginRef origin) {
+        public record Singled(NumericTerm.FromOnePosition term, Place value, LineOrigin origin) {
             public Singled {
                 if (value == null) {
                     throw new IllegalArgumentException(
@@ -428,7 +428,7 @@ public final class GuardThresholds {
         publish(each, read, withoutALine);
         switch (read) {
             case ComparisonAssessment.AtAPosition at -> {
-                OriginRef.ComparisonOrigin origin = originOf(each, plan, at.cutting());
+                LineOrigin.ComparisonOrigin origin = originOf(each, plan, at.cutting());
                 // The value a row is owed against this line, which the reading of the comparison
                 // already answered. Taken off the level the rule was written with, a rule that wrote
                 // a multiple of the position named a class at a number the position never holds.
@@ -532,15 +532,15 @@ public final class GuardThresholds {
 
     /** How a row meets a line a body's condition drew, which is a guard's own answer: what it takes
      *  is getting the comparison to answer, because what it is about is a place in a body. */
-    private static OriginRef.ComparisonOrigin originOf(ComparisonCatalog.Catalogued each,
+    private static LineOrigin.ComparisonOrigin originOf(ComparisonCatalog.Catalogued each,
                                                        CoverageSites.Plan plan, Cutting cutting) {
         // The two together, from the plan that numbered this comparison. Which comparison the rule
         // is about is the catalog's answer; where a run through it is written down is the plan's,
         // and it is required rather than looked up leniently because only an admitted reading
         // reaches here and the policy admits nothing the plan does not number.
-        return new OriginRef.ComparisonOrigin(
+        return new LineOrigin.ComparisonOrigin(
                 new RuleRef.Comparison(each.which().behavior(), each.origin()),
-                new OriginRef.ComparisonOrigin.Read(each.which(),
+                new LineOrigin.ComparisonOrigin.Read(each.which(),
                         new souther.compiler.check.RuleCitation.WrittenAt(each.at()),
                         plan.requireEmissionSiteOf(each.which())),
                 new LineFacts(cutting.claim()));

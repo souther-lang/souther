@@ -47,7 +47,7 @@ public final class LinesRead {
      * is two lines here and one obligation there, and an accounting keyed on the obligation would
      * call the second of them a duplicate and let it go missing.
      */
-    public record Line(BoundaryTarget at, OriginRef by) {}
+    public record Line(BoundaryTarget at, LineOrigin by) {}
 
     private final Set<Line> found = new LinkedHashSet<>();
     private final List<Border> drawn = new ArrayList<>();
@@ -60,7 +60,7 @@ public final class LinesRead {
      * apart by where they are; one line met twice by one reading is the reading passing the same
      * place again, and a border is made of it once.
      */
-    public void found(BoundaryTarget at, OriginRef by) {
+    public void found(BoundaryTarget at, LineOrigin by) {
         found.add(new Line(at, by));
     }
 

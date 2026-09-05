@@ -86,7 +86,7 @@ public record DeclaredBorders(souther.compiler.diag.Citation at,
     }
 
     /** The same, for a caller holding the key the rule handed it
-     *  ({@code OriginRef.declaredLine}). */
+     *  ({@code LineOrigin.declaredLine}). */
     public NumberAt<RuleKey> at(Key line) {
         return forms.get(line);
     }

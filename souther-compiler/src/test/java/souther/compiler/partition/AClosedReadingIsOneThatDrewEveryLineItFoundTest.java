@@ -172,8 +172,8 @@ class AClosedReadingIsOneThatDrewEveryLineItFoundTest {
                         souther.compiler.numeric.Endpoint.inclusive(Count.of(5)), null));
     }
 
-    private static OriginRef bound(String clause) {
-        return new OriginRef.InvariantOrigin(new RuleRef.Invariant(new Clause.Ref(
+    private static LineOrigin bound(String clause) {
+        return new LineOrigin.InvariantOrigin(new RuleRef.Invariant(new Clause.Ref(
                 new Clause.Id(TypeSymbols.declared(new TypeKey("example.rate", "Amount")), 0),
                 java.util.Optional.of(new ClauseName(clause)))), 0,
                 souther.compiler.numeric.EndSide.LOWER, true);

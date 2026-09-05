@@ -222,7 +222,7 @@ public final class LinesWhereTheyFall {
      * so a fourth outcome is a question asked of this method and not an answer it already gives.
      */
     private static WhereTheNameStands standingOf(InputDomain inputs, NumericTerm term,
-                                                 Symbols symbols, OriginRef origin) {
+                                                 Symbols symbols, LineOrigin origin) {
         TermPath path = term.subjectPath();
         if (inputs.at(path) != null) {
             return new WhereTheNameStands.AsWritten(term);

@@ -107,7 +107,7 @@ class ANarrowingIsToldOnlyAboutTheEndItWasReadAtTest {
                 .matching(EndSide.UPPER, at).orElseThrow();
 
         IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
-                () -> OriginRef.NarrowedOrigin.of(aMinimum(), at, holdsTheHighEnd));
+                () -> LineOrigin.NarrowedOrigin.of(aMinimum(), at, holdsTheHighEnd));
         assertTrue(refused.getMessage().startsWith("a bound placing the LOWER end"),
                 refused.getMessage());
     }
@@ -121,7 +121,7 @@ class ANarrowingIsToldOnlyAboutTheEndItWasReadAtTest {
                 .matching(EndSide.LOWER, elsewhere).orElseThrow();
 
         IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
-                () -> OriginRef.NarrowedOrigin.of(aMinimum(),
+                () -> LineOrigin.NarrowedOrigin.of(aMinimum(),
                         Endpoint.inclusive(Count.of(100)), holdsAnotherEnd));
         assertTrue(refused.getMessage().startsWith("a cut at "), refused.getMessage());
     }
@@ -146,8 +146,8 @@ class ANarrowingIsToldOnlyAboutTheEndItWasReadAtTest {
             TypeSymbols.declared(new TypeKey("example.weigh", "Held"));
 
     /** The clause the bound is written in, which is only an identity here. */
-    private static OriginRef.InvariantOrigin aMinimum() {
-        return new OriginRef.InvariantOrigin(new RuleRef.Invariant(new Clause.Ref(
+    private static LineOrigin.InvariantOrigin aMinimum() {
+        return new LineOrigin.InvariantOrigin(new RuleRef.Invariant(new Clause.Ref(
                 new Clause.Id(TypeSymbols.declared(new TypeKey("example.weigh", "Amount")), 0),
                 Optional.of(new ClauseName("floor")))), 0, EndSide.LOWER, true);
     }

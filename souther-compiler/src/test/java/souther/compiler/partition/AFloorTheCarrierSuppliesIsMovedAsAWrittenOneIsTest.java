@@ -292,7 +292,7 @@ class AFloorTheCarrierSuppliesIsMovedAsAWrittenOneIsTest {
      */
     private static List<String> clausesOwing(String declaration) {
         return boundariesOf(declaration).stream()
-                .map(each -> ((OriginRef.InvariantOrigin) each.origin()).rule().clause().name()
+                .map(each -> ((LineOrigin.InvariantOrigin) each.origin()).rule().clause().name()
                         .orElseThrow().toString())
                 .sorted().toList();
     }

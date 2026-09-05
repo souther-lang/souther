@@ -19,24 +19,24 @@ import java.util.List;
  * every reader afterwards had to work out which of the two it was holding, and one of them read a
  * day count as the number a model wrote.
  */
-public record Cut(Carrier carrier, Place at, List<OriginRef> origins) {
+public record Cut(Carrier carrier, Place at, List<LineOrigin> origins) {
 
     public Cut {
         origins = List.copyOf(origins);
     }
 
-    public static Cut at(Carrier carrier, Place at, OriginRef origin) {
+    public static Cut at(Carrier carrier, Place at, LineOrigin origin) {
         return new Cut(carrier, at, List.of(origin));
     }
 
     /** The same cut, also drawn by {@code origin}. */
-    public Cut and(OriginRef origin) {
+    public Cut and(LineOrigin origin) {
         // Once per rule. One clause can place both ends at one value — `value >= 5 && value <= 5` —
         // and holding it twice owes the line two rows to the same rule and prints it twice.
         if (origins.contains(origin)) {
             return this;
         }
-        List<OriginRef> all = new java.util.ArrayList<>(origins);
+        List<LineOrigin> all = new java.util.ArrayList<>(origins);
         all.add(origin);
         return new Cut(carrier, at, all);
     }

@@ -88,8 +88,8 @@ class ALineIsOfAPositionTheMeasurementMeasuresTest {
                         Endpoint.inclusive(Count.of(1000))));
     }
 
-    private static OriginRef aBound() {
-        return new OriginRef.InvariantOrigin(new RuleRef.Invariant(new Clause.Ref(
+    private static LineOrigin aBound() {
+        return new LineOrigin.InvariantOrigin(new RuleRef.Invariant(new Clause.Ref(
                 new Clause.Id(TypeSymbols.declared(new TypeKey("example.fee", "Amount")), 0),
                 Optional.of(new ClauseName("cap")))), 0, EndSide.LOWER, true);
     }

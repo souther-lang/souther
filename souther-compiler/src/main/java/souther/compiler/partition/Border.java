@@ -50,7 +50,7 @@ import java.util.SequencedSet;
  * @param origin  the rule that drew it, as this reading met it
  * @param answers one entry per point the line has, and no other
  */
-public record Border(BoundaryTarget cut, OriginRef origin, Map<DomainPoint, PointAnswer> answers) {
+public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, PointAnswer> answers) {
 
     public Border {
         if (answers == null || !answers.keySet().equals(pointsOf(origin))) {
@@ -96,7 +96,7 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<DomainPoint, Poin
      * have a run either way — which one of them is inside the partition the border bounds is the
      * rule's answer and no part of which point it is.
      */
-    public static SequencedSet<DomainPoint> pointsOf(OriginRef origin) {
+    public static SequencedSet<DomainPoint> pointsOf(LineOrigin origin) {
         List<DomainPoint> points = new ArrayList<>();
         points.add(new DomainPoint.AtTheLine());
         switch (origin.lineFacts().claim()) {
@@ -270,7 +270,7 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<DomainPoint, Poin
 
     /** Whether the rule that drew a line is satisfied by a row at one of its points, which is the
      *  rule's own answer ({@link LineFacts#holdsAt}). */
-    private static boolean holdsAt(DomainPoint point, OriginRef origin) {
+    private static boolean holdsAt(DomainPoint point, LineOrigin origin) {
         return origin.lineFacts().holdsAt(point);
     }
 
@@ -487,7 +487,7 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<DomainPoint, Poin
      * @param within what the rules leave the quantity, on the quantity's own order. Null where they
      *               leave it everything
      */
-    public static Border at(BoundaryTarget target, OriginRef origin, NumericDomain.Bounds within) {
+    public static Border at(BoundaryTarget target, LineOrigin origin, NumericDomain.Bounds within) {
         return at(target, origin, within, List.of());
     }
 
@@ -503,7 +503,7 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<DomainPoint, Poin
      * @param parted every place the rules part this quantity's values, this border's own among them
      *               or not
      */
-    public static Border at(BoundaryTarget target, OriginRef origin, NumericDomain.Bounds within,
+    public static Border at(BoundaryTarget target, LineOrigin origin, NumericDomain.Bounds within,
                             List<Parting> parted) {
         return at(target, origin, within, parted, NarrowedBounds.NOTHING);
     }
@@ -523,7 +523,7 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<DomainPoint, Poin
      * against one of them says nothing about the other. Which is why what arrives here is something
      * that can be asked about an end, rather than an answer already given about somebody else's.
      */
-    public static Border at(BoundaryTarget target, OriginRef origin, NumericDomain.Bounds within,
+    public static Border at(BoundaryTarget target, LineOrigin origin, NumericDomain.Bounds within,
                             List<Parting> parted, NarrowedBounds narrowed) {
         NumericDomain.Bounds reach = within == null ? new NumericDomain.Bounds(null, null) : within;
         LevelSpace space = target.levels();
@@ -581,7 +581,7 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<DomainPoint, Poin
      * <p>Which of the four each of them is is nobody's choice here: it follows from where the point
      * is and whether the rule holds there ({@link PointRole#of}).
      */
-    private static void againstTheLine(Map<DomainPoint, PointAnswer> demands, OriginRef origin,
+    private static void againstTheLine(Map<DomainPoint, PointAnswer> demands, LineOrigin origin,
                                        Level cut, LevelSpace space, NumericDomain.Bounds reach) {
         switch (origin.lineFacts().claim()) {
             case ComparisonClaim.Cut order -> {
@@ -626,7 +626,7 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<DomainPoint, Poin
     /** The value against the line on one side of it, which the run there is asked for without. Null
      *  where the order names no value there, and then the whole run is what is asked for. */
     private static Level levelAgainstTheLineOn(Map<DomainPoint, PointAnswer> demands,
-                                               OriginRef origin, Towards side) {
+                                               LineOrigin origin, Towards side) {
         boolean atTheLine = origin.lineFacts().claim() instanceof ComparisonClaim.Cut order
                 && order.valueBelongs() == side;
         PointAnswer point = demands.get(atTheLine ? new DomainPoint.AtTheLine()
@@ -802,7 +802,7 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<DomainPoint, Poin
      * the place: two rules can part the values at one number, and each of them is one an author
      * could move without touching the other.
      */
-    public static List<Parting> partedBy(BoundaryTarget target, OriginRef origin) {
+    public static List<Parting> partedBy(BoundaryTarget target, LineOrigin origin) {
         LevelSpace space = target.levels();
         Level cut = target.at();
         if (drawnByAnInvariant(origin)) {
@@ -903,7 +903,7 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<DomainPoint, Poin
      * point against the line is the value a row inside stands at: the line's own where the bound
      * admits it, and the nearest value it does leave where the bound refuses it.
      */
-    private static void aBound(Map<DomainPoint, PointAnswer> demands, OriginRef origin,
+    private static void aBound(Map<DomainPoint, PointAnswer> demands, LineOrigin origin,
                                BorderQuantity of, Level cut, LevelSpace space,
                                NumericDomain.Bounds within, QuantityArrangement arrangement) {
         Towards kept = satisfyingSide(origin);
@@ -984,7 +984,7 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<DomainPoint, Poin
      * of its two bounds answers for the end it placed rather than for whichever end matches.
      */
     private static void requireItIsTheEndItKeeps(NumericDomain.Bounds within, LevelSpace space,
-                                                 Level cut, Towards kept, OriginRef origin) {
+                                                 Level cut, Towards kept, LineOrigin origin) {
         Endpoint end = within == null ? null
                 : kept == Towards.ABOVE ? within.min() : within.max();
         // Where the rule leaves off, which is not always the number it wrote. A carrier that counts
@@ -1020,12 +1020,12 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<DomainPoint, Poin
      *
      * <p>Derived here from the two things a rule says about its own threshold, rather than asked of
      * each producer. Which side the threshold's own value belongs to and whether the rule holds there
-     * are what every rule records ({@link OriginRef}); which way the rule is satisfied follows from
+     * are what every rule records ({@link LineOrigin}); which way the rule is satisfied follows from
      * the pair and is what a border is read off. Recorded a third time it would be free to disagree
      * with them, and a line whose sides were the wrong way round asks for two rows that prove
      * nothing.
      */
-    private static Towards satisfyingSide(OriginRef origin) {
+    private static Towards satisfyingSide(LineOrigin origin) {
         return ordering(origin).satisfyingSide();
     }
 
@@ -1037,7 +1037,7 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<DomainPoint, Poin
      * other one, and both sides of it are the same class — so a caller here is holding a line whose
      * two sides it has already established.
      */
-    private static ComparisonClaim.Cut ordering(OriginRef origin) {
+    private static ComparisonClaim.Cut ordering(LineOrigin origin) {
         if (origin.lineFacts().claim()
                 instanceof ComparisonClaim.Cut order) {
             return order;
@@ -1054,7 +1054,7 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<DomainPoint, Poin
      * this measure does with the answer, and reading it off the origin put the vocabulary of borders
      * inside the identity every other measure of a rule shares.
      */
-    private static boolean ordersAroundTheCut(OriginRef origin) {
+    private static boolean ordersAroundTheCut(LineOrigin origin) {
         return ordersAroundTheCut(drawnByAnInvariant(origin), origin.lineFacts().singles());
     }
 
@@ -1067,11 +1067,11 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<DomainPoint, Poin
      * they do not: both order the values either side of the number, and only one of the two has a
      * far side anything can stand on.
      */
-    private static boolean drawnByAnInvariant(OriginRef origin) {
+    private static boolean drawnByAnInvariant(LineOrigin origin) {
         return switch (origin) {
-            case OriginRef.InvariantOrigin _ -> true;
-            case OriginRef.NarrowedOrigin n -> drawnByAnInvariant(n.bound());
-            case OriginRef.ComparisonOrigin _, OriginRef.EnsuresOrigin _ -> false;
+            case LineOrigin.InvariantOrigin _ -> true;
+            case LineOrigin.NarrowedOrigin n -> drawnByAnInvariant(n.bound());
+            case LineOrigin.ComparisonOrigin _, LineOrigin.EnsuresOrigin _ -> false;
         };
     }
 
@@ -1082,7 +1082,7 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<DomainPoint, Poin
      * names a value has the values beside it on both sides of what it distinguishes, so there is no
      * one place to put a seam at — and whoever asks about such a line asks about the value itself.
      */
-    private static Seam seamOf(LevelSpace space, Level cut, OriginRef origin) {
+    private static Seam seamOf(LevelSpace space, Level cut, LineOrigin origin) {
         if (!(origin.lineFacts().claim()
                 instanceof ComparisonClaim.Cut order)) {
             return null;
@@ -1112,12 +1112,12 @@ public record Border(BoundaryTarget cut, OriginRef origin, Map<DomainPoint, Poin
     }
 
     /** Whether the threshold's own value satisfies the rule that drew the line. */
-    private static boolean holdsAtTheValue(OriginRef origin) {
+    private static boolean holdsAtTheValue(LineOrigin origin) {
         return origin.lineFacts().holdsAtTheValue();
     }
 
     /** Which side of the line the threshold's own value belongs to, of a rule that ordered them. */
-    private static Towards valueBelongs(OriginRef origin) {
+    private static Towards valueBelongs(LineOrigin origin) {
         return ordering(origin).valueBelongs();
     }
 }

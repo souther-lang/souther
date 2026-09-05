@@ -144,7 +144,7 @@ class AClauseOfATypeDoesNotPartItsValuesTest {
     void aBoundADeclarationTookInPartsNothingEither() {
         Endpoint at = Endpoint.inclusive(Count.of(100));
         assertEquals(List.of(), Border.partedBy(aLineAt(100),
-                        OriginRef.NarrowedOrigin.of(aBound(), at, aDeclarationHolding(at))),
+                        LineOrigin.NarrowedOrigin.of(aBound(), at, aDeclarationHolding(at))),
                 "taking an end in moves where the position stops, which is not dividing it");
     }
 
@@ -180,8 +180,8 @@ class AClauseOfATypeDoesNotPartItsValuesTest {
                 new Level.OnACarrier(WHOLE, Count.of(value)));
     }
 
-    private static OriginRef.InvariantOrigin aBound() {
-        return new OriginRef.InvariantOrigin(new RuleRef.Invariant(new Clause.Ref(
+    private static LineOrigin.InvariantOrigin aBound() {
+        return new LineOrigin.InvariantOrigin(new RuleRef.Invariant(new Clause.Ref(
                 new Clause.Id(TypeSymbols.declared(new TypeKey("example.weigh", "Amount")), 0),
                 Optional.of(new ClauseName("cap")))), 0, EndSide.LOWER, true);
     }
@@ -190,11 +190,11 @@ class AClauseOfATypeDoesNotPartItsValuesTest {
      *  address one place. */
     private static final ComparisonEmissionSite WHERE = Numberings.comparison(1, 0);
 
-    private static OriginRef aComparison() {
-        return new OriginRef.ComparisonOrigin(new RuleRef.Comparison("weigh",
+    private static LineOrigin aComparison() {
+        return new LineOrigin.ComparisonOrigin(new RuleRef.Comparison("weigh",
                 new souther.compiler.types.CoverageOrigin("example.weigh", 2, 0,
                         souther.compiler.types.CoverageConstruct.BINARY)),
-                new OriginRef.ComparisonOrigin.Read(
+                new LineOrigin.ComparisonOrigin.Read(
                         new souther.compiler.coverage.ComparisonOccurrence(
                                 "example.weigh", "weigh", 0),
                         new souther.compiler.check.RuleCitation.WrittenAt(

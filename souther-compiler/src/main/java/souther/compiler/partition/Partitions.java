@@ -1098,7 +1098,7 @@ public final class Partitions {
             BoundaryTarget where = BoundaryTarget.at(
                     new BorderQuantity.OfACoordinate(axis.id().behavior(), axis.term(), orders),
                     new Level.OnACarrier(cut.carrier(), cut.at()));
-            for (OriginRef origin : cut.origins()) {
+            for (LineOrigin origin : cut.origins()) {
                 // Every rule that drew a line here, as it was read. Which of them fall in one place
                 // is the arrangement's answer, and telling them apart here kept the first and lost
                 // the rest — so a run bounded by two rules knew about one of them.
@@ -1113,7 +1113,7 @@ public final class Partitions {
             BoundaryTarget target = BoundaryTarget.at(
                     new BorderQuantity.OfACoordinate(axis.id().behavior(), axis.term(), orders),
                     new Level.OnACarrier(cut.carrier(), cut.at()));
-            for (OriginRef origin : cut.origins()) {
+            for (LineOrigin origin : cut.origins()) {
                 // One cut, one border. Whether the quantity reaches the line is settled where the
                 // cut was made — a bound's line is an end of what the bound leaves — so there is
                 // nothing to test here and nothing to drop. It used to answer null and be dropped
