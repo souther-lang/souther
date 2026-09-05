@@ -1422,8 +1422,9 @@ final class Terms {
      * <p>A type with no carrier is asked about rather than assumed away. Which operands {@code /}
      * has is settled where it is typed and not here, so a divisor of a type nothing orders is a
      * rule this declines — which is what it does with everything else it cannot read — rather than a
-     * dereference of a null. Swallowed by the fail-open catch, that would take the whole behavior's
-     * analysis with it and say nothing.
+     * dereference of a null. A rule written about an operand nothing orders is a rule about the
+     * program, and stopping the compile over one would answer a question about the model with a
+     * failure of this compiler.
      */
     private NumericDomain.Bounds extentOf(Type type) {
         Carrier carrier = Carrier.ofValue(type, symbols);
@@ -1521,7 +1522,7 @@ final class Terms {
      * is the naming and the reading disagreeing about which value the atom is, and every bound
      * derived under that name is about neither of them.
      */
-    static final class OneTermTwoDerivations extends TheCheckDisagreesWithItself {
+    static final class OneTermTwoDerivations extends IllegalStateException {
         private static final long serialVersionUID = 1L;
 
         OneTermTwoDerivations(String message) {
@@ -1536,7 +1537,7 @@ final class Terms {
      * of which value it is, so two namings answering differently is one of them having read a rule
      * the other did not — and the reader that asked between them was answered from half of it.
      */
-    static final class OneTermTwoIntrinsicAnswers extends TheCheckDisagreesWithItself {
+    static final class OneTermTwoIntrinsicAnswers extends IllegalStateException {
         private static final long serialVersionUID = 1L;
 
         OneTermTwoIntrinsicAnswers(String message) {
@@ -1624,19 +1625,19 @@ final class Terms {
     /**
      * One term this gave two kinds of number.
      *
-     * <p>Apart from everything else the check can fall over on, and for a reason. Those are shapes it
-     * has no rule for, and answering them with silence is what fail-open means. This is the check
-     * disagreeing with itself about one of its own terms: a term is a value, and a value is one kind
-     * of number, so every relation recorded against a term that is two of them relates the wrong
-     * things. Swallowed, it produces a body with no findings, which is what a body with nothing to
-     * report produces.
+     * <p>Apart from the shapes this check declines, and for a reason. Declining is about a rule it
+     * has no words for, and the run-time check stands for what it declined. This is about one of the
+     * check's own terms: a term is a value, and a value is one kind of number, so every relation
+     * recorded against a term that is two of them relates the wrong things — and a body that came
+     * back with nothing to say for that reason is a body whose invariants all discharge, said in the
+     * same words.
      *
      * <p>What it is about has narrowed. A term was a string written out of its parts, and two values
      * could write one — a collision this would catch only where the two happened to be numbers spaced
      * differently. Terms are held by what they are made of now, so that route is gone and what is
      * left is the check handing one value two spacings.
      */
-    static final class OneTermTwoKinds extends TheCheckDisagreesWithItself {
+    static final class OneTermTwoKinds extends IllegalStateException {
          private static final long serialVersionUID = 1L;
 
         OneTermTwoKinds(String message) {

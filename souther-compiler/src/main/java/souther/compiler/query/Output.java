@@ -10,7 +10,6 @@ import souther.compiler.generated.EvaluationArtifact;
 import souther.compiler.generated.GeneratedImplementations;
 import souther.compiler.generated.MemoryClassLoader;
 import souther.compiler.generated.ProbeImage;
-import souther.compiler.coverage.CoverageSites;
 import souther.compiler.execute.ConstantConstruction;
 import souther.compiler.execute.ConstantOutcome;
 import souther.compiler.execute.ProgramExecution;
@@ -357,10 +356,12 @@ public final class Output {
      * counted classes, because what holds a row to a budget it cannot exceed is the counting itself
      * — a row evaluated against uncounted classes has nothing but a clock behind it.
      *
-     * <p>Absent where {@link ArmObservation#RECORD} is asked for and the plan and the bodies do not
-     * line up, which is the one thing this must not paper over: emitting a body an arm short reports the
-     * arm that ran as one nothing reaches, and that reads as a gap in the model rather than a fault in
-     * the measurement.
+     * <p>Two answers and not three. An absence with nothing of its own to report says this compile
+     * has no inputs to generate the module from; an absence carrying a refusal says the program was
+     * refused, and the refusal is what a reader is owed. A generation that contradicts itself — a
+     * node reached that the plan it was made from does not hold, an arm numbered that nothing wrote
+     * — is neither, and answering with the first for it would report a module with no arms to read
+     * exactly as a module whose arms were all read. So it is not caught here.
      */
     public record Evaluated(String name, ArmObservation arms)
             implements Key<EvaluationArtifact> {
@@ -375,16 +376,8 @@ public final class Output {
             if (in == null) {
                 return Answer.absent();
             }
-            Instrumentation instrumentation = Instrumentation.COUNTING;
-            ProbeImage probes = new ProbeImage.Uninstrumented();
-            if (arms == ArmObservation.RECORD) {
-                CoverageSites.Plan plan = in.checked().plan();
-                instrumentation = instrumentation.measuring(plan);
-                // The numbering the calls about to be written carry, taken from the plan that is
-                // writing them. What a run leaves behind is these numbers, and this is what says
-                // whose they are.
-                probes = new ProbeImage.Instrumented(plan.identity());
-            }
+            Instrumentation instrumentation = arms == ArmObservation.RECORD
+                    ? Instrumentation.COUNTING.measuring() : Instrumentation.COUNTING;
             try {
                 Emissions emitted = Backend.generate(
                         in.lowered(), in.scope(), in.scope().library().kernelSignatures(),
@@ -394,13 +387,12 @@ public final class Output {
                         in.dischargeClauses(), in.shapes(), in.checks(), in.standingCalls(),
                         instrumentation);
                 Classes.stamp(db, name, emitted);
-                // The classes and what they implement, from the one emission that decided both.
-                return Answer.of(
-                        new EvaluationArtifact(emitted.seal(), emitted.implemented(), probes));
+                // The classes, what they implement and whose numbers a run through them leaves,
+                // from the one emission that decided all three.
+                return Answer.of(new EvaluationArtifact(emitted.seal(), emitted.implemented(),
+                        emitted.probes()));
             } catch (CompileException e) {
                 return Answer.absent(e);
-            } catch (IllegalStateException _) {
-                return Answer.absent();   // the plan is not about these bodies
             }
         }
     }

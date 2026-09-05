@@ -11,6 +11,7 @@ import souther.compiler.inputs.FilingCoordinate;
 import souther.compiler.inputs.InputQuestion;
 import souther.compiler.inputs.StandingQuestion;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.inputs.TwoAccountsOfOneQuestion;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.partition.ClosureGap;
 import souther.compiler.types.CoverageConstruct;
@@ -157,7 +158,7 @@ class OneFactIsOneWeakeningHoweverItWasEvidencedTest {
         WeakeningSet theOtherWayRound =
                 standingQuestion(new RuleCitation.Named("m"), List.of(none, form));
 
-        assertThrows(IllegalArgumentException.class, () -> met.union(theOtherWayRound),
+        assertThrows(TwoAccountsOfOneQuestion.class, () -> met.union(theOtherWayRound),
                 "two readings of one question that disagree about what the author wrote are not"
                         + " something to put together");
     }

@@ -7,7 +7,6 @@ import souther.compiler.check.ElementBindings;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
-import souther.compiler.diag.TheCompilerDisagreesWithItself;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
 import souther.compiler.types.Type;
@@ -73,8 +72,10 @@ class AValueReadThroughItselfIsNotAPositionNothingNamesTest {
         BindingTrail.ReadThroughItself raised = assertThrows(BindingTrail.ReadThroughItself.class,
                 () -> names.pathOf(read("a", FIRST), symbols()));
 
-        assertInstanceOf(TheCompilerDisagreesWithItself.class, raised,
-                "a representation that cannot be is not a limit of this analysis");
+        assertInstanceOf(IllegalStateException.class, raised,
+                "a lineage that runs back to where it started is a graph nothing here builds, so"
+                        + " what is wrong is this compiler's own state and not what a caller"
+                        + " handed over");
     }
 
     /** And a name that reaches no position answers that, which is the other thing entirely. */

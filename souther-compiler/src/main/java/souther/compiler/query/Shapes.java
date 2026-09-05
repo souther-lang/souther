@@ -19,7 +19,6 @@ import souther.compiler.check.DerivedSymbols;
 import souther.compiler.check.ResolvedSymbols;
 import souther.compiler.core.ValueShape;
 import souther.compiler.diag.CompileException;
-import souther.compiler.diag.TheCompilerDisagreesWithItself;
 import souther.compiler.types.BindingOwner;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
@@ -704,12 +703,12 @@ public final class Shapes {
     /**
      * Raised where a module's expansion came out and says nothing about a declaration it wrote.
      *
-     * <p>Not an ordinary limit, and said so by the interface it carries: a reading falls open on
-     * what it has no rule for, and this has to cross that, or a declaration whose clauses were never
-     * expanded is reported as one that was read and found to state little.
+     * <p>The expansion of a module is what every reader of that module's clauses is answered from,
+     * so an expansion that came out and says nothing about a declaration it wrote is two of this
+     * compiler's answers disagreeing. Read as an ordinary answer it would say the declaration was
+     * expanded and found to state little, which is what a declaration stating little says.
      */
-    public static final class NothingWasExpandedFor extends RuntimeException
-            implements TheCompilerDisagreesWithItself {
+    public static final class NothingWasExpandedFor extends IllegalStateException {
 
         private static final long serialVersionUID = 1L;
 

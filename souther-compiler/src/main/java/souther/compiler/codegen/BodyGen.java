@@ -1991,9 +1991,14 @@ final class BodyGen {
                     Label elseL = code.newLabel();
                     Label end = code.newLabel();
                     code.ifeq(elseL);
+                    // A fork answering a function is a fork like any other: a row takes one of its
+                    // arms, and the arm it took is the plan's to be told about. What the arm answers
+                    // with is what differs here, and that is not something a count is about.
+                    probe(iff, 0);
                     emitFunctionValue(iff.then(), paramTypes);
                     code.goto_(end);
                     code.labelBinding(elseL);
+                    probe(iff, 1);
                     emitFunctionValue(iff.els(), paramTypes);
                     code.labelBinding(end);
                 }

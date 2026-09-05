@@ -61,10 +61,12 @@ class WhoTakesAPlansNumberingHasItsBodiesTest {
                             + " off the plan that walk made. There is no stand-in to have taken it"
                             + " from: a module whose bodies did not come out is answered for by"
                             + " there being no answer here at all"),
-            new Licence("souther.compiler.query.Output.Evaluated.compute -> identity", 1,
-                    "what the classes about to be written are numbered by, taken from the plan"
-                            + " that is instrumenting them — one value used for both, so what a"
-                            + " run records and what says whose numbers they are cannot part"));
+            new Licence("souther.compiler.codegen.Backend.generating -> identity", 1,
+                    "what the classes being written are numbered by, taken off the plan the same"
+                            + " method just realized from the bodies it is emitting — and taken"
+                            + " only where coverage was asked for, so it is never the stand-in's."
+                            + " The emission answers with it, rather than a caller working out a"
+                            + " numbering of its own beside the one the probes were written from"));
 
     @Test
     void everyReaderOfAPlansNumberingIsWrittenDownWithWhatMakesItSafe() throws IOException {

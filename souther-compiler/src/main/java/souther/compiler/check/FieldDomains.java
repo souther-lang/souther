@@ -1097,11 +1097,12 @@ public final class FieldDomains {
      * account under the rule and none at the name either is the two coming apart — the rule was met
      * by the walk that asks and by nothing that reads.
      *
-     * <p>Not an ordinary limit, so not swallowed. Answered as one, an author is told that this
-     * compiler has no word for their rule, which is a sentence about their model printed because two
-     * of this compiler's accounts disagreed.
+     * <p>Not a rule this has no words for. A question stands and nothing accounts for it, which is
+     * two of this compiler's accounts disagreeing about what it asked. Answered as a rule it cannot
+     * read, an author is told that this compiler has no word for what they wrote — a sentence about
+     * their model, printed because of something that happened here.
      */
-    static final class AStandingQuestionWithNoAccount extends TheCheckDisagreesWithItself {
+    static final class AStandingQuestionWithNoAccount extends IllegalStateException {
 
         private static final long serialVersionUID = 1L;
 
