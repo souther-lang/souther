@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import souther.compiler.check.AnalysisBody;
 import souther.compiler.check.ElementBindings;
+import souther.compiler.check.PredicateStatement;
 import souther.compiler.check.RuleCitation;
 import souther.compiler.check.RuleRef;
 import souther.compiler.check.StringPredicates;
@@ -76,6 +77,12 @@ record PredicateReadings(List<Reading> predicates) {
         /** What this compiler made of the strings the predicate states. */
         StringPredicates.Reading reading() {
             return stated.reading();
+        }
+
+        /** What the rule states, for a reader that names what it divides a position into. Null
+         *  only where the text an author wrote was not worked out. */
+        PredicateStatement statement() {
+            return stated.statement();
         }
     }
 

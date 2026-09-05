@@ -211,17 +211,29 @@ public enum StringPredicates {
     }
 
     /**
-     * A checked clause's predicate: the argument the rule is about, and what reading it came to.
+     * A checked clause's predicate: the argument the rule is about, what reading it came to, and
+     * what it states in the words the model states it in.
      *
-     * @param subject the argument the rule is about, for a caller that resolves it to a position
-     * @param reading what this compiler made of the strings the predicate states there
+     * <p>{@code statement} is there exactly where the text an author wrote was worked out, which is
+     * every reading but {@link Reading.WrittenArgumentNotKnown} — a rule whose text nothing settled
+     * has nothing to be called. Checked here rather than left to a reader, so that a caller holding
+     * a reading knows without asking whether there is a statement beside it.
+     *
+     * @param subject   the argument the rule is about, for a caller that resolves it to a position
+     * @param reading   what this compiler made of the strings the predicate states there
+     * @param statement what the rule states, for a reader that names what it divides a position
+     *                  into. Absent only where the text was not worked out
      */
-    public record Stated(Core subject, Reading reading) {
+    public record Stated(Core subject, Reading reading, PredicateStatement statement) {
 
         public Stated {
             if (subject == null || reading == null) {
                 throw new IllegalArgumentException(
                         "a predicate that was stated is about something and was read");
+            }
+            if ((statement == null) != (reading instanceof Reading.WrittenArgumentNotKnown)) {
+                throw new IllegalArgumentException(
+                        "a rule states something exactly where its text was worked out: " + reading);
             }
         }
     }
@@ -334,9 +346,14 @@ public enum StringPredicates {
         }
         Core subject = call.args().get(predicate.subject());
         String written = text.of(call.args().get(predicate.written()));
+        // What the model calls the operation, taken off the name the call resolved to rather than
+        // from the table. The table is keyed by what an operation means, and what a document calls
+        // it is what an author writes — read off a key, a class would be named after this
+        // compiler's word for the meaning.
         return written == null
-                ? new Stated(subject, new Reading.WrittenArgumentNotKnown())
-                : new Stated(subject, predicate.readingOf(written));
+                ? new Stated(subject, new Reading.WrittenArgumentNotKnown(), null)
+                : new Stated(subject, predicate.readingOf(written),
+                        new PredicateStatement(operation.qualified(), written));
     }
 
 }

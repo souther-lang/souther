@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.check.PredicateStatement;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.values.ValueSet;
 
@@ -19,16 +20,24 @@ import souther.compiler.values.ValueSet;
  * settled — and "the values it admits are known and the rest are not" is a state that cannot be
  * spelled.
  *
- * @param term     the position this divides, which one position answers
- * @param whenTrue the values that satisfy the rule
+ * <p><b>What it states and which rule it is are two things and both travel.</b> A class this leaves
+ * is called by what a value in it satisfies, which is the statement; which rule of the model
+ * produced the division, and which reading of that rule, is the origin. Two copies of one helper
+ * divide two positions by one statement under two origins, and a reader given only the second would
+ * have to name a class after where a rule was written.
+ *
+ * @param term      the position this divides, which one position answers
+ * @param whenTrue  the values that satisfy the rule
  * @param whenFalse the values that do not
- * @param origin   which rule this is, which reading of it, and where a reader is sent to find it
+ * @param statement what the rule states, in the words the model states it in
+ * @param origin    which rule this is, which reading of it, and where a reader is sent to find it
  */
 public record SetDivision(NumericTerm.FromOnePosition term, ValueSet whenTrue, ValueSet whenFalse,
-                          PredicateOrigin origin) {
+                          PredicateStatement statement, PredicateOrigin origin) {
 
     public SetDivision {
-        if (term == null || whenTrue == null || whenFalse == null || origin == null) {
+        if (term == null || whenTrue == null || whenFalse == null
+                || statement == null || origin == null) {
             throw new IllegalArgumentException(
                     "a division of a position tells some values from the rest, and some rule said"
                             + " it");

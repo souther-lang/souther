@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.check.PredicateStatement;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.StringPredicates;
 import souther.compiler.inputs.BlockReason;
@@ -80,32 +81,49 @@ final class SetDivisions {
      * so four is what the rows are owed at, and the two rules taken one at a time would ask for a
      * distinction the other one already made.
      *
-     * <p><b>Which rules hold in it, and not a name.</b> A cell is where a run falls, and where it
-     * falls is decided by each rule coming out one way or the other. What a report calls it is the
-     * reader's to settle out of that; carried as a word made here, it would be a name for a set
-     * that says nothing about which rules of the model put a value in it.
+     * <p><b>What each rule states and how it came out, in the order the body states them.</b> Where
+     * a run falls is decided by each of the position's rules coming out one way or the other, and
+     * that is what tells a cell from its neighbours — so the assignment is what a cell is, and a
+     * reader names the class out of it. Held as two sets of rules, the order a document lists them
+     * in would come from a set rather than from the model.
      *
-     * @param values    the values in it, which no other cell holds
-     * @param satisfies the rules a value here satisfies, in the order they were read
-     * @param fails     and the rules it does not
+     * <p>And it is the statements, not the origins. Two copies of one helper state one rule at two
+     * positions, and the class each leaves is called the same thing; which reading produced the
+     * evidence is what the evidence carries and is no part of what a class is.
+     *
+     * @param values the values in it, which no other cell of the position holds
+     * @param under  each of the position's rules and how it came out here, in the order the body
+     *               states them
      */
-    record Cell(ValueSet values, List<PredicateOrigin> satisfies, List<PredicateOrigin> fails) {
+    record Cell(ValueSet values, List<Answered> under) {
 
         Cell {
             if (values == null || values.isEmpty()) {
                 throw new IllegalArgumentException(
                         "a class of a position holds a value; an empty one is no class of it");
             }
-            satisfies = List.copyOf(satisfies);
-            fails = List.copyOf(fails);
+            under = List.copyOf(under);
+            if (under.isEmpty()) {
+                throw new IllegalArgumentException(
+                        "a cell is what the rules of a position left, so some rule made it");
+            }
         }
 
-        /** The same cell, with {@code by} coming out {@code holding} and the values that leaves. */
-        Cell and(ValueSet narrowed, PredicateOrigin by, boolean holding) {
-            List<PredicateOrigin> yes = new ArrayList<>(satisfies);
-            List<PredicateOrigin> no = new ArrayList<>(fails);
-            (holding ? yes : no).add(by);
-            return new Cell(narrowed, yes, no);
+        /** The same cell, with one more rule coming out {@code holding} and what that leaves. */
+        Cell and(ValueSet narrowed, PredicateStatement states, boolean holding) {
+            List<Answered> wider = new ArrayList<>(under);
+            wider.add(new Answered(states, holding));
+            return new Cell(narrowed, wider);
+        }
+    }
+
+    /** One of a position's rules, and whether a value in the cell satisfies it. */
+    record Answered(PredicateStatement states, boolean holds) {
+
+        Answered {
+            if (states == null) {
+                throw new IllegalArgumentException("a rule that came out one way states something");
+            }
         }
     }
 
@@ -128,7 +146,8 @@ final class SetDivisions {
     }
 
     /** One rule read as far as the plans for its two sides, waiting on its position's group. */
-    private record Asked(PredicateOrigin by, NumericTerm.FromOnePosition term,
+    private record Asked(PredicateOrigin by, PredicateStatement states,
+                         NumericTerm.FromOnePosition term,
                          AdmittedPlan whenTrue, AdmittedPlan whenFalse) {}
 
     /**
@@ -204,8 +223,8 @@ final class SetDivisions {
                                       Allowance<NumericTerm.FromOnePosition> allowance) {
         SetDivision first = divisions.get(0);
         List<Cell> cells = new ArrayList<>();
-        cells.add(new Cell(first.whenTrue(), List.of(first.origin()), List.of()));
-        cells.add(new Cell(first.whenFalse(), List.of(), List.of(first.origin())));
+        cells.add(new Cell(first.whenTrue(), List.of(new Answered(first.statement(), true))));
+        cells.add(new Cell(first.whenFalse(), List.of(new Answered(first.statement(), false))));
         for (SetDivision each : divisions.subList(1, divisions.size())) {
             List<Cell> narrower = new ArrayList<>();
             for (Cell cell : cells) {
@@ -216,7 +235,7 @@ final class SetDivisions {
                         return null;
                     }
                     if (!met.set().isEmpty()) {
-                        narrower.add(cell.and(met.set(), each.origin(), holding));
+                        narrower.add(cell.and(met.set(), each.statement(), holding));
                     }
                 }
             }
@@ -243,7 +262,8 @@ final class SetDivisions {
         }
         NumericTerm.FromOnePosition term = new NumericTerm.ValueOf(at.path());
         switch (each.reading()) {
-            case StringPredicates.Reading.Accepting it -> asked.add(new Asked(each.origin(), term,
+            case StringPredicates.Reading.Accepting it -> asked.add(new Asked(each.origin(),
+                    each.statement(), term,
                     new AdmittedPlan.Pattern(PatternPlan.of(it.accepts())),
                     new AdmittedPlan.Pattern(PatternPlan.notMatching(it.accepts()))));
             case StringPredicates.Reading.PatternNotRead it -> undivided.add(new Undivided(
@@ -274,7 +294,7 @@ final class SetDivisions {
                     new BlockReason.PredicateTellingNothingApart()));
             return;
         }
-        divided.add(new PartitionEvidence.BySet(
-                new SetDivision(each.term(), whenTrue, whenFalse, each.by())));
+        divided.add(new PartitionEvidence.BySet(new SetDivision(
+                each.term(), whenTrue, whenFalse, each.states(), each.by())));
     }
 }

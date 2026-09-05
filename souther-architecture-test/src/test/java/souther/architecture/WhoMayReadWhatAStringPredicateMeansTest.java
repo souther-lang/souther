@@ -170,6 +170,10 @@ class WhoMayReadWhatAStringPredicateMeansTest {
             A_BODYS_RULE + "$Reading",
             A_BODYS_RULE + "$Stated",
             A_BODYS_RULE + "$Stated#reading()L" + OWNER + "$Reading;",
+            // What the rule states, which is what a class it makes is called. Read off the same
+            // value the reading came in and never worked out again: a name for a class derived a
+            // second time would be one that agrees with the rule until one of the two changes.
+            A_BODYS_RULE + "$Stated#statement()Lsouther/compiler/check/PredicateStatement;",
             A_BODYS_RULE + "$Stated#subject()Lsouther/compiler/core/Core;",
             WHAT_A_BODYS_RULE_DIVIDES,
             WHAT_A_BODYS_RULE_DIVIDES + IN_A_DESCRIPTOR,

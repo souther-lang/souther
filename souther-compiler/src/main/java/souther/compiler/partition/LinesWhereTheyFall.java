@@ -129,7 +129,7 @@ public final class LinesWhereTheyFall {
             // filing that worked them out again would be a second answer about one rule.
             case PartitionEvidence.BySet(SetDivision division) ->
                     new PartitionEvidence.BySet(new SetDivision(here, division.whenTrue(),
-                            division.whenFalse(), division.origin()));
+                            division.whenFalse(), division.statement(), division.origin()));
         };
     }
 

@@ -103,9 +103,14 @@ class WhatABehaviorsRuleAboutItsStringsDividesAPositionIntoTest {
         List<SetDivisions.Cell> cells = read.cells().values().iterator().next();
         assertEquals(1, read.cells().size(), "one position is divided");
         assertEquals(4, cells.size(), "into the classes the two rules come to between them");
-        assertEquals(List.of(2, 1, 1, 0),
-                cells.stream().map(each -> each.satisfies().size()).toList(),
-                "each satisfying its own answer to each of the two rules");
+        assertEquals(List.of(
+                        "String.startsWith(\"JP\", x) and String.endsWith(\"X\", x)",
+                        "String.startsWith(\"JP\", x) and not String.endsWith(\"X\", x)",
+                        "not String.startsWith(\"JP\", x) and String.endsWith(\"X\", x)",
+                        "not String.startsWith(\"JP\", x) and not String.endsWith(\"X\", x)"),
+                cells.stream().map(each -> said(each)).toList(),
+                "each named by what a value in it satisfies, in the order the body states the"
+                        + " rules");
         // Exclusive, which is what makes them classes: a value the model may hold is in one.
         assertEquals(1, cells.stream()
                         .filter(each -> each.values().has(new Value.Text("JPX"))).count(),
@@ -180,6 +185,13 @@ class WhatABehaviorsRuleAboutItsStringsDividesAPositionIntoTest {
                         new BlockReason.BehaviorDistinctionsTooCostly()),
                 read.undivided().stream().map(SetDivisions.Undivided::why).toList(),
                 "and both are answered for as the position's distinctions not being built");
+    }
+
+    /** What a cell says, which is what each of the position's rules came to in it. */
+    private static String said(SetDivisions.Cell cell) {
+        return cell.under().stream()
+                .map(each -> each.holds() ? each.states().saidOf("x") : each.states().deniedOf("x"))
+                .reduce((one, other) -> one + " and " + other).orElseThrow();
     }
 
     /** The one division the model under test states. */
