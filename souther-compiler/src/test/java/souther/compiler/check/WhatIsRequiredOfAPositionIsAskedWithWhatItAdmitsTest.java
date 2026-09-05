@@ -126,6 +126,32 @@ class WhatIsRequiredOfAPositionIsAskedWithWhatItAdmitsTest {
                 """));
     }
 
+    /**
+     * Positions the rules hold as one value, refused as the one value they are.
+     *
+     * <p>The block and not its members. Each of {@code p} and {@code r} is left something on its
+     * own — {@code p} may be one and {@code r} may be nine — and what has nothing is the one value
+     * the alternative says they are, since what is required of them cannot both hold of it.
+     *
+     * <p>An equality inside an alternative, because that is the only place a block's members can be
+     * required to be in different ranges: written outside one, the numbers read the same equality
+     * and refuse the rules on their own.
+     */
+    @Test
+    void positionsHeldAsOneValueAreRefusedAsThatValue() {
+        assertEquals(new Emptiness.AtEqualPositions(
+                        List.of(new Emptiness.AtAField.Where.In("p"),
+                                new Emptiness.AtAField.Where.In("r")),
+                        new Emptiness.NoAllowedValueWithinRequiredBounds()), only("""
+                module demo
+
+                data Held = { p: Int, r: Int, s: Int, t: Int }
+                    invariant no = ((p == r && p == 1) || (p == r && p == 9))
+                                && s == p + 1 && s <= 4
+                                && t == r - 1 && t >= 7
+                """));
+    }
+
     /** And one alternative inside them is a rule somebody satisfies. */
     @Test
     void anAlternativeInsideThemIsARuleAValueSatisfies() {

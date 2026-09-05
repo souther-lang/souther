@@ -154,8 +154,10 @@ sealed interface Confinement<A> {
         static <A> Admission<A> bothShown(Admission<A> one, Admission<A> other) {
             Set<Sameness.Block<A>> both = new LinkedHashSet<>(one.at);
             both.retainAll(other.at);
-            // And shown by the readings alone only where both of them were. A choice one of whose
-            // branches needed a restriction from outside is a choice that needed it.
+            // And shown by the readings alone only where both of them were, which is the rule
+            // however these two were shown. Nothing hands a branch's fate a restriction from
+            // outside today ({@link StatedByClauses.Reading}), so both of these are the readings'
+            // own; said the other way, this would be a fact about the pair that neither half is.
             return new Admission<>(Emptiness.EMPTY,
                     one.by == other.by ? one.by : EmptyBy.RULES_TOGETHER, both,
                     one.byTheReadings() && other.byTheReadings()
@@ -266,23 +268,24 @@ sealed interface Confinement<A> {
                                                     refused,
                                             Set<Sameness.Block<A>> heldAsOneAndEmptied,
                                             Shown how) {
-        if (how == Shown.BY_THE_READINGS) {
-            if (ordered.isBottom()) {
-                return Admission.at(Emptiness.EMPTY, EmptyBy.ORDER, ordered.holdingNothing(), how);
+        // The ends holding a position nothing, which is that reading's own answer and is asked
+        // whichever placing this is about: a reading left with no range at all names no position,
+        // and where it names one, that is where the lack is.
+        if (ordered.isBottom()) {
+            return Admission.at(Emptiness.EMPTY, EmptyBy.ORDER, ordered.holdingNothing(), how);
+        }
+        // And a position with nowhere to be once everything placing it is met, which is a lack the
+        // alternatives never hear about: a position no alternative names is not one they are asked
+        // about, so where what is required of it does not reach where its own ends leave it,
+        // nothing else here will say so.
+        Set<A> nowhere = new LinkedHashSet<>();
+        carriers.keySet().forEach(position -> {
+            if (sits.apply(position).holdsNothing()) {
+                nowhere.add(position);
             }
-        } else {
-            // A position left nowhere to be, which is a lack the alternatives never hear about: a
-            // position no alternative names is not one they are asked about, and where the rules
-            // require it to be somewhere its own ends do not reach, nothing else will say so.
-            Set<A> nowhere = new LinkedHashSet<>();
-            carriers.keySet().forEach(position -> {
-                if (sits.apply(position).holdsNothing()) {
-                    nowhere.add(position);
-                }
-            });
-            if (!nowhere.isEmpty()) {
-                return Admission.at(Emptiness.EMPTY, EmptyBy.ORDER, nowhere, how);
-            }
+        });
+        if (!nowhere.isEmpty()) {
+            return Admission.at(Emptiness.EMPTY, EmptyBy.ORDER, nowhere, how);
         }
         // A meter of this question's own, spent on this asking of it. What may be built to decide
         // whether a declaration has a value cannot come out of a position's allowance: the same
