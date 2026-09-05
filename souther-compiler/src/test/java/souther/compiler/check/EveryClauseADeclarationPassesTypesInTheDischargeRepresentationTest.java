@@ -119,8 +119,8 @@ class EveryClauseADeclarationPassesTypesInTheDischargeRepresentationTest {
                     continue;
                 }
                 TypeSymbol.AtModule named = TypeSymbols.declared(new TypeKey(module, data.name()));
-                for (TypeOps.Declared each : clauses.of(named, data).reached()) {
-                    assertNotNull(clauses.typed(each.asExpanded(), named, data),
+                for (TypeOps.Declared each : clauses.of(named).reached()) {
+                    assertNotNull(clauses.typed(each.asExpanded(), named),
                             "`" + data.name() + "` declares a clause this check could not type:\n"
                                     + source);
                     read++;

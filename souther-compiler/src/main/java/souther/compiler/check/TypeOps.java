@@ -1186,8 +1186,8 @@ public final class TypeOps {
      */
     static ValueReading.Owner writingFields(TypeSymbol name, Symbols symbols) {
         return name instanceof TypeSymbol.AtModule at
-                && symbols.declaredNode(at) instanceof Hir.Data data
-                ? new ValueReading.Owner(at, data) : null;
+                && symbols.declaredNode(at) instanceof Hir.Data
+                ? new ValueReading.Owner(at) : null;
     }
 
     /** Every data reachable from {@code data} through spreads, transitively — the set two cases are
@@ -1208,18 +1208,61 @@ public final class TypeOps {
     }
 
     /**
-     * All invariant clauses that apply to a data, in the order a failure is decided by: the clauses of
-     * the data it spreads first, then its own, each in the order it is written.
+     * What each rule that governs a declaration is called and where it was written, in the order a
+     * failure is decided by: the rules of what it spreads first, then its own, each in the order it
+     * is written.
      *
-     * <p>A clause keeps the name it was declared with wherever it arrives from, so a spread carries not
-     * only the rule but what an attempt on the spreading type calls it.
+     * <p>The part of a clause that does not turn on the representation the declaration is read in.
+     * Resolution settles which clauses a declaration has, what each is called and where it stands;
+     * after it, the only thing that makes one is {@link Hir.InvariantClause#with}, which replaces the
+     * expression and carries the name and the position across, and no representation below adds a
+     * clause, drops one, or reorders them. So this is well defined in every representation, and a
+     * reader may ask it of whichever world it holds.
+     *
+     * <p>What a clause states is not here, and that is what this answer is for: what a rule states is
+     * owned by the representation it is read in, and nothing can reach it through this.
      */
-    public static List<Hir.InvariantClause> settledInvariants(Hir.Data data, Symbols symbols) {
+    public static List<InvariantHeader> invariantHeadersGoverning(
+            TypeSymbol.AtModule named, Symbols symbols) {
+        List<InvariantHeader> headers = new ArrayList<>();
+        for (Hir.InvariantClause clause : settledClauses(named, symbols)) {
+            headers.add(new InvariantHeader(clause.name(), clause.pos()));
+        }
+        return headers;
+    }
+
+    /**
+     * The rules that govern {@code named}, as they were settled: what the declaring module made of
+     * each clause once the helpers it names were expanded into it.
+     *
+     * <p>Not public, and there is one reader. What a clause states is owned by the representation it
+     * is read in — the settled form by the derived world, the expanded one by
+     * {@link ExpandedClauseLookup} — so a way of asking for it that anyone could reach is a way of
+     * asking for one representation and being answered in whichever the caller's world happened to
+     * be at.
+     *
+     * <p>Every declaration is read from {@code symbols}: the one asked about and every one a spread
+     * reaches. Handed a node beside the world, the declaration asked about would be at whichever
+     * stage the caller was holding and the ones under it at whichever stage the world reads.
+     */
+    static List<Hir.InvariantClause> settledClausesGoverning(
+            TypeSymbol.AtModule named, DerivedSymbols symbols) {
+        return settledClauses(named, symbols);
+    }
+
+    /** The same for a reader that wants only what every representation agrees on, which is why this
+     *  takes any world. Private, so the world a clause's body is read from stays said by the method
+     *  a caller names. */
+    private static List<Hir.InvariantClause> settledClauses(
+            TypeSymbol.AtModule named, Symbols symbols) {
+        if (!(symbols.declaredNode(named) instanceof Hir.Data data)) {
+            return List.of();
+        }
         List<Hir.InvariantClause> invs = new ArrayList<>();
         for (Hir.Name inc : data.includes()) {
-            Hir.Data spread = spreadTarget(inc, symbols);
-            if (spread != null) {
-                invs.addAll(settledInvariants(spread, symbols));
+            if (inc.answered() instanceof Hir.Name.Denoting denoting
+                    && denoting.type() instanceof TypeSymbol.AtModule spread) {
+                invs.addAll(settledClauses(spread, symbols));
             }
         }
         invs.addAll(data.invariants());
@@ -1236,8 +1279,12 @@ public final class TypeOps {
      * another source of clauses is a walk somebody can hand the wrong one.
      */
     public static ExpandedRules expandedInvariants(
-            TypeSymbol.AtModule named, Hir.Data data, Symbols symbols, ExpandedClauseLookup form) {
-        return declaredExpanded(named, data, symbols, form);
+            TypeSymbol.AtModule named, Symbols symbols, ExpandedClauseLookup form) {
+        if (form == null) {
+            throw new IllegalArgumentException(
+                    "reading a declaration's clauses takes somewhere to read them from");
+        }
+        return governedBy(named, symbols, form);
     }
 
     /**
@@ -1245,8 +1292,7 @@ public final class TypeOps {
      *
      * <p>A clause reaching a type through a spread is that type's to hold and the other type's to
      * have written, and a reader told which clause failed on a data that declares none of its own is
-     * told about a declaration they would not find. {@code declaredOn} is null where the walk was
-     * not given a name to start from.
+     * told about a declaration they would not find.
      *
      * <p>{@code ordinal} is which of {@code declaredOn}'s own clauses this is, counted where that
      * declaration writes them and not where this walk happened to reach it. Two spreads of one type
@@ -1282,42 +1328,53 @@ public final class TypeOps {
      * and that is the sentence the whole of #1312 was about — shared through a clause-source
      * parameter, it is one edit away from being a choice again.
      *
-     * <p>{@code named} is what the walk reached this declaration by. A spread whose name is not a
-     * module's declaration contributes nothing and costs nothing: no module wrote it, so there is no
-     * expansion of it to be short of.
+     * <p>{@code named} is the declaration being read, and the only way in. Which declarations the
+     * walk visits is {@code symbols}' to answer and what each of them states is {@code form}'s: two
+     * authorities with two questions, and neither is asked the other's. Handed a node as well, which
+     * declarations are reached would come from the caller for the one asked about and from the world
+     * for the ones under it — and the two need not be the same reading.
+     *
+     * <p>A spread whose name is not a module's declaration contributes nothing and costs nothing: no
+     * module wrote it, so there is no expansion of it to be short of.
+     *
+     * <p>A declaration this world cannot read is rules not reached and not rules there are none of.
+     * What a declaration takes in is written on it, so a walk that could not read it did not walk
+     * what it spreads — and the two authorities settle that between them: something declares it or
+     * nothing does, which is {@code form}'s to say, and it can be read here or it cannot, which is
+     * the world's. Only where nothing declares it at all are there no spreads to be short of.
      */
-    public static ExpandedRules declaredExpanded(
-            TypeSymbol.AtModule named, Hir.Data data, Symbols symbols, ExpandedClauseLookup form) {
-        if (form == null) {
-            throw new IllegalArgumentException(
-                    "reading a declaration's clauses takes somewhere to read them from");
-        }
-        ExpandedRules found = new ExpandedRules(List.of(), true);
-        for (Hir.Name inc : data.includes()) {
-            Hir.Data id = spreadTarget(inc, symbols);
-            if (id != null) {
-                found = found.and(declaredExpanded(
-                        inc.answered().type() instanceof TypeSymbol.AtModule at ? at : null,
-                        id, symbols, form));
+    private static ExpandedRules governedBy(
+            TypeSymbol.AtModule named, Symbols symbols, ExpandedClauseLookup form) {
+        ExpandedClauseResult stated = form.of(named.key());
+        Hir.Def declared = symbols.declaredNode(named);
+        ExpandedRules found = new ExpandedRules(List.of(),
+                declared != null || stated instanceof ExpandedClauseResult.NotDeclared);
+        if (declared instanceof Hir.Data data) {
+            for (Hir.Name inc : data.includes()) {
+                if (inc.answered() instanceof Hir.Name.Denoting denoting
+                        && denoting.type() instanceof TypeSymbol.AtModule spread) {
+                    found = found.and(governedBy(spread, symbols, form));
+                }
             }
         }
-        return found.and(ownClausesOf(named, form));
+        return found.and(rulesOf(named, stated));
     }
 
     /**
-     * What {@code form} answers for {@code named} alone, as rules.
+     * What the lookup answered for {@code named} alone, as rules.
      *
      * <p>An answer this could not be given is carried as a rule not reached rather than as no rule.
      * They are the same empty list and opposite facts: a declaration that states nothing holds every
      * value its type does, and one whose clauses nobody worked out holds whatever its author wrote.
      * A reading handed the second as the first says a position admits everything and says nothing
      * about not having looked.
+     *
+     * <p>Handed the answer rather than the lookup, because the walk above reads the same answer to
+     * decide something else — whether a declaration nothing here can read is one nothing declares.
+     * Asked twice, the two questions could be answered by two.
      */
-    private static ExpandedRules ownClausesOf(TypeSymbol.AtModule named, ExpandedClauseLookup form) {
-        if (named == null) {
-            return new ExpandedRules(List.of(), true);
-        }
-        return switch (form.of(named.key())) {
+    private static ExpandedRules rulesOf(TypeSymbol.AtModule named, ExpandedClauseResult stated) {
+        return switch (stated) {
             case ExpandedClauseResult.Found(ExpandedClauses clauses) -> {
                 List<Declared> out = new ArrayList<>();
                 for (int ordinal = 0; ordinal < clauses.clauses().size(); ordinal++) {
@@ -1590,7 +1647,7 @@ public final class TypeOps {
         Type at = t;
         while (isSingleValueNewtype(at, symbols) && worn.add(((Type.Ref) at).name())) {
             Hir.Data data = (Hir.Data) symbols.declaredNode(((Type.Ref) at).name());
-            layers.add(new Layer(((Type.Ref) at).name(), data));
+            layers.add(new Layer(((Type.Ref) at).name()));
             Type inner = fieldTypes(data, symbols).get("value");
             if (inner == null) {
                 break;
@@ -1604,13 +1661,16 @@ public final class TypeOps {
     public record NewtypeSpine(List<Layer> layers, Type terminal) {}
 
     /**
-     * One name a value wears, and the declaration it is written by.
+     * One name a value wears.
      *
-     * <p>Kept together because a rule is read at a layer and reported by the declaration that wrote
-     * it — a failure names a clause of a type, and dropping which type that was leaves a diagnostic
-     * with nothing to point at.
+     * <p>The name and nothing under it. A rule is read at a layer and reported by the declaration
+     * that wrote it, and the name is what says which that is — so a reader with the name has what a
+     * diagnostic needs and asks the world it is reading in for the rest. The declaration was carried
+     * here as well, and a reader holding one holds the clauses written on it, in whichever
+     * representation this walk's world happened to be at; what a rule states is asked for by naming
+     * the representation it is read in, and this walk names none.
      */
-    public record Layer(TypeSymbol named, Hir.Data data) {}
+    public record Layer(TypeSymbol named) {}
 
     /**
      * The names wrapped round a value of {@code t}, outermost first.

@@ -1562,15 +1562,14 @@ public final class Elaborator {
      *
      * <p>Nothing is checked for the {@code else e} form: it already answers any failure.
      */
-    private static void checkArmsAnswerClauses(Hir.IfConstructed ic, TypeSymbol typeName, Symbols symbols) {
+    private static void checkArmsAnswerClauses(Hir.IfConstructed ic, TypeSymbol.AtModule typeName,
+                                               Symbols symbols) {
         if (!ic.mapsClauses()) {
             return;
         }
-        List<Hir.InvariantClause> clauses = symbols.declaredNode(typeName) instanceof Hir.Data data
-                ? TypeOps.settledInvariants(data, symbols) : List.of();
         LinkedHashSet<String> named = new LinkedHashSet<>();
         boolean unnamed = false;
-        for (Hir.InvariantClause clause : clauses) {
+        for (InvariantHeader clause : TypeOps.invariantHeadersGoverning(typeName, symbols)) {
             if (clause.name().isPresent()) {
                 named.add(clause.name().get());
             } else {

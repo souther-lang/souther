@@ -149,8 +149,8 @@ public record DeclaredTypeEvidence(FieldRead read,
      */
     public boolean heldToARule(Type type) {
         return type instanceof Type.Ref(TypeSymbol named)
-                && symbols().declaredNode(named) instanceof Hir.Data data
-                && !TypeOps.settledInvariants(data, symbols()).isEmpty();
+                && named instanceof TypeSymbol.AtModule declared
+                && !TypeOps.invariantHeadersGoverning(declared, symbols()).isEmpty();
     }
 
     /** The body a name stands for, where it names a value of this reading's own. */
