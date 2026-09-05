@@ -1,6 +1,5 @@
 package souther.compiler.check;
 
-import souther.compiler.ast.Hir;
 import souther.compiler.numeric.NumericDomain.Bounds;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
@@ -54,7 +53,7 @@ public final class ValueGuarantees {
         Map<RuleKey, Bounds> guaranteed = new LinkedHashMap<>();
         for (ValueReading.Owner owner : owners) {
             InvariantChecker.Seeded seeded =
-                    seededOf(owner.named(), owner.data(), source, policy);
+                    seededOf(owner.named(), source, policy);
             if (seeded == null) {
                 // All of them or none, which is what leaves a value unbounded rather than bounded
                 // by half of what the declarations say.
@@ -76,9 +75,9 @@ public final class ValueGuarantees {
     /** The reading of {@code named}, or null where it fell over. A reading that fell over is one
      * this says nothing from, which leaves a value unbounded rather than bounded by half of what
      * a declaration says. */
-    private static InvariantChecker.Seeded seededOf(TypeSymbol.AtModule named, Hir.Data data,
+    private static InvariantChecker.Seeded seededOf(TypeSymbol.AtModule named,
                                                     RuleReadingSource source, ReadingPolicy policy) {
-        InvariantChecker.Seeded seeded = InvariantChecker.seedFields(named, data, source, policy);
+        InvariantChecker.Seeded seeded = InvariantChecker.seedFields(named, source, policy);
         return seeded.everyClauseRead() && !seeded.constraints().isBottom() ? seeded : null;
     }
 }

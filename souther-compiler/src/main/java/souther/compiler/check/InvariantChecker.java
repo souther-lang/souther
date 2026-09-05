@@ -293,7 +293,7 @@ public final class InvariantChecker {
      * in the representation the check reads.
      */
     public static ClauseDischarge capabilityOf(ClausesForDischarge.ClauseReading clause,
-                                               TypeSymbol.AtModule named, Hir.Data data,
+                                               TypeSymbol.AtModule named,
                                                RuleReadingSource source, ReadingPolicy policy) {
         InvariantChecker c =
                 new InvariantChecker(source.symbols(), source.invariants(), policy);
@@ -303,10 +303,10 @@ public final class InvariantChecker {
         // seeded of them — what a clause owes is the question, and answering it here would be
         // assuming it.
         return c.capabilityOf(clause,
-                _ -> c.clauses.typed(clause.asExpanded(), named, data),
-                Denotations.none().locations(c.clauses.bindingsOf(named, data).values(),
+                _ -> c.clauses.typed(clause.asExpanded(), named),
+                Denotations.none().locations(c.clauses.bindingsOf(named).values(),
                         c.terms::placeSubject, c.terms::placeTerm),
-                data.name());
+                named.name());
     }
 
     /**
@@ -561,9 +561,9 @@ public final class InvariantChecker {
      * nothing about, which is the same answer as a declaration with no rules — so nothing about the
      * declaration throws. {@link Terms.OneTermTwoKinds} is not about the declaration, and nothing
      * below here catches it. */
-    static Seeded seedFields(TypeSymbol.AtModule named, Hir.Data data, RuleReadingSource source,
+    static Seeded seedFields(TypeSymbol.AtModule named, RuleReadingSource source,
                              ReadingPolicy policy) {
-        return seedFields(named, data, source, policy, Map.of());
+        return seedFields(named, source, policy, Map.of());
     }
 
     /**
@@ -573,9 +573,9 @@ public final class InvariantChecker {
      * field is one more assertion into it — so what comes back is the range each remaining field can
      * still take, which is where a row completing that assignment has to look.
      */
-    static Seeded seedFields(TypeSymbol.AtModule named, Hir.Data data, RuleReadingSource source,
+    static Seeded seedFields(TypeSymbol.AtModule named, RuleReadingSource source,
                              ReadingPolicy policy, Map<NumberAt<RuleKey>, Count> settled) {
-        return seedFields(named, data, source, policy, settled, Reach.EVERYTHING);
+        return seedFields(named, source, policy, settled, Reach.EVERYTHING);
     }
 
     /**
@@ -588,13 +588,17 @@ public final class InvariantChecker {
      * declaration was holding. Supposing a declaration has values is the other thing {@code reach}
      * says, and it is not that one — see {@link Reach}.
      */
-    static Seeded seedFields(TypeSymbol.AtModule named, Hir.Data data, RuleReadingSource source,
+    static Seeded seedFields(TypeSymbol.AtModule named, RuleReadingSource source,
                              ReadingPolicy policy, Map<NumberAt<RuleKey>, Count> settled,
                              Reach reach) {
         Symbols symbols = source.symbols();
         InvariantChecker c = new InvariantChecker(symbols, source.invariants(), policy);
-        Map<String, Type> fields = c.clauses.fieldsOf(data);
-        Map<String, BindingId> bindings = c.clauses.bindingsOf(named, data);
+        // A newtype's value is the same location as the newtype, so it is at no name of its own and
+        // its fields are the first step there is. Read from the world rather than off a node handed
+        // in, and turned into a name here, where the names a rule may write are decided.
+        boolean atTheValue = DeclaredTypeEvidence.isNewtype(named, symbols);
+        Map<String, Type> fields = c.clauses.fieldsOf(named);
+        Map<String, BindingId> bindings = c.clauses.bindingsOf(named);
         Denotations at = Denotations.none()
                 .locations(bindings.values(), c.terms::placeSubject, c.terms::placeTerm);
         Known k = Known.top();
@@ -658,7 +662,7 @@ public final class InvariantChecker {
         // missing from this reading is the position, since a clause of this declaration can
         // name any position of it.
         boolean skipped = false;
-        ExpandedRules rules = c.clauses.of(named, data);
+        ExpandedRules rules = c.clauses.of(named);
         if (!opened && !rules.reached().isEmpty()) {
             gathering.missed(RuleKey.THE_VALUE, new RulesMissed.PositionNotOpened());
         }
@@ -671,7 +675,7 @@ public final class InvariantChecker {
             gathering.missed(RuleKey.THE_VALUE, new RulesMissed.ClausesNotExpanded());
         }
         for (TypeOps.Declared declared :
-                opened ? c.clauses.declared(named, data) : List.<TypeOps.Declared>of()) {
+                opened ? c.clauses.declared(named) : List.<TypeOps.Declared>of()) {
             // Where this clause becomes a rule of the model something can be attributed to.
             // Everything below carries the origin as it is: what is written down here is read
             // back by a report, and a reader handed the clause reference instead would have to
@@ -682,7 +686,7 @@ public final class InvariantChecker {
                 skipped = true;
                 continue;
             }
-            Core stated = c.clauses.typed(declared.asExpanded(), named, data).orNull();
+            Core stated = c.clauses.typed(declared.asExpanded(), named).orNull();
             if (stated == null) {
                 read = false;
                 gathering.missed(RuleKey.THE_VALUE, new RulesMissed.ClauseNotTyped());
@@ -719,7 +723,7 @@ public final class InvariantChecker {
                 // Every position: this is the reading a boundary is derived from, and a rule
                 // the construction must satisfy is a rule wherever in the value it sits.
                 k = c.engine.seedAt(new Core.Read(field.getKey(), field.getValue(), type, NOWHERE),
-                        data.newtype() ? RuleKey.THE_VALUE : RuleKey.of(field.getKey()),
+                        atTheValue ? RuleKey.THE_VALUE : RuleKey.of(field.getKey()),
                         k, at, new GuaranteeWalk.Extent.EveryName(), gathering, reach);
             }
         }
@@ -735,7 +739,7 @@ public final class InvariantChecker {
                 // position of a record inside a newtype was filed one step deeper than anything
                 // asks for.
                 c.name(new Core.Read(field.getKey(), field.getValue(), type, NOWHERE),
-                        data.newtype() ? RuleKey.THE_VALUE : RuleKey.of(field.getKey()),
+                        atTheValue ? RuleKey.THE_VALUE : RuleKey.of(field.getKey()),
                         type, at, symbols, 1, atoms, typeAt, held, keys);
             }
         }
@@ -942,7 +946,7 @@ public final class InvariantChecker {
         Core inner = value;
         Type worn = type;
         for (TypeOps.Layer layer : TypeOps.newtypeChain(type, symbols)) {
-            Type under = TypeOps.fieldTypes(layer.data(), symbols).get("value");
+            Type under = TypeOps.newtypeInner(layer.named(), symbols);
             if (under == null) {
                 break;
             }
@@ -3078,7 +3082,7 @@ public final class InvariantChecker {
      * value and not a choice of arms.
      */
     private Judgment verdictOf(Core.Construct nd, Hir.Data type, Known k, Denotations at) {
-        Map<String, BindingId> fields = clauses.bindingsOf(nd.typeName(), type);
+        Map<String, BindingId> fields = clauses.bindingsOf(nd.typeName());
         Map<BindingId, Core> given = new HashMap<>();
         for (Core.FieldValue fv : nd.values()) {
             BindingId field = fields.get(fv.field());
@@ -3090,7 +3094,7 @@ public final class InvariantChecker {
             Core written = terms.writtenValue(fv.value(), at);
             given.put(field, written != null ? written : fv.value());
         }
-        return verdictOf(nd.typeName(), type, given, k, at, !constantlyBuilt(type, nd));
+        return verdictOf(nd.typeName(), given, k, at, !constantlyBuilt(type, nd));
     }
 
     /** Which of the values a construction hands over is not one a clause may be read against
@@ -3169,7 +3173,7 @@ public final class InvariantChecker {
 
     /** The discharge verdict for a construction of {@code type} whose fields are being given
      * {@code given}. */
-    private Judgment verdictOf(TypeSymbol.AtModule named, Hir.Data type, Map<BindingId, Core> given, Known k,
+    private Judgment verdictOf(TypeSymbol.AtModule named, Map<BindingId, Core> given, Known k,
                                Denotations at, boolean decidesFalse) {
         // What the construction hands over that no clause may be read against. A clause naming one of
         // them is left to the run-time check, and one that is decided outright is still decided: what
@@ -3198,7 +3202,7 @@ public final class InvariantChecker {
         // The clauses that state something here, and not whether they are all of them: a clause
         // stating nothing readable at this construction is one the run-time check stands for, which
         // is what `unreadable` below already carries for the ones that were read.
-        for (Clauses.Stated stated : clauses.statedAt(named, type, given).clauses()) {
+        for (Clauses.Stated stated : clauses.statedAt(named, given).clauses()) {
             Predicates.Owed o = predicates.obligations(stated.expr(), k, at, unnamed, decidesFalse);
             unreadable |= o.unreadable();
             for (Predicates.Part eachOne : o.parts()) {

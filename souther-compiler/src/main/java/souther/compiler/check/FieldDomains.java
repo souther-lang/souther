@@ -364,7 +364,7 @@ public final class FieldDomains {
         // answers were being given away by treating it as a value with nothing to say.
         READINGS.incrementAndGet();
         InvariantChecker.Seeded seeded =
-                InvariantChecker.seedFields(named, data, source, policy, settled, reach);
+                InvariantChecker.seedFields(named, source, policy, settled, reach);
         Map<RuleKey, NumericDomain.Bounds> out = new LinkedHashMap<>();
         seeded.atoms().forEach((field, atom) -> {
             // The value itself is at no name of its own, and its range is the one thing not worth
@@ -1446,7 +1446,7 @@ public final class FieldDomains {
     public static boolean mayHoldNothingAt(TypeSymbol.AtModule named, Hir.Data data, RuleKey path,
                                            RuleReadingSource source, ReadingPolicy policy) {
         // A count is never below none, so leaving it no room above none is leaving it at none.
-        return OccurrenceCounts.of(named, data, source, policy).mayHoldAtMost(path, 0);
+        return OccurrenceCounts.of(named, source, policy).mayHoldAtMost(path, 0);
     }
 
     /**

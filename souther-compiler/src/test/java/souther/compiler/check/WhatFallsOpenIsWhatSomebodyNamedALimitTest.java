@@ -193,7 +193,7 @@ class WhatFallsOpenIsWhatSomebodyNamedALimitTest {
     void whatAClauseIsReadOverIsWorkedOutInsideTheReading() {
         Compilation c = answered(STANDING);
         TypeSymbol.AtModule named = TypeSymbols.declared(new TypeKey("demo", "制限木"));
-        TypeOps.Declared clause = expandedClauseOf(c, named, declarationOf(c, named));
+        TypeOps.Declared clause = expandedClauseOf(c, named);
         List<GaveUp> gaveUp = new ArrayList<>();
         InvariantChecker.GAVE_UP = gaveUp;
         try {
@@ -269,7 +269,7 @@ class WhatFallsOpenIsWhatSomebodyNamedALimitTest {
         Compilation c = answered(TWO_STANDING);
         TypeSymbol.AtModule named = TypeSymbols.declared(new TypeKey("demo", "制限木"));
         Hir.Data data = declarationOf(c, named);
-        TypeOps.Declared clause = expandedClauseOf(c, named, data);
+        TypeOps.Declared clause = expandedClauseOf(c, named);
         Supplier<SecondaryClauseReading.Over> over =
                 () -> new SecondaryClauseReading.Over(
                         DataChecker.fieldScope(named, data, symbolsOf(c)),
@@ -300,7 +300,7 @@ class WhatFallsOpenIsWhatSomebodyNamedALimitTest {
         Compilation c = answered(STANDING);
         TypeSymbol.AtModule named = TypeSymbols.declared(new TypeKey("demo", "制限木"));
         Hir.Data data = declarationOf(c, named);
-        TypeOps.Declared clause = expandedClauseOf(c, named, data);
+        TypeOps.Declared clause = expandedClauseOf(c, named);
         java.util.function.Supplier<SecondaryClauseReading.Over> over =
                 () -> new SecondaryClauseReading.Over(
                         DataChecker.fieldScope(named, data, symbolsOf(c)),
@@ -325,9 +325,8 @@ class WhatFallsOpenIsWhatSomebodyNamedALimitTest {
     void anExpansionSaysWhatItLeftStanding() {
         Compilation c = answered(STANDING);
         TypeSymbol.AtModule named = TypeSymbols.declared(new TypeKey("demo", "制限木"));
-        Hir.Data data = declarationOf(c, named);
 
-        assertFalse(expandedClauseOf(c, named, data).standing().leftNothing(),
+        assertFalse(expandedClauseOf(c, named).standing().leftNothing(),
                 "the recursive helper the clause names is left standing");
     }
 
@@ -353,9 +352,8 @@ class WhatFallsOpenIsWhatSomebodyNamedALimitTest {
         return data;
     }
 
-    private static TypeOps.Declared expandedClauseOf(Compilation c, TypeSymbol.AtModule named,
-                                                     Hir.Data data) {
-        List<TypeOps.Declared> reached = TypeOps.expandedInvariants(named, data, symbolsOf(c),
+    private static TypeOps.Declared expandedClauseOf(Compilation c, TypeSymbol.AtModule named) {
+        List<TypeOps.Declared> reached = TypeOps.expandedInvariants(named, symbolsOf(c),
                 lookupOf(c)).reached();
         assertEquals(1, reached.size(), () -> named + " writes the one clause this reads");
         return reached.get(0);

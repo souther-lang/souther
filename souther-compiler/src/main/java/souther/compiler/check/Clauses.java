@@ -32,7 +32,7 @@ final class Clauses {
 
     private final Symbols symbols;
     private final ExpandedClauseLookup expandedClauses;
-    private final Map<Hir.Data, Map<String, Type>> fields = new HashMap<>();
+    private final Map<TypeSymbol.AtModule, Map<String, Type>> fields = new HashMap<>();
     private final Map<TypeSymbol.AtModule, Map<String, BindingId>> bindings =
             new HashMap<>();
     /** Remembered per declaration, not per clause: a clause an include brings in is one expression
@@ -65,17 +65,18 @@ final class Clauses {
 
     /** Every rule that applies to {@code named}, in the expanded representation, with whether every
      * one of them was reached. */
-    ExpandedRules of(TypeSymbol.AtModule named, Hir.Data data) {
+    ExpandedRules of(TypeSymbol.AtModule named) {
         return effective.computeIfAbsent(named, name ->
-                TypeOps.expandedInvariants(name, data, symbols, expandedClauses));
+                TypeOps.expandedInvariants(name, symbols, expandedClauses));
     }
 
     private final Map<TypeSymbol.AtModule, List<TypeOps.Declared>> declaredClauses =
             new HashMap<>();
 
-    /** What {@code data}'s fields are. */
-    Map<String, Type> fieldsOf(Hir.Data data) {
-        return fields.computeIfAbsent(data, d -> TypeOps.fieldTypes(d, symbols));
+    /** What {@code named}'s fields are, read from this reading's own world for the reason
+     *  {@link #declarationOf} gives. */
+    Map<String, Type> fieldsOf(TypeSymbol.AtModule named) {
+        return fields.computeIfAbsent(named, name -> TypeOps.fieldTypes(declarationOf(name), symbols));
     }
 
     /**
@@ -86,8 +87,23 @@ final class Clauses {
      * of: two modules may declare one spelling, and a reader with both in sight would otherwise have
      * them answer alike.
      */
-    Map<String, BindingId> bindingsOf(TypeSymbol.AtModule named, Hir.Data data) {
+    Map<String, BindingId> bindingsOf(TypeSymbol.AtModule named) {
         return bindings.computeIfAbsent(named, name -> TypeOps.fieldBindings(name, symbols));
+    }
+
+    /**
+     * The declaration {@code named} is, read from the world this reading was made against.
+     *
+     * <p>Read here and not taken from a caller. What a clause states is read in a representation,
+     * and so is what the declaration it is written on holds; handed a node, this would type a clause
+     * of one reading against the fields of another, and nothing it held would say so.
+     */
+    private Hir.Data declarationOf(TypeSymbol.AtModule named) {
+        if (symbols.declaredNode(named) instanceof Hir.Data data) {
+            return data;
+        }
+        throw new IllegalArgumentException(
+                "`" + named.name() + "` is not a product this reading's world declares");
     }
 
     /**
@@ -99,12 +115,15 @@ final class Clauses {
      * not, and it never was — the elaborator does not answer null of its own accord, so every one of
      * those was an exception caught here and dropped.
      */
-    TypedClause typed(ClauseAsExpanded clause, TypeSymbol.AtModule named, Hir.Data data) {
+    TypedClause typed(ClauseAsExpanded clause, TypeSymbol.AtModule named) {
         return typed.computeIfAbsent(named, _ -> new IdentityHashMap<>())
                 .computeIfAbsent(clause.read(), _ -> SecondaryClauseReading.of(clause,
-                        () -> new SecondaryClauseReading.Over(
-                                DataChecker.fieldScope(named, data, symbols),
-                                CheckContext.of(symbols).forData(data).forDischarge()),
+                        () -> {
+                            Hir.Data data = declarationOf(named);
+                            return new SecondaryClauseReading.Over(
+                                    DataChecker.fieldScope(named, data, symbols),
+                                    CheckContext.of(symbols).forData(data).forDischarge());
+                        },
                         "typing a clause of " + named));
     }
 
@@ -116,16 +135,16 @@ final class Clauses {
      * that is not there, and the clause is left to the run-time check rather than read against
      * nothing.
      */
-    Core statedAt(ClauseAsExpanded clause, TypeSymbol.AtModule named, Hir.Data data,
+    Core statedAt(ClauseAsExpanded clause, TypeSymbol.AtModule named,
                   Map<BindingId, Core> given) {
         // Fail-open: a clause with no form leaves its run-time check standing, whichever way the
         // form went missing. Which of the two it was matters to a reader that publishes a sentence
         // about the clause, and this is not one.
-        Core stated = typed(clause, named, data).orNull();
+        Core stated = typed(clause, named).orNull();
         if (stated == null) {
             return null;
         }
-        return given.keySet().containsAll(fieldsRead(stated, named, data))
+        return given.keySet().containsAll(fieldsRead(stated, named))
                 ? substituted(stated, given) : null;
     }
 
@@ -137,11 +156,11 @@ final class Clauses {
      * it owes where one is being built are the same clauses read the same way, and they differ only
      * in what the fields are given — a read of each field, or the value each is being handed.
      */
-    StatedClauses statedAt(TypeSymbol.AtModule named, Hir.Data data, Map<BindingId, Core> given) {
+    StatedClauses statedAt(TypeSymbol.AtModule named, Map<BindingId, Core> given) {
         List<Stated> stated = new ArrayList<>();
         List<RuleRef.Invariant> lost = new ArrayList<>();
-        for (TypeOps.Declared inv : declared(named, data)) {
-            Core one = statedAt(inv.asExpanded(), named, data, given);
+        for (TypeOps.Declared inv : declared(named)) {
+            Core one = statedAt(inv.asExpanded(), named, given);
             if (one != null) {
                 stated.add(new Stated(Clause.of(inv), one));
             } else {
@@ -193,15 +212,15 @@ final class Clauses {
     record Stated(Clause clause, Core expr) {}
 
     /** Every clause of {@code named}, each with the declaration that wrote it. */
-    List<TypeOps.Declared> declared(TypeSymbol.AtModule named, Hir.Data data) {
-        return declaredClauses.computeIfAbsent(named, name -> of(name, data).reached());
+    List<TypeOps.Declared> declared(TypeSymbol.AtModule named) {
+        return declaredClauses.computeIfAbsent(named, name -> of(name).reached());
     }
 
     /** Which of {@code data}'s own fields {@code clause} reads, remembered: a clause is read at every
      * construction of its type, and what it reads does not change between them. */
-    private Set<BindingId> fieldsRead(Core clause, TypeSymbol.AtModule named, Hir.Data data) {
+    private Set<BindingId> fieldsRead(Core clause, TypeSymbol.AtModule named) {
         return readsFields.computeIfAbsent(clause, read -> {
-            Set<BindingId> declared = new HashSet<>(bindingsOf(named, data).values());
+            Set<BindingId> declared = new HashSet<>(bindingsOf(named).values());
             Set<BindingId> found = new HashSet<>();
             readsOf(read, binding -> {
                 if (declared.contains(binding)) {

@@ -940,7 +940,7 @@ final class BodyGen {
             Hir.Data owner = (Hir.Data) symbols.declaredNode(nd.typeName());
             Map<String, Type> flds = fieldTypes(owner);
             ClassDesc cdType = cd(nd.typeName());
-            TypeSymbol built = nd.typeName();
+            TypeSymbol.AtModule built = nd.typeName();
             // A type of another module is built through its checked entry: `new` reaches a constructor
             // that is not public, and the checked entry is the declared path either way.
             if (DataChecker.isInvariantBearing(built, symbols) || symbols.scope().isForeign(built)) {

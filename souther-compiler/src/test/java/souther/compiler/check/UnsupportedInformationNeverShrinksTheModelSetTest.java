@@ -3,7 +3,6 @@ package souther.compiler.check;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.query.Scopes;
-import souther.compiler.ast.Hir;
 import souther.compiler.query.Compilation;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbols;
@@ -28,15 +27,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class UnsupportedInformationNeverShrinksTheModelSetTest {
 
-    private static Hir.Data data(Compilation compilation, String name) {
-        for (Hir.Def def : compilation.module("demo").defs().stream().map(each -> each.declaration().node()).toList()) {
-            if (def instanceof Hir.Data found && found.name().equals(name)) {
-                return found;
-            }
-        }
-        throw new IllegalArgumentException("no such declaration: " + name);
-    }
-
     private static FieldDomains domainsOf(String source, String name) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
@@ -51,7 +41,7 @@ class UnsupportedInformationNeverShrinksTheModelSetTest {
         compilation.answerEverything();
         Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
         return OccurrenceCounts.of(TypeSymbols.declared(new TypeKey(symbols.module(), name)),
-                data(compilation, name), RuleReadings.of(compilation, "demo"),
+                RuleReadings.of(compilation, "demo"),
                 souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
     }
 

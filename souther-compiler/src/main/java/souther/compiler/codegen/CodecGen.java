@@ -719,7 +719,7 @@ final class CodecGen {
      * between a boundary that holds and one that quietly does not.
      */
     private List<Hir.InvariantClause> dischargeForm(Hir.Data data) {
-        return TypeOps.expandedInvariants(data.declares(), data, symbols,
+        return TypeOps.expandedInvariants(data.declares(), symbols,
                 ctx.dischargeInvariants()).whole()
                 .orElseThrow(() -> new RulesWereNotAllRead(data.declares().name()));
     }

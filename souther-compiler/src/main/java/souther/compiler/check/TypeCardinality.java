@@ -418,7 +418,7 @@ public final class TypeCardinality {
             if (!(def instanceof Hir.Data data) || !(name instanceof TypeSymbol.AtModule at)) {
                 return;
             }
-            OccurrenceCounts held = OccurrenceCounts.of(at, data, source, policy);
+            OccurrenceCounts held = OccurrenceCounts.of(at, source, policy);
             for (RuleKey path : data.newtype() ? Set.of(RuleKey.THE_VALUE)
                     : TypeOps.fieldTypes(data, symbols).keySet().stream()
                             .map(RuleKey::of).collect(java.util.stream.Collectors.toSet())) {

@@ -94,19 +94,18 @@ public final class DeclaredClauses {
     }
 
     private static List<Conjunct> writtenOn(TypeSymbol wears, RuleReadingSource source) {
-        // The declaration the name was written by, read here. A name a module wrote is one this
-        // finds a data for; a caller handed the body instead would be holding a declaration for a
-        // question that is this one's, and could read the position's structure back out of it.
-        if (!(wears instanceof TypeSymbol.AtModule named)
-                || !(source.symbols().declaredNode(named) instanceof Hir.Data data)) {
+        // A name a module wrote is the only one there are rules of to read: what the language
+        // declares carries none. Which declaration that name is, and what it states, are the walk's
+        // to read from the world and the lookup it holds.
+        if (!(wears instanceof TypeSymbol.AtModule named)) {
             return List.of();
         }
         List<Conjunct> out = new ArrayList<>();
         // The clauses with the declaration each was written on, which is what names the line
         // (ADR-0090). Read flat, every clause a spread brought in was named after the type that
         // spread it, and two clauses of one declaration were one rule.
-        for (TypeOps.Declared declared : TypeOps.declaredExpanded(
-                named, data, source.symbols(), source.invariants()).reached()) {
+        for (TypeOps.Declared declared : TypeOps.expandedInvariants(
+                named, source.symbols(), source.invariants()).reached()) {
             RuleRef.Invariant rule = new RuleRef.Invariant(Clause.Ref.of(declared));
             int conjunct = -1;
             for (Hir.Expr each : ClauseHelpers.conjunctsOf(declared.clause().expr())) {

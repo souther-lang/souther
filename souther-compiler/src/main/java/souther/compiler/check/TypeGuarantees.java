@@ -89,14 +89,14 @@ final class TypeGuarantees {
         Set<Object> already = new HashSet<>();
         for (ValueReading.Owner owner : written.owners()) {
             Map<BindingId, Core> given = new HashMap<>();
-            clauses.bindingsOf(owner.named(), owner.data()).forEach((name, binding) -> {
+            clauses.bindingsOf(owner.named()).forEach((name, binding) -> {
                 Core value = values.get(name);
                 if (value != null) {
                     given.put(binding, value);
                 }
             });
             Clauses.StatedClauses stated =
-                    clauses.statedAt(owner.named(), owner.data(), given);
+                    clauses.statedAt(owner.named(), given);
             for (Clauses.Stated one : stated.clauses()) {
                 if (already.add(one.clause().ref())) {
                     here.add(read(one, denotations, withoutParts));
@@ -135,7 +135,7 @@ final class TypeGuarantees {
     private boolean beyond(Type type, ValueReading here, Set<Object> stated) {
         ValueReading there = ValueReading.of(type, symbols);
         for (ValueReading.Owner owner : there.owners()) {
-            for (TypeOps.Declared each : clauses.declared(owner.named(), owner.data())) {
+            for (TypeOps.Declared each : clauses.declared(owner.named())) {
                 if (!stated.contains(Clause.of(each).ref())) {
                     return true;
                 }
@@ -208,7 +208,7 @@ final class TypeGuarantees {
             return false;
         }
         for (ValueReading.Owner owner : written.owners()) {
-            if (!clauses.declared(owner.named(), owner.data()).isEmpty()) {
+            if (!clauses.declared(owner.named()).isEmpty()) {
                 return true;
             }
         }

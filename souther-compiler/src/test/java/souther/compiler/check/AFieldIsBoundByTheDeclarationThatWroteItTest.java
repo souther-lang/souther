@@ -111,7 +111,7 @@ class AFieldIsBoundByTheDeclarationThatWroteItTest {
             Compilation c = compiled(reached);
 
             assertEquals(Map.of("lo", new BindingId(declaring, 0), "hi", new BindingId(declaring, 1)),
-                    readBy(c, "demo").bindingsOf(RANGE, range(c)),
+                    readBy(c, "demo").bindingsOf(RANGE),
                     "reached " + reached + ": a field is bound by the declaration that wrote it");
         }
     }
@@ -132,9 +132,9 @@ class AFieldIsBoundByTheDeclarationThatWroteItTest {
             Hir.Expr clause = range.invariants().get(0).expr();
 
             ClauseAsExpanded read = new ClauseAsExpanded(clause, CallsLeftStanding.NONE);
-            Core athome = readBy(c, "up").typed(read, RANGE, range).orNull();
+            Core athome = readBy(c, "up").typed(read, RANGE).orNull();
             assertNotNull(athome, "the declaring module reads its own rule");
-            assertEquals(athome, readBy(c, "demo").typed(read, RANGE, range).orNull(),
+            assertEquals(athome, readBy(c, "demo").typed(read, RANGE).orNull(),
                     "reached " + reached + ": one rule, read the same either side of the boundary");
         }
     }
@@ -182,10 +182,8 @@ class AFieldIsBoundByTheDeclarationThatWroteItTest {
         Clauses read = readBy(c, "demo");
 
         TypeSymbol.AtModule ours = TypeSymbols.declared(new TypeKey("demo", "Range"));
-        Hir.Data mine = (Hir.Data) c.db().ask(new Names.ResolvedDeclaration(ours.key())).value();
-
-        assertTrue(Collections.disjoint(read.bindingsOf(RANGE, range(c)).values(),
-                        read.bindingsOf(ours, mine).values()),
+        assertTrue(Collections.disjoint(read.bindingsOf(RANGE).values(),
+                        read.bindingsOf(ours).values()),
                 "two declarations of `Range` bind two sets of fields");
     }
 

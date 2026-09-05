@@ -23,10 +23,17 @@ import java.util.Map;
  * </ul>
  *
  * <p>What is <em>not</em> settled is what a declaration takes in by a spread. A clause of the type
- * spread from is still that type's, and which clauses apply to a declaration is composed on demand
- * by {@link TypeOps#settledInvariants} walking {@code includes()}. A reader that took this state to
- * mean the spreads had been flattened into each declaration would find a declaration's own clauses
- * where it expected every clause that governs it.
+ * spread from is still that type's, and which clauses govern a declaration is composed on demand by
+ * the walks of {@link TypeOps} following {@code includes()}. A reader that took this state to mean
+ * the spreads had been flattened into each declaration would find a declaration's own clauses where
+ * it expected every clause that governs it.
+ *
+ * <p>Those walks reach every declaration through a world and none through a node handed to them, and
+ * what each of them states is read from whatever owns that representation: the settled form from the
+ * derived world, where this rung's work is what a declaration is read as, and the expanded form from
+ * {@link ExpandedClauseLookup}. What turns on neither is what a rule is called and where it stands
+ * ({@link InvariantHeader}), which resolution settles and {@link Hir.InvariantClause#with} carries
+ * across every rewrite below.
  *
  * <p>The name is the part a reader cannot see for itself. A clause that has been expanded reads like
  * one the author wrote that way, and what this says is that nothing in it is left to expand. A pass

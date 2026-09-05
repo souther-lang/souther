@@ -25,6 +25,7 @@ import souther.compiler.check.Lower;
 import souther.compiler.check.ReqSig;
 import souther.compiler.check.Sig;
 import souther.compiler.check.DerivedSymbols;
+import souther.compiler.check.InvariantHeader;
 import souther.compiler.check.TypeOps;
 import souther.compiler.core.EnsuresEnforcement;
 import souther.compiler.codegen.Backend;
@@ -618,28 +619,19 @@ public final class Output {
                     writtenValue(check.value()), clausesOf(db, check), check.pos());
         }
 
-        /** What the type is declared to hold of its values, in declaration order, or none where the
-         *  declaring module cannot be read here. */
+        /** What the type is declared to hold of its values, in declaration order — the names, which
+         *  are what a report of a constant that broke one quotes, and which every representation of
+         *  the declaration agrees on. None where the declaring module has no scope here, which is a
+         *  module this compilation does not have rather than one whose clauses could not be read. */
         private static List<ConstantConstruction.Clause> clausesOf(Db db,
                 DataChecker.ConstCheck check) {
-            Answer<souther.compiler.check.Prepared> declaring =
-                    db.ask(new Shapes.Prepared(check.type().module()));
             Answer<DerivedSymbols> scope = Names.derivedSymbols(db, check.type().module());
-            if (!declaring.present() || !scope.present()) {
-                return List.of();
-            }
-            List<Hir.InvariantClause> clauses = null;
-            for (souther.compiler.check.Derived.Def declared : declaring.value().defs()) {
-                if (declared instanceof souther.compiler.check.Derived.Data data
-                        && data.declaration().node().name().equals(check.type().name())) {
-                    clauses = TypeOps.settledInvariants(data.declaration().node(), scope.value());
-                }
-            }
-            if (clauses == null) {
+            if (!scope.present()) {
                 return List.of();
             }
             List<ConstantConstruction.Clause> named = new ArrayList<>();
-            for (Hir.InvariantClause clause : clauses) {
+            for (InvariantHeader clause
+                    : TypeOps.invariantHeadersGoverning(check.type(), scope.value())) {
                 named.add(new ConstantConstruction.Clause(clause.name()));
             }
             return named;

@@ -134,8 +134,8 @@ final class CardinalityTransfer {
         if (contradiction.isPresent()) {
             return Cardinality.none(contradiction.get());
         }
-        OccurrenceCounts counts = OccurrenceCounts.of(named, data, source, policy, granted);
-        OccurrenceValues values = OccurrenceValues.of(named, data, source, policy, granted);
+        OccurrenceCounts counts = OccurrenceCounts.of(named, source, policy, granted);
+        OccurrenceValues values = OccurrenceValues.of(named, source, policy, granted);
         Map<String, Type> fields = TypeOps.fieldTypes(data, source.symbols());
         if (data.newtype()) {
             // A newtype is one value under a name, so its value sits where it sits: the rules written

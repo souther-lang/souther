@@ -81,9 +81,9 @@ public final class DataChecker {
         TypeChecker.forEachChild(e, c -> collectConstChecks(c, symbols, out));
     }
 
-    public static boolean isInvariantBearing(TypeSymbol typeName, Symbols symbols) {
-        return typeName != null && symbols.declaredNode(typeName) instanceof Hir.Data d
-                && !TypeOps.settledInvariants(d, symbols).isEmpty();
+    public static boolean isInvariantBearing(TypeSymbol.AtModule typeName, Symbols symbols) {
+        return typeName != null
+                && !TypeOps.invariantHeadersGoverning(typeName, symbols).isEmpty();
     }
 
     /**
@@ -94,7 +94,7 @@ public final class DataChecker {
      */
     private static void checkClauseNames(Hir.Data data, Symbols symbols) {
         Set<String> seen = new HashSet<>();
-        for (Hir.InvariantClause clause : TypeOps.settledInvariants(data, symbols)) {
+        for (InvariantHeader clause : TypeOps.invariantHeadersGoverning(data.declares(), symbols)) {
             String name = clause.name().orElse(null);
             if (name != null && !seen.add(name)) {
                 throw CompileException.of(Diagnostic
