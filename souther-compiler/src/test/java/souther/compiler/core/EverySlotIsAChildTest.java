@@ -1,6 +1,7 @@
 package souther.compiler.core;
 
 import souther.compiler.check.CoreBinders;
+import souther.compiler.types.WrittenOwner;
 import souther.compiler.ast.Hir;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
@@ -36,7 +37,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class EverySlotIsAChildTest {
 
     private static final SourcePos POS = new SourcePos(1, 1);
-    private static final SourceConstructOrigin ORIGIN = SourceConstructOrigin.written("t", 0, souther.compiler.types.SourceConstruct.IF);
+    private static final SourceConstructOrigin ORIGIN = SourceConstructOrigin.written(
+            new WrittenOwner.Body("t", "b"), 0,
+            souther.compiler.types.SourceConstruct.IF);
     private static final BindingOwner OWNER = new BindingOwner.OfValue("demo", "go");
 
     private static final Hir.Binders BINDERS = new Hir.Binders(OWNER);

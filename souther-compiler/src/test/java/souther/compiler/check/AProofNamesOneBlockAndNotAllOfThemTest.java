@@ -145,11 +145,13 @@ class AProofNamesOneBlockAndNotAllOfThemTest {
         Confinement.Admission<FactSubject> one = new Confinement.Admission<>(
                 souther.compiler.values.Emptiness.EMPTY,
                 Confinement.EmptyBy.POSITIONS_HELD_AS_ONE,
-                Set.of(souther.compiler.values.Sameness.of(P, Q).joining(Q, R).blockOf(P)));
+                Set.of(souther.compiler.values.Sameness.of(P, Q).joining(Q, R).blockOf(P)),
+                Confinement.Shown.BY_THE_READINGS);
         Confinement.Admission<FactSubject> other = new Confinement.Admission<>(
                 souther.compiler.values.Emptiness.EMPTY,
                 Confinement.EmptyBy.POSITIONS_HELD_AS_ONE,
-                Set.of(souther.compiler.values.Sameness.of(P, Q).joining(Q, S).blockOf(P)));
+                Set.of(souther.compiler.values.Sameness.of(P, Q).joining(Q, S).blockOf(P)),
+                Confinement.Shown.BY_THE_READINGS);
 
         assertTrue(Confinement.Admission.bothShown(one, other).at().isEmpty(),
                 "neither branch says the value p and q share has none");

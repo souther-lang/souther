@@ -364,7 +364,8 @@ class CompilePostfixApplicationTest {
         Ast.Expr callee = new Ast.Var(applied, new SourceReferenceOrigin("m", 0),
                 applied.region());
         return Hir.Apply.read(new Ast.Apply(callee, java.util.List.of(),
-                        SourceConstructOrigin.written("m", 0, SourceConstruct.CALL), at, null),
+                        SourceConstructOrigin.written(new souther.compiler.types.WrittenOwner.Body("m", "f"),
+                                0, SourceConstruct.CALL), at, null),
                 new Hir.AppliedCallee(applied, callee.reportedAt()),
                 new Hir.Var.Unanswered(applied, null, applied.region()), java.util.List.of());
     }

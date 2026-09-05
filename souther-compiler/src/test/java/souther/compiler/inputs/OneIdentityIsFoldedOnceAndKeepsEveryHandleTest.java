@@ -3,6 +3,7 @@ package souther.compiler.inputs;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.RuleCitation;
+import souther.compiler.types.WrittenOwner;
 import souther.compiler.check.RuleRef;
 import souther.compiler.diag.Citation;
 import souther.compiler.diag.SourcePos;
@@ -247,6 +248,7 @@ class OneIdentityIsFoldedOnceAndKeepsEveryHandleTest {
     }
 
     private static RuleRef comparison() {
-        return new RuleRef.Comparison("b", new SourceConstructOrigin("m", 1, 1, SourceConstruct.IF));
+        return new RuleRef.Comparison("b", new SourceConstructOrigin(
+                new WrittenOwner.Body("m", "b"), 1, 1, SourceConstruct.IF));
     }
 }

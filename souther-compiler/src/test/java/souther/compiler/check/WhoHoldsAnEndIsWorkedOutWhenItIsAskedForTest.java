@@ -25,8 +25,18 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class WhoHoldsAnEndIsWorkedOutWhenItIsAskedForTest {
 
-    /** {@code hi} is ten above {@code lo}, which is a relation and places no end of its own — so
-     *  where {@code hi} starts is somewhere a declaration has to be read again to attribute. */
+    /**
+     * {@code hi} is ten above {@code lo}, which is a relation and places no end of its own — so
+     * where {@code hi} starts is somewhere a declaration has to be read again to attribute.
+     *
+     * <p>Two declarations write a lower end on the one coordinate and only one of them holds it:
+     * {@code Common} puts {@code hi} ten above {@code lo} and {@code Held} puts it five above, so
+     * ten above is where {@code hi} stops and {@code Common} is what put it there. Which is only
+     * answerable if leaving a declaration's clauses out leaves out the ones it wrote rather than the
+     * ones read where it was: {@code Common}'s rule arrives through {@code Held}'s spread, and read
+     * the second way taking {@code Common} away takes nothing away, so neither candidate moves the
+     * end on its own and both are named.
+     */
     private static final String SOURCE = """
             module demo exposing ( Held, keep )
 
@@ -58,7 +68,8 @@ class WhoHoldsAnEndIsWorkedOutWhenItIsAskedForTest {
         long beforeNames = FieldDomains.readingsMade();
         assertEquals(java.util.List.of("Common"),
                 holding(hi).stream().map(TypeSymbol::name).toList(),
-                "and ten above is Common's doing");
+                "and ten above is Common's doing: a rule a spread brought in is held by the"
+                        + " declaration that wrote it, not the one it was read at");
         assertTrue(FieldDomains.readingsMade() > beforeNames,
                 "which took reading the declaration again without a declaration's clauses");
     }

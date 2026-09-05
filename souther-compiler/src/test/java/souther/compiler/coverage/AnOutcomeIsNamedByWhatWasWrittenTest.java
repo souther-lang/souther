@@ -3,6 +3,7 @@ package souther.compiler.coverage;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.core.Core;
+import souther.compiler.types.WrittenOwner;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.types.SourceConstruct;
@@ -164,7 +165,9 @@ class AnOutcomeIsNamedByWhatWasWrittenTest {
     /** A guard of a comprehension is a fork of that comprehension, and not of something else. */
     @Test
     void aLoweredForkKeepsTheConstructItWasLoweredFrom() {
-        SourceConstructOrigin written = SourceConstructOrigin.written("m", 3, SourceConstruct.COMPREHENSION);
+        SourceConstructOrigin written = SourceConstructOrigin.written(
+                new WrittenOwner.Body("m", "b"), 3,
+                SourceConstruct.COMPREHENSION);
 
         assertEquals(SourceConstruct.COMPREHENSION, written.lowered(1).kind());
     }
@@ -245,7 +248,9 @@ class AnOutcomeIsNamedByWhatWasWrittenTest {
     /** And a site cannot be made holding one, which is where the two halves are first put together. */
     @Test
     void aSiteCannotHoldAPairTheLanguageDoesNotHave() {
-        SourceConstructOrigin fork = SourceConstructOrigin.written("m", 0, SourceConstruct.COMPREHENSION);
+        SourceConstructOrigin fork = SourceConstructOrigin.written(
+                new WrittenOwner.Body("m", "b"), 0,
+                SourceConstruct.COMPREHENSION);
         assertThrows(IllegalArgumentException.class, () -> new CoverageSites.ArmSite("b", built(),
                 Numberings.armPlace(0, Numberings.arm(1, 0), fork, null), 0,
                 new CoverageSites.Obligation("b", fork, 0,

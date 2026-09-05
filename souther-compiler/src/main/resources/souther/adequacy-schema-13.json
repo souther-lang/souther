@@ -1101,7 +1101,7 @@
     },
     "ruleId": {
       "type": "object",
-      "description": "What tells one rule of the model from every other, which is not what a reader is shown. The coordinates differ by kind because rules are told apart by different things, and every part of an identity is written: a declaration is its module and its name — two modules may each declare an `Amount`, and they are two types — and a behavior's constructs are numbered from zero in each source, so which source is part of which construct. A key within this document rather than a name; a consumer groups by it and shows `rule`. It names the rule and not the question — one rule raises more than one, and `question` and `subject` beside it are what tell those apart.",
+      "description": "What tells one rule of the model from every other, which is not what a reader is shown. The coordinates differ by kind because rules are told apart by different things, and every part of an identity is written: a declaration is its module and its name — two modules may each declare an `Amount`, and they are two types — and a comparison is the construct a definition wrote, numbered from zero within that definition, so which definition is part of which construct. A document written before the numbering was counted within a definition carries no `definition` and numbers over the whole source instead, which is what its absence says; the other kinds never carry one. A key within this document rather than a name; a consumer groups by it and shows `rule`. It names the rule and not the question — one rule raises more than one, and `question` and `subject` beside it are what tell those apart.",
       "required": [
         "kind",
         "declaredIn"
@@ -1123,6 +1123,11 @@
               {
                 "required": [
                   "behavior"
+                ]
+              },
+              {
+                "required": [
+                  "definition"
                 ]
               },
               {
@@ -1159,6 +1164,11 @@
               {
                 "required": [
                   "declaredOn"
+                ]
+              },
+              {
+                "required": [
+                  "definition"
                 ]
               },
               {
@@ -1249,7 +1259,7 @@
         },
         "declaredIn": {
           "type": "string",
-          "description": "The module the rule is written in. Part of every identity here: names are unique within a module and not across them, and a construct's number starts again in each source."
+          "description": "The module the rule is written in. Part of every identity here: names are unique within a module and not across them, and a construct's number starts again in each definition."
         },
         "declaredOn": {
           "type": "string",
@@ -1257,7 +1267,11 @@
         },
         "behavior": {
           "type": "string",
-          "description": "The behavior an `ensures` clause or a body's comparison is written in."
+          "description": "The behavior an `ensures` clause reads, or the one whose answer a body's comparison is read for. For a comparison this is not where it is written: a helper's comparison is read by every behavior that calls it, and `definition` says which definition wrote it."
+        },
+        "definition": {
+          "type": "string",
+          "description": "The definition whose source wrote the comparison, present in a document whose `ordinal` is counted within one. A document written before construct numbering became a count within a definition has none, and its `ordinal` is a count over the whole source instead — so which of the two a number means is read from whether this is here."
         },
         "clause": {
           "type": "integer",
@@ -1269,7 +1283,7 @@
         },
         "ordinal": {
           "type": "integer",
-          "description": "The construct the comparison was written in, as this compile numbered the constructs of its source."
+          "description": "The construct the comparison was written as, counted from zero among the constructs written by whatever `definition` names. Where `definition` is absent the document is an earlier one and this counts the constructs of the whole source."
         },
         "lowered": {
           "type": "integer",
@@ -1643,7 +1657,7 @@
     },
     "armObligationId": {
       "type": "object",
-      "description": "What tells one arm of a behavior from every other, which is not what a reader is shown. A key within this document: a consumer joins one run's arms against another run's on it. Neither `label` nor `at` is one — a body spliced in from out of sight has its copies at as many places as there are call sites, and two arms of two forks are both spelled `else`. Not a name anything outside one compilation can be matched by: `construct` is the reader's own count over the source it read, and what identity needs is that the numbering be a function of the source and that two constructs never share one.",
+      "description": "What tells one arm of a behavior from every other, which is not what a reader is shown. A key within this document: a consumer joins one run's arms against another run's on it. Neither `label` nor `at` is one — a body spliced in from out of sight has its copies at as many places as there are call sites, and two arms of two forks are both spelled `else`. Not a name anything outside one compilation can be matched by: `construct` is the reader's own count over what `definition` names, and what identity needs is that the numbering be a function of that definition's syntax and that no two constructs of it share a number — the definition and the number together are what tell one construct from every other, and two definitions' first constructs are two constructs. A document written before that count was kept within a definition carries no `definition` and counts the whole source instead.",
       "required": [
         "module",
         "construct",
@@ -1677,12 +1691,16 @@
       "properties": {
         "module": {
           "type": "string",
-          "description": "The module whose source wrote the construct, which is what keeps a prelude helper's forks apart from those of the module expanding it: each source numbers from zero."
+          "description": "The module whose source wrote the construct, which is what keeps a prelude helper's forks apart from those of the module expanding it."
+        },
+        "definition": {
+          "type": "string",
+          "description": "The definition whose source wrote the construct, present in a document whose `construct` is counted within one. A document written before construct numbering became a count within a definition has none, and its `construct` counts the whole source instead."
         },
         "construct": {
           "type": "integer",
           "minimum": 0,
-          "description": "Which construct of that source, by the reader's own count over it."
+          "description": "Which construct of whatever `definition` names, by the reader's own count over it. Where `definition` is absent the document is an earlier one and this counts the constructs of the whole source."
         },
         "lowered": {
           "type": "integer",
@@ -1717,10 +1735,67 @@
                 "type": "string",
                 "description": "The module whose source wrote the rule out, for a rule that has no name of its own."
               },
+              "writtenBy": {
+                "type": "object",
+                "description": "Which of the module's writings wrote the rule out. A caller handing a rule in is whatever wrote the expression there, and that is not only a definition's body: a clause of a `data`, a behavior's statement of itself and a value written in an `example` row each write one as readily. Present in a document whose `block` is counted within one of them; a document written before the count was kept that way carries none, and its `block` counts the blocks of the whole source instead.",
+                "required": [
+                  "kind"
+                ],
+                "additionalProperties": false,
+                "oneOf": [
+                  {
+                    "properties": { "kind": { "const": "declaration" } },
+                    "required": ["declaredOn"],
+                    "not": { "anyOf": [ { "required": ["behavior"] }, { "required": ["definition"] }, { "required": ["sourceId"] } ] }
+                  },
+                  {
+                    "properties": { "kind": { "const": "stated" } },
+                    "required": ["behavior"],
+                    "not": { "anyOf": [ { "required": ["declaredOn"] }, { "required": ["definition"] }, { "required": ["sourceId"] } ] }
+                  },
+                  {
+                    "properties": { "kind": { "const": "body" } },
+                    "required": ["definition"],
+                    "not": { "anyOf": [ { "required": ["declaredOn"] }, { "required": ["behavior"] }, { "required": ["sourceId"] } ] }
+                  },
+                  {
+                    "properties": { "kind": { "const": "example_rows" } },
+                    "required": ["behavior", "sourceId"],
+                    "not": { "anyOf": [ { "required": ["declaredOn"] }, { "required": ["definition"] } ] }
+                  },
+                  {
+                    "properties": { "kind": { "const": "stand_in" } },
+                    "required": ["behavior", "sourceId"],
+                    "not": { "anyOf": [ { "required": ["declaredOn"] }, { "required": ["definition"] } ] }
+                  }
+                ],
+                "properties": {
+                  "kind": {
+                    "description": "What wrote it. `example_rows` and `stand_in` are the two a module may write more than one of for one behavior, and they say which source as well: an attached file's rows are counted apart from the model file's, and the two written for one behavior in one source are two writings.",
+                    "enum": ["declaration", "stated", "body", "example_rows", "stand_in"]
+                  },
+                  "declaredOn": {
+                    "type": "string",
+                    "description": "The declaration whose clauses wrote it."
+                  },
+                  "behavior": {
+                    "type": "string",
+                    "description": "The behavior whose statement of itself wrote it, or the one whose rows or stand-in did."
+                  },
+                  "definition": {
+                    "type": "string",
+                    "description": "The definition whose body wrote it."
+                  },
+                  "sourceId": {
+                    "type": "string",
+                    "description": "The source the rows or the stand-in are written in, read the way a `source` subject is. `sources` says what it is called."
+                  }
+                }
+              },
               "block": {
                 "type": "integer",
                 "minimum": 0,
-                "description": "Which block of that source the rule is, by the reader's own count over it."
+                "description": "Which block of whatever `writtenBy` names the rule is, by the reader's own count over that. Where `writtenBy` is absent the document is an earlier one and this counts the blocks of the whole source."
               }
             }
           }

@@ -3,6 +3,7 @@ package souther.compiler;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.coverage.Numberings;
+import souther.compiler.types.WrittenOwner;
 import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.MeasurementStatus;
@@ -718,7 +719,7 @@ class AMeasureWithNoNumberSaysWhyTest {
         Weakening a = new Weakening.ProofContradicted("take",
                 Numberings.arm(2, 1));
         Weakening b = new Weakening.ArmsUnsettled(
-                new souther.compiler.types.SourceConstructOrigin("m", 0, 0,
+                new souther.compiler.types.SourceConstructOrigin(new WrittenOwner.Body("m", "b"), 0, 0,
                         souther.compiler.types.SourceConstruct.IF));
         Weakening c = new Weakening.OutputCasesUnreadable("take");
 

@@ -3,6 +3,7 @@ package souther.compiler.coverage;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.core.Core;
+import souther.compiler.types.WrittenOwner;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BinOp;
 import souther.compiler.types.BindingId;
@@ -37,7 +38,8 @@ class APlaceSeveralWaysLeadToIsStillOnePlaceTest {
     private static final SourcePos AT = new SourcePos(1, 1);
 
     private static final SourceConstructOrigin FORK =
-            SourceConstructOrigin.written("demo", 0, SourceConstruct.IF);
+            SourceConstructOrigin.written(new WrittenOwner.Body("demo", "b"), 0,
+                    SourceConstruct.IF);
 
     /** One fork standing in both sides of a comparison, which is two ways to one place. */
     private static Core sharedFork() {

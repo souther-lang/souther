@@ -843,8 +843,9 @@
                 "rule" : {
                   "kind" : "comparison",
                   "declaredIn" : "conformance.staffing",
+                  "definition" : "grantLeave",
                   "behavior" : "grantLeave",
-                  "ordinal" : 13,
+                  "ordinal" : 1,
                   "lowered" : 0
                 },
                 "conjunct" : 0,
@@ -915,8 +916,9 @@
                 "rule" : {
                   "kind" : "comparison",
                   "declaredIn" : "conformance.staffing",
+                  "definition" : "grantLeave",
                   "behavior" : "grantLeave",
-                  "ordinal" : 13,
+                  "ordinal" : 1,
                   "lowered" : 0
                 },
                 "conjunct" : 0,
@@ -959,8 +961,9 @@
               "rule" : {
                 "kind" : "comparison",
                 "declaredIn" : "conformance.staffing",
+                "definition" : "grantLeave",
                 "behavior" : "grantLeave",
-                "ordinal" : 13,
+                "ordinal" : 1,
                 "lowered" : 0
               },
               "conjunct" : 0,
@@ -987,8 +990,9 @@
           "ruleId" : {
             "kind" : "comparison",
             "declaredIn" : "conformance.staffing",
+            "definition" : "grantLeave",
             "behavior" : "grantLeave",
-            "ordinal" : 13,
+            "ordinal" : 1,
             "lowered" : 0
           },
           "relation" : "=",
@@ -1012,8 +1016,9 @@
               "rule" : {
                 "kind" : "comparison",
                 "declaredIn" : "conformance.staffing",
+                "definition" : "grantLeave",
                 "behavior" : "grantLeave",
-                "ordinal" : 13,
+                "ordinal" : 1,
                 "lowered" : 0
               },
               "conjunct" : 0,
@@ -1041,8 +1046,9 @@
           "ruleId" : {
             "kind" : "comparison",
             "declaredIn" : "conformance.staffing",
+            "definition" : "grantLeave",
             "behavior" : "grantLeave",
-            "ordinal" : 13,
+            "ordinal" : 1,
             "lowered" : 0
           },
           "relation" : "=",
@@ -1066,8 +1072,9 @@
               "rule" : {
                 "kind" : "comparison",
                 "declaredIn" : "conformance.staffing",
+                "definition" : "grantLeave",
                 "behavior" : "grantLeave",
-                "ordinal" : 13,
+                "ordinal" : 1,
                 "lowered" : 0
               },
               "conjunct" : 0,
@@ -1107,8 +1114,9 @@
           "ruleId" : {
             "kind" : "comparison",
             "declaredIn" : "conformance.staffing",
+            "definition" : "grantLeave",
             "behavior" : "grantLeave",
-            "ordinal" : 13,
+            "ordinal" : 1,
             "lowered" : 0
           },
           "relation" : "in",
@@ -1132,8 +1140,9 @@
               "rule" : {
                 "kind" : "comparison",
                 "declaredIn" : "conformance.staffing",
+                "definition" : "grantLeave",
                 "behavior" : "grantLeave",
-                "ordinal" : 13,
+                "ordinal" : 1,
                 "lowered" : 0
               },
               "conjunct" : 0,
@@ -1173,8 +1182,9 @@
           "ruleId" : {
             "kind" : "comparison",
             "declaredIn" : "conformance.staffing",
+            "definition" : "grantLeave",
             "behavior" : "grantLeave",
-            "ordinal" : 13,
+            "ordinal" : 1,
             "lowered" : 0
           },
           "relation" : "in",
@@ -1226,8 +1236,9 @@
                 "rule" : {
                   "kind" : "comparison",
                   "declaredIn" : "conformance.staffing",
+                  "definition" : "grantLeave",
                   "behavior" : "grantLeave",
-                  "ordinal" : 17,
+                  "ordinal" : 5,
                   "lowered" : 0
                 },
                 "conjunct" : 0,
@@ -1298,8 +1309,9 @@
                 "rule" : {
                   "kind" : "comparison",
                   "declaredIn" : "conformance.staffing",
+                  "definition" : "grantLeave",
                   "behavior" : "grantLeave",
-                  "ordinal" : 17,
+                  "ordinal" : 5,
                   "lowered" : 0
                 },
                 "conjunct" : 0,
@@ -1342,8 +1354,9 @@
               "rule" : {
                 "kind" : "comparison",
                 "declaredIn" : "conformance.staffing",
+                "definition" : "grantLeave",
                 "behavior" : "grantLeave",
-                "ordinal" : 17,
+                "ordinal" : 5,
                 "lowered" : 0
               },
               "conjunct" : 0,
@@ -1370,8 +1383,9 @@
           "ruleId" : {
             "kind" : "comparison",
             "declaredIn" : "conformance.staffing",
+            "definition" : "grantLeave",
             "behavior" : "grantLeave",
-            "ordinal" : 17,
+            "ordinal" : 5,
             "lowered" : 0
           },
           "relation" : "=",
@@ -1395,8 +1409,9 @@
               "rule" : {
                 "kind" : "comparison",
                 "declaredIn" : "conformance.staffing",
+                "definition" : "grantLeave",
                 "behavior" : "grantLeave",
-                "ordinal" : 17,
+                "ordinal" : 5,
                 "lowered" : 0
               },
               "conjunct" : 0,
@@ -1436,8 +1451,9 @@
           "ruleId" : {
             "kind" : "comparison",
             "declaredIn" : "conformance.staffing",
+            "definition" : "grantLeave",
             "behavior" : "grantLeave",
-            "ordinal" : 17,
+            "ordinal" : 5,
             "lowered" : 0
           },
           "relation" : "in",
@@ -1461,8 +1477,9 @@
               "rule" : {
                 "kind" : "comparison",
                 "declaredIn" : "conformance.staffing",
+                "definition" : "grantLeave",
                 "behavior" : "grantLeave",
-                "ordinal" : 17,
+                "ordinal" : 5,
                 "lowered" : 0
               },
               "conjunct" : 0,
@@ -1502,8 +1519,9 @@
           "ruleId" : {
             "kind" : "comparison",
             "declaredIn" : "conformance.staffing",
+            "definition" : "grantLeave",
             "behavior" : "grantLeave",
-            "ordinal" : 17,
+            "ordinal" : 5,
             "lowered" : 0
           },
           "relation" : "in",
@@ -1819,8 +1837,9 @@
                 "rule" : {
                   "kind" : "comparison",
                   "declaredIn" : "conformance.staffing",
+                  "definition" : "judgeHours",
                   "behavior" : "judgeHours",
-                  "ordinal" : 22,
+                  "ordinal" : 4,
                   "lowered" : 0
                 },
                 "conjunct" : 0,
@@ -1891,8 +1910,9 @@
                 "rule" : {
                   "kind" : "comparison",
                   "declaredIn" : "conformance.staffing",
+                  "definition" : "judgeHours",
                   "behavior" : "judgeHours",
-                  "ordinal" : 19,
+                  "ordinal" : 1,
                   "lowered" : 0
                 },
                 "conjunct" : 0,
@@ -1935,8 +1955,9 @@
               "rule" : {
                 "kind" : "comparison",
                 "declaredIn" : "conformance.staffing",
+                "definition" : "judgeHours",
                 "behavior" : "judgeHours",
-                "ordinal" : 19,
+                "ordinal" : 1,
                 "lowered" : 0
               },
               "conjunct" : 0,
@@ -1964,8 +1985,9 @@
           "ruleId" : {
             "kind" : "comparison",
             "declaredIn" : "conformance.staffing",
+            "definition" : "judgeHours",
             "behavior" : "judgeHours",
-            "ordinal" : 19,
+            "ordinal" : 1,
             "lowered" : 0
           },
           "relation" : "=",
@@ -1989,8 +2011,9 @@
               "rule" : {
                 "kind" : "comparison",
                 "declaredIn" : "conformance.staffing",
+                "definition" : "judgeHours",
                 "behavior" : "judgeHours",
-                "ordinal" : 19,
+                "ordinal" : 1,
                 "lowered" : 0
               },
               "conjunct" : 0,
@@ -2017,8 +2040,9 @@
           "ruleId" : {
             "kind" : "comparison",
             "declaredIn" : "conformance.staffing",
+            "definition" : "judgeHours",
             "behavior" : "judgeHours",
-            "ordinal" : 19,
+            "ordinal" : 1,
             "lowered" : 0
           },
           "relation" : "=",
@@ -2042,8 +2066,9 @@
               "rule" : {
                 "kind" : "comparison",
                 "declaredIn" : "conformance.staffing",
+                "definition" : "judgeHours",
                 "behavior" : "judgeHours",
-                "ordinal" : 19,
+                "ordinal" : 1,
                 "lowered" : 0
               },
               "conjunct" : 0,
@@ -2083,8 +2108,9 @@
           "ruleId" : {
             "kind" : "comparison",
             "declaredIn" : "conformance.staffing",
+            "definition" : "judgeHours",
             "behavior" : "judgeHours",
-            "ordinal" : 19,
+            "ordinal" : 1,
             "lowered" : 0
           },
           "relation" : "in",
@@ -2108,8 +2134,9 @@
               "rule" : {
                 "kind" : "comparison",
                 "declaredIn" : "conformance.staffing",
+                "definition" : "judgeHours",
                 "behavior" : "judgeHours",
-                "ordinal" : 19,
+                "ordinal" : 1,
                 "lowered" : 0
               },
               "conjunct" : 0,
@@ -2137,8 +2164,9 @@
                 "rule" : {
                   "kind" : "comparison",
                   "declaredIn" : "conformance.staffing",
+                  "definition" : "judgeHours",
                   "behavior" : "judgeHours",
-                  "ordinal" : 22,
+                  "ordinal" : 4,
                   "lowered" : 0
                 },
                 "conjunct" : 0,
@@ -2157,8 +2185,9 @@
           "ruleId" : {
             "kind" : "comparison",
             "declaredIn" : "conformance.staffing",
+            "definition" : "judgeHours",
             "behavior" : "judgeHours",
-            "ordinal" : 19,
+            "ordinal" : 1,
             "lowered" : 0
           },
           "relation" : "in",
@@ -2182,8 +2211,9 @@
               "rule" : {
                 "kind" : "comparison",
                 "declaredIn" : "conformance.staffing",
+                "definition" : "judgeHours",
                 "behavior" : "judgeHours",
-                "ordinal" : 22,
+                "ordinal" : 4,
                 "lowered" : 0
               },
               "conjunct" : 0,
@@ -2211,8 +2241,9 @@
           "ruleId" : {
             "kind" : "comparison",
             "declaredIn" : "conformance.staffing",
+            "definition" : "judgeHours",
             "behavior" : "judgeHours",
-            "ordinal" : 22,
+            "ordinal" : 4,
             "lowered" : 0
           },
           "relation" : "=",
@@ -2236,8 +2267,9 @@
               "rule" : {
                 "kind" : "comparison",
                 "declaredIn" : "conformance.staffing",
+                "definition" : "judgeHours",
                 "behavior" : "judgeHours",
-                "ordinal" : 22,
+                "ordinal" : 4,
                 "lowered" : 0
               },
               "conjunct" : 0,
@@ -2264,8 +2296,9 @@
           "ruleId" : {
             "kind" : "comparison",
             "declaredIn" : "conformance.staffing",
+            "definition" : "judgeHours",
             "behavior" : "judgeHours",
-            "ordinal" : 22,
+            "ordinal" : 4,
             "lowered" : 0
           },
           "relation" : "=",
@@ -2289,8 +2322,9 @@
               "rule" : {
                 "kind" : "comparison",
                 "declaredIn" : "conformance.staffing",
+                "definition" : "judgeHours",
                 "behavior" : "judgeHours",
-                "ordinal" : 22,
+                "ordinal" : 4,
                 "lowered" : 0
               },
               "conjunct" : 0,
@@ -2318,8 +2352,9 @@
                 "rule" : {
                   "kind" : "comparison",
                   "declaredIn" : "conformance.staffing",
+                  "definition" : "judgeHours",
                   "behavior" : "judgeHours",
-                  "ordinal" : 19,
+                  "ordinal" : 1,
                   "lowered" : 0
                 },
                 "conjunct" : 0,
@@ -2338,8 +2373,9 @@
           "ruleId" : {
             "kind" : "comparison",
             "declaredIn" : "conformance.staffing",
+            "definition" : "judgeHours",
             "behavior" : "judgeHours",
-            "ordinal" : 22,
+            "ordinal" : 4,
             "lowered" : 0
           },
           "relation" : "in",
@@ -2363,8 +2399,9 @@
               "rule" : {
                 "kind" : "comparison",
                 "declaredIn" : "conformance.staffing",
+                "definition" : "judgeHours",
                 "behavior" : "judgeHours",
-                "ordinal" : 22,
+                "ordinal" : 4,
                 "lowered" : 0
               },
               "conjunct" : 0,
@@ -2404,8 +2441,9 @@
           "ruleId" : {
             "kind" : "comparison",
             "declaredIn" : "conformance.staffing",
+            "definition" : "judgeHours",
             "behavior" : "judgeHours",
-            "ordinal" : 22,
+            "ordinal" : 4,
             "lowered" : 0
           },
           "relation" : "in",

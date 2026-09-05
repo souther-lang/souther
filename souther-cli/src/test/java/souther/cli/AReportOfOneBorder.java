@@ -1,6 +1,7 @@
 package souther.cli;
 
 import souther.compiler.query.WeakeningSet;
+import souther.compiler.types.WrittenOwner;
 import souther.compiler.query.Weakening;
 import souther.compiler.query.Measurement;
 import souther.compiler.check.Carrier;
@@ -112,7 +113,8 @@ final class AReportOfOneBorder {
     static Border aBorderABodyDrew() {
         LineOrigin origin = new LineOrigin.ComparisonOrigin(
                 new RuleRef.Comparison("weigh", new souther.compiler.types.SourceConstructOrigin(
-                        "example.rate", 2, 0, souther.compiler.types.SourceConstruct.BINARY)),
+                        new WrittenOwner.Body("example.rate", "weigh"), 2, 0,
+                        souther.compiler.types.SourceConstruct.BINARY)),
                 new LineOrigin.ComparisonOrigin.Read(
                         new souther.compiler.coverage.ComparisonOccurrence(
                                 "example.rate", "weigh", 0),

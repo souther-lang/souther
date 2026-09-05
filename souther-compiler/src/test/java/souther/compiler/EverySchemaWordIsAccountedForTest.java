@@ -1,6 +1,7 @@
 package souther.compiler;
 
 import souther.compiler.source.SourceId;
+import souther.compiler.types.WrittenOwner;
 
 import org.junit.jupiter.api.Test;
 
@@ -38,8 +39,10 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -165,6 +168,30 @@ class EverySchemaWordIsAccountedForTest {
         return out;
     }
 
+    /**
+     * The word each thing that may write a block is published as.
+     *
+     * <p>The set is the owners themselves, so one added to the language leaves this without a word
+     * for it and fails here. What is written down is the spelling, which a document carries and a
+     * Java name is not.
+     */
+    private static Set<String> ownerWords() {
+        Map<String, String> spelling = new LinkedHashMap<>();
+        spelling.put("Declaration", "declaration");
+        spelling.put("Stated", "stated");
+        spelling.put("Body", "body");
+        spelling.put("Examples", "example_rows");
+        spelling.put("Fake", "stand_in");
+        Set<String> words = new LinkedHashSet<>();
+        for (Class<?> owner : armsOf(souther.compiler.types.WrittenOwner.class)) {
+            String word = spelling.get(owner.getSimpleName());
+            assertNotNull(word, owner.getSimpleName() + " may write a block and this document has"
+                    + " no word for it");
+            words.add(word);
+        }
+        return words;
+    }
+
     /** The names a branch measure can give an arm, spelled by the writer's own encoder. */
     private static Set<String> armWords() {
         return Arrays.stream(souther.compiler.coverage.OutcomeName.values())
@@ -264,6 +291,14 @@ class EverySchemaWordIsAccountedForTest {
             new Vocabulary("findings[].kind",
                     List.of("$defs", "findings", "items", "properties", "kind"),
                     Adequacy.Kind.class),
+            // What wrote a block a caller handed in. The set comes from the owners a source can
+            // write, so a sixth of them has to teach this its word before the schema will pass;
+            // only the spelling is written down here, the report's own switch being exhaustive over
+            // the same sealed type.
+            new Vocabulary("branch.obligations[].rules[].writtenBy.kind",
+                    List.of("$defs", "armObligationId", "properties", "rules", "items",
+                            "properties", "writtenBy", "properties", "kind"),
+                    List.of(souther.compiler.types.WrittenOwner.class), ownerWords(), Set.of()),
             new Vocabulary("findings[].disposition",
                     List.of("$defs", "findings", "items", "properties", "disposition"),
                     Adequacy.Finding.Disposition.class),
@@ -561,7 +596,8 @@ class EverySchemaWordIsAccountedForTest {
      * word for rather than as a word this test forgot.
      */
     private static Set<String> armExclusionWords() {
-        SourceConstructOrigin fork = SourceConstructOrigin.written("m", 0, SourceConstruct.IF);
+        SourceConstructOrigin fork = SourceConstructOrigin.written(
+                new WrittenOwner.Body("m", "b"), 0, SourceConstruct.IF);
         return java.util.stream.Stream
                 .<ArmExclusion>of(new ArmExclusion.OccurrencesNotToldApart(fork))
                 .map(AdequacyReport::wire)
@@ -572,7 +608,7 @@ class EverySchemaWordIsAccountedForTest {
     private static Set<String> decidedByWords() {
         return java.util.stream.Stream.of(DecidedBy.THE_DECLARATION,
                         new DecidedBy.BySupplied(List.of(new SuppliedRules.RuleIdentity.Written(
-                                RuleOrigin.written("m", 0)))),
+                                RuleOrigin.written(new WrittenOwner.Body("m", "b"), 0)))),
                         DecidedBy.NOT_SAID)
                 .map(AdequacyReport::wire)
                 .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
@@ -639,7 +675,7 @@ class EverySchemaWordIsAccountedForTest {
     void theWordsAGuardKeysOnAreTheStatusesOfAMeasurementWithAValue() {
         souther.compiler.query.WeakeningSet by = souther.compiler.query.WeakeningSet.of(
                 new souther.compiler.query.Weakening.ArmsUnsettled(
-                        new souther.compiler.types.SourceConstructOrigin("m", 0, 0,
+                        new souther.compiler.types.SourceConstructOrigin(new WrittenOwner.Body("m", "b"), 0, 0,
                                 souther.compiler.types.SourceConstruct.IF)));
         Set<String> withAValue = new LinkedHashSet<>();
         for (souther.compiler.query.Measure<String> each : List.<
@@ -792,7 +828,7 @@ class EverySchemaWordIsAccountedForTest {
     private static souther.compiler.inputs.StandingQuestion boundaryUndetermined() {
         return souther.compiler.inputs.StandingQuestion.BoundaryUndetermined.of(
                 new souther.compiler.check.RuleRef.Comparison("f",
-                        new souther.compiler.types.SourceConstructOrigin("m", 0, 0,
+                        new souther.compiler.types.SourceConstructOrigin(new WrittenOwner.Body("m", "b"), 0, 0,
                                 souther.compiler.types.SourceConstruct.IF)),
                 new souther.compiler.check.RuleCitation.WrittenAt(
                         souther.compiler.diag.Citation.of(
@@ -806,7 +842,7 @@ class EverySchemaWordIsAccountedForTest {
     private static souther.compiler.inputs.StandingQuestion unclassified() {
         return souther.compiler.inputs.StandingQuestion.NothingClassifiesIt.of(
                 new souther.compiler.check.RuleRef.Comparison("f",
-                        new souther.compiler.types.SourceConstructOrigin("m", 0, 0,
+                        new souther.compiler.types.SourceConstructOrigin(new WrittenOwner.Body("m", "b"), 0, 0,
                                 souther.compiler.types.SourceConstruct.IF)),
                 new souther.compiler.check.RuleCitation.WrittenAt(
                         souther.compiler.diag.Citation.of(
@@ -821,7 +857,7 @@ class EverySchemaWordIsAccountedForTest {
             souther.compiler.inputs.InputQuestion about) {
         return souther.compiler.inputs.StandingQuestion.Exact.of(
                 new souther.compiler.check.RuleRef.Comparison("f",
-                        new souther.compiler.types.SourceConstructOrigin("m", 0, 0,
+                        new souther.compiler.types.SourceConstructOrigin(new WrittenOwner.Body("m", "b"), 0, 0,
                                 souther.compiler.types.SourceConstruct.IF)),
                 new souther.compiler.check.RuleCitation.WrittenAt(
                         souther.compiler.diag.Citation.of(
@@ -855,14 +891,14 @@ class EverySchemaWordIsAccountedForTest {
                                         new souther.compiler.types.ValueName.Behavior("m", "f"),
                                         0, 0, on), "Found")),
                         AdequacyReport.schemaRuleKind(new souther.compiler.check.RuleRef.Comparison("f",
-                                new souther.compiler.types.SourceConstructOrigin("m", 0, 0,
+                                new souther.compiler.types.SourceConstructOrigin(new WrittenOwner.Body("m", "b"), 0, 0,
                                         souther.compiler.types.SourceConstruct.IF))),
                         // A rule a body writes as one of the language's own operations over the
                         // values at a position, which tells a set of them from the rest and draws
                         // no line. Its own word beside a comparison because what a reader does
                         // about them differs.
                         AdequacyReport.schemaRuleKind(new souther.compiler.check.RuleRef.Predicate("f",
-                                new souther.compiler.types.SourceConstructOrigin("m", 1, 0,
+                                new souther.compiler.types.SourceConstructOrigin(new WrittenOwner.Body("m", "b"), 1, 0,
                                         souther.compiler.types.SourceConstruct.CALL)))),
                 allowedAt(schema(), List.of("$defs", "ruleId", "properties", "kind")));
     }

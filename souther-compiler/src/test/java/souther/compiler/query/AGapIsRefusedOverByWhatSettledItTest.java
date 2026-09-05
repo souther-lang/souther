@@ -3,6 +3,7 @@ package souther.compiler.query;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.coverage.ArmProbe;
+import souther.compiler.types.WrittenOwner;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.coverage.DecidedBy;
 import souther.compiler.coverage.Numberings;
@@ -39,9 +40,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class AGapIsRefusedOverByWhatSettledItTest {
 
     private static final SourceConstructOrigin SETTLED =
-            SourceConstructOrigin.written("m", 0, SourceConstruct.IF);
+            SourceConstructOrigin.written(new WrittenOwner.Body("m", "b"), 0,
+                    SourceConstruct.IF);
     private static final SourceConstructOrigin UNSETTLED =
-            SourceConstructOrigin.written("m", 1, SourceConstruct.IF);
+            SourceConstructOrigin.written(new WrittenOwner.Body("m", "b"), 1,
+                    SourceConstruct.IF);
 
     /** Four places of one numbering, so that arms put in one list are addresses of one. */
     private static final Map<Integer, ArmProbe> PLACES = Numberings.arms(4);

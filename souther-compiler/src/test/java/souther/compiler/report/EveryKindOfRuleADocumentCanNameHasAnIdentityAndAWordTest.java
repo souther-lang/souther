@@ -9,6 +9,7 @@ import souther.compiler.check.RuleRef;
 import souther.compiler.types.SourceConstruct;
 import souther.compiler.types.SourceConstructOrigin;
 import souther.compiler.types.TypeKey;
+import souther.compiler.types.WrittenOwner;
 import souther.compiler.types.TypeSymbols;
 import souther.compiler.types.ValueName;
 
@@ -50,8 +51,9 @@ class EveryKindOfRuleADocumentCanNameHasAnIdentityAndAWordTest {
      * name the day something produces one, which is exactly the case this exists for.
      */
     private static List<RuleRef> everyKind() {
+        WrittenOwner.Body body = new WrittenOwner.Body("m", "b");
         SourceConstructOrigin written =
-                new SourceConstructOrigin("m", 1, 0, SourceConstruct.BINARY);
+                new SourceConstructOrigin(body, 1, 0, SourceConstruct.BINARY);
         Clause.Ref clause = new Clause.Ref(
                 new Clause.Id(TypeSymbols.declared(new TypeKey("m", "Amount")), 0),
                 Optional.of(new ClauseName("cap")));
@@ -61,7 +63,7 @@ class EveryKindOfRuleADocumentCanNameHasAnIdentityAndAWordTest {
                         new BehaviorContract.RuleId(new ValueName.Behavior("m", "b"), 0, 0, null),
                         "c"),
                 new RuleRef.Comparison("b", written),
-                new RuleRef.Predicate("b", new SourceConstructOrigin("m", 2, 0,
+                new RuleRef.Predicate("b", new SourceConstructOrigin(body, 2, 0,
                         SourceConstruct.CALL)));
     }
 

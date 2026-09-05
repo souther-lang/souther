@@ -1,6 +1,7 @@
 package souther.compiler.report;
 
 import souther.compiler.report.AdequacyReport;
+import souther.compiler.types.WrittenOwner;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.RuleCitation;
@@ -29,7 +30,8 @@ class OneRuleIsCalledOneThingOnBothSurfacesTest {
     @Test
     void aDocumentCallsAComparisonWhatAReaderIsShown() {
         RuleRef.Comparison rule = new RuleRef.Comparison("f",
-                new SourceConstructOrigin("m", 0, 0, SourceConstruct.IF));
+                new SourceConstructOrigin(new WrittenOwner.Body("m", "b"), 0, 0,
+                        SourceConstruct.IF));
 
         assertEquals(RuleCitation.WHAT_IT_IS, AdequacyReport.schemaRuleKind(rule));
     }

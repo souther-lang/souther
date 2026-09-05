@@ -1,6 +1,7 @@
 package souther.compiler.report;
 
 import souther.compiler.query.WeakeningSet;
+import souther.compiler.types.WrittenOwner;
 import souther.compiler.report.AdequacyReport;
 import tools.jackson.databind.json.JsonMapper;
 import tools.jackson.databind.node.ObjectNode;
@@ -38,9 +39,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class WhatWasObservedDecidesWhatAReportMayNameTest {
 
     private static final SourceConstructOrigin SETTLED =
-            SourceConstructOrigin.written("m", 0, SourceConstruct.IF);
+            SourceConstructOrigin.written(new WrittenOwner.Body("m", "b"), 0,
+                    SourceConstruct.IF);
     private static final SourceConstructOrigin UNSETTLED =
-            SourceConstructOrigin.written("m", 1, SourceConstruct.IF);
+            SourceConstructOrigin.written(new WrittenOwner.Body("m", "b"), 1,
+                    SourceConstruct.IF);
 
     /** Four places of one numbering, so that arms put in one list are addresses of one. */
     private static final java.util.Map<Integer, ArmProbe> PLACES = Numberings.arms(4);

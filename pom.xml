@@ -96,6 +96,10 @@
         <!-- Named rather than written where it is used: `souther init` writes a project that runs
              its tests, and what it hands that project is this number. -->
         <surefire.version>3.5.6</surefire.version>
+        <!-- The coverage agent a run under `-Pcoverage-by-class` carries. Named once because two
+             places need the same number: the profile that starts the agent and the test-support
+             module that compiles against its runtime. -->
+        <jacoco.version>0.8.14</jacoco.version>
         <!-- How many JVMs the tests are spread over. Named here so -DforkCount=N reaches it: a
              literal in the plugin's configuration outranks the property surefire declares, so the
              override the comment below offers was not one, and a fork count could not be measured
@@ -404,6 +408,59 @@
             <properties>
                 <test.excluded.groups/>
             </properties>
+        </profile>
+
+        <!-- What each test class covered, one file per class under every module's
+             `target/coverage-by-class/`. The agent records; `CoverageByClass` in test-support cuts
+             the record at each class boundary; `bin/CoverageSubsumption.java` reads the files and
+             names the classes whose every branch some other class also ran. Asked for as
+
+                 mvn -o test -Pcoverage-by-class -Dtest.excluded.groups=
+
+             — with the population included, because a class only the nightly duplicates is a
+             fact the reader wants to see, and the reader marks those rather than this run leaving
+             them out. Off by default: the agent slows every class, and a plain run has no reader
+             for what it writes. -->
+        <profile>
+            <id>coverage-by-class</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.jacoco</groupId>
+                        <artifactId>jacoco-maven-plugin</artifactId>
+                        <version>${jacoco.version}</version>
+                        <executions>
+                            <execution>
+                                <goals>
+                                    <goal>prepare-agent</goal>
+                                </goals>
+                                <configuration>
+                                    <!-- The agent writes nothing of its own; the listener takes
+                                         its data at each class boundary. -->
+                                    <output>none</output>
+                                    <includes>
+                                        <include>souther.*</include>
+                                    </includes>
+                                    <propertyName>jacoco.agent.args</propertyName>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-surefire-plugin</artifactId>
+                        <configuration>
+                            <!-- `@{}` rather than `${}`: the agent's arguments are set by a goal
+                                 that runs after the model is read, and only a late reference sees
+                                 them. -->
+                            <argLine>${test.jvm.args} -Xss4m @{jacoco.agent.args}</argLine>
+                            <systemPropertyVariables>
+                                <souther.test.coverage.dir>${project.build.directory}/coverage-by-class</souther.test.coverage.dir>
+                            </systemPropertyVariables>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
         </profile>
 
         <profile>

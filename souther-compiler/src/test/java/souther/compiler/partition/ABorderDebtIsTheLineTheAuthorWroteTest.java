@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.coverage.Numberings;
+import souther.compiler.types.WrittenOwner;
 import souther.compiler.coverage.SiteNumbering;
 
 import org.junit.jupiter.api.Test;
@@ -226,7 +227,8 @@ class ABorderDebtIsTheLineTheAuthorWroteTest {
     private static LineOrigin readAt(int occurrence) {
         souther.compiler.check.RuleRef.Comparison rule =
                 new souther.compiler.check.RuleRef.Comparison("twice",
-                        new souther.compiler.types.SourceConstructOrigin("example.banding", 2, 0,
+                        new souther.compiler.types.SourceConstructOrigin(
+                                new WrittenOwner.Body("example.banding", "twice"), 2, 0,
                                 souther.compiler.types.SourceConstruct.BINARY));
         return new LineOrigin.ComparisonOrigin(rule,
                 new LineOrigin.ComparisonOrigin.Read(

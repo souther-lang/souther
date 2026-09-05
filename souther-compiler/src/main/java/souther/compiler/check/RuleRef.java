@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.types.SourceConstructOrigin;
+import souther.compiler.types.WrittenOwner;
 
 /**
  * Which rule of the model, and nothing about how anybody came to be holding it.
@@ -47,7 +48,7 @@ public sealed interface RuleRef {
     }
 
     /**
-     * A comparison written in a behavior's body.
+     * A comparison a definition wrote, read for the answer of some behavior.
      *
      * <p>The comparison and not the fork testing it. A condition can be an application of a
      * function parameter, so one predicate handed to two calls is one rule and two predicates
@@ -73,20 +74,40 @@ public sealed interface RuleRef {
             if (behavior == null || origin == null) {
                 throw new IllegalArgumentException("a comparison of a body is one of some behavior's");
             }
+            // Which definition wrote it is half of what tells this comparison from every other, and
+            // it is held where the value is made rather than where one is published. A comparison of
+            // a type's clause or of a behavior's `ensures` is answered for by the clause and the arm
+            // it is in and never reaches here; one an analysis rebuilt was written by nobody.
+            if (!(origin.owner() instanceof WrittenOwner.Body)) {
+                throw new IllegalStateException("a comparison of a body was written by a"
+                        + " definition, and this was written by " + origin.owner());
+            }
+        }
+
+        /** The definition whose body wrote the comparison — not the behavior reading it, which a
+         *  helper's comparison has one of per caller. */
+        public WrittenOwner.Body writtenIn() {
+            return (WrittenOwner.Body) origin.owner();
         }
     }
 
     /**
-     * A predicate applied in a behavior's body — a rule about the strings at a position, written as
-     * a call rather than as a comparison.
+     * A predicate a behavior applies — a rule about the strings at a position, written as a call
+     * rather than as a comparison.
      *
      * <p>The application and the whole of it, the way a comparison is. Which predicate it is and
      * what the author wrote in it are read off the call by whoever reads rules; what tells one of
      * these from another is which application of which source it is, so that a helper holding one
      * is the same rule at each of its calls.
      *
-     * @param behavior whose body it is written in. Two behaviors calling one helper each read its
-     *                 predicate, and the readings are what a coverage question is raised per
+     * <p><b>Written in a body or in a clause.</b> Which of the two is not narrowed here, which is
+     * where this parts from {@link Comparison}: a behavior states such a rule about one of its
+     * inputs in an {@code ensures} as much as in a condition, and what the position is told apart
+     * into is what the two come to between them. A predicate held to a body would be a rule of the
+     * model with nowhere to be filed.
+     *
+     * @param behavior whose rule it is. Two behaviors calling one helper each read its predicate,
+     *                 and the readings are what a coverage question is raised per
      * @param origin   which application of which module the author wrote, which is what tells one
      *                 from another wherever it is met
      */

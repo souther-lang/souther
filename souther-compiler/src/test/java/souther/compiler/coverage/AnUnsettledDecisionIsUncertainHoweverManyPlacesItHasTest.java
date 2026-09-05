@@ -1,6 +1,7 @@
 package souther.compiler.coverage;
 
 import souther.compiler.query.WeakeningSet;
+import souther.compiler.types.WrittenOwner;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.query.Adequacy;
@@ -33,7 +34,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 class AnUnsettledDecisionIsUncertainHoweverManyPlacesItHasTest {
 
     private static final SourceConstructOrigin FORK =
-            SourceConstructOrigin.written("m", 0, SourceConstruct.IF);
+            SourceConstructOrigin.written(new WrittenOwner.Body("m", "b"), 0,
+                    SourceConstruct.IF);
 
     /** Three places of one numbering, so that arms put in one list are addresses of one. */
     private static final java.util.Map<Integer, ArmProbe> PLACES = Numberings.arms(3);
@@ -106,7 +108,8 @@ class AnUnsettledDecisionIsUncertainHoweverManyPlacesItHasTest {
      */
     @Test
     void anArmOfASettledForkBesideAnUnsettledOneIsStillAGap() {
-        SourceConstructOrigin beside = SourceConstructOrigin.written("m", 1, SourceConstruct.IF);
+        SourceConstructOrigin beside = SourceConstructOrigin.written(
+                new WrittenOwner.Body("m", "b"), 1, SourceConstruct.IF);
         Adequacy.BranchEvidence measured = Adequacy.BranchEvidence.measured("b",
                 List.of(arm(0, DecidedBy.NOT_SAID), arm(1, DecidedBy.NOT_SAID),
                         arm(2, beside, 0, DecidedBy.THE_DECLARATION)),

@@ -784,6 +784,28 @@ public sealed interface Carrier {
     }
 
     /**
+     * The range of this order that {@code bounds} names, where {@code bounds} counts what this
+     * order counts.
+     *
+     * <p>The one crossing between the two, and it is here because this is where a count and a value
+     * of this order are the same fact said twice. What the numbers prove about a position is a pair
+     * of ends in the count space its atom lives in; what a reading of an order holds is a pair of
+     * ends on the order. The two are written the same way and are not the same thing — a day count
+     * is a number and a date is not — so the crossing is a question about the carrier and never a
+     * pair of ends passed across.
+     *
+     * <p>Nothing where this order counts nothing. A string stands in an order and no number stands
+     * under it, so a bound in a count space is about some other position and not this one — and
+     * saying it says nothing here is the difference between a reading that could not speak and one
+     * that spoke and placed no edge.
+     */
+    default PositionRestriction within(NumericDomain.Bounds bounds) {
+        return counts()
+                ? new PositionRestriction.Within(new OrderedInterval(bounds.min(), bounds.max()))
+                : new PositionRestriction.NotSpokenOf();
+    }
+
+    /**
      * Whether any value this order holds inside {@code range} is one {@code set} admits.
      *
      * <p>The one place a set of values and a range on an order are put together. Each of them is

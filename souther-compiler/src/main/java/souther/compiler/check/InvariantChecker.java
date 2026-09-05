@@ -912,8 +912,9 @@ public final class InvariantChecker {
         // is a number the domain carries the two are one identity read once — and this asks it of
         // every level of a chain, so reading it twice costs more than the chain is long.
         //
-        // Both, because only some positions are numbers. An enumeration is ordered and carries no
-        // atom, so a clause bounding one is recognised by what it is called and by nothing above it.
+        // Both, because a position may have either or both, and which it has is `Terms.positionOf`'s
+        // answer. What is done here is recording that answer; classifying the position's type again
+        // would be a second table, and the two would agree until one of them learned something.
         Terms.Position position = terms.positionOf(value, at);
         FactSubject atom = position.atom();
         if (atom != null) {

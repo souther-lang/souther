@@ -1,5 +1,6 @@
 package souther.compiler.inputs;
 
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
@@ -120,13 +121,44 @@ class APositionARuleWasNotReadAtDoesNotReadAsOneEveryRuleWasReadAtTest {
                 () -> "and nothing is short of the position's rules: " + at.reading());
     }
 
-    /** The reading of every behavior of every model this repository carries. */
-    private static List<InputDomain> everyReading() {
+    /** The readings, once they have been made. */
+    private static List<InputDomain> everyReading;
+
+    /**
+     * The reading of every behavior of every model this repository carries.
+     *
+     * <p>Read once for the class, as the models are compiled once for the JVM: two questions here
+     * walk the same readings and neither changes one, so reading them per question is the same
+     * work over — and reading the population is most of what this class costs.
+     *
+     * <p>Read when one of them asks, and not while the class is initialised. What this population
+     * failing to be read looks like is the regression this class is about, and a class that could
+     * not initialise reports it as an initialiser that threw on every method — including the one
+     * below that reads none of this and is what says the other two are answerable.
+     */
+    private static synchronized List<InputDomain> everyReading() {
+        if (everyReading != null) {
+            return everyReading;
+        }
         List<InputDomain> out = new ArrayList<>();
         for (Compilation compilation : RepositoryModels.all()) {
             readings(compilation, out);
         }
-        return out;
+        everyReading = List.copyOf(out);
+        return everyReading;
+    }
+
+    /**
+     * And given back when the class is done with them.
+     *
+     * <p>A fork keeps its JVM, so what is held statically is held for every class after this one.
+     * Less than what a corpus's compiles come to — the compilations these are read from are
+     * {@link RepositoryModels}' and stay whatever this does — but the readings themselves are this
+     * class's, and it is the class that wanted them.
+     */
+    @AfterAll
+    static void released() {
+        everyReading = null;
     }
 
     private static void readings(Compilation compilation, List<InputDomain> out) {
