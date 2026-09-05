@@ -7,7 +7,6 @@ import tools.jackson.databind.json.JsonMapper;
 
 import souther.compiler.check.ReadingPolicy;
 import souther.compiler.diag.SourceNameResolver;
-import souther.compiler.meta.ModulePath;
 import souther.compiler.partition.AdequacyPolicy;
 import souther.compiler.partition.Budgets;
 import souther.compiler.partition.UndividedPosition;
@@ -18,7 +17,6 @@ import souther.compiler.values.AsACompilationAllows;
 import java.util.EnumMap;
 import java.util.EnumSet;
 import java.util.LinkedHashSet;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
@@ -60,25 +58,15 @@ class EveryWordForAnUnreadRuleIsOneSomeCompilationWritesTest {
     /**
      * A model, and what a compilation of it may spend.
      *
-     * @param sources     the modules handed over, in order
+     * @param source       the module handed over
      * @param distinctions what a measure may spend working out what a behavior's rules tell apart,
      *                     or null for what a compilation allows
      * @param reading      what a reading may build with, or null for the same
      */
-    private record Witness(List<String> sources, PatternPlan.Budget distinctions,
-                           ReadingPolicy reading) {
-
-        Witness {
-            sources = List.copyOf(sources);
-        }
-    }
+    private record Witness(String source, PatternPlan.Budget distinctions, ReadingPolicy reading) {}
 
     private static Witness of(String source) {
-        return new Witness(List.of(source), null, null);
-    }
-
-    private static Witness across(String... sources) {
-        return new Witness(List.of(sources), null, null);
+        return new Witness(source, null, null);
     }
 
     /**
@@ -91,12 +79,12 @@ class EveryWordForAnUnreadRuleIsOneSomeCompilationWritesTest {
      * these two ask of it.
      */
     private static Witness spending(String source, PatternPlan.Budget distinctions) {
-        return new Witness(List.of(source), distinctions, null);
+        return new Witness(source, distinctions, null);
     }
 
     /** The same, where what is said down is what a reading of the declarations may build with. */
     private static Witness readingWith(String source, ReadingPolicy reading) {
-        return new Witness(List.of(source), null, reading);
+        return new Witness(source, null, reading);
     }
 
     /** Room to answer what a position admits, and none to hand each of its rules on as the set it
@@ -397,9 +385,7 @@ class EveryWordForAnUnreadRuleIsOneSomeCompilationWritesTest {
 
     /** The words a document of this model writes for the rules it did not read. */
     private static Set<String> wordsWritten(Witness witness) {
-        Compilation compilation = witness.sources().size() == 1
-                ? Compilation.ofSource(witness.sources().get(0), "Main")
-                : Compilation.ofSources(witness.sources(), ModulePath.EMPTY);
+        Compilation compilation = Compilation.ofSource(witness.source(), "Main");
         if (witness.distinctions() != null) {
             compilation = compilation.withAdequacyPolicy(new AdequacyPolicy(
                     new AdequacyPolicy.OfTheMeasures(Budgets.measures().pairSpace(),

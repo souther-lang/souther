@@ -19,9 +19,15 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * that test was written after.
  *
  * <p>So these are the two models the words are for, taken to the document a build reads. A
- * declaration reachable from itself is a type this could not work out; a threshold on a list's
- * elements is values held inside something the walk does not reach into. Both compile, which is why
- * a report is asked about them at all.
+ * declaration reachable from itself is a type this could not work out; a clause nothing could type
+ * is a position whose rules the reading never arrived at. A report is written about each of them
+ * whatever else this compiler says against the model, which is why it is asked about them at all —
+ * and the tripwire below says out loud that the second is a model this compiler refuses.
+ *
+ * <p>The whole of that vocabulary is held to the same claim in one place
+ * ({@link souther.compiler.query.EveryWordForAnUnreadRuleIsOneSomeCompilationWritesTest}), which is
+ * where a word added arrives as a question. These two stay because the tripwire is about the models
+ * rather than about the words.
  *
  * <p>The version is unchanged by their arrival, and the schema says why in its own words: a word
  * added to an enumerated field is one no earlier document carried, so a document written before it
