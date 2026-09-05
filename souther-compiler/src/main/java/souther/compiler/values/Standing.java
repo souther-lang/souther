@@ -29,11 +29,18 @@ import java.util.function.Function;
 public final class Standing<A> {
 
     /**
-     * One rule this reading could not take in.
+     * One rule this reading could not take in, and the places it is about.
      *
      * <p>The positions together, because that is what was given up on: a rule relating two of them
      * is one rule, and telling a reader about it at one place and again at the other would be two
      * accounts of one thing.
+     *
+     * <p><b>What it is about and not where it was written.</b> Those are the same for a rule
+     * somebody wrote at the places it names. They part where a machine is refused: it is made for
+     * the one value a block of positions share, so what stands at every one of them is wider than
+     * the rules — and the pattern that asked for it was written at one of them. Which written place
+     * asked is a different question with a different reader ({@code AdmissibleReading.askedAt}),
+     * and it is answered there rather than recovered from here.
      */
     private record Entry<A>(Set<A> positions, UnreadReason why) {
 
@@ -57,11 +64,14 @@ public final class Standing<A> {
     /**
      * One rule that went unread, and the positions it named.
      *
-     * <p>{@code named} may be empty — a rule reaching no position this reading can name is still a
-     * rule it did not read, and what that costs is settled where it is joined.
+     * <p>Nothing where it named none. A rule reaching no position this reading can name is still a
+     * rule it did not read, and what that costs is carried by the reading having dropped one
+     * ({@code AdmissibleValues.dropped}) rather than here: nothing can be asked of an entry that
+     * names nowhere, so holding one would make {@link #isEmpty} mean "holds an entry" where every
+     * reader of it means "has something to say".
      */
     public static <A> Standing<A> of(Set<A> named, UnreadReason why) {
-        return new Standing<>(List.of(new Entry<>(named, why)));
+        return named.isEmpty() ? nothing() : new Standing<>(List.of(new Entry<>(named, why)));
     }
 
     /** Whether every rule the reading was handed was taken in. */

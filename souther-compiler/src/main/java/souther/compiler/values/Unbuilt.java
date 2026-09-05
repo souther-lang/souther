@@ -39,7 +39,12 @@ public final class Unbuilt<A> {
      * refused, and which rules are answerable for it is which of them asked for that pattern. Named
      * with one rule, two rules writing one pattern would have one of them answering for both.
      *
-     * @param at what was being worked out when it was refused, which is what the reason is about
+     * @param at a position of what was being worked out when it was refused, which is what the
+     *           reason is about. What was being worked out is a block, so a machine refused for
+     *           positions held as one value is recorded at each of them: the answer they share is
+     *           the one that came out wider. Which of them wrote the pattern is not this — it is
+     *           what a rule is answerable for, and matching this against
+     *           {@code AdmissibleReading.askedAt} is where that is settled
      * @param asked the pattern whose machine was refused, which is what a rule is answerable for
      *              having written
      * @param why what a rule is answerable for, which is what {@link UnreadReason.About#A_RULE}

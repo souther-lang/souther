@@ -108,10 +108,13 @@ class AnEqualityBetweenTwoPositionsIsHeldByTheValuesTest {
      * <p>The range the one value is in is every one of their ranges at once. Asked of one member,
      * the pair would be answered against half of what the rules say and would come back holding
      * something.
+     *
+     * <p>And said of the two of them. Each position is left a range with something in it, so a
+     * sentence naming one would send an author to read a place whose own rules are fine.
      */
     @Test
     void whereTheirRangesShareNothingTheyAreRefusedToo() {
-        refuses("NoValueItsRulesAllowIsInThatRange", """
+        refuses("NoValueTheseAllowIsInTheRangeTheyShare", """
                 module demo
 
                 data Pair = { p: String, r: String }

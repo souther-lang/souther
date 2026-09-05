@@ -3,10 +3,12 @@ package souther.compiler.values;
 import org.junit.jupiter.api.Test;
 
 import java.util.LinkedHashSet;
+import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -138,6 +140,56 @@ class EveryAnswerOfAReadingIsFiledUnderItsOwnBlocksTest {
         assertEquals(ValueSet.oneOf(Set.of(A, B)), reading.at("p"),
                 "and each alternative still holds what it stated");
         filedUnderItsOwn(reading);
+    }
+
+    /**
+     * A choice between two equalities has lost a relation, and says so.
+     *
+     * <p>Merged into one product, what is left holds neither pair as one value — the relation is
+     * {@code p = r} or {@code p = s}, and no product states that. So the reading cannot promise
+     * that what it holds is the whole of the relation, though what it says about each position on
+     * its own is exact.
+     *
+     * <p>An equality narrows nothing anywhere, so the only thing that can carry "this rule shaped
+     * the relation" is the promise's footprint. Left out of it, a choice between two equalities
+     * would read as one nothing was lost by.
+     */
+    @Test
+    void aChoiceBetweenTwoEqualitiesLosesARelationAndSaysSo() {
+        AdmissibleValues<String> merged = AdmissibleValues.<String>holdingAsOne("p", "r")
+                .join(AdmissibleValues.holdingAsOne("p", "s"), allowing());
+
+        assertFalse(merged.relationExact(), "neither pair survives the merge");
+        assertTrue(merged.projectionExactAt("p"), "and what each position holds is still exact");
+        assertTrue(merged.projectionExactAt("r"));
+        assertTrue(merged.projectionExactAt("s"));
+    }
+
+    /** And held apart, nothing is lost: the alternatives keep the relation between them. */
+    @Test
+    void andHeldApartTheRelationSurvives() {
+        AdmissibleValues<String> apart = AdmissibleValues.<String>holdingAsOne("p", "r")
+                .joinApart(AdmissibleValues.holdingAsOne("p", "s"), allowing());
+
+        assertTrue(apart.relationExact(), "the union of two products is what it is");
+    }
+
+    /**
+     * Two sides of one product may not hold a position between them.
+     *
+     * <p>They are not two sides then. Read as a relation they close into one, and what each of them
+     * was stated to admit is filed under a side the product has no entry for — so the rules are
+     * dropped without anything saying so. Putting them together means meeting what they admit,
+     * which is a set somebody has to build and there is no allowance where a product is made.
+     */
+    @Test
+    void twoSidesOfOneProductMayNotShareAPosition() {
+        Map<Sameness.Block<String>, ValueSet> overlapping = new java.util.LinkedHashMap<>();
+        overlapping.put(Sameness.of("p", "q").blockOf("p"), ValueSet.just(A));
+        overlapping.put(Sameness.of("q", "r").blockOf("q"), ValueSet.just(B));
+
+        assertThrows(IllegalArgumentException.class,
+                () -> new AdmissibleValues.Box<>(overlapping));
     }
 
     /**

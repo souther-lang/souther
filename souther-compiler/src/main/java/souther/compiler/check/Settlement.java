@@ -4,9 +4,12 @@ import souther.compiler.values.Emptiness;
 import souther.compiler.values.Realized;
 import souther.compiler.values.UnreadReason;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.SortedSet;
+import java.util.TreeSet;
 
 /**
  * What settling the met-together reading came to: the values, and the fate of every branch.
@@ -100,19 +103,21 @@ record Settlement(Confinement.Worked<FactSubject> confinement,
             // apart again, and a rule's account is not built out of it — which is the direction
             // this record exists to refuse, and is now refused by the type rather than by saying so.
             //
-            // The answers first and then the machines, which is a settled order and not one the
-            // appending happened to give: each half arrived in its own vocabulary's declared order,
-            // and a place holding one of each would otherwise come out in whichever this method
-            // wrote last.
+            // Said in the vocabulary's declared order, as a joined side is. The two halves are put
+            // together here and each arrived in its own — the machines in the order the copies were
+            // met — so a place holding one of each would otherwise come out in the order this
+            // method appended them, which is the order of the copies reaching the answer.
+            Map<FactSubject, SortedSet<UnreadReason>> both = new LinkedHashMap<>();
+            answerStanding.forEach((position, why) ->
+                    both.computeIfAbsent(position, _ -> new TreeSet<>()).addAll(why));
+            ruleShortfalls.forEach(each ->
+                    both.computeIfAbsent(each.at(), _ -> new TreeSet<>()).add(each.why()));
             souther.compiler.values.Standing<FactSubject> out =
                     souther.compiler.values.Standing.nothing();
-            for (Map.Entry<FactSubject, List<UnreadReason>> each : answerStanding.entrySet()) {
+            for (Map.Entry<FactSubject, SortedSet<UnreadReason>> each : both.entrySet()) {
                 for (UnreadReason why : each.getValue()) {
                     out = out.alsoAt(Set.of(each.getKey()), why);
                 }
-            }
-            for (souther.compiler.values.Unbuilt.RuleShortfall<FactSubject> each : ruleShortfalls) {
-                out = out.alsoAt(Set.of(each.at()), each.why());
             }
             return out;
         }

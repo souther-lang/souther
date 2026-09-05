@@ -117,6 +117,20 @@ public sealed interface DataMessage extends Message {
     @Code(DiagnosticCode.E1013)
     record NoValueTheseCanAllHold(String data, String at) implements DataMessage, Reported {}
 
+    /**
+     * The values positions held as one value are allowed and the range they share have none in
+     * common.
+     *
+     * <p>Beside {@link NoValueTheseCanAllHold} for the reason
+     * {@link NoValueItsRulesAllowIsInThatRange} stands beside
+     * {@link NothingIsLeftForThatPositionToHold}: the ends hold values and the rules allow values
+     * and the two are apart, so a sentence about what the rules leave these would send an author
+     * to read either half and find nothing wrong with it.
+     */
+    @Code(DiagnosticCode.E1013)
+    record NoValueTheseAllowIsInTheRangeTheyShare(String data, String at)
+            implements DataMessage, Reported {}
+
     /** A set is asked to hold more values that differ than there are of what it holds. */
     @Code(DiagnosticCode.E1013)
     record ASetCannotBeFilledFromItsElement(String data, String at, long available)

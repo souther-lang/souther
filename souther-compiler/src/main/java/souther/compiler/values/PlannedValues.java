@@ -57,6 +57,27 @@ public sealed interface PlannedValues<A> {
             guaranteed = Collections.unmodifiableMap(new LinkedHashMap<>(guaranteed));
             tangled = Collections.unmodifiableSet(new LinkedHashSet<>(tangled));
             widened = Collections.unmodifiableSet(new LinkedHashSet<>(widened));
+            // Everything filed under a block, said in this reading's own coordinates — see
+            // {@link AdmissibleValues}, whose reasoning this is.
+            Sameness<A> mine = held instanceof PlannedHeld.Alternatives<A> it
+                    ? commonTo(it) : Sameness.discrete();
+            filedIn(mine, guaranteed.keySet(), tangled, widened);
+        }
+    }
+
+    /** Refuses an answer filed under a coordinate this reading does not answer in — see
+     *  {@link AdmissibleValues}. */
+    @SafeVarargs
+    private static <A> void filedIn(Sameness<A> mine, Set<Sameness.Block<A>>... these) {
+        for (Set<Sameness.Block<A>> blocks : these) {
+            for (Sameness.Block<A> block : blocks) {
+                Sameness.Block<A> here = mine.blockOf(block.members().iterator().next());
+                if (!block.equals(here)) {
+                    throw new IllegalArgumentException("an answer at " + block
+                            + " is filed under a coordinate this reading does not answer in,"
+                            + " which holds those positions as " + here);
+                }
+            }
         }
     }
 
@@ -81,10 +102,12 @@ public sealed interface PlannedValues<A> {
      */
     static <A> PlannedValues<A> holdingAsOne(A here, A there) {
         Sameness.Block<A> block = Sameness.of(here, there).blockOf(here);
+        // Promised at the block, though it narrows nothing there — see
+        // {@link AdmissibleValues#holdingAsOne}.
         return new Settled<>(
                 PlannedHeld.one(new PlannedHeld.Box<>(Map.of(block, AdmittedPlan.ANY))),
-                Map.of(), Standing.nothing(), false, Map.of(), AdmittedPlan.ANY, true, Set.of(),
-                Set.of());
+                Map.of(), Standing.nothing(), false, Map.of(block, AdmittedPlan.ANY),
+                AdmittedPlan.ANY, true, Set.of(), Set.of());
     }
 
     /**
@@ -159,19 +182,18 @@ public sealed interface PlannedValues<A> {
      * whose description this could not ask about is not one of them — it was not refused, it was not
      * asked.
      */
-    default Set<A> refusedInEveryAlternativeAt(AskedOfEachBlock<A> asked) {
+    default Set<Sameness.Block<A>> refusedInEveryAlternativeAt(AskedOfEachBlock<A> asked) {
         if (!(this instanceof Settled<A> it
                 && it.held() instanceof PlannedHeld.Alternatives<A> boxes)) {
             return Set.of();
         }
-        Set<A> everywhere = null;
+        Set<Sameness.Block<A>> everywhere = null;
         for (PlannedHeld.Box<A> box : boxes.boxes()) {
-            Set<A> here = new LinkedHashSet<>();
-            // A block refused is every position of it refused: the positions hold one value, and
-            // there is no value for any of them where the one they share has none.
+            Set<Sameness.Block<A>> here = new LinkedHashSet<>();
+            // The block and not its positions — see {@link AdmissibleValues}.
             box.at().forEach((block, plan) -> {
                 if (askedOf(block, plan, asked) == Emptiness.EMPTY) {
-                    here.addAll(block.members());
+                    here.add(block);
                 }
             });
             if (here.isEmpty()) {
@@ -725,16 +747,26 @@ public sealed interface PlannedValues<A> {
     private static <A> Realized<A> resolved(Settled<A> of, Allowance<A> by) {
         Unbuilt<A> gaveUp = new Unbuilt<>();
         Map<A, ValueSet> perPosition = realized(of.perPosition(), of.sameness(), by, gaveUp);
-        Map<Sameness.Block<A>, ValueSet> guaranteed = promised(of.guaranteed(), by);
         AdmissibleValues.Held<A> held = switch (of.held()) {
             case PlannedHeld.Nothing<A> _ -> new AdmissibleValues.Held.Nothing<A>();
             case PlannedHeld.Alternatives<A> boxes -> alternatives(boxes, by, gaveUp);
         };
+        // The coordinates the answer is in, which are not the ones it was described in. An
+        // alternative dropped for admitting nothing is one whose equalities the rest need not
+        // state, so what the survivors hold as one may be coarser than what every description did
+        // — and everything filed under a block is said in the answer's own before it is built.
+        Sameness<A> heldAsOne = held instanceof AdmissibleValues.Held.Alternatives<A> it
+                ? it.commonSameness() : Sameness.discrete();
+        Map<Sameness.Block<A>, AdmittedPlan> promising = new LinkedHashMap<>();
+        of.guaranteed().forEach((block, plan) -> promising.merge(
+                heldAsOne.blockOf(block.members().iterator().next()), plan,
+                (one, other) -> AdmittedPlan.meeting(List.of(one, other))));
         return new Realized<>(new AdmissibleValues<>(held, perPosition,
                 gaveUp.beside(of.standing()), of.dropped(),
-                guaranteed, promised(of.defaultGuaranteed(), by.elsewhere()),
+                promised(promising, by), promised(of.defaultGuaranteed(), by.elsewhere()),
                 of.guaranteedTogether(),
-                of.tangled(), PlannedValues.both(of.widened(), gaveUp.names())),
+                mapped(of.tangled(), heldAsOne),
+                mapped(both(of.widened(), gaveUp.names()), heldAsOne)),
                 gaveUp.aboutARule(), gaveUp.aboutTheAnswer());
     }
 

@@ -198,8 +198,8 @@ public final class ConjoinedAdmissibleValues<A> {
      * that position is — and a position every alternative of its own factor is refused at is one
      * every alternative of the conjunction is refused at.
      */
-    public Set<A> refusedInEveryAlternativeAt(AskedOfEachBlock<A> asked) {
-        Set<A> out = new LinkedHashSet<>();
+    public Set<Sameness.Block<A>> refusedInEveryAlternativeAt(AskedOfEachBlock<A> asked) {
+        Set<Sameness.Block<A>> out = new LinkedHashSet<>();
         factors.forEach(each -> out.addAll(each.refusedInEveryAlternativeAt(asked)));
         return Collections.unmodifiableSet(out);
     }

@@ -13,6 +13,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.SequencedMap;
+import java.util.Set;
 
 /**
  * What the rules say, in each of the languages this reading has for saying it.
@@ -150,24 +151,22 @@ public record ConstraintState<A>(NumericDomain<A> numbers, PredicateFacts<A> fac
         if (said == null) {
             return Optional.ofNullable(why);
         }
-        // Positions the rules hold as one value are named together. Each of them is left something
-        // on its own, so no one of them is the place — and the sentence read off one would send an
-        // author after a rule that place is fine with.
-        if (shown.by() == Confinement.EmptyBy.POSITIONS_HELD_AS_ONE) {
-            List<Emptiness.AtAField.Where> where = new ArrayList<>();
-            positions.forEach((position, place) -> {
-                if (shown.at().contains(position)) {
-                    where.add(place);
-                }
-            });
-            return Optional.of(where.size() < 2 ? Emptiness.preferred(why, said)
-                    : Emptiness.preferred(why, new Emptiness.AtEqualPositions(where, said)));
+        // One block of the proof is named, and it is named as what it is: a place where it is one
+        // position, and the positions together where it is several.
+        //
+        // One and not all of them. Two blocks left nothing are two lacks, and a sentence over both
+        // would say their positions are one value — a relation no rule of the model states. Which
+        // one is settled by the order the value declares its positions, as which of several empty
+        // positions is named is: read off the state's own set, the block named would be the one
+        // whose clause was met first, and moving a clause would move the refusal.
+        List<Emptiness.AtAField.Where> where = nearestBlock(shown.at(), positions);
+        if (where.size() == 1) {
+            return Optional.of(Emptiness.preferred(why,
+                    new Emptiness.AtAField(where.getFirst(), said)));
         }
-        for (Map.Entry<A, Emptiness.AtAField.Where> each : positions.entrySet()) {
-            if (shown.at().contains(each.getKey())) {
-                return Optional.of(Emptiness.preferred(why,
-                        new Emptiness.AtAField(each.getValue(), said)));
-            }
+        if (where.size() > 1) {
+            return Optional.of(Emptiness.preferred(why,
+                    new Emptiness.AtEqualPositions(where, said)));
         }
         // No position to name, which is what a choice refused at two of them leaves: each of them
         // holds values some alternative stands at, so what was shown is about the whole product.
@@ -178,6 +177,37 @@ public record ConstraintState<A>(NumericDomain<A> numbers, PredicateFacts<A> fac
         // happened to be at, which is the declaration's own value.
         return Optional.of(shown.by() == Confinement.EmptyBy.SET_AND_RANGE
                 ? Emptiness.preferred(why, said) : why);
+    }
+
+    /**
+     * The places of the block whose earliest position the value declares first, in that order.
+     *
+     * <p>One block and not the union of them. What each of these says is that the positions in it
+     * are one value and that value has none, which is a lack per block — read together, a
+     * declaration whose {@code p == q} and whose {@code r == s} are each contradictory would be
+     * told that all four are one value, which no rule of it says.
+     *
+     * <p>Empty where no block's positions are all declared here, which is a block about subjects
+     * this value does not name. What can be said then is what the general proof says.
+     */
+    private static <A> List<Emptiness.AtAField.Where> nearestBlock(
+            Set<souther.compiler.values.Sameness.Block<A>> blocks,
+            SequencedMap<A, Emptiness.AtAField.Where> positions) {
+        for (Map.Entry<A, Emptiness.AtAField.Where> first : positions.entrySet()) {
+            for (souther.compiler.values.Sameness.Block<A> block : blocks) {
+                if (!block.holds(first.getKey())) {
+                    continue;
+                }
+                List<Emptiness.AtAField.Where> where = new ArrayList<>();
+                positions.forEach((position, place) -> {
+                    if (block.holds(position)) {
+                        where.add(place);
+                    }
+                });
+                return where.size() == block.members().size() ? where : List.of();
+            }
+        }
+        return List.of();
     }
 
     /**

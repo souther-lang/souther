@@ -385,6 +385,7 @@ public record AdmissibleValues<A>(Held<A> held, Map<A, ValueSet> perPosition,
                 throw new IllegalArgumentException(
                         "a product with an empty side stands for nothing, and is not an alternative");
             }
+            Sameness.apart(at.keySet());
         }
 
         /** One alternative over positions that are each their own block. */
@@ -397,16 +398,7 @@ public record AdmissibleValues<A>(Held<A> held, Map<A, ValueSet> perPosition,
         /** Which positions this alternative holds as one value, read off what it is a product
          *  over. */
         public Sameness<A> sameness() {
-            Sameness<A> out = Sameness.discrete();
-            for (Sameness.Block<A> block : at.keySet()) {
-                if (!block.isOne()) {
-                    List<A> members = new ArrayList<>(block.members());
-                    for (int each = 1; each < members.size(); each++) {
-                        out = out.joining(members.get(0), members.get(each));
-                    }
-                }
-            }
-            return out;
+            return Sameness.of(at.keySet());
         }
 
         ValueSet get(Sameness.Block<A> block) {
@@ -572,6 +564,37 @@ public record AdmissibleValues<A>(Held<A> held, Map<A, ValueSet> perPosition,
         // same on two compiles of one model.
         tangled = Collections.unmodifiableSet(new LinkedHashSet<>(tangled));
         widened = Collections.unmodifiableSet(new LinkedHashSet<>(widened));
+        Sameness<A> mine = held instanceof Held.Alternatives<A> it
+                ? it.commonSameness() : Sameness.discrete();
+        filedIn(mine, guaranteed.keySet(), tangled, widened);
+    }
+
+    /**
+     * Refuses an answer filed under a coordinate this reading does not answer in.
+     *
+     * <p>What a block holds is one value, and which positions are one value is the reading's own
+     * ({@link #sameness}). A conjunction leaves a coarser relation and a choice a finer one, so an
+     * operation has to say what each side's answers come to in the relation it leaves — and one
+     * that carries them across by hand is one somebody writes without carrying them.
+     *
+     * <p>Refused rather than moved. Two promises arriving at one block promise what both promise,
+     * which is a set somebody has to build and there is no allowance here; and an answer quietly
+     * refiled is a producer left wrong with nothing saying so. What it costs unrefused is that a
+     * reader asking about a position looks under the block it is on, finds nothing, and is told the
+     * reading promised nothing and widened nowhere.
+     */
+    @SafeVarargs
+    private static <A> void filedIn(Sameness<A> mine, Set<Sameness.Block<A>>... these) {
+        for (Set<Sameness.Block<A>> blocks : these) {
+            for (Sameness.Block<A> block : blocks) {
+                Sameness.Block<A> here = mine.blockOf(block.members().iterator().next());
+                if (!block.equals(here)) {
+                    throw new IllegalArgumentException("an answer at " + block
+                            + " is filed under a coordinate this reading does not answer in,"
+                            + " which holds those positions as " + here);
+                }
+            }
+        }
     }
 
     /**
@@ -765,8 +788,14 @@ public record AdmissibleValues<A>(Held<A> held, Map<A, ValueSet> perPosition,
      */
     public static <A> AdmissibleValues<A> holdingAsOne(A here, A there) {
         Sameness.Block<A> block = Sameness.of(here, there).blockOf(here);
+        // Promised at the block, though it narrows nothing there. The keys of the promise are the
+        // footprint as well — the blocks a rule of this reading reached — and this rule reached
+        // one: it shapes the relation without touching what any position admits. Left out, a
+        // choice between two equalities would be a union of two relations that no product holds
+        // and would say it lost nothing, since what it reads to decide that is this key set.
         return new AdmissibleValues<>(one(new Box<>(Map.of(block, ValueSet.ANY))), Map.of(),
-                Standing.nothing(), false, Map.of(), ValueSet.ANY, true, Set.of(), Set.of());
+                Standing.nothing(), false, Map.of(block, ValueSet.ANY), ValueSet.ANY, true,
+                Set.of(), Set.of());
     }
 
     /**
@@ -958,18 +987,19 @@ public record AdmissibleValues<A>(Held<A> held, Map<A, ValueSet> perPosition,
      * What it cannot do is disagree with that answer about anything a reader acts on: what comes
      * back is a place to name, and none of them is the general form.
      */
-    public Set<A> refusedInEveryAlternativeAt(AskedOfEachBlock<A> asked) {
+    public Set<Sameness.Block<A>> refusedInEveryAlternativeAt(AskedOfEachBlock<A> asked) {
         if (!(held instanceof Held.Alternatives<A> it)) {
             return Set.of();
         }
-        Set<A> everywhere = null;
+        Set<Sameness.Block<A>> everywhere = null;
         for (Box<A> box : it.boxes()) {
-            Set<A> here = new LinkedHashSet<>();
-            // A block refused is every position of it refused: the positions hold one value, and
-            // there is no value for any of them where the one they share has none.
+            Set<Sameness.Block<A>> here = new LinkedHashSet<>();
+            // The block and not its positions. What was refused is the one value those positions
+            // share, and each of them may be left something on its own — taken apart here, the
+            // proof would say a lack is at a place whose own rules are fine with it.
             box.at().forEach((block, set) -> {
                 if (asked.of(block, set) == Emptiness.EMPTY) {
-                    here.addAll(block.members());
+                    here.add(block);
                 }
             });
             if (here.isEmpty()) {

@@ -54,6 +54,47 @@ public final class Sameness<A> {
         return Sameness.<A>discrete().joining(one, other);
     }
 
+    /**
+     * Refuses blocks that share a position, which are not the classes of any relation.
+     *
+     * <p>What a product is indexed by has to be its sides, and two sides holding one position
+     * between them are not two sides. Read as a relation, they close into one class, and the sets
+     * they were written at are then filed under a class the product has no entry for — so what
+     * each of them said is admitted by nobody and refused by nobody, which is a rule silently
+     * dropped rather than a state anything can answer about.
+     *
+     * <p>Refused rather than closed. Putting them together means meeting what each was stated to
+     * admit, which is a set somebody has to build, and there is no allowance where a product is
+     * made.
+     */
+    public static <A> void apart(Collection<Block<A>> blocks) {
+        Set<A> seen = new LinkedHashSet<>();
+        blocks.forEach(block -> block.members().forEach(each -> {
+            if (!seen.add(each)) {
+                throw new IllegalArgumentException(
+                        "two sides of one product hold " + each + " between them: " + blocks);
+            }
+        }));
+    }
+
+    /**
+     * The relation these blocks are the classes of, in one pass.
+     *
+     * <p>For a caller that already holds the classes — a product is indexed by them, so reading the
+     * relation off it is reading the keys. Built by {@link #joining} instead, a block of several
+     * positions costs a copy of the whole relation for each of them, and a reading is asked what it
+     * holds as one every time a position is looked up in it.
+     */
+    public static <A> Sameness<A> of(Collection<Block<A>> blocks) {
+        Map<A, Block<A>> out = new LinkedHashMap<>();
+        blocks.forEach(block -> {
+            if (!block.isOne()) {
+                block.members().forEach(each -> out.put(each, block));
+            }
+        });
+        return out.isEmpty() ? discrete() : new Sameness<>(out);
+    }
+
     /** Whether no two positions are held as one. */
     public boolean isDiscrete() {
         return blocks.isEmpty();

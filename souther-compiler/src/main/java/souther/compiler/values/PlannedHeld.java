@@ -67,6 +67,7 @@ sealed interface PlannedHeld<A> {
                 }
             });
             at = Collections.unmodifiableMap(said);
+            Sameness.apart(at.keySet());
         }
 
         /** One alternative over positions that are each their own block. */
@@ -79,16 +80,7 @@ sealed interface PlannedHeld<A> {
         /** Which positions this alternative holds as one value, read off what it is a product
          *  over. */
         Sameness<A> sameness() {
-            Sameness<A> out = Sameness.discrete();
-            for (Sameness.Block<A> block : at.keySet()) {
-                if (!block.isOne()) {
-                    List<A> members = new ArrayList<>(block.members());
-                    for (int each = 1; each < members.size(); each++) {
-                        out = out.joining(members.get(0), members.get(each));
-                    }
-                }
-            }
-            return out;
+            return Sameness.of(at.keySet());
         }
 
         AdmittedPlan get(Sameness.Block<A> block) {
