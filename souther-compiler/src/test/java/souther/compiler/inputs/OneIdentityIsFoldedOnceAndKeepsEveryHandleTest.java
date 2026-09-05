@@ -128,7 +128,7 @@ class OneIdentityIsFoldedOnceAndKeepsEveryHandleTest {
         StandingQuestion one = asked(NAMED, List.of(form, none));
         StandingQuestion theOtherWayRound = asked(PLACED, List.of(none, form));
 
-        assertThrows(IllegalArgumentException.class, () -> one.mergedWith(theOtherWayRound));
+        assertThrows(TwoAccountsOfOneQuestion.class, () -> one.mergedWith(theOtherWayRound));
     }
 
     /** And a question that asks something is not an account of one that asks nothing. */

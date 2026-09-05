@@ -38,12 +38,11 @@ public record UnnamedRegion(Region region) {
     /**
      * A region that is in a text something already names, handed over as one that is not.
      *
-     * <p>Marked for the reason {@link DiagnosticPlace.NotAPlace} is: what raises one of these runs
-     * inside an analysis that falls open, and an unmarked refusal would be swallowed there — turning
-     * a report the compiler built wrongly into a subject with nothing wrong with it.
+     * <p>The whole of what this type is for. A region in a text something can name, held as one that
+     * cannot, is a value with a source identity beside it and a declaration that it has none — two
+     * answers to one question, which is what holding these apart at the type was meant to stop.
      */
-    public static final class NotInAnUnnamedText extends IllegalArgumentException
-            implements TheCompilerDisagreesWithItself {
+    public static final class NotInAnUnnamedText extends IllegalArgumentException {
 
         private static final long serialVersionUID = 1L;
 

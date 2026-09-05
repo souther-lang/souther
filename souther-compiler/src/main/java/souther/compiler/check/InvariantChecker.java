@@ -1205,7 +1205,7 @@ public final class InvariantChecker {
      * value that came back with nothing to say for that reason reads exactly like a value whose
      * rules were all read.
      */
-    static final class APartNoReadingSaw extends TheCheckDisagreesWithItself {
+    static final class APartNoReadingSaw extends IllegalStateException {
 
         private static final long serialVersionUID = 1L;
 

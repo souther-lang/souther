@@ -156,9 +156,8 @@ public record Clause(Id id, Optional<ClauseName> name, DiagnosticPlace at) {
      * walk has no rule for; this is not that. It says the compiler's own model of a declaration
      * contradicts itself, and swallowed it comes out as a behavior with nothing to report — the same
      * thing a behavior whose invariants all discharge comes out as.
-     * {@link InvariantChecker#gaveUp} refuses it for that reason.
      */
-    static final class NotOneClause extends TheCheckDisagreesWithItself {
+    static final class NotOneClause extends IllegalStateException {
 
         private static final long serialVersionUID = 1L;
 

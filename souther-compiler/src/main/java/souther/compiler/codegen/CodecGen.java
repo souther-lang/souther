@@ -16,7 +16,6 @@ import souther.compiler.types.Type;
 import souther.compiler.jvm.SoutherJvmAbi;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.check.TypeOps;
-import souther.compiler.diag.TheCompilerDisagreesWithItself;
 import souther.compiler.core.Core;
 
 import souther.compiler.jvm.DecoderKind;
@@ -729,12 +728,11 @@ final class CodecGen {
      * Raised where a decoder was to be built and a rule about the value had not been read.
      *
      * <p>Not a limit and not an author's mistake: the emission does not begin where a rule it reads
-     * could not be worked out, so arriving here is this compiler having gone past that. It carries
-     * {@link TheCompilerDisagreesWithItself} so that nothing below reads it as a shape the emitter
-     * has no rule for and carries on with a decoder that constrains less.
+     * could not be worked out, so arriving here is this compiler having gone past its own
+     * precondition. What a decoder built from the rules that happened to be readable holds a value
+     * to is less than the model says, and it carries no word for having done so.
      */
-    static final class RulesWereNotAllRead extends RuntimeException
-            implements TheCompilerDisagreesWithItself {
+    static final class RulesWereNotAllRead extends IllegalStateException {
 
         private static final long serialVersionUID = 1L;
 

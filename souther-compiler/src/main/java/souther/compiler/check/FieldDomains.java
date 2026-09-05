@@ -1101,7 +1101,7 @@ public final class FieldDomains {
      * compiler has no word for their rule, which is a sentence about their model printed because two
      * of this compiler's accounts disagreed.
      */
-    static final class AStandingQuestionWithNoAccount extends TheCheckDisagreesWithItself {
+    static final class AStandingQuestionWithNoAccount extends IllegalStateException {
 
         private static final long serialVersionUID = 1L;
 

@@ -1269,8 +1269,7 @@ public final class Bodies {
      * is the compiler holding two answers to one question, and the reader that swallowed it would
      * publish nothing and look exactly like a reader that had nothing to publish.
      */
-    static final class ALeaveAndAModuleDisagree extends RuntimeException
-            implements souther.compiler.diag.TheCompilerDisagreesWithItself {
+    static final class ALeaveAndAModuleDisagree extends IllegalStateException {
 
         private static final long serialVersionUID = 1L;
 

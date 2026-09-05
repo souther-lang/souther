@@ -1521,7 +1521,7 @@ final class Terms {
      * is the naming and the reading disagreeing about which value the atom is, and every bound
      * derived under that name is about neither of them.
      */
-    static final class OneTermTwoDerivations extends TheCheckDisagreesWithItself {
+    static final class OneTermTwoDerivations extends IllegalStateException {
         private static final long serialVersionUID = 1L;
 
         OneTermTwoDerivations(String message) {
@@ -1536,7 +1536,7 @@ final class Terms {
      * of which value it is, so two namings answering differently is one of them having read a rule
      * the other did not — and the reader that asked between them was answered from half of it.
      */
-    static final class OneTermTwoIntrinsicAnswers extends TheCheckDisagreesWithItself {
+    static final class OneTermTwoIntrinsicAnswers extends IllegalStateException {
         private static final long serialVersionUID = 1L;
 
         OneTermTwoIntrinsicAnswers(String message) {
@@ -1636,7 +1636,7 @@ final class Terms {
      * differently. Terms are held by what they are made of now, so that route is gone and what is
      * left is the check handing one value two spacings.
      */
-    static final class OneTermTwoKinds extends TheCheckDisagreesWithItself {
+    static final class OneTermTwoKinds extends IllegalStateException {
          private static final long serialVersionUID = 1L;
 
         OneTermTwoKinds(String message) {
