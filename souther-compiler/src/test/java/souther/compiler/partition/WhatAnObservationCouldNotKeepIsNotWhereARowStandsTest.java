@@ -124,15 +124,15 @@ class WhatAnObservationCouldNotKeepIsNotWhereARowStandsTest {
                 new BorderQuantity.Observation() {
 
                     @Override
-                    public ObservedValue at(TermPath path) {
+                    public WalkResult<ObservationAtPoint> at(TermPath path) {
                         throw new AssertionError("a number over a run is not read from one value");
                     }
 
                     @Override
-                    public List<ObservedValue> everyValueAt(TermPath path) {
-                        return UNDER.equals(path)
+                    public WalkResult<List<ObservedValue>> everyValueAt(TermPath path) {
+                        return WalkResult.reached(UNDER.equals(path)
                                 ? List.of(new ObservedValue.Truncated())
-                                : List.of(new ObservedValue.Unknown("no"));
+                                : List.of(new ObservedValue.Unknown("no")));
                     }
                 });
 
@@ -143,7 +143,7 @@ class WhatAnObservationCouldNotKeepIsNotWhereARowStandsTest {
     }
 
     /**
-     * A walk that arrived at no value says that, and not that an observation stopped.
+     * A walk that arrived and found no value says that, and not that an observation stopped.
      *
      * <p>The two leave different work and only one of them names a budget. A reader that words a
      * code as what an observation did — and something downstream does, since that is what the code
@@ -152,30 +152,32 @@ class WhatAnObservationCouldNotKeepIsNotWhereARowStandsTest {
      */
     @Test
     void aWalkThatReachedNoValueIsNotAnObservationThatStopped() {
-        BorderQuantity.Stands stands = form().standsAt(AT_A_HUNDRED,
+        BorderQuantity.Stands stands = atAPlace().standsAt(AT_A_HUNDRED,
                 new BorderQuantity.Observation() {
 
                     @Override
-                    public ObservedValue at(TermPath path) {
-                        return null;
+                    public WalkResult<ObservationAtPoint> at(TermPath path) {
+                        return WalkResult.reached(ObservationAtPoint.ANOTHER_READING);
                     }
 
                     @Override
-                    public List<ObservedValue> everyValueAt(TermPath path) {
-                        return java.util.Collections.singletonList(null);
+                    public WalkResult<List<ObservedValue>> everyValueAt(TermPath path) {
+                        throw new AssertionError("a number of one place is not read over a run");
                     }
                 });
 
         assertEquals(BorderQuantity.Stands.couldNotTell(ReadingGap.NO_VALUE), stands,
-                "nothing arrived, which is not a value an observation could not keep");
+                "the walk arrived and no value of the row stands there, which is not a value an"
+                        + " observation could not keep");
     }
 
     /**
-     * And a run the walk never reached says the same, rather than that the row does not stand.
+     * And a run the walk never reached says something else again, not that the row missed the line.
      *
-     * <p>The other way nothing arrives. A caller that could not walk to the run hands over no list
-     * at all, and answering "this is no number of that" would make a place this compiler could not
-     * reach into the model putting the row somewhere else — {@code Stands.No}, and a point missed.
+     * <p>A caller that could not walk to the run hands over no run at all. Answering "this is no
+     * number of that" would make a place this compiler could not reach into the model putting the
+     * row somewhere else — {@code Stands.No}, and a point missed; answering that no value stands
+     * there says the row wrote nothing at a position nothing ever looked at.
      */
     @Test
     void aRunTheWalkNeverReachedIsNotARunThatMissedTheLine() {
@@ -183,18 +185,25 @@ class WhatAnObservationCouldNotKeepIsNotWhereARowStandsTest {
                 new BorderQuantity.Observation() {
 
                     @Override
-                    public ObservedValue at(TermPath path) {
-                        return null;
+                    public WalkResult<ObservationAtPoint> at(TermPath path) {
+                        throw new AssertionError("a number over a run is not read from one value");
                     }
 
                     @Override
-                    public List<ObservedValue> everyValueAt(TermPath path) {
-                        return null;
+                    public WalkResult<List<ObservedValue>> everyValueAt(TermPath path) {
+                        return WalkResult.couldNotWalk();
                     }
                 });
 
-        assertEquals(BorderQuantity.Stands.couldNotTell(ReadingGap.NO_VALUE), stands,
+        assertEquals(BorderQuantity.Stands.couldNotTell(ReadingGap.COULD_NOT_WALK), stands,
                 "the walk did not reach the run, which says nothing about where the row stands");
+    }
+
+    /** The same quantity over one position's own value, for what is asked of a place. */
+    private static BorderQuantity.OverAForm atAPlace() {
+        NumericTerm.ValueOf here = new NumericTerm.ValueOf(UNDER);
+        return new BorderQuantity.OverAForm("decide", LinearForm.atom((NumericTerm) here),
+                Map.of(here, TermOrdersFixtures.itself(here, new Carrier.Whole())));
     }
 
     private static BorderQuantity.OverAForm form() {
@@ -207,14 +216,14 @@ class WhatAnObservationCouldNotKeepIsNotWhereARowStandsTest {
         return new BorderQuantity.Observation() {
 
             @Override
-            public ObservedValue at(TermPath path) {
+            public WalkResult<ObservationAtPoint> at(TermPath path) {
                 throw new AssertionError("a number over a run is not read from one value");
             }
 
             @Override
-            public List<ObservedValue> everyValueAt(TermPath path) {
+            public WalkResult<List<ObservedValue>> everyValueAt(TermPath path) {
                 assertEquals(UNDER, path, "read from where the run says its values are");
-                return List.of(values);
+                return WalkResult.reached(List.of(values));
             }
         };
     }

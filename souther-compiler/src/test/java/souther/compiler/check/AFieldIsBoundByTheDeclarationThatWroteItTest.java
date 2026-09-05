@@ -131,9 +131,10 @@ class AFieldIsBoundByTheDeclarationThatWroteItTest {
             Hir.Data range = range(c);
             Hir.Expr clause = range.invariants().get(0).expr();
 
-            Core athome = readBy(c, "up").typed(clause, RANGE, range).orNull();
+            ClauseAsExpanded read = new ClauseAsExpanded(clause, CallsLeftStanding.NONE);
+            Core athome = readBy(c, "up").typed(read, RANGE, range).orNull();
             assertNotNull(athome, "the declaring module reads its own rule");
-            assertEquals(athome, readBy(c, "demo").typed(clause, RANGE, range).orNull(),
+            assertEquals(athome, readBy(c, "demo").typed(read, RANGE, range).orNull(),
                     "reached " + reached + ": one rule, read the same either side of the boundary");
         }
     }

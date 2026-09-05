@@ -1,0 +1,93 @@
+package souther.compiler.check;
+
+import souther.compiler.core.Core;
+import souther.compiler.values.UnreadReason;
+
+/**
+ * One thing a rule of the model is answerable for, at one position, written at one place.
+ *
+ * <p>Three and not two. What a reading was short of and where it left the position short are what a
+ * place's own account holds; which written thing it is about is what an account of a rule needs and
+ * is what a place cannot say — every rule reaching a position pays into its answer, so a place has
+ * as many claimants as it has rules and names none of them.
+ *
+ * <p><b>Made where the reading decided, and never read back out of a place.</b> A position's
+ * standing is what it was left holding and is right to hold every reason there is; sifting it for
+ * the ones a rule could be answerable for gives a list of reasons and no rule. So each of these is
+ * made at the point the reading made the decision, where the written thing is still in hand, and
+ * what travels afterwards is this.
+ *
+ * <p>Told apart by all three. The same reason at the same position, decided at two written places,
+ * is two of these — an author has two things to look at, and a carrier that kept one would be
+ * choosing between them by whichever was met first.
+ *
+ * <p>No order. Which of two of these an author wrote first is a fact about the model, and saying it
+ * needs the source rather than the reading; nothing here is in an order anybody may read.
+ *
+ * @param position what the reading was left unable to say the values of
+ * @param why what it was short of, which a rule is answerable for ({@link UnreadReason.About#A_RULE})
+ * @param site the written place the reading decided it at
+ */
+record RuleShortfall(FactSubject position, UnreadReason why, RuleShortfall.Site site) {
+
+    RuleShortfall {
+        if (position == null || why == null || site == null) {
+            throw new IllegalArgumentException(
+                    "a shortfall about a rule says where, what it was, and where it was written");
+        }
+        if (why.about() != UnreadReason.About.A_RULE) {
+            throw new IllegalArgumentException(
+                    "a reason about " + why.about() + " names no rule to be about: " + why);
+        }
+    }
+
+    /**
+     * A written place a reading can be short of something at.
+     *
+     * <p>Two, because two kinds of decision are made about two kinds of thing. A reading gives up on
+     * a clause it has no word for, which is one leaf somebody wrote. A choice offers an alternative
+     * nothing could read, which is one fact about the choice however many positions it reaches and
+     * however many leaves are under it — filed at a leaf, an author would be sent to the branch that
+     * was read.
+     *
+     * <p>What is held is identity and nothing else: two of these are the same written place or are
+     * not. Where they stand relative to each other is the source's to say and is asked nowhere here.
+     */
+    sealed interface Site {
+
+        /** One clause the reading had no word for, as the node it was written as. */
+        record AtALeaf(Core node) implements Site {
+
+            public AtALeaf {
+                if (node == null) {
+                    throw new IllegalArgumentException("a leaf is some node of a clause");
+                }
+            }
+
+            @Override
+            public boolean equals(Object other) {
+                return other instanceof AtALeaf it && node == it.node;
+            }
+
+            @Override
+            public int hashCode() {
+                return System.identityHashCode(node);
+            }
+
+            @Override
+            public String toString() {
+                return "leaf@" + Integer.toHexString(System.identityHashCode(node));
+            }
+        }
+
+        /** One choice an alternative of which nothing could read. */
+        record AtAChoice(ChoiceId id) implements Site {
+
+            public AtAChoice {
+                if (id == null) {
+                    throw new IllegalArgumentException("a choice is some choice of a clause");
+                }
+            }
+        }
+    }
+}

@@ -4,21 +4,21 @@ package souther.compiler.diag;
  * A failure that says the compiler's own model contradicts itself, as opposed to one that says the
  * compiler could not follow a program.
  *
- * <p>An analysis that falls open swallows the second and must not swallow the first. A shape a walk
- * has no rule for is what falling open is for: the run-time check stands, and a limit of an analysis
- * can never reject a valid program. This is the other one — one name given two values, one clause
- * given two answers, a region running between two sources. Swallowed, it produces a subject with no
- * findings, which is exactly what a subject that passed produces, so the difference between "this
- * could not be analysed" and "this is proven" stops being readable anywhere.
+ * <p>What the two are is one name given two values, one clause given two answers, a region running
+ * between two sources — as against a shape a walk has no rule for, where the run-time check stands
+ * and a limit of an analysis may never reject a valid program.
  *
- * <p>What a boundary asks about is this type, rather than a list of the ones it knows of. A list is
- * a copy of this file kept somewhere else, and the way it goes wrong is silent: a compiler that
- * gains a new way to disagree with itself starts reporting that disagreement as an ordinary limit,
- * and nothing fails while it does.
+ * <p><b>No boundary asks about this.</b> One did, and asking was the mistake: a boundary that gives
+ * up on everything except the kinds it recognises makes a limit of every failure nobody has named
+ * yet, and nothing fails while it does. Where an analysis falls open now, what it falls open on is a
+ * value something with the standing to say so made, and a failure with no such value behind it is
+ * not a limit whatever its type
+ * ({@code souther.compiler.check.WhatTheCheckCannotRead}).
  *
- * <p>An interface and not a class, and here rather than beside the check, because the two layers
- * that raise one cannot share a superclass: a place that is not a place is refused where regions
- * become places, and the readings of a clause are compared where clauses are read.
+ * <p>So this names a family and is read by nobody. An interface and not a class, and here rather
+ * than beside any one check, because the layers that raise one cannot share a superclass: a place
+ * that is not a place is refused where regions become places, and the readings of a clause are
+ * compared where clauses are read.
  */
 public interface TheCompilerDisagreesWithItself {
 }

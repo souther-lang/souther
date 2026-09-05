@@ -121,9 +121,10 @@ class AClassificationIsPlacedInsideTheClauseItIsAboutTest {
                 // Which of the declaration's clauses each answer is about is not carried, so what is
                 // held is that it is inside one of them — a position inside the helper is inside none.
                 boolean inside = false;
-                for (Hir.InvariantClause clause
+                for (souther.compiler.check.ExpandedClauses.Expanded each
                         : ((ExpandedClauseResult.Found) declared.of(
                                 ((TypeSymbol.AtModule) named).key())).clauses().clauses()) {
+                    Hir.InvariantClause clause = each.clause();
                     assertNotNull(clause.region(), "the clause knows where it is written");
                     inside = inside || Region.encloses(clause.region(), Region.point(answer.owed().clause()));
                 }

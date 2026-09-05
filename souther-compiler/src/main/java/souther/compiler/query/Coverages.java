@@ -1012,14 +1012,16 @@ final class Coverages {
         souther.compiler.partition.ObservedInputs read =
                 probe.read(built.row().inputs()).asInputs();
         if (read == null) {
-            // Nothing came back to read the row off, which is not an observation of it. What did
-            // not happen here is the running: the values would not build a second time, or the
-            // model refused them, or the classes would not link — and every one of those is
-            // something this run did rather than a value a limit shortened. Named as the second, a
-            // linkage failure arrives at the account as an observation that was stopped, and the
-            // report says a limit did something that never fired.
+            // Nothing came back to read the row off, which is not an observation of it and is not a
+            // position holding no value either. What did not happen here is the running: the values
+            // would not build a second time, or the model refused them, or the classes would not
+            // link — and every one of those is something this run did rather than a value a limit
+            // shortened or a place a row wrote nothing at. Named as the first, a linkage failure
+            // arrives at the account as an observation that was stopped and the report says a limit
+            // did something that never fired; named as the second, it says the row put nothing
+            // where nothing ever looked.
             return new StandingAtAPoint.Met.CouldNotTell(
-                    Set.of(souther.compiler.partition.ReadingGap.NO_VALUE));
+                    Set.of(souther.compiler.partition.ReadingGap.COULD_NOT_READ_ROW));
         }
         return StandingAtAPoint.met(line, List.of(read), criterion, site);
     }

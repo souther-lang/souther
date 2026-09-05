@@ -99,10 +99,15 @@ public final class ClauseHelpers {
             // construction that appears only inside a helper's body written as an application
             // here and as a construction there, and what tells the two representations apart is
             // what {@link InliningPolicy} says and nothing else.
+            // What each clause's own expansion left standing, taken from the run that made it. The
+            // inliner's own answer is about every tree it was driven over, and a clause told that a
+            // call standing in a sibling stands in it would be read as one this cannot follow when
+            // nothing in it is.
+            List<CallsLeftStanding> standing = new ArrayList<>();
+            Hir.Def expanded = withInlinedInvariants(inliner, def, standing::add);
             out.put(declares,
-                    NewtypeDesugar.rewriteInvariantsOf(withInlinedInvariants(inliner, def), symbols)
-                            instanceof Hir.Data d
-                            ? new ExpandedClauses(declares, d.invariants())
+                    NewtypeDesugar.rewriteInvariantsOf(expanded, symbols) instanceof Hir.Data d
+                            ? new ExpandedClauses(declares, paired(d.invariants(), standing))
                             : ExpandedClauses.nothingToExpand(declares));
         }
         return Map.copyOf(out);
@@ -117,6 +122,25 @@ public final class ClauseHelpers {
      */
     public static ExpandedClauses noClausesToExpand(TypeKey declaration) {
         return ExpandedClauses.nothingToExpand(declaration);
+    }
+
+    /**
+     * Each clause with what its own expansion left standing, in the order they were written.
+     *
+     * <p>The two lists are the same walk's answers and are put together the moment both are in
+     * hand, so that nothing below holds a clause beside a set that is not its own.
+     */
+    private static List<ExpandedClauses.Expanded> paired(List<Hir.InvariantClause> clauses,
+                                                         List<CallsLeftStanding> standing) {
+        if (clauses.size() != standing.size()) {
+            throw new IllegalStateException("this compiler expanded " + standing.size()
+                    + " clauses and wrote down " + clauses.size());
+        }
+        List<ExpandedClauses.Expanded> out = new ArrayList<>();
+        for (int each = 0; each < clauses.size(); each++) {
+            out.add(new ExpandedClauses.Expanded(clauses.get(each), standing.get(each)));
+        }
+        return out;
     }
 
     /** {@code m} with its helper parameter types settled and the names in its invariants written
@@ -134,7 +158,7 @@ public final class ClauseHelpers {
     private static Hir.Module withInlinedInvariants(HelperInliner inliner, Hir.Module m) {
         List<Hir.Def> defs = new ArrayList<>();
         for (Hir.Def def : m.defs()) {
-            defs.add(withInlinedInvariants(inliner, def));
+            defs.add(withInlinedInvariants(inliner, def, _ -> { }));
         }
         List<Hir.BehaviorDef> behaviors = new ArrayList<>();
         for (Hir.BehaviorDef behavior : m.behaviors()) {
@@ -152,13 +176,18 @@ public final class ClauseHelpers {
      * clause as written and the other on the clause with the helpers in it would tell the two
      * apart by something other than {@link InliningPolicy}.
      */
-    private static Hir.Def withInlinedInvariants(HelperInliner inliner, Hir.Def def) {
+    private static Hir.Def withInlinedInvariants(HelperInliner inliner, Hir.Def def,
+                                                java.util.function.Consumer<CallsLeftStanding> met) {
         if (!(def instanceof Hir.Data d) || d.invariants().isEmpty()) {
             return def;
         }
         BindingOwner declared = new BindingOwner.OfData(d.declares());
         return new Hir.Data(d.written(), d.declares(), d.newtype(), d.includes(), d.fields(),
-                Hir.mapClauses(d.invariants(), clause -> inliner.inline(clause, declared)),
+                Hir.mapClauses(d.invariants(), clause -> {
+                    Expansion<Hir.Expr> one = inliner.expanding(clause, declared);
+                    met.accept(CallsLeftStanding.of(one.standing()));
+                    return one.value();
+                }),
                 d.pos());
     }
 

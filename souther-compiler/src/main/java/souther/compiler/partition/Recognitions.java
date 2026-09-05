@@ -3,11 +3,11 @@ package souther.compiler.partition;
 import souther.compiler.inputs.Membership;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.numeric.Place;
-import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.values.Value;
 
 import java.math.BigDecimal;
+import java.util.Objects;
 
 /**
  * Reading one {@link Recognition} against one value.
@@ -40,6 +40,11 @@ public final class Recognitions {
      * say, so it is handed the observation as it stands ({@link Membership}).
      */
     public static Membership membershipOf(Recognition what, ObservedValue value) {
+        // A class is put to a value that stands, and whether one stands there was settled by
+        // whatever walked to the position. Answered here instead, this entry would say one thing
+        // for a class that looks at a shape and another for a class that reads a number — one
+        // question with two answers, decided by which kind of class a caller happened to hold.
+        Objects.requireNonNull(value, "a class is put to a value that stands at the position");
         return switch (what) {
             case Recognition.Under under ->
                     membershipOf(under.inner(), Classifier.inside(under.worn(), value));
@@ -58,15 +63,9 @@ public final class Recognitions {
         };
     }
 
-    /** One told apart by looking at the value, which there has to be one of to look at. */
+    /** One told apart by looking at the value, which there is one of to look at. */
     private static Membership byShape(ObservedValue value,
                                       java.util.function.Predicate<ObservedValue> holds) {
-        // No class holds what is not there, and which class it is in is what nothing can say. The
-        // word is this classifier's own: what a walk arrived at is not an observation, and the
-        // sentence read off this code is about placing a value rather than about a limit.
-        if (value == null) {
-            return new Membership.Incomplete(Incompleteness.Code.VALUE_UNREADABLE);
-        }
         Membership.Incomplete unread = Membership.unread(value);
         return unread != null ? unread : Membership.of(holds.test(value));
     }
@@ -110,6 +109,9 @@ public final class Recognitions {
      * <p>The three answers a reading has, in one place. A value that is not a number is a value the
      * class does not hold; a number that could not be read is why nobody can say; and only a number
      * that arrived reaches the question the class is actually about.
+     *
+     * <p>Asked of a value, so there is no fourth. Whether there is a value here was settled by
+     * whatever walked to the position, and a class is put to the ones that stand.
      */
     private static Membership counted(Recognition.OfACount count, ObservedValue value) {
         // Read on the order the value is written on; asked on the order the count is compared
@@ -118,10 +120,6 @@ public final class Recognitions {
             case NumericTerm.Reading.Number number -> Membership.of(
                     holds(count.is(), number.value(), count.carrier()));
             case NumericTerm.Reading.Missing missing -> new Membership.Incomplete(missing.code());
-            // Nothing to place, which no class holds and none refuses either. Said in this
-            // classifier's word for it, as the value that never arrived is above.
-            case NumericTerm.Reading.NoValue _ ->
-                    new Membership.Incomplete(Incompleteness.Code.VALUE_UNREADABLE);
             case NumericTerm.Reading.NotNumber _ -> Membership.NO_MATCH;
         };
     }

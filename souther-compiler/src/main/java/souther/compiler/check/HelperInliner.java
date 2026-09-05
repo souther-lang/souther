@@ -344,6 +344,21 @@ public final class HelperInliner {
      */
     private final java.util.SequencedSet<ReachName.Declaration> leftStanding = new java.util.LinkedHashSet<>();
 
+    /**
+     * What each expansion being asked about has left standing, innermost last.
+     *
+     * <p>Beside {@link #leftStanding} and not read off it. That set answers for every tree this
+     * inliner was driven over, which is what a module has to emit; a reading holding one tree needs
+     * the calls standing in that tree, and the two are the same set only where an inliner expanded
+     * one thing. Written here as the decision is made, for the same reason the other is.
+     *
+     * <p>A list because one asked expansion can run inside another — a declaration's clauses are
+     * expanded one at a time inside the expansion of the declaration — and a call standing in the
+     * inner tree stands in the outer one, which holds it.
+     */
+    private final java.util.List<java.util.SequencedSet<ReachName.Declaration>> standingHere =
+            new java.util.ArrayList<>();
+
     /** Bindings holding the same elements as another binding, and bindings holding elements made
      *  from another's. Written where an expansion removes the operation that says so. */
     private final ElementProvenance.Builder provenance = new ElementProvenance.Builder();
@@ -1035,6 +1050,34 @@ public final class HelperInliner {
     }
 
     /**
+     * The same, answering with what this one expansion left standing as well as with what it
+     * produced.
+     *
+     * <p>For a reader that has to tell a call the expansion meant to leave from one it was supposed
+     * to remove. Both are a helper applied and the finished tree does not say which, so the answer
+     * is taken where it is made rather than worked out again from the tree
+     * ({@link CallsLeftStanding}).
+     */
+    Expansion<Hir.Expr> expanding(Hir.Expr e, BindingOwner into) {
+        return expanding(() -> inline(e, into));
+    }
+
+    /**
+     * What one run of {@code expansion} left standing, for a driver expanding something this class
+     * has no single entry point for — the several clauses of one declaration, expanded one after
+     * another into the tree the declaration becomes.
+     */
+    <T> Expansion<T> expanding(java.util.function.Supplier<T> expansion) {
+        java.util.SequencedSet<ReachName.Declaration> asked = new java.util.LinkedHashSet<>();
+        standingHere.add(asked);
+        try {
+            return new Expansion<>(expansion.get(), asked);
+        } finally {
+            standingHere.remove(standingHere.size() - 1);
+        }
+    }
+
+    /**
      * Runs {@code expansion} as one writing into {@code into}.
      *
      * <p>The writing is a value and it is made whole: nothing it holds is left from the writing
@@ -1276,6 +1319,9 @@ public final class HelperInliner {
             // The requirement this expansion just made: the call stays a call, so a method for what
             // it reaches has to be emitted wherever this tree ends up.
             leftStanding.add(reaches);
+            for (java.util.SequencedSet<ReachName.Declaration> asked : standingHere) {
+                asked.add(reaches);
+            }
         }
         if (helper == null || standing) {
             // builtin, injected behavior, a function-typed parameter, or a recursive helper —

@@ -79,7 +79,11 @@ record ReadByClauses(Confinement.Worked<FactSubject> confinement,
      * branch this declaration has already dropped — and would pay for machines the whole answer
      * never needed to find out.
      *
-     * @param aboutARule what a rule of this part is answerable for, per position
+     * @param aboutARule what a rule of this part is answerable for, each saying the written place
+     *                   the reading decided it at. Not sifted out of what the positions were left
+     *                   holding: a place holds the reasons of every rule that reached it and names
+     *                   none of them, so what came back from sifting it was a list of reasons and
+     *                   no clause
      * @param aboutStrings which strings this part admits at each position it states a rule about.
      *                     Beside the adoptions and not among them: what a part took a position in
      *                     at is what the readings settled, and this is what the clause states — a
@@ -92,8 +96,7 @@ record ReadByClauses(Confinement.Worked<FactSubject> confinement,
      *                     what the model admits at a position, made by whoever asked second
      */
     record OfAPart(Adoption<FactSubject> byValues, Adoption<FactSubject> byOrder,
-                   java.util.Map<FactSubject,
-                           java.util.List<souther.compiler.values.UnreadReason>> aboutARule,
+                   Set<RuleShortfall> aboutARule,
                    java.util.Map<FactSubject, AdmittedStrings> aboutStrings) {
 
         /** The positions some reading took the whole of this part in at. */

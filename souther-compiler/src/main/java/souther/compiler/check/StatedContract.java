@@ -104,26 +104,15 @@ public record StatedContract(ValueName.Behavior behavior, List<Param> params, Ty
                 for (ClausesForDischarge.ClauseReading written : declaring.conjunctsOf(
                         rule.statement(), BehaviorContract.ownerOf(contract.behavior()))) {
                     conjuncts.add(new Conjunct(written.at(),
-                            typed(written.read(), scope, ctx, contract.behavior())));
+                            SecondaryClauseReading.of(written.asExpanded(),
+                                    () -> new SecondaryClauseReading.Over(scope, ctx),
+                                    "typing " + contract.behavior().name())));
                 }
                 rules.add(new StatedRule(rule.id(), rule.guard(), rule.value(), clause.name(),
                         conjuncts));
             }
         }
         return new StatedContract(contract.behavior(), contract.params(), contract.output(), rules);
-    }
-
-    /** {@code read} as the check holds it, or that typing it did not finish there. */
-    private static TypedClause typed(souther.compiler.ast.Hir.Expr read, Scope scope,
-                                     CheckContext ctx, ValueName.Behavior behavior) {
-        try {
-            return new TypedClause.Typed(Elaborator.elaborate(read, scope, ctx, Type.BOOL));
-        } catch (RuntimeException why) {
-            // Fail-open, as every reading of a clause is, and recorded — and said as what it is, so
-            // that a reader publishing a sentence about the rule is not handed this as one.
-            InvariantChecker.gaveUp("typing " + behavior.name(), why);
-            return new TypedClause.Stopped();
-        }
     }
 
     /** Where a rule states nothing this can read, so a reader asking what to assume has nothing to

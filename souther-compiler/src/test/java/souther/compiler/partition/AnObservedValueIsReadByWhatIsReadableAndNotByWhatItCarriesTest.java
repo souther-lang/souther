@@ -21,8 +21,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 
 /**
  * A row is read at a position by what the reading exposes there, and never by what its value
@@ -92,7 +91,7 @@ class AnObservedValueIsReadByWhatIsReadableAndNotByWhatItCarriesTest {
     @Test
     void aNameEveryCaseSpreadsIsReadAtEveryCase() {
         assertEquals(List.of(new ObservedValue.Integer(6), new ObservedValue.Integer(7)),
-                read(SPREAD, aCardAndACash(), amount()),
+                stood(SPREAD, aCardAndACash(), amount()),
                 "the amount is readable at the sum, so a row is read at it whichever case it wrote");
     }
 
@@ -111,7 +110,8 @@ class AnObservedValueIsReadByWhatIsReadableAndNotByWhatItCarriesTest {
      */
     @Test
     void aFieldOnlyOneCaseDeclaresIsNotReadableAtTheSum() {
-        assertNull(read(SPREAD, List.of(card(6), card(7)), cardNumber()),
+        assertInstanceOf(WalkResult.CouldNotWalk.class,
+                read(SPREAD, List.of(card(6), card(7)), cardNumber()),
                 "nothing is readable at the sum but what its cases share, so this walk cannot be"
                         + " made at all");
     }
@@ -120,7 +120,7 @@ class AnObservedValueIsReadByWhatIsReadableAndNotByWhatItCarriesTest {
     @Test
     void aNarrowingIsHowACaseOwnFieldIsReached() {
         assertEquals(List.of(new ObservedValue.Text("x")),
-                read(SPREAD, aCardAndACash(), cardNumberAsACard()),
+                stood(SPREAD, aCardAndACash(), cardNumberAsACard()),
                 "a path that names the case may read what only that case declares");
     }
 
@@ -133,10 +133,10 @@ class AnObservedValueIsReadByWhatIsReadableAndNotByWhatItCarriesTest {
      */
     @Test
     void aRowAtAnotherCaseStandsNowhereRatherThanFailingTheWalk() {
-        List<ObservedValue> found = read(SPREAD, List.of(cash(7)), cardNumberAsACard());
-
-        assertNotNull(found, "the narrowing is a step this path may take, whatever the row wrote");
-        assertEquals(List.of(), found,
+        assertInstanceOf(WalkResult.Reached.class,
+                read(SPREAD, List.of(cash(7)), cardNumberAsACard()),
+                "the narrowing is a step this path may take, whatever the row wrote");
+        assertEquals(List.of(), stood(SPREAD, List.of(cash(7)), cardNumberAsACard()),
                 "and a row at the other case stands nowhere below it");
     }
 
@@ -156,12 +156,12 @@ class AnObservedValueIsReadByWhatIsReadableAndNotByWhatItCarriesTest {
     void aSpreadNameReadsLikeOneDeclaredOnTheElement() {
         List<ObservedValue> written = List.of(new ObservedValue.Integer(6));
 
-        assertEquals(written, read(SPREAD, List.of(card(6)), amount()),
+        assertEquals(written, stood(SPREAD, List.of(card(6)), amount()),
                 "the run holds the number the row wrote at the name the cases spread");
-        assertEquals(written, read(ON_THE_ELEMENT, List.of(onTheElement(6)), amount()),
+        assertEquals(written, stood(ON_THE_ELEMENT, List.of(onTheElement(6)), amount()),
                 "and the same number where the element declares it");
-        assertEquals(read(ON_THE_ELEMENT, List.of(onTheElement(6)), amount()),
-                read(SPREAD, List.of(card(6)), amount()),
+        assertEquals(stood(ON_THE_ELEMENT, List.of(onTheElement(6)), amount()),
+                stood(SPREAD, List.of(card(6)), amount()),
                 "the cases spreading the name change nothing about what a run of it holds");
     }
 
@@ -182,12 +182,12 @@ class AnObservedValueIsReadByWhatIsReadableAndNotByWhatItCarriesTest {
     @Test
     void whatTheStepsBesideAFieldAdmitIsSaidHere() {
         assertEquals(List.of(new ObservedValue.Integer(6), new ObservedValue.Integer(7)),
-                read(SPREAD, aCardAndACash(), amount()),
+                stood(SPREAD, aCardAndACash(), amount()),
                 "an element of the list is every element the row wrote");
         assertEquals(List.of(new ObservedValue.Text("x")),
-                read(SPREAD, aCardAndACash(), cardNumberAsACard()),
+                stood(SPREAD, aCardAndACash(), cardNumberAsACard()),
                 "and a narrowing keeps what the row wrote as that case");
-        assertEquals(List.of(), read(SPREAD, List.of(cash(7)), cardNumberAsACard()),
+        assertEquals(List.of(), stood(SPREAD, List.of(cash(7)), cardNumberAsACard()),
                 "and drops what it wrote as another, which is a step taken");
     }
 
@@ -218,15 +218,24 @@ class AnObservedValueIsReadByWhatIsReadableAndNotByWhatItCarriesTest {
                 + sum + "`");
     }
 
-    /** What the walk reads at {@code path}, off a row holding {@code entries}. */
-    private static List<ObservedValue> read(String source, List<ObservedValue> entries,
-                                            TermPath path) {
+    /** What the walk at {@code path} came to, off a row holding {@code entries}. */
+    private static WalkResult<List<ObservedValue>> read(String source, List<ObservedValue> entries,
+                                                        TermPath path) {
         RuleReadingSource rules = RuleReadings.ofSource(source);
         BehaviorInputs inputs = new BehaviorInputs(List.of("ns"),
                 List.of(new Type.ListOf(named("Entry"))), rules, POLICY);
         return inputs.valuesAt(List.of(new ObservedValue.Sequence(
                 entries.stream().map(AnObservedValueIsReadByWhatIsReadableAndNotByWhatItCarriesTest
                         ::entry).toList())), path);
+    }
+
+    /** The same where the walk was taken, which is what a test about the values is asking for. */
+    private static List<ObservedValue> stood(String source, List<ObservedValue> entries,
+                                             TermPath path) {
+        if (read(source, entries, path) instanceof WalkResult.Reached(List<ObservedValue> values)) {
+            return values;
+        }
+        throw new AssertionError("the walk down " + path + " could not be taken");
     }
 
     private static List<ObservedValue> aCardAndACash() {
