@@ -42,6 +42,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.function.Supplier;
 import java.util.Map;
 
 /**
@@ -515,13 +516,23 @@ public final class Partitions {
      * are in the order an author wrote them.
      */
     private static List<NumericTerm.FromOnePosition> numbersMeasuring(
-            PositionMeasurements at, List<PartitionEvidence> evidence, EvidenceAccount account) {
+            PositionMeasurements at, List<PartitionEvidence> evidence,
+            List<ClassingBlocker> blocked, EvidenceAccount account) {
         TermPath path = at.position().path();
         List<PartitionEvidence> here = evidence.stream()
                 .filter(each -> each.at().position().equals(path)).toList();
         List<NumericTerm.FromOnePosition> numbers = new ArrayList<>();
         for (PartitionEvidence each : here) {
             if (!numbers.contains(each.at())) {
+                numbers.add(each.at());
+            }
+        }
+        // And the numbers a rule was to divide and did not. A blocker is what keeps a position's
+        // classes from being composed out of the rules that worked, so a number reached by one and
+        // by no evidence is exactly the number it has to reach — measured off the evidence alone,
+        // the one case a blocker exists for is the one it never arrives at.
+        for (ClassingBlocker each : blocked) {
+            if (each.at().position().equals(path) && !numbers.contains(each.at())) {
                 numbers.add(each.at());
             }
         }
@@ -576,15 +587,28 @@ public final class Partitions {
         // What the rules about this position tell apart as sets, which is a vocabulary of its own.
         // Where they are the whole of what divides the position, the classes are what they come to
         // between them and there is nothing to put them beside.
-        List<SetDivision> divisions = PartitionEvidence.divisionsIn(mine);
         // What the rules leave the position divided into, asked once. The vocabulary decides the
         // classes and nothing else: what the lines cut, where the rules part the position and what
         // the account is owed are observations of their own, so everything below runs whichever way
         // this came out. A second route past them would be a second answer about all of them.
         TypeView view = TypeView.of(type, ruleSource.symbols());
-        Classing.Classed classed = Classing.of(term, mine, blocked, carrier,
+        Classing.Result answered = Classing.of(term, mine, blocked, carrier,
                 at.position().admits(), allowance,
                 place -> standing(view, carrier, place, ruleSource));
+        Classing.Classed classed = answered.classed();
+        // A rule that makes no class here is reported and stops nothing. Its evidence is answered
+        // for as one the classes were not composed out of, which is what it is: the position is
+        // divided by the rules beside it exactly as it would have been without this one.
+        for (Classing.Told each : answered.doesNotDivide()) {
+            found.add(RuleWithoutALine.of(each.what().by().rule(), each.what().by().cited(),
+                    new FilingCoordinate.AtPosition(term.position()), each.why()));
+            account.disposedOf(each.what(),
+                    new EvidenceAccount.Disposition.TheClassesWereNotComposed(term));
+        }
+        List<PartitionEvidence> dividing = mine.stream()
+                .filter(each -> answered.doesNotDivide().stream()
+                        .noneMatch(one -> one.what().equals(each)))
+                .toList();
         // One switch and not three conditionals. What each answer means for the classes, for the
         // rules they were composed from and for whether the cuts stand is the answer's, said once;
         // read off it three times, each reading is a place to disagree about what the arm meant.
@@ -603,7 +627,8 @@ public final class Partitions {
             case Classing.Classed.NotComposed(var why) ->
                     new Composition(List.of(), List.of(), true, why);
         };
-        if (!divisions.isEmpty()) {
+        List<SetDivision> composing = PartitionEvidence.divisionsIn(dividing);
+        if (!composing.isEmpty()) {
             if (made.why() != null) {
                 // Into the gathering the whole stage answers with, and not a list of this method's
                 // own: what a reader is told is assembled once, after every position has been
@@ -613,29 +638,30 @@ public final class Partitions {
                 // its own rule and has already been reported, so a reason copied from it onto the
                 // rules beside it would name them for something that happened to another.
                 if (blocked.isEmpty()) {
-                    divisions.forEach(each -> found.add(RuleWithoutALine.of(each.origin().rule(),
+                    composing.forEach(each -> found.add(RuleWithoutALine.of(each.origin().rule(),
                             each.origin().cited(),
                             new FilingCoordinate.AtPosition(term.position()), made.why())));
                 }
-                divisions.forEach(each -> account.disposedOf(new PartitionEvidence.BySet(each),
+                composing.forEach(each -> account.disposedOf(new PartitionEvidence.BySet(each),
                         new EvidenceAccount.Disposition.TheClassesWereNotComposed(term)));
             } else {
-                divisions.forEach(each ->
+                composing.forEach(each ->
                         account.measured(new PartitionEvidence.BySet(each), id));
             }
         }
+        // Said here because this is where they were asked. A blocker carried in and never reached
+        // is a denominator this stage closed over the rules that worked, which the account refuses.
+        account.heldShut(blocked);
         RulesWithNoLine stated = rules;
         if (here.isEmpty() && !points.isEmpty()) {
             // Nothing orders this position, so its classes are the values singled out and
             // everything else. Ranges here would ask the rows for a distinction between the two
             // sides of a value the behavior treats alike.
-            mine.stream().filter(each -> !(each instanceof PartitionEvidence.BySet))
+            dividing.stream().filter(each -> !(each instanceof PartitionEvidence.BySet))
                     .forEach(each -> account.measured(each, id));
             return made(out, at, behavior, term,
-                    made.onAnOrder()
-                            ? classesOf(axis, () -> singledClasses(points, term, type, reading,
-                                    domain, ruleSource))
-                            : classesOf(axis, made::classes),
+                    made.classesFor(axis, () -> singledClasses(points, term, type, reading,
+                            domain, ruleSource)),
                     made.divides(),
                     // A cut is a place on the order the values are counted on, and a class that is
                     // a set has no answer to where it lies — so where the classes are sets there
@@ -652,7 +678,7 @@ public final class Partitions {
         // which is the thing being fixed here happening again one field over. The end the
         // position stops short of is outside it as much as anything past it is.
         List<Threshold> reachable = new ArrayList<>();
-        for (PartitionEvidence each : mine) {
+        for (PartitionEvidence each : dividing) {
             if (each instanceof PartitionEvidence.BySet) {
                 continue;   // already answered for above, as a class the vocabularies will not hold
             }
@@ -687,13 +713,12 @@ public final class Partitions {
         // written about the position rather than everything that came to nothing.
         NumericDomain.Bounds within = domain;
         return made(out, at, behavior, term,
-                made.onAnOrder() ? classesOf(axis, () -> Intervals.classesOf(
+                made.classesFor(axis, () -> Intervals.classesOf(
                         Intervals.of(reachable, within == null ? null : within.min(),
                                 within == null ? null : within.max(), carrier),
                         term, type, reading, policy, ruleSource,
                         within == null ? null : within.min(),
-                        within == null ? null : within.max()))
-                        : classesOf(axis, made::classes),
+                        within == null ? null : within.max())),
                 made.divides(),
                 mergedPoints(merged(cutsOf(axis), reachable, carrier), points, carrier),
                 reachable.stream()
@@ -770,6 +795,26 @@ public final class Partitions {
 
         boolean onAnOrder() {
             return this == ON_AN_ORDER;
+        }
+
+        /**
+         * What the axis's classes are, which is this answer's to say and not a caller's.
+         *
+         * <p>Where the classes were not composed there are none, and what the declarations already
+         * left is not them. A position the model divides is divided by everything said about it —
+         * so a list kept because it happened to be there before is a denominator that says a
+         * distinction was taken up when this stage has just said it was not, and the rows are owed
+         * at classes nothing holds them to.
+         *
+         * <p>Everywhere else refinement is the rule ({@link #classesOf}): what a body draws is
+         * evidence arriving after the model's own, and where the model already divides the number
+         * the classes stay as they are.
+         */
+        List<PartitionClass> classesFor(Axis axis, Supplier<List<PartitionClass>> onTheOrder) {
+            if (why != null) {
+                return List.of();
+            }
+            return classesOf(axis, onAnOrder() ? onTheOrder : this::classes);
         }
     }
 
@@ -939,7 +984,7 @@ public final class Partitions {
                 .filter(each -> !(each instanceof StandingQuestion.Unclassified)).toList());
         asked.addAll(gathered.unclassified());
         List<PositionMeasurements> measurements = new ArrayList<>();
-        EvidenceAccount account = new EvidenceAccount(evidence);
+        EvidenceAccount account = new EvidenceAccount(evidence, blocked);
         // A position at a time, so that what a body's rules add is added where the position already
         // is. Walked as one run of measures, which position each of them came back for is a
         // question this would have to answer again once the rules name a second number of one.
@@ -950,7 +995,8 @@ public final class Partitions {
             // about are both measures of it, and which of the two answers a report is owed is
             // taken together rather than chosen between by the order this happens to walk them in.
             BodyCutInspection came = null;
-            List<NumericTerm.FromOnePosition> numbers = numbersMeasuring(at, evidence, account);
+            List<NumericTerm.FromOnePosition> numbers =
+                    numbersMeasuring(at, evidence, blocked, account);
             for (NumericTerm.FromOnePosition term : numbers) {
                 // The measure of this number where the declarations made one, and nothing where a
                 // body's rules are the first to name it. What such a measure starts from is what

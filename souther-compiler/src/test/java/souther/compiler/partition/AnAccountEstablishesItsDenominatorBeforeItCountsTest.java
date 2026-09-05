@@ -50,7 +50,7 @@ class AnAccountEstablishesItsDenominatorBeforeItCountsTest {
         assertEquals(one.id(), other.id(), "the same rule and the same number");
 
         IllegalStateException refused = assertThrows(IllegalStateException.class,
-                () -> new EvidenceAccount(List.of(one, other)));
+                () -> new EvidenceAccount(List.of(one, other), List.of()));
 
         assertTrue(refused.getMessage().startsWith("two pieces of evidence are called"),
                 refused.getMessage());
@@ -66,7 +66,7 @@ class AnAccountEstablishesItsDenominatorBeforeItCountsTest {
     void onePieceHandedOverTwiceIsOnePiece() {
         PartitionEvidence one = dividing("10");
 
-        EvidenceAccount account = new EvidenceAccount(List.of(one, one));
+        EvidenceAccount account = new EvidenceAccount(List.of(one, one), List.of());
         account.measured(one, new AxisId("f", AT.toString()));
 
         account.everyPieceWasDisposedOf(List.of(new Axis(new AxisId("f", AT.toString()), AT,
@@ -78,7 +78,7 @@ class AnAccountEstablishesItsDenominatorBeforeItCountsTest {
     /** A piece disposed of under a name belonging to another is refused. */
     @Test
     void aPieceDisposedOfUnderAnothersNameIsRefused() {
-        EvidenceAccount account = new EvidenceAccount(List.of(dividing("10")));
+        EvidenceAccount account = new EvidenceAccount(List.of(dividing("10")), List.of());
 
         IllegalStateException refused = assertThrows(IllegalStateException.class,
                 () -> account.measured(dividing("20"), new AxisId("f", AT.toString())));

@@ -134,6 +134,28 @@ final class Classing {
      */
     private record AsASet(ValueSet whenTrue, ValueSet whenFalse, PredicateStatement states) {}
 
+    /**
+     * What the rules of one position came to: the classes, and the rules that make none.
+     *
+     * <p>Two answers and not one, because they are about different rules. A rule read to the end
+     * whose two sides the position does not both hold divides nothing — and it stops nothing
+     * either: the rules beside it divide the position as they would have without it. Folded into
+     * the first answer, a rule that states no distinction would close a denominator, which is what
+     * a distinction gone missing does and this is the opposite of that.
+     *
+     * @param doesNotDivide the rules that make no class here, each with what it came to. Reported,
+     *                      and nothing waits on them
+     */
+    record Result(Classed classed, List<Told> doesNotDivide) {
+
+        Result {
+            doesNotDivide = List.copyOf(doesNotDivide);
+        }
+    }
+
+    /** One rule of a position that makes no class of it, and what it came to. */
+    record Told(PartitionEvidence what, BlockReason.RuleWithoutLineReason why) {}
+
     /** What the rules of one position came to. */
     sealed interface Classed {
 
@@ -182,43 +204,84 @@ final class Classing {
      * @param writing what a row would carry for a value of this position, or null where nothing
      *                here composes one
      */
-    static Classed of(NumericTerm.FromOnePosition term, List<PartitionEvidence> mine,
-                      List<ClassingBlocker> blocked, Carrier carrier, ValueSet admits,
-                      Allowance<NumericTerm.FromOnePosition> allowance,
-                      Function<Place, FixtureTemplate> writing) {
-        // Asked before the vocabulary, and kept as it was said. A rule missing from the denominator
-        // is missing however the rules beside it are written, and what stopped it is a fact about
-        // that rule rather than about what the position's rules come to together.
-        if (!blocked.isEmpty()) {
-            return new Classed.NotComposed(blocked.get(0).why());
+    static Result of(NumericTerm.FromOnePosition term, List<PartitionEvidence> mine,
+                     List<ClassingBlocker> blocked, Carrier carrier, ValueSet admits,
+                     Allowance<NumericTerm.FromOnePosition> allowance,
+                     Function<Place, FixtureTemplate> writing) {
+        // Which of the rules actually tell two of this position's values apart, asked before
+        // anything else is decided. An invariant restricts and a behavior divides what is left, so
+        // a rule whose two sides the position does not both hold states no distinction here — and
+        // one that states none must not be in the population that chooses a vocabulary or composes
+        // a class. Left in, a rule that divides nothing would put the position's classes in one
+        // algebra or the other, and would stand in every label the classes carry.
+        List<PartitionEvidence> active = new ArrayList<>();
+        List<Told> doesNotDivide = new ArrayList<>();
+        for (PartitionEvidence each : mine) {
+            AsASet asASet = asASet(each, carrier);
+            if (asASet == null) {
+                active.add(each);   // an order's rule, whose values are the intervals' business
+                continue;
+            }
+            Boolean divides = tellsApart(term, admits, asASet, allowance);
+            if (divides == null) {
+                return new Result(
+                        new Classed.NotComposed(new BlockReason.BehaviorDistinctionsTooCostly()),
+                        List.of());
+            }
+            if (divides) {
+                active.add(each);
+            } else {
+                doesNotDivide.add(new Told(each, new BlockReason.PredicateTellingNothingApart()));
+            }
         }
-        switch (vocabularyOf(mine, carrier)) {
+        // Asked after that, and kept as it was said. A rule missing from the denominator is missing
+        // however the rules beside it are written, and what stopped it is a fact about that rule
+        // rather than about what the position's rules come to together.
+        if (!blocked.isEmpty()) {
+            return new Result(new Classed.NotComposed(blocked.get(0).why()), doesNotDivide);
+        }
+        switch (vocabularyOf(active, carrier)) {
             case ON_AN_ORDER -> {
-                return new Classed.OnTheOrder();
+                return new Result(new Classed.OnTheOrder(), doesNotDivide);
             }
             case NOT_ONE -> {
-                return new Classed.NotComposed(new BlockReason.ClassesNotComposed());
+                return new Result(new Classed.NotComposed(new BlockReason.ClassesNotComposed()),
+                        doesNotDivide);
             }
             default -> { }
         }
         List<AsASet> said = new ArrayList<>();
-        mine.forEach(each -> said.add(asASet(each, carrier)));
+        active.forEach(each -> said.add(asASet(each, carrier)));
         List<Cell> cells = refined(term, admits, said, allowance);
         if (cells == null) {
-            return new Classed.NotComposed(new BlockReason.BehaviorDistinctionsTooCostly());
-        }
-        // A rule the position leaves nothing on one side of divides nothing here, however the
-        // strings fall. An invariant restricts and a behavior divides what is left, so the two
-        // sides of a rule can both hold strings and one of them hold no value this position may
-        // take — and a class published for it is one no run is ever counted at.
-        if (cells.size() < 2) {
-            return new Classed.NotComposed(new BlockReason.PredicateTellingNothingApart());
+            return new Result(
+                    new Classed.NotComposed(new BlockReason.BehaviorDistinctionsTooCostly()),
+                    doesNotDivide);
         }
         List<PartitionClass> out = new ArrayList<>();
         for (Cell cell : cells) {
             out.add(classOf(term, cell, writing).ofTheNumber(term));
         }
-        return new Classed.Composed(out);
+        return new Result(new Classed.Composed(out), doesNotDivide);
+    }
+
+    /**
+     * Whether {@code said} tells two of the position's values apart, or null where the allowance
+     * ran out working it out.
+     *
+     * <p>Both sides against what the position holds, and not against every value there is. A rule
+     * can name strings on both sides and have the declarations leave nothing on one of them, which
+     * is the position undivided by it however the strings fall.
+     */
+    private static Boolean tellsApart(NumericTerm.FromOnePosition term, ValueSet admits,
+                                      AsASet said,
+                                      Allowance<NumericTerm.FromOnePosition> allowance) {
+        Allowance.Composed yes = allowance.meet(Sameness.Block.of(term), admits, said.whenTrue());
+        Allowance.Composed no = allowance.meet(Sameness.Block.of(term), admits, said.whenFalse());
+        if (yes.gaveUp() || no.gaveUp()) {
+            return null;
+        }
+        return !yes.set().isEmpty() && !no.set().isEmpty();
     }
 
     /**

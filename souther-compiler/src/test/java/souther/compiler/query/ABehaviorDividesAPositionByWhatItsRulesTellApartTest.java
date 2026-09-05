@@ -198,6 +198,68 @@ class ABehaviorDividesAPositionByWhatItsRulesTellApartTest {
                 "and the rule is named as one that tells nothing apart");
     }
 
+    /**
+     * A distinction this compiler did not get closes the position's classes, even where the
+     * declarations had already divided it.
+     *
+     * <p>The whole of what a blocker is for, and the case it is most needed in: no rule of the body
+     * came out, so there is no evidence at the position at all. Measured off the evidence, the
+     * position is not among the numbers this stage looks at — and the classes the declarations left
+     * stand, beside a rule nobody could read that was supposed to close them.
+     */
+    @Test
+    void aDistinctionThisCompilerDidNotGetClosesTheClassesTheDeclarationsLeft() {
+        Partitions.Partitioning divided = partitioningOf("""
+                data Code = String
+                    invariant value == "JP" || value == "US"
+
+                behavior route : (code: Code, p: String) -> Where
+                let route (code, p) = {
+                    guard String.startsWith(p, code.value) else Abroad
+                    Home
+                }
+                """);
+
+        assertEquals(List.of(), divided.axes().stream()
+                        .flatMap(each -> each.classes().stream()).map(PartitionClass::label)
+                        .toList(),
+                "the position has no classes while a rule about it went unread");
+        assertTrue(divided.rulesWithoutALine().stream()
+                        .anyMatch(each -> each.why() instanceof BlockReason.UnreadValueRule),
+                "and the rule that could not be read is named: "
+                        + divided.rulesWithoutALine());
+    }
+
+    /**
+     * And a rule proved to tell nothing apart leaves them standing.
+     *
+     * <p>The other side of the pair, and what keeps the first from being "any rule this compiler
+     * did not turn into a division". This rule was read to the end and what it states is that the
+     * position is undivided by it — so the classes the declarations left are untouched, and the rule
+     * is reported on its own account.
+     */
+    @Test
+    void andARuleProvedToTellNothingApartLeavesThemStanding() {
+        Partitions.Partitioning divided = partitioningOf("""
+                data Code = String
+                    invariant value == "JP" || value == "US"
+
+                behavior route : (code: Code) -> Where
+                let route (code) = {
+                    guard String.startsWith("", code.value) else Abroad
+                    Home
+                }
+                """);
+
+        assertTrue(divided.axes().stream().anyMatch(each -> !each.classes().isEmpty()),
+                "what the declarations divide the position into is still there: " + divided.axes());
+        assertTrue(divided.rulesWithoutALine().stream()
+                        .anyMatch(each -> each.why()
+                                instanceof BlockReason.PredicateTellingNothingApart),
+                "and the rule that tells nothing apart is reported on its own: "
+                        + divided.rulesWithoutALine());
+    }
+
     /** The one measure the model under test makes of its position. */
     private static Axis dividing(String behavior) {
         Partitions.Partitioning divided = partitioningOf(behavior);

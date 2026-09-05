@@ -70,6 +70,21 @@ final class EvidenceAccount {
      *  {@link Disposition.Measured} can ask the evidence what it should have left behind. */
     private record Answered(PartitionEvidence what, Disposition how) {}
 
+    /**
+     * The distinctions this stage was told it did not get, and whether each was acted on.
+     *
+     * <p>Beside the evidence and held the same way. A blocker exists to keep a position's classes
+     * from being composed out of the rules that worked, so one nobody read is a denominator built
+     * from the successes with nothing said — which is the thing a blocker is for, failing silently.
+     *
+     * <p>Which is not hypothetical. A position reached by a blocker and by no evidence was not
+     * among the numbers this stage measures at all, so the blocker was carried in, filed, and never
+     * asked; the classes the declarations had left stood, and the rule that could not be read was a
+     * finding beside a denominator it was supposed to close. Nothing failed, because nothing was
+     * counting.
+     */
+    private final Map<ClassingBlocker, Boolean> blockers = new LinkedHashMap<>();
+
     private final Map<PartitionEvidence.FiledEvidenceId, PartitionEvidence> owed = new LinkedHashMap<>();
     private final Map<PartitionEvidence.FiledEvidenceId, Answered> answered = new LinkedHashMap<>();
 
@@ -90,7 +105,8 @@ final class EvidenceAccount {
      * <p>The same piece handed over twice is one piece. What that would say about the stage is
      * nothing, and nothing here counts arrivals.
      */
-    EvidenceAccount(List<PartitionEvidence> evidence) {
+    EvidenceAccount(List<PartitionEvidence> evidence, List<ClassingBlocker> blocked) {
+        blocked.forEach(each -> blockers.put(each, false));
         for (PartitionEvidence each : evidence) {
             PartitionEvidence already = owed.put(each.id(), each);
             if (already != null && !already.equals(each)) {
@@ -119,6 +135,11 @@ final class EvidenceAccount {
 
     void measured(PartitionEvidence what, AxisId at) {
         disposedOf(what, new Disposition.Measured(at));
+    }
+
+    /** That the classes of {@code at} were held shut by every blocker filed there. */
+    void heldShut(List<ClassingBlocker> here) {
+        here.forEach(each -> blockers.put(each, true));
     }
 
     /**
@@ -152,6 +173,15 @@ final class EvidenceAccount {
             }
         }
         everyPieceWasDisposedOf();
+        List<ClassingBlocker> unread = blockers.entrySet().stream()
+                .filter(each -> !each.getValue()).map(Map.Entry::getKey).toList();
+        if (!unread.isEmpty()) {
+            throw new IllegalStateException(
+                    "this stage was told it did not get these distinctions and never asked: "
+                            + unread + " — a position whose classes one of them was to hold shut"
+                            + " was measured without it, which is a denominator built out of the"
+                            + " rules that worked");
+        }
     }
 
     /** Whether {@code axis} carries what {@code evidence} draws, asked in that evidence's own
