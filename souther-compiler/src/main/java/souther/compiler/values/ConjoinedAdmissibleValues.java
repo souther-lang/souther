@@ -149,9 +149,9 @@ public final class ConjoinedAdmissibleValues<A> {
     /**
      * Whether any reading has been taken into this.
      *
-     * <p>For a caller that takes a reading in once and has to be able to say so — {@link
-     * souther.compiler.check.ConstraintState#takingValuesRead} is written against nothing having
-     * been taken in yet, and a second reading arriving there would replace the first without a word.
+     * <p>For a caller that takes a reading in once and has to be able to say so — a state takes one
+     * in against nothing having been taken in yet, and a second reading arriving there would replace
+     * the first without a word.
      *
      * <p><b>Whether and not how many.</b> How many factors are here is how many vocabularies the
      * readings fell into, which is not how many readings there were: two readings that name the
@@ -268,7 +268,7 @@ public final class ConjoinedAdmissibleValues<A> {
         // together by different composers are two answers, and meeting them would charge a position
         // of one against the allowance of the other. An assertion because it is a fact about how
         // this compiler reads a declaration rather than about any model — see
-        // `ConstraintState.takingValuesRead`, which holds the same kind of thing the same way.
+        // `Confinement.Conjoined.taking`, which holds the same kind of thing the same way.
         assert sets == other.sets
                 : "two readings put together by different composers are two answers";
         List<AdmissibleValues<A>> both = new ArrayList<>(factors);
