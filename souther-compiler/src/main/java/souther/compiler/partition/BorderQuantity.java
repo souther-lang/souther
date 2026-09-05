@@ -7,6 +7,7 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Place;
+import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.ObservedValue;
 
 import java.util.List;
@@ -103,13 +104,11 @@ public sealed interface BorderQuantity {
             // measured on. The two are one carrier for a position's own content and part for a term
             // that is what an operation answered — a time counts the seconds of its day and its hour
             // counts by one, so a reader handed the second decodes the first as nothing (#1027).
-            return switch (of.read(observation.at(term.position()))) {
-                case NumericTerm.Reading.Missing missing ->
-                        Stands.couldNotTell(ReadingGap.of(missing.code()));
-                case NumericTerm.Reading.NoValue _ -> Stands.couldNotTell(ReadingGap.NO_VALUE);
-                case NumericTerm.Reading.NotNumber _ -> Stands.NO;
-                case NumericTerm.Reading.Number number ->
-                        where.holds(new Level.OnACarrier(of.answered(), number.value()))
+            return switch (readAt(of, observation.at(term.position()))) {
+                case WhatATermRead.CameToNothing(ReadingGap why) -> Stands.couldNotTell(why);
+                case WhatATermRead.NoNumberOfTheValue _ -> Stands.NO;
+                case WhatATermRead.Number(Place value) ->
+                        where.holds(new Level.OnACarrier(of.answered(), value))
                                 ? Stands.YES : Stands.NO;
             };
         }
@@ -311,27 +310,23 @@ public sealed interface BorderQuantity {
             // Each on its own order. Read on one order for the pair, a position written back
             // differently from the other was read as a value it does not hold — a date read as a
             // whole number is no number at all, and the row stood at nothing (#1018).
-            NumericTerm.Reading here = on.read(observation.at(on.term().subjectPath()));
-            NumericTerm.Reading there =
-                    against.read(observation.at(against.term().subjectPath()));
+            WhatATermRead here = readAt(on, observation.at(on.term().subjectPath()));
+            WhatATermRead there = readAt(against, observation.at(against.term().subjectPath()));
             // Both sides, and not the first of them. The pair is unreadable for whatever stopped
             // either, and a reader told about one end is being told which end this happened to
             // look at first.
             Set<ReadingGap> stopped = new java.util.LinkedHashSet<>();
-            for (NumericTerm.Reading end : List.of(here, there)) {
-                if (end instanceof NumericTerm.Reading.Missing missing) {
-                    stopped.add(ReadingGap.of(missing.code()));
-                }
-                if (end instanceof NumericTerm.Reading.NoValue) {
-                    stopped.add(ReadingGap.NO_VALUE);
+            for (WhatATermRead end : List.of(here, there)) {
+                if (end instanceof WhatATermRead.CameToNothing(ReadingGap why)) {
+                    stopped.add(why);
                 }
             }
             Stands unread = Stands.couldNotTell(stopped);
             if (unread != null) {
                 return unread;
             }
-            if (!(here instanceof NumericTerm.Reading.Number onAt)
-                    || !(there instanceof NumericTerm.Reading.Number againstAt)) {
+            if (!(here instanceof WhatATermRead.Number onAt)
+                    || !(there instanceof WhatATermRead.Number againstAt)) {
                 return Stands.NO;
             }
             if (!counts()) {
@@ -561,24 +556,21 @@ public sealed interface BorderQuantity {
                 // term, every value where the term is over a run of them. Asked for one either way,
                 // a total would be read off whichever element the row's reading happened to pick.
                 TermOrders orders = on.get(each.getKey());
-                NumericTerm.Reading read = switch (each.getKey()) {
-                    case NumericTerm.FromOnePosition one -> orders.read(observation.at(one.position()));
+                WhatATermRead read = switch (each.getKey()) {
+                    case NumericTerm.FromOnePosition one ->
+                            readAt(orders, observation.at(one.position()));
                     case NumericTerm.TakenOver over ->
-                            orders.readOver(observation.everyValueAt(over.subjectPath()));
+                            readOver(orders, observation.everyValueAt(over.subjectPath()));
                 };
-                if (read instanceof NumericTerm.Reading.Missing missing) {
-                    stopped.add(ReadingGap.of(missing.code()));
+                if (read instanceof WhatATermRead.CameToNothing(ReadingGap why)) {
+                    stopped.add(why);
                     continue;
                 }
-                if (read instanceof NumericTerm.Reading.NoValue) {
-                    stopped.add(ReadingGap.NO_VALUE);
-                    continue;
-                }
-                if (!(read instanceof NumericTerm.Reading.Number number)) {
+                if (!(read instanceof WhatATermRead.Number(Place value))) {
                     noNumber = true;
                     continue;
                 }
-                at = at.add(Count.number(number.value()).at().multiply(each.getValue()));
+                at = at.add(Count.number(value).at().multiply(each.getValue()));
             }
             Stands unread = Stands.couldNotTell(stopped);
             if (unread != null) {
@@ -882,13 +874,80 @@ public sealed interface BorderQuantity {
         }
     }
 
+    /**
+     * What one term of a quantity came to at one row: the number it names, or why it names none.
+     *
+     * <p>The arms every reading of a term ends in, rather than {@link NumericTerm.Reading}'s. A walk
+     * that was not taken is one of the ways a term comes to no number and is not a reading of a
+     * value, so it has no arm there — and each of the three quantities would otherwise carry its
+     * own guard for that before switching, which is one rule written three times.
+     */
+    sealed interface WhatATermRead {
+
+        /** The number the term names at this row. */
+        record Number(Place value) implements WhatATermRead { }
+
+        /** The value was read and this term is no number of it, which is an answer about the value
+         *  and not about anything that stopped. */
+        record NoNumberOfTheValue() implements WhatATermRead { }
+
+        /** No number, and this is what the reading met instead. */
+        record CameToNothing(ReadingGap why) implements WhatATermRead { }
+    }
+
+    /** What {@code on} reads where the walk to its one position came to {@code answered}. */
+    private static WhatATermRead readAt(TermOrders on, WalkResult<ObservationAtPoint> answered) {
+        return switch (answered) {
+            case WalkResult.CouldNotWalk<ObservationAtPoint> _ ->
+                    new WhatATermRead.CameToNothing(ReadingGap.COULD_NOT_WALK);
+            case WalkResult.Reached(ObservationAtPoint standing) -> switch (standing) {
+                case ObservationAtPoint.Value(ObservedValue value) -> said(on.read(value));
+                // Both are the walk arriving and no value of the row standing here, which is what
+                // the reading has a word for. Which of the two it was is the measure's own business
+                // and nothing a number is read off.
+                case ObservationAtPoint.WroteNothing _, ObservationAtPoint.BelongsToAnotherReading _
+                        -> new WhatATermRead.CameToNothing(ReadingGap.NO_VALUE);
+            };
+        };
+    }
+
+    /** The same over the values of a run, which a walk that was not taken has none of. */
+    private static WhatATermRead readOver(TermOrders on,
+                                          WalkResult<java.util.List<ObservedValue>> answered) {
+        return switch (answered) {
+            case WalkResult.CouldNotWalk<java.util.List<ObservedValue>> _ ->
+                    new WhatATermRead.CameToNothing(ReadingGap.COULD_NOT_WALK);
+            case WalkResult.Reached(java.util.List<ObservedValue> values) -> said(on.readOver(values));
+        };
+    }
+
+    /** What a term's own reading of a value comes to here. */
+    private static WhatATermRead said(NumericTerm.Reading read) {
+        return switch (read) {
+            case NumericTerm.Reading.Number(Place value) ->
+                    new WhatATermRead.Number(value);
+            case NumericTerm.Reading.Missing(Incompleteness.Code code) ->
+                    new WhatATermRead.CameToNothing(ReadingGap.of(code));
+            case NumericTerm.Reading.NoValue _ ->
+                    new WhatATermRead.CameToNothing(ReadingGap.NO_VALUE);
+            case NumericTerm.Reading.NotNumber _ -> new WhatATermRead.NoNumberOfTheValue();
+        };
+    }
+
     /** What one row holds at each of a behavior's positions, for a quantity reading its own value
      *  off it. Handed in rather than reached for: which rows there are and how a value is found in
      *  one belong to the measure, and a quantity only asks what stands at a path. */
     interface Observation {
 
-        /** The one value standing at {@code path}, for a number taken of what is there. */
-        ObservedValue at(TermPath path);
+        /**
+         * What stands at {@code path}, for a number taken of what is there.
+         *
+         * <p>The walk's own answer first, because a position this compiler could not walk to is not
+         * a position a row holds nothing at. What a reading of a number does about the two differs,
+         * and a measure handing back one shape for both would settle that here, where nothing knows
+         * enough to.
+         */
+        WalkResult<ObservationAtPoint> at(TermPath path);
 
         /**
          * Every value standing at {@code path}, for a number taken over a run of them.
@@ -899,7 +958,11 @@ public sealed interface BorderQuantity {
          * about what they add up to is about all of them and does not. Answered by one method, the
          * caller that wanted one would be handed a list to choose from and the choosing would move
          * to whoever asked — which is the reading of a row being made twice.
+         *
+         * <p>Under the same walk as {@link #at}, and holding none where the row wrote no element. A
+         * total over nothing is what a run starts from rather than a value nobody could read, so
+         * there is nothing here for a row that wrote an empty container to be told apart as.
          */
-        java.util.List<ObservedValue> everyValueAt(TermPath path);
+        WalkResult<java.util.List<ObservedValue>> everyValueAt(TermPath path);
     }
 }

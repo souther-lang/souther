@@ -197,10 +197,11 @@ public final class StandingAtAPoint {
         }
 
         @Override
-        public ObservedValue at(TermPath path) {
+        public WalkResult<ObservationAtPoint> at(TermPath path) {
             if (!(where.occurrencesAt(observedInputs.inputs(), path)
                     instanceof WalkResult.Reached(List<BehaviorInputs.Occurrence> values))) {
-                return null;   // the walk and the type disagree, which is the quantity's to report
+                // The walk and the type disagree, which is the quantity's to report.
+                return WalkResult.couldNotWalk();
             }
             if (values.isEmpty()) {
                 // The row wrote no element here, so nothing of it stands anywhere on this line.
@@ -208,19 +209,19 @@ public final class StandingAtAPoint {
                 // value nothing could read leaves the point undecided over a row that plainly
                 // settles it.
                 wroteNothing = true;
-                return null;
+                return WalkResult.reached(ObservationAtPoint.WROTE_NOTHING);
             }
             for (BehaviorInputs.Occurrence each : values) {
                 each.at().forEach((step, ordinal) -> held.merge(step, ordinal + 1, Math::max));
             }
             for (BehaviorInputs.Occurrence each : values) {
                 if (agrees(each)) {
-                    return each.value();
+                    return WalkResult.reached(new ObservationAtPoint.Value(each.value()));
                 }
             }
             // No value here under this reading. Not a stop: the reading names an element this
             // position does not have, and another reading is where its values are.
-            return null;
+            return WalkResult.reached(ObservationAtPoint.ANOTHER_READING);
         }
 
         /**
@@ -235,11 +236,10 @@ public final class StandingAtAPoint {
          * written nothing here: it wrote a container, and what it holds is none.
          */
         @Override
-        public List<ObservedValue> everyValueAt(TermPath path) {
-            // Null where the walk and the type disagree, which is the quantity's to report, as it
-            // is for the one value a place holds.
-            return where.valuesAt(observedInputs.inputs(), path)
-                    instanceof WalkResult.Reached(List<ObservedValue> values) ? values : null;
+        public WalkResult<List<ObservedValue>> everyValueAt(TermPath path) {
+            // The walk's own answer handed on, which is the quantity's to report where it could not
+            // be taken, as it is for the one value a place holds.
+            return where.valuesAt(observedInputs.inputs(), path);
         }
 
         /** Whether {@code each} was reached through the elements this reading chose. */
