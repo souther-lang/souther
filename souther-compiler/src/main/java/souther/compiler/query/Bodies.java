@@ -1264,10 +1264,10 @@ public final class Bodies {
     /**
      * A leave to read a definition, and a module that has no such definition to hand over.
      *
-     * <p>Not a limit of an analysis. A reading said that module publishes the name, and a reading
-     * is what every reader of that module is answered from — so a settled module without the body
-     * is the compiler holding two answers to one question, and the reader that swallowed it would
-     * publish nothing and look exactly like a reader that had nothing to publish.
+     * <p>A reading said that module publishes the name, and a reading is what every reader of that
+     * module is answered from. So a settled module without the body is two of this compiler's
+     * answers to one question standing at once, and a reader that went on from it would publish
+     * nothing — which is what a reader with nothing to publish does.
      */
     static final class ALeaveAndAModuleDisagree extends IllegalStateException {
 
