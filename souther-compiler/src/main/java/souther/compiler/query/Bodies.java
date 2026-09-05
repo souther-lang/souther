@@ -2015,10 +2015,15 @@ public final class Bodies {
      *
      * <p>Nothing is said where the signature is not in hand: a behavior whose signature did not work
      * out has been reported on for that.
+     *
+     * <p>The plan is handed in rather than derived. What a claim says it is about is an arm, and
+     * the arms it names travel out of here inside the answer the check publishes — so the numbering
+     * they are addresses of has to be the one that answer carries, and a numbering decided here
+     * would be a second one of the same module for every later reader to hold a claim against.
      */
     private static Map<String, souther.compiler.claims.Claims> judged(
             Db db, souther.compiler.coverage.ModuleBodies of, Hir.Module settled,
-            souther.compiler.coverage.DecisionSources decisions, souther.compiler.coverage.SuppliedRules supplied) {
+            souther.compiler.coverage.CoverageSites.Plan plan) {
         String module = of.module();
         Map<String, Core> bodies = of.bodies();
         ReadingPolicy policy = db.ask(new Front.Reading()).value();
@@ -2031,14 +2036,6 @@ public final class Bodies {
         if (!scope.present() || !inputs.present() || !sigs.present() || !reading.present()) {
             return Map.of();
         }
-        // The same numbering every measure is taken over, so a claim and the reading that judges it
-        // name one arm. Built from the same bodies, which is what makes the two agree.
-        //
-        // Made here rather than asked for. What arrives is read off the checked bodies, so the
-        // query that answers it for a report depends on this one and cannot be asked from inside
-        // it. Both routes call one function over one input; what is not shared is the memo.
-        souther.compiler.coverage.CoverageSites.Plan plan =
-                souther.compiler.coverage.CoverageSites.of(of, decisions, supplied);
         Map<String, souther.compiler.claims.Claims> out = new LinkedHashMap<>();
         for (Hir.BehaviorDef behavior : settled.behaviors()) {
             Core body = bodies.get(behavior.name());
@@ -2220,19 +2217,22 @@ public final class Bodies {
         private final Map<String, souther.compiler.check.ElementBindings> elements;
         private final souther.compiler.coverage.DecisionSources decisions;
         private final souther.compiler.coverage.SuppliedRules supplied;
+        private final souther.compiler.coverage.NumberingIdentity numbering;
 
         private Elaborated(souther.compiler.coverage.ModuleBodies of,
                            Map<String, Core> emittedHelpers,
                            Map<String, souther.compiler.claims.Claims> claims,
                            Map<String, souther.compiler.check.ElementBindings> elements,
                            souther.compiler.coverage.DecisionSources decisions,
-                           souther.compiler.coverage.SuppliedRules supplied) {
+                           souther.compiler.coverage.SuppliedRules supplied,
+                           souther.compiler.coverage.NumberingIdentity numbering) {
             this.of = of;
             this.supplied = supplied;
             this.emittedHelpers = emittedHelpers;
             this.claims = claims;
             this.elements = elements;
             this.decisions = decisions;
+            this.numbering = numbering;
         }
 
         /**
@@ -2279,17 +2279,37 @@ public final class Bodies {
          * are only as true as the caller made them — and there are a dozen callers, each holding
          * one of these and taking the parts off it.
          *
-         * <p><b>Each call walks the bodies again, and what comes back is the same numbering.</b> A
-         * numbering is what {@link souther.compiler.coverage.NumberingIdentity} says it is — the
-         * same places under the same numbers over the same executable — so two walks of one body
-         * come to one numbering, and an address handed out by either is an address of both. Which
-         * is a thing the values prove rather than one a caller takes on trust from having been
-         * given the same object: the emitter's arm and a measure's arm are equal because they
-         * address one place of one numbering, and they would be equal across two builds for the
-         * same reason.
+         * <p><b>Each call walks the bodies again, under the numbering this answer carries.</b> What
+         * comes back is a plan of its own and its addresses are addresses of {@link #numberingIdentity()},
+         * so an arm of one call and an arm of another are one address rather than two that agree.
+         * The walk is held to having realized that numbering, which is where a walk that came to
+         * number a place otherwise is refused.
+         *
+         * <p>Two derivations across two compiles are still held against each other by what
+         * {@link souther.compiler.coverage.NumberingIdentity} says a numbering is — the same places
+         * under the same numbers over the same executable. Nothing here rests on an address having
+         * been made by the same call as the one it is compared with.
+         *
+         * <p><b>For a caller that wants the places and not where they are.</b> Reading a recorded
+         * number back as a place takes no walk: {@link #numberingIdentity()} with
+         * {@link souther.compiler.coverage.SiteNumbering#of} answers it, and asking here for it
+         * walks every body to learn nothing the caller uses.
          */
         public souther.compiler.coverage.CoverageSites.Plan plan() {
-            return souther.compiler.coverage.CoverageSites.of(of, decisions, supplied);
+            return souther.compiler.coverage.CoverageSites.under(of, decisions, supplied, numbering);
+        }
+
+        /**
+         * The numbering of this module's bodies, which this check issued and every reading of them
+         * is of.
+         *
+         * <p>What a number a run was recorded at means. Held here because deciding it is what
+         * holding the bodies is: a reader that decided one of its own would have a second answer
+         * about one module's arms, and no later check could tell the two apart while both were
+         * true.
+         */
+        public souther.compiler.coverage.NumberingIdentity numberingIdentity() {
+            return numbering;
         }
 
         /** Who owns the rule each fork of this module's bodies decides by. */
@@ -2454,11 +2474,17 @@ public final class Bodies {
             // the pair rather than two things to put together again.
             souther.compiler.coverage.ModuleBodies of =
                     new souther.compiler.coverage.ModuleBodies(name, bodies);
+            // The numbering of these bodies, decided here and once. What it is an answer about is
+            // the module this check holds, so this is where there is a module to decide it from;
+            // and the claims below name arms of it, so they are addresses of the numbering this
+            // answer goes on to carry rather than of one more that agrees with it.
+            souther.compiler.coverage.CoverageSites.Plan plan =
+                    souther.compiler.coverage.CoverageSites.of(of, read, handed);
             Map<String, souther.compiler.claims.Claims> claims =
-                    judged(db, of, settled.value(), read, handed);
+                    judged(db, of, settled.value(), plan);
             return Answer.of(
                     new Elaborated(of, module.value().emittedHelpers(), claims, elements,
-                            read, handed),
+                            read, handed, plan.identity()),
                     contradicted(db, name, claims));
         }
     }

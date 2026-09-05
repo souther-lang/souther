@@ -1921,10 +1921,15 @@ public final class Adequacy {
      * elements bind, whether the bodies came back at all — and those take the numbering off the
      * value they are already holding. This is the same route rather than a second one, and calling
      * it from there would be asking the store for something in hand.
+     *
+     * <p>The check owns the numbering, so this reads the numbering it issued. What a plan adds is
+     * where each place is in the bodies, which a caller reading a recorded number back as a place
+     * does not use — and deriving one for it walks every body of the module to say nothing more.
      */
     static Optional<SiteNumbering> numberingOf(Db db, String module) {
         Bodies.Elaborated checked = db.ask(new Bodies.Checked(module)).value();
-        return checked == null ? Optional.empty() : Optional.of(checked.plan().numbering());
+        return checked == null ? Optional.empty()
+                : Optional.of(SiteNumbering.of(checked.numberingIdentity()));
     }
 
     /** The behavior of that name that has inputs of its own, or null. A composition's inputs are its
@@ -2338,7 +2343,8 @@ public final class Adequacy {
             // for: a module whose bodies were not read has no numbering, and its rows have no
             // account of a run to be read under one.
             Optional<SiteNumbering> numbering =
-                    checked == null ? Optional.empty() : Optional.of(checked.plan().numbering());
+                    checked == null ? Optional.empty()
+                            : Optional.of(SiteNumbering.of(checked.numberingIdentity()));
             Map<String, RowReading> byTarget = db.ask(new RowReadings(name)).value();
             Set<ArmProbe> lit = new LinkedHashSet<>();
             for (RowReading observed : byTarget.values()) {
@@ -2775,7 +2781,8 @@ public final class Adequacy {
             // every module whose bodies were not read and so is nobody's numbering. Taken off the
             // value in hand instead, a module without one says it has none.
             Optional<SiteNumbering> numbering =
-                    checked == null ? Optional.empty() : Optional.of(checked.plan().numbering());
+                    checked == null ? Optional.empty()
+                            : Optional.of(SiteNumbering.of(checked.numberingIdentity()));
             Map<String, RowReading> byTarget = db.ask(new RowReadings(name)).value();
             Map<String, InputDomain> readInputs = db.ask(new Inputs(name)).value();
             // What the guards above each place leave, asked once for the module and read by

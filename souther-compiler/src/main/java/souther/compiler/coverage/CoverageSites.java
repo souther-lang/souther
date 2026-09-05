@@ -445,9 +445,49 @@ public final class CoverageSites {
         }
     }
 
-    /** The sites of every behavior body in one module, numbered in the order the bodies are declared
-     * and, within one, in the order the arms are written. */
+    /**
+     * The sites of every behavior body in one module, numbered in the order the bodies are declared
+     * and, within one, in the order the arms are written — the numbering being decided here.
+     *
+     * <p>Deciding a numbering is what whoever holds the bodies does once. Every other walk of them
+     * wants the places and not a second opinion about what the numbers mean, and asks
+     * {@link #under} with the numbering that was issued.
+     */
     public static Plan of(ModuleBodies of, DecisionSources decisions, SuppliedRules supplied) {
+        return sites(of, decisions, supplied, SiteNumbering.Building::finish);
+    }
+
+    /**
+     * The same sites, under a numbering already issued over these bodies.
+     *
+     * <p>What a reader that needs where the places are does when the numbering is somebody else's
+     * to decide. The addresses handed out are addresses of {@code numbering}, so an arm of this
+     * plan and an arm of the plan the numbering was issued with are one address rather than two
+     * that agree.
+     *
+     * <p>The walk is held to having realized {@code numbering} rather than trusted to have: a walk
+     * that numbered a place otherwise would hand out an address saying the number means what this
+     * numbering says, and nothing downstream could see the difference.
+     *
+     * <p><b>For a reader that wants the places.</b> A number read back as a place needs no walk at
+     * all — {@link SiteNumbering#of} answers that from the numbering alone, and a caller that asks
+     * here for it walks every body to learn nothing it uses.
+     */
+    public static Plan under(ModuleBodies of, DecisionSources decisions, SuppliedRules supplied,
+                             NumberingIdentity numbering) {
+        return sites(of, decisions, supplied,
+            (walked, module, executable) -> walked.realize(numbering, module, executable));
+    }
+
+    /** Where the walk's numbers come to mean places: decided from the bodies, or already decided
+     *  and realized by this walk. */
+    private interface Numbering {
+        SiteNumbering of(SiteNumbering.Building walked, String module,
+                         Map<String, ExecutableIdentity> executable);
+    }
+
+    private static Plan sites(ModuleBodies of, DecisionSources decisions, SuppliedRules supplied,
+                              Numbering settling) {
         // Which comparisons there are is not this walk's to decide. Asked here and answered once,
         // so that what gets a number and what a line is drawn on are the same collection read twice
         // rather than two descents that happen to agree.
@@ -468,7 +508,7 @@ public final class CoverageSites {
         // The numbering, now that every place is in it and what the bodies do is known — and then
         // the walk's numbers read back as places of it. One direction and one moment: nothing above
         // could have made an address, and nothing below sees a number.
-        SiteNumbering numbering = walk.numbering.finish(of.module(), executable);
+        SiteNumbering numbering = settling.of(walk.numbering, of.module(), executable);
         List<Site> sites = new ArrayList<>();
         for (DraftSite draft : walk.sites) {
             sites.add(switch (draft.outcome()) {

@@ -56,41 +56,80 @@ class WhatDerivesANumberingIsWhatHoldsTheBodiesTest {
 
     private static final String SITES = "souther/compiler/coverage/CoverageSites";
 
+    private static final String NUMBERING = "souther/compiler/coverage/NumberingIdentity";
+
     /** A method that may derive one, how many times it does, and why it is one of the ones that
      *  does. */
     private record Licence(String who, int calls, String why) { }
 
     private static final List<Licence> MAY_DERIVE = List.of(
-            new Licence("souther.compiler.query.Bodies.judged", 1,
-                    "what a body claims cannot arrive is judged against the arms of the same"
-                            + " bodies, and the claim and the reading that judges it have to name"
-                            + " one arm"),
-            new Licence("souther.compiler.query.Bodies.Elaborated.plan", 1,
-                    "what every reader outside the check asks: the bodies are held here, so this is"
-                            + " where a numbering of them is a numbering of anything at all"));
+            new Licence("souther.compiler.query.Bodies.Checked.compute", 1,
+                    "the check holds the bodies, so this is where a numbering of them is a"
+                            + " numbering of anything at all. What it decides here is carried by"
+                            + " the answer, and every later walk of these bodies realizes it"));
+
+    /** A method that may construct one, how many times it does, and why. Beside the table above
+     *  and not the same one: deciding what a module's numbers mean is one act, and putting an
+     *  already decided numbering into a value is another. */
+    private static final List<Licence> MAY_CONSTRUCT = List.of(
+            new Licence("souther.compiler.coverage.SiteNumbering.Building.finish", 1,
+                    "the walk that hands the numbers out is what knows what each addresses, and it"
+                            + " is one act with the numbering being made"),
+            new Licence("souther.compiler.coverage.NumberingIdentity.of", 1,
+                    "the numbering of nothing, which is what a module with no bodies to walk has"));
 
     @Test
     void onlyTheCheckThatHoldsThemDerivesAModulesNumbering() throws IOException {
-        assertEquals(declared(), derivations(),
+        assertEquals(declared(MAY_DERIVE), derivations(),
                 "a numbering derived anywhere else is a second answer about one module's arms, and"
                         + " a reader holding it is reading a run against numbers nothing wrote."
-                        + " What may derive one, and why: " + why());
+                        + " What may derive one, and why: " + why(MAY_DERIVE));
     }
 
-    private static Map<String, Integer> declared() {
+    /**
+     * And nothing outside the numbering's own package makes one.
+     *
+     * <p>Beside the walk, because the two are told apart by nothing afterwards. A numbering put
+     * together from parts a caller had to hand is a numbering, and an address of it is an address —
+     * so a reader handed one would be reading a run against places by whatever the caller believed
+     * the numbers meant. The walk is the only thing that knows, and the constructor is public
+     * because a fixture stating a numbering outright is how the readings below it are tested.
+     */
+    @Test
+    void nothingElseInTheCompilerMakesANumbering() throws IOException {
+        assertEquals(declared(MAY_CONSTRUCT), constructions(),
+                "a numbering made anywhere else says what numbers mean without having handed any"
+                        + " out. What may make one, and why: " + why(MAY_CONSTRUCT));
+    }
+
+    private static Map<String, Integer> declared(List<Licence> licences) {
         Map<String, Integer> out = new TreeMap<>();
-        MAY_DERIVE.forEach(each -> out.put(each.who(), each.calls()));
+        licences.forEach(each -> out.put(each.who(), each.calls()));
         return out;
     }
 
-    private static Map<String, String> why() {
+    private static Map<String, String> why(List<Licence> licences) {
         Map<String, String> out = new LinkedHashMap<>();
-        MAY_DERIVE.forEach(each -> out.put(each.who(), each.why()));
+        licences.forEach(each -> out.put(each.who(), each.why()));
         return out;
     }
 
-    /** How many times each method of the compiler derives a numbering. */
+    /** How many times each method of the compiler decides a numbering from bodies. Only the call
+     *  that decides one: a walk taking a numbering already issued asks for it by another name, and
+     *  hands out addresses of what it was given. */
     private static Map<String, Integer> derivations() throws IOException {
+        return calls(call -> call.owner().asInternalName().equals(SITES)
+                && call.name().stringValue().equals("of"));
+    }
+
+    /** How many times each method of the compiler makes a numbering. */
+    private static Map<String, Integer> constructions() throws IOException {
+        return calls(call -> call.owner().asInternalName().equals(NUMBERING)
+                && call.name().stringValue().equals("<init>"));
+    }
+
+    private static Map<String, Integer> calls(java.util.function.Predicate<InvokeInstruction> what)
+            throws IOException {
         Map<String, Integer> calls = new TreeMap<>();
         int read = 0;
         for (Path each : classes()) {
@@ -99,9 +138,7 @@ class WhatDerivesANumberingIsWhatHoldsTheBodiesTest {
             String from = model.thisClass().asInternalName().replace('/', '.').replace('$', '.');
             for (MethodModel method : model.methods()) {
                 method.code().ifPresent(code -> code.forEach(element -> {
-                    if (element instanceof InvokeInstruction call
-                            && call.owner().asInternalName().equals(SITES)
-                            && call.name().stringValue().equals("of")) {
+                    if (element instanceof InvokeInstruction call && what.test(call)) {
                         calls.merge(from + "." + method.methodName().stringValue(), 1, Integer::sum);
                     }
                 }));
