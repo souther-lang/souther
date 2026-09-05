@@ -11,7 +11,6 @@ import java.nio.file.Path;
 import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.Optional;
-import java.util.function.Supplier;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -31,16 +30,22 @@ import org.junit.platform.launcher.TestIdentifier;
 class WhatAClassCoveredIsCutAtItsOwnBoundaryTest {
 
     /** Each take is one distinct record, so a file can be read back to the take it was. */
-    private static final class Takes implements Supplier<byte[]> {
+    private static final class Takes implements CoverageByClass.Recorder {
         private final Deque<byte[]> served = new ArrayDeque<>();
         private int count;
+        private int dropped;
 
         @Override
-        public byte[] get() {
+        public byte[] take() {
             count++;
             byte[] record = ("take-" + count).getBytes();
             served.add(record);
             return record;
+        }
+
+        @Override
+        public void drop() {
+            dropped++;
         }
     }
 
@@ -69,13 +74,12 @@ class WhatAClassCoveredIsCutAtItsOwnBoundaryTest {
                 identifierOf("b", ClassSource.from("souther.example.BTest")),
                 TestExecutionResult.successful());
 
-        byte[] discovery = takes.served.pollFirst();
+        assertEquals(1, takes.dropped,
+                "what ran before the first class is dropped so that it belongs to no class");
         assertArrayEquals(takes.served.pollFirst(),
                 Files.readAllBytes(dir.resolve("souther.example.ATest.exec")));
         assertArrayEquals(takes.served.pollFirst(),
                 Files.readAllBytes(dir.resolve("souther.example.BTest.exec")));
-        assertEquals("take-1", new String(discovery),
-                "what ran before the first class is taken so that it belongs to no class");
         try (Stream<Path> files = Files.list(dir)) {
             assertEquals(2, files.count());
         }
@@ -98,8 +102,18 @@ class WhatAClassCoveredIsCutAtItsOwnBoundaryTest {
 
     @Test
     void aRunThatDidNotAskNeverReachesForTheAgent() {
-        CoverageByClass listener = new CoverageByClass(
-                Optional.empty(), () -> fail("a plain run must not take the agent's data"));
+        CoverageByClass listener = new CoverageByClass(Optional.empty(),
+                new CoverageByClass.Recorder() {
+                    @Override
+                    public byte[] take() {
+                        return fail("a plain run must not take the agent's data");
+                    }
+
+                    @Override
+                    public void drop() {
+                        fail("a plain run must not reset the agent either");
+                    }
+                });
 
         listener.testPlanExecutionStarted(null);
         listener.executionFinished(

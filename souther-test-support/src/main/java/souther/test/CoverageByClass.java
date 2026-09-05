@@ -5,7 +5,6 @@ import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Optional;
-import java.util.function.Supplier;
 import org.jacoco.agent.rt.RT;
 import org.junit.platform.engine.TestExecutionResult;
 import org.junit.platform.engine.support.descriptor.ClassSource;
@@ -38,23 +37,28 @@ public final class CoverageByClass implements TestExecutionListener {
     /** Where a run wanting this writes each class's data; unset in a plain run. */
     public static final String DIRECTORY_PROPERTY = "souther.test.coverage.dir";
 
+    /** What records the run: asked for what it holds since it was last asked, or told to drop it. */
+    interface Recorder {
+        /** What was recorded since the last take or drop, which starts the next record. */
+        byte[] take();
+
+        /** Starts the next record without keeping this one. */
+        void drop();
+    }
+
     private final Optional<Path> directory;
-    private final Supplier<byte[]> takeAndReset;
+    private final Recorder recorder;
 
     /** What the service loader constructs: the agent's data, into the directory the run named. */
     public CoverageByClass() {
-        this(
-                Optional.ofNullable(System.getProperty(DIRECTORY_PROPERTY)).map(Path::of),
-                Agent::takeAndReset);
+        this(Optional.ofNullable(System.getProperty(DIRECTORY_PROPERTY)).map(Path::of),
+                new Agent());
     }
 
-    /**
-     * The same over {@code takeAndReset}, which is asked for what was recorded since it was last
-     * asked, and over {@code directory}; empty means the run did not ask.
-     */
-    CoverageByClass(Optional<Path> directory, Supplier<byte[]> takeAndReset) {
+    /** The same over {@code recorder} and {@code directory}; empty means the run did not ask. */
+    CoverageByClass(Optional<Path> directory, Recorder recorder) {
         this.directory = directory;
-        this.takeAndReset = takeAndReset;
+        this.recorder = recorder;
     }
 
     @Override
@@ -62,7 +66,7 @@ public final class CoverageByClass implements TestExecutionListener {
         if (directory.isEmpty()) {
             return;
         }
-        takeAndReset.get();
+        recorder.drop();
     }
 
     @Override
@@ -80,7 +84,7 @@ public final class CoverageByClass implements TestExecutionListener {
         Path dir = directory.get();
         try {
             Files.createDirectories(dir);
-            Files.write(dir.resolve(className.get() + ".exec"), takeAndReset.get());
+            Files.write(dir.resolve(className.get() + ".exec"), recorder.take());
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
@@ -90,12 +94,15 @@ public final class CoverageByClass implements TestExecutionListener {
      * The agent, reached only from a run that asked for this. Its own class so that a plain run
      * never links against the agent's runtime, which is on no plain run's classpath.
      */
-    private static final class Agent {
-        private Agent() {
+    private static final class Agent implements Recorder {
+        @Override
+        public byte[] take() {
+            return RT.getAgent().getExecutionData(true);
         }
 
-        static byte[] takeAndReset() {
-            return RT.getAgent().getExecutionData(true);
+        @Override
+        public void drop() {
+            RT.getAgent().reset();
         }
     }
 }
