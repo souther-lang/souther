@@ -136,16 +136,18 @@ public record OrderedIntervals<A>(Map<A, OrderedInterval> ranges, boolean nothin
      * positions in both. Where there are none, the choice still admits nothing and no position is at
      * fault, and that is said as itself.
      *
-     * <p>This realises a decision rather than making one. Which alternatives nobody can take turns
-     * on what every language reading the clause left, and a branch these ranges are perfectly happy
-     * with is one the values may have refused — so what arrives here is each side already told that
-     * nothing satisfies it ({@link #leavingNothing}), and what is asked is what two such sides leave
-     * empty between them.
+     * <p>This realises a decision rather than making one, and it does not ask what it was made of.
+     * Which alternatives nobody can take turns on what every language reading the clause left, and
+     * a branch these ranges are perfectly happy with is one the values may have refused — so what
+     * arrives is the ranges as they were read, of a branch something else settled. What is answered
+     * is what the two of them leave empty between them, and the whole is said to hold nothing
+     * because the choice does, not because these ranges show it.
      *
-     * <p>Told a side that stands, this would answer that a choice somebody can take admits nothing,
-     * which is the one direction a state deciding emptiness may not move in. What keeps that from
-     * arriving is where the telling is done and not a question asked here: a check beside the call
-     * that normalises the sides is a check of the line above it.
+     * <p>Which is why there is no question here about the sides. Asked whether they hold nothing,
+     * this would be deciding what it was called to realise; told a side that stands, it answers
+     * that a choice somebody can take admits nothing, which is the one direction a state deciding
+     * emptiness may not move in. What keeps that from arriving is the caller having settled it,
+     * and there is no reading of a caller that has not.
      */
     public OrderedIntervals<A> bothDead(OrderedIntervals<A> other) {
         Map<A, OrderedInterval> both = new LinkedHashMap<>();

@@ -150,13 +150,28 @@ public final class WhatWasCompiled {
     /**
      * Every class that calls {@code method} on {@code on}.
      *
-     * <p>For a rule about who may do something rather than about who may name a type. A call is in
-     * the caller's constant pool whatever it is spelled like at the call site, and a lambda's body
-     * is compiled into the class that wrote it, so a caller cannot get out of this by writing the
-     * call somewhere shorter.
+     * <p>For a rule about who may do something rather than about who may name a type. A lambda's
+     * body is compiled into the class that wrote it, so a caller cannot get out of this by writing
+     * the call somewhere shorter.
+     *
+     * <p><b>Through whatever type it is named.</b> What a call site puts in the constant pool is
+     * the type the receiver was declared as, so a method of an interface called through one of its
+     * implementations is a reference to the implementation. A rule about who may do something is
+     * about the operation and not about the spelling of the variable it was reached through, and a
+     * rule reading only the type it was asked about would be escaped by declaring the receiver one
+     * step down. So the owners are that type and every compiled type that answers it
+     * ({@link #implementing}).
+     *
+     * <p>A type this module did not compile has no implementations to gather, and the walk over
+     * what it did compile finds none — which is the right answer for a rule about this module's own
+     * calls into somebody else's type.
      */
     public static Set<String> callersOf(Class<?> on, String method) {
-        ClassDesc owner = on.describeConstable().orElseThrow();
+        Set<ClassDesc> owners = new LinkedHashSet<>();
+        owners.add(on.describeConstable().orElseThrow());
+        for (String each : implementing(on)) {
+            owners.add(ClassDesc.of(each));
+        }
         Set<String> found = new LinkedHashSet<>();
         for (String each : classes()) {
             ConstantPool pool = parse(each).constantPool();
@@ -168,7 +183,7 @@ public final class WhatWasCompiled {
                     continue;
                 }
                 if (entry instanceof java.lang.classfile.constantpool.MemberRefEntry asCall
-                        && asCall.owner().asSymbol().equals(owner)
+                        && owners.contains(asCall.owner().asSymbol())
                         && asCall.name().stringValue().equals(method)) {
                     found.add(each);
                 }

@@ -508,10 +508,12 @@ sealed interface Confinement<A> {
          * <p>Each language is asked what two dead branches leave it, and neither is asked whether
          * they are dead — a language may be perfectly happy with a branch the other refused, and
          * asked through the entry for a choice that stands it would answer for that branch with the
-         * ends it read. The two are not asked alike: the values are taken as leaving nothing first,
-         * which is what stops a position one alternative emptied from being named the reason a
-         * choice nobody can take is empty, and the ranges are not, because what they leave empty
-         * between two branches is already what every alternative leaves empty.
+         * ends it read.
+         *
+         * <p>The values are taken as leaving nothing before they are asked and the ranges are not,
+         * so the two answer differently about which position a dead choice is empty at: the ranges
+         * name the positions every alternative emptied, and the values, having been emptied whole,
+         * name none.
          */
         Planned<A> bothDead(Planned<A> other, Admission<A> shown) {
             return new Planned<>(values.leavingNothing().bothDead(other.values.leavingNothing()),

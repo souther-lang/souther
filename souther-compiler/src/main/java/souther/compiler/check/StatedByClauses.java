@@ -607,15 +607,15 @@ sealed interface StatedByClauses {
          * alternative contains, at a position the rules are fine with, and one the refusal would
          * then be written about.
          *
-         * <p><b>So which of four a choice is is decided here, and the languages are told the
+         * <p><b>So which of four a choice is is decided here, and the languages realise the
          * answer.</b> Every alternative dead is what both of them leave empty
-         * ({@link Confinement.Planned#bothDead}), where each side is first taken as leaving nothing
-         * ({@link AdmissibleValues#leavingNothing}, {@link OrderedIntervals#leavingNothing}); one
-         * alternative dead is the other alternative, which is held already and asks the languages
-         * nothing; both standing is what two readings somebody can be in come to
-         * ({@link Confinement.Planned#either}); and a fate nothing has settled keeps the choice.
-         * What each language is asked is which of those it is realising, and never which of them it
-         * is.
+         * ({@link Confinement.Planned#bothDead}); one alternative dead is the other alternative,
+         * which is held already and asks the languages nothing; both standing is what two readings
+         * somebody can be in come to ({@link Confinement.Planned#either}); and a fate nothing has
+         * settled keeps the choice. What each language is asked is which of those it is realising,
+         * and never which of them it is — a language may be perfectly happy with a branch the other
+         * refused, so a language asked to decide would answer about a branch and not about the
+         * choice.
          *
          * <p>What every alternative leaves empty is what the dead choice leaves empty, and where
          * that is no position, the choice admits nothing with none of them at fault. That is the
