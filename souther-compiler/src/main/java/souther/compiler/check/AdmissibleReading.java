@@ -65,16 +65,6 @@ final class AdmissibleReading implements ClauseReading<PlannedValues<FactSubject
      * are two places in a declaration, and what each of them is about is asked of the one in hand.
      */
     private final Map<Core, StringPredicates.Stated> asStated = new IdentityHashMap<>();
-    /**
-     * Which written place each node is, for the machines this asks for to say who asked.
-     *
-     * <p>Beside the table above and by the same rule. A machine is refused where it is made, which
-     * is under the position's allowance and long past anything holding a clause — so what asked
-     * travels with the asking, and the far end names a written thing instead of naming the position
-     * the spending was arranged by.
-     */
-    private final AuthoredOccurrences occurrences = new AuthoredOccurrences();
-
     private AdmissibleReading(Terms terms, Map<FactSubject, Type> byName,
                               Symbols symbols, Alternatives alternatives, Allowance<FactSubject> allowed) {
         this.terms = terms;
@@ -195,9 +185,8 @@ final class AdmissibleReading implements ClauseReading<PlannedValues<FactSubject
             // answer this rule, and whether one is ever made of it is settled where the position's
             // plan is worked out under its allowance.
             case StringPredicates.Reading.Accepting it -> PlannedValues.at(position,
-                    new AdmittedPlan.Pattern(occurrences.of(e),
-                            states ? PatternPlan.of(it.accepts())
-                                    : PatternPlan.notMatching(it.accepts())));
+                    new AdmittedPlan.Pattern(states ? PatternPlan.of(it.accepts())
+                            : PatternPlan.notMatching(it.accepts())));
             case StringPredicates.Reading.PatternNotRead it -> stoppedBy(it.why(), position);
             // A rule whose text this could not work out is a rule this did not read, and what that
             // costs is the leaf's to say — over every position the clause names, which is more than

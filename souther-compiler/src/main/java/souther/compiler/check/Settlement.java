@@ -67,12 +67,12 @@ record Settlement(Realized<FactSubject> made, OrderedIntervals<FactSubject> orde
      * builds an account of a rule out of it, which is the direction the loss runs in.
      */
     record Sided(Emptiness emptiness, Map<FactSubject, List<UnreadReason>> answerStanding,
-                 List<souther.compiler.values.Unbuilt.RuleShortfall<FactSubject>> ruleShortfalls,
+                 Set<souther.compiler.values.Unbuilt.RuleShortfall<FactSubject>> ruleShortfalls,
                  Set<FactSubject> unbuilt) {
 
         /** A branch nobody has probed yet, which everything joins onto. */
         static Sided settledAs(Emptiness emptiness) {
-            return new Sided(emptiness, Map.of(), List.of(), Set.of());
+            return new Sided(emptiness, Map.of(), Set.of(), Set.of());
         }
 
         /**
@@ -89,6 +89,11 @@ record Settlement(Realized<FactSubject> made, OrderedIntervals<FactSubject> orde
                     new java.util.LinkedHashMap<>(answerStanding);
             ruleShortfalls.forEach(each -> out.merge(each.at(), List.of(each.why()),
                     ReadByClauses::alsoSaying));
+            // Said in the vocabulary's declared order, as a joined side is. The two halves are put
+            // together here and each arrived in its own, so a place holding one of each would come
+            // out in the order this happened to append them — which is an order of this method's
+            // and not one a reader is promised.
+            out.replaceAll((_, reasons) -> reasons.stream().sorted().toList());
             return out;
         }
 
@@ -108,17 +113,15 @@ record Settlement(Realized<FactSubject> made, OrderedIntervals<FactSubject> orde
             ReadByClauses.alsoSaying(answerStanding, other.answerStanding())
                     .forEach((position, reasons) ->
                             why.put(position, reasons.stream().sorted().toList()));
-            // And the other half joined as itself. A shortfall is one fact about one written thing,
-            // so two copies of one occurrence are one of these and two occurrences are two — which
-            // is what a set of them says and what a map of positions could not.
-            List<souther.compiler.values.Unbuilt.RuleShortfall<FactSubject>> asked =
-                    new java.util.ArrayList<>(ruleShortfalls);
-            other.ruleShortfalls().forEach(each -> {
-                if (!asked.contains(each)) {
-                    asked.add(each);
-                }
-            });
-            return new Sided(emptiness.joined(other.emptiness()), why, List.copyOf(asked), gaveUp);
+            // And the other half as a union, which is what this half is: a shortfall is one fact
+            // about one pattern at one position, so two copies of one are one and two are two.
+            // Held in the order the copies were met, a branch's aggregate would say which copy was
+            // settled first, and the class above promises that it cannot.
+            Set<souther.compiler.values.Unbuilt.RuleShortfall<FactSubject>> asked =
+                    new java.util.LinkedHashSet<>(ruleShortfalls);
+            asked.addAll(other.ruleShortfalls());
+            return new Sided(emptiness.joined(other.emptiness()), why,
+                    java.util.Collections.unmodifiableSet(asked), gaveUp);
         }
     }
 }

@@ -36,17 +36,24 @@ public final class Unbuilt<A> {
      * thing the position knows — recovered from there, this became a fact about every rule that
      * mentions the place.
      *
+     * <p>The pattern and not a rule. A machine is the pattern's, and the same pattern written into
+     * three rules is one machine that all three asked for — so what is named here is what was
+     * refused, and which rules are answerable for it is which of them asked for that pattern. Named
+     * with one rule, two rules writing one pattern would have one of them answering for both.
+     *
      * @param at what was being worked out when it was refused, which is what the reason is about
-     * @param occurrence what asked, which is what a reader is sent to
+     * @param asked the pattern whose machine was refused, which is what a rule is answerable for
+     *              having written
      * @param why what a rule is answerable for, which is what {@link UnreadReason.About#A_RULE}
      *            says of it
      */
-    public record RuleShortfall<A>(A at, AuthoredOccurrence occurrence, UnreadReason why) {
+    public record RuleShortfall<A>(A at, souther.compiler.regex.PatternPlan asked,
+                                   UnreadReason why) {
 
         public RuleShortfall {
-            if (at == null || occurrence == null || why == null) {
-                throw new IllegalArgumentException("a shortfall about a rule says where, what asked"
-                        + " and what it was");
+            if (at == null || asked == null || why == null) {
+                throw new IllegalArgumentException("a shortfall about a rule says where, what was"
+                        + " asked for and what it was");
             }
             if (why.about() != UnreadReason.About.A_RULE) {
                 throw new IllegalArgumentException(
@@ -78,7 +85,7 @@ public final class Unbuilt<A> {
         }
     }
 
-    private final List<RuleShortfall<A>> aboutARule = new ArrayList<>();
+    private final Set<RuleShortfall<A>> aboutARule = new LinkedHashSet<>();
     private final List<AnswerShortfall<A>> aboutTheAnswer = new ArrayList<>();
 
     /** Records what {@code made} says about {@code atom}, where it says the answer was not built. */
@@ -86,16 +93,14 @@ public final class Unbuilt<A> {
         switch (made) {
             case Realization.Exact _ -> { }
             case Realization.OverTheMachineLimit it -> add(new RuleShortfall<>(atom,
-                    it.occurrence(), UnreadReason.PATTERN_TOO_COSTLY));
+                    it.asked(), UnreadReason.PATTERN_TOO_COSTLY));
             case Realization.OverTheAnswerLimit _ -> add(new AnswerShortfall<>(atom,
                     UnreadReason.EXACT_VALUES_TOO_COSTLY));
         }
     }
 
     private void add(RuleShortfall<A> one) {
-        if (!aboutARule.contains(one)) {
-            aboutARule.add(one);
-        }
+        aboutARule.add(one);
     }
 
     private void add(AnswerShortfall<A> one) {
@@ -116,9 +121,21 @@ public final class Unbuilt<A> {
         return Collections.unmodifiableSet(out);
     }
 
-    /** What a rule of the model is answerable for, each saying which written thing asked. */
-    List<RuleShortfall<A>> aboutARule() {
-        return List.copyOf(aboutARule);
+    /**
+     * What a rule of the model is answerable for, each saying which pattern was refused.
+     *
+     * <p>A set, because that is what these are. One pattern refused at one position is one fact
+     * however many times the work met it, and nothing here is an order anybody may read: the order
+     * somebody wrote their rules in is the reading's to say, and a set of facts joined from two
+     * branches would say the order they were joined in.
+     *
+     * <p><b>Kept in the order they were recorded all the same.</b> Nothing may read the order, and
+     * a compile has to come out the same twice — {@link Set#copyOf} iterates in an order salted per
+     * run of the machine, so a downstream fold that seeds anything from these would put a report in
+     * a different order on Tuesday.
+     */
+    Set<RuleShortfall<A>> aboutARule() {
+        return Collections.unmodifiableSet(new LinkedHashSet<>(aboutARule));
     }
 
     /** What the answer is answerable for, which names no rule. */

@@ -77,6 +77,31 @@ class ALimitIsAnsweredForByWhatAskedForItTest {
                         + " for and which is filed nowhere under a rule");
     }
 
+    /** The same pattern written into two rules, which is one machine both of them asked for. */
+    private static final String ONE_PATTERN_TWO_RULES_ASKED_FOR = """
+            module demo
+
+            data N = { x: String, y: String }
+                invariant one = String.matches("a{60000}", y)
+                invariant other = String.matches("a{60000}", y)
+            """;
+
+    /**
+     * And a pattern two rules wrote is one machine that both of them are answerable for.
+     *
+     * <p>What a refusal is about is the pattern. A machine is made once however many rules ask for
+     * it — the allowance is spent once, and the same model with the clause written twice comes to
+     * the same answer — so both of the rules that asked are answerable, and neither is answerable
+     * because it happened to be read first.
+     */
+    @Test
+    void aPatternTwoRulesWroteIsOneMachineBothAreAnswerableFor() {
+        Map<String, List<UnreadReason>> standing = standingOn(ONE_PATTERN_TWO_RULES_ASKED_FOR);
+
+        assertEquals(List.of(UnreadReason.PATTERN_TOO_COSTLY), standing.get("one at y"));
+        assertEquals(List.of(UnreadReason.PATTERN_TOO_COSTLY), standing.get("other at y"));
+    }
+
     /**
      * And the position says it all the same.
      *

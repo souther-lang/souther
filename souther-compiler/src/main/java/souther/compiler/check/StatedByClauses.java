@@ -101,7 +101,7 @@ sealed interface StatedByClauses {
     record Part(Adoption<FactSubject> byValues, Adoption<FactSubject> byOrder,
                 Map<FactSubject, java.util.List<souther.compiler.values.UnreadReason>> standing,
                 Map<FactSubject, StringRestriction> aboutStrings,
-                java.util.Set<souther.compiler.values.AuthoredOccurrence> asked) {
+                java.util.Set<souther.compiler.values.PlannedValues.Asked<FactSubject>> asked) {
 
         /** The same part, in a branch nobody can be in — see {@link Adoption#inADeadBranch}. */
         Part inADeadBranch() {
@@ -152,15 +152,13 @@ sealed interface StatedByClauses {
         }
 
         /** What either of them asked for, which is what this part asked for. */
-        private static java.util.Set<souther.compiler.values.AuthoredOccurrence> both(
-                java.util.Set<souther.compiler.values.AuthoredOccurrence> these,
-                java.util.Set<souther.compiler.values.AuthoredOccurrence> those) {
+        private static java.util.Set<souther.compiler.values.PlannedValues.Asked<FactSubject>> both(
+                java.util.Set<souther.compiler.values.PlannedValues.Asked<FactSubject>> these,
+                java.util.Set<souther.compiler.values.PlannedValues.Asked<FactSubject>> those) {
             if (those.isEmpty()) {
                 return these;
             }
-            java.util.Set<souther.compiler.values.AuthoredOccurrence> out =
-                    java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
-            out.addAll(these);
+            java.util.Set<souther.compiler.values.PlannedValues.Asked<FactSubject>> out = new LinkedHashSet<>(these);
             out.addAll(those);
             return out;
         }
@@ -783,7 +781,7 @@ sealed interface StatedByClauses {
          * rules and names none of them.
          */
         private static Map<FactSubject, java.util.List<souther.compiler.values.UnreadReason>>
-                routed(java.util.List<souther.compiler.values.Unbuilt
+                routed(java.util.Set<souther.compiler.values.Unbuilt
                         .RuleShortfall<FactSubject>> shortfalls,
                        Part part,
                        Map<FactSubject,
@@ -791,7 +789,9 @@ sealed interface StatedByClauses {
             Map<FactSubject, java.util.List<souther.compiler.values.UnreadReason>> out =
                     new java.util.LinkedHashMap<>(answered);
             shortfalls.stream()
-                    .filter(each -> part.asked().contains(each.occurrence()))
+                    .filter(each -> part.asked().contains(
+                            new souther.compiler.values.PlannedValues.Asked<>(
+                                    each.at(), each.asked())))
                     .forEach(each -> out.merge(each.at(), java.util.List.of(each.why()),
                             ReadByClauses::alsoSaying));
             return out;
@@ -826,7 +826,9 @@ sealed interface StatedByClauses {
             // so a rule that named the place was handed a limit its neighbour reached — and an
             // author reading it went to a clause that reads perfectly well.
             made.aboutARule().stream()
-                    .filter(each -> part.asked().contains(each.occurrence()))
+                    .filter(each -> part.asked().contains(
+                            new souther.compiler.values.PlannedValues.Asked<>(
+                                    each.at(), each.asked())))
                     .forEach(each -> out.merge(each.at(),
                             java.util.List.of(each.why()), ReadByClauses::alsoSaying));
             return out;

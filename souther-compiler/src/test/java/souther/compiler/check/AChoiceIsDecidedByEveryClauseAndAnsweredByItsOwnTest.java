@@ -199,21 +199,30 @@ class AChoiceIsDecidedByEveryClauseAndAnsweredByItsOwnTest {
      */
     @Test
     void aFateAggregatesTheSameWhicheverOccurrenceComesFirst() {
-        // One of each half, because the two are aggregated as two. What a pattern asked for and was
-        // refused says which pattern; what the answer was short of says the place and no more.
+        // Two of the same half, which is where an order could reach the answer. A pair of
+        // shortfalls held in the order the copies were met would come out one way round from one
+        // side and the other way round from the other, and the aggregate of a branch would be a
+        // fact about which copy was settled first.
         Settlement.Sided one = new Settlement.Sided(
                 souther.compiler.values.Emptiness.UNDECIDED, Map.of(),
-                List.of(new souther.compiler.values.Unbuilt.RuleShortfall<>(UNREAD,
-                        souther.compiler.values.AuthoredOccurrence.another(),
-                        UnreadReason.PATTERN_TOO_COSTLY)),
+                java.util.Set.of(new souther.compiler.values.Unbuilt.RuleShortfall<>(UNREAD,
+                        aPattern("a{300}"), UnreadReason.PATTERN_TOO_COSTLY)),
                 java.util.Set.of());
         Settlement.Sided other = new Settlement.Sided(
-                souther.compiler.values.Emptiness.UNDECIDED,
-                Map.of(UNREAD, List.of(UnreadReason.EXACT_VALUES_TOO_COSTLY)), List.of(),
+                souther.compiler.values.Emptiness.UNDECIDED, Map.of(),
+                java.util.Set.of(new souther.compiler.values.Unbuilt.RuleShortfall<>(UNREAD,
+                        aPattern("b{300}"), UnreadReason.PATTERN_TOO_COSTLY)),
                 java.util.Set.of());
 
         assertEquals(one.alsoSeen(other), other.alsoSeen(one),
                 "one branch, one aggregate, whichever copy was settled first");
+    }
+
+    /** The pattern a rule would have this compiler build, as a plan. */
+    private static souther.compiler.regex.PatternPlan aPattern(String regex) {
+        return souther.compiler.regex.PatternPlan.of(
+                ((souther.compiler.regex.PatternRead.Read)
+                        souther.compiler.regex.PatternParser.read(regex)).syntax());
     }
 
     /** Every question of every rule that nothing answered, and what stopped this reading of it. */

@@ -44,14 +44,15 @@ public sealed interface Realization {
      * that mentions the place — which sends an author to a clause that reads perfectly well, and
      * leaves the reason with no place among the parts they wrote.
      *
-     * @param occurrence the written pattern whose machine was refused
+     * @param asked the pattern whose machine was refused, which is what somebody wrote and what any
+     *              rule writing it asked for
      */
-    record OverTheMachineLimit(AuthoredOccurrence occurrence) implements Realization {
+    record OverTheMachineLimit(souther.compiler.regex.PatternPlan asked) implements Realization {
 
         public OverTheMachineLimit {
-            if (occurrence == null) {
+            if (asked == null) {
                 throw new IllegalArgumentException(
-                        "a machine is asked for by something somebody wrote, and this says which");
+                        "a machine is asked for by a pattern, and this says which");
             }
         }
     }

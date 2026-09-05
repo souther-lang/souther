@@ -29,11 +29,14 @@ import java.util.Set;
  * @param aboutTheAnswer what the answer is answerable for, naming no rule and nothing written
  */
 public record Realized<A>(AdmissibleValues<A> values,
-                          List<Unbuilt.RuleShortfall<A>> aboutARule,
+                          Set<Unbuilt.RuleShortfall<A>> aboutARule,
                           List<Unbuilt.AnswerShortfall<A>> aboutTheAnswer) {
 
     public Realized {
-        aboutARule = List.copyOf(aboutARule);
+        // Held in the order they were recorded, which nothing may read and every run has to give
+        // the same: an immutable copy iterates in an order salted per run of the machine, and a
+        // reader that seeded anything from one would report a model two ways on two days.
+        aboutARule = Collections.unmodifiableSet(new LinkedHashSet<>(aboutARule));
         aboutTheAnswer = List.copyOf(aboutTheAnswer);
     }
 

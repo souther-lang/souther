@@ -99,8 +99,9 @@ final class Realizer {
      * was a machine nobody needed, and the position had that much less for the meet it did need.
      *
      * <p>Kept like everything else, so the same pattern written into three rules is one machine.
-     * Which is also why nothing is named here: the machine is the pattern's, not any rule's, and a
-     * rule that asked for one refused says so where it asked.
+     * Which is also why no rule is named here and the pattern is: the machine is the pattern's, and
+     * a rule that asked for one refused is a rule whose reading asked for that pattern — three of
+     * them where three wrote it.
      */
     private Realization pattern(AdmittedPlan.Pattern plan) {
         Language made = plan.plan().compile(meter);
@@ -111,7 +112,7 @@ final class Realizer {
         // somebody wrote, so a machine larger than a machine may be is that pattern's size — the
         // same one asked for first, out of a full allowance, would have been refused the same way.
         return meter.stoppedBy() == Meter.Stopped.ONE_MACHINE
-                ? new Realization.OverTheMachineLimit(plan.occurrence())
+                ? new Realization.OverTheMachineLimit(plan.plan())
                 : new Realization.OverTheAnswerLimit();
     }
 
