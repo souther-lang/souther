@@ -203,7 +203,9 @@ public final class PublicationOrders {
      * code is that code, so the two orders agreeing is not something to keep in step — there is one
      * order, and this is it with the one reason that is no observation's put after them. A walk
      * that reached no value is last for the same reason the codes are in the order they are: it is
-     * the furthest from an answer.
+     * the furthest from an answer. The two that never reached a value to begin with follow it, a
+     * step further out again — a position that was read and holds nothing is nearer a number than a
+     * position nothing arrived at, and a walk that was refused is nearer than a row that never came.
      */
     public static final CanonicalSelection.Order<ReadingGap> READING_GAPS =
             CanonicalSelection.Order.overValues(everyReadingGap());
@@ -214,6 +216,8 @@ public final class PublicationOrders {
             out.add(ReadingGap.of(code));
         }
         out.add(ReadingGap.NO_VALUE);
+        out.add(ReadingGap.COULD_NOT_WALK);
+        out.add(ReadingGap.COULD_NOT_READ_ROW);
         return out;
     }
 
@@ -311,6 +315,7 @@ public final class PublicationOrders {
                 WeakeningWord.INPUT_CASES_UNREADABLE,
                 WeakeningWord.BORDER_VALUE_UNREADABLE,
                 WeakeningWord.BORDER_VALUE_ABSENT,
+                WeakeningWord.BORDER_OBSERVATION_UNAVAILABLE,
                 WeakeningWord.BODIES_NOT_ELABORATED,
                 WeakeningWord.BEHAVIOR_INPUT_NOT_READ,
                 WeakeningWord.BEHAVIOR_BOUNDARY_NOT_DERIVED,
