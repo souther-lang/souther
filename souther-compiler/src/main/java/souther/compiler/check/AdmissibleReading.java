@@ -13,6 +13,7 @@ import souther.compiler.values.Value;
 import souther.compiler.values.ValueSet;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -65,6 +66,17 @@ final class AdmissibleReading implements ClauseReading<PlannedValues<FactSubject
      * are two places in a declaration, and what each of them is about is asked of the one in hand.
      */
     private final Map<Core, StringPredicates.Stated> asStated = new IdentityHashMap<>();
+    /**
+     * What this reading was short of at each clause it gave up on, against the clause.
+     *
+     * <p>By the node itself and by the same rule as the table above: two clauses written the same
+     * way are two places somebody wrote, and a rule is answerable for the one it wrote. Kept as the
+     * decisions are made, so that what a rule is answerable for is never worked out afterwards from
+     * what a position was left holding.
+     */
+    private final Map<Core, List<RuleShortfall>> shortfalls = new IdentityHashMap<>();
+    /** What each clause asked a machine for, against the clause, and by the same rule again. */
+    private final Map<Core, Set<AskedAt>> asked = new IdentityHashMap<>();
     private AdmissibleReading(Terms terms, Map<FactSubject, Type> byName,
                               Symbols symbols, Alternatives alternatives, Allowance<FactSubject> allowed) {
         this.terms = terms;
@@ -184,10 +196,10 @@ final class AdmissibleReading implements ClauseReading<PlannedValues<FactSubject
             // that much less for the meet it does need. So what is said is which machine would
             // answer this rule, and whether one is ever made of it is settled where the position's
             // plan is worked out under its allowance.
-            case StringPredicates.Reading.Accepting it -> PlannedValues.at(position,
+            case StringPredicates.Reading.Accepting it -> asking(e, position,
                     new AdmittedPlan.Pattern(states ? PatternPlan.of(it.accepts())
                             : PatternPlan.notMatching(it.accepts())));
-            case StringPredicates.Reading.PatternNotRead it -> stoppedBy(it.why(), position);
+            case StringPredicates.Reading.PatternNotRead it -> stoppedBy(e, it.why(), position);
             // A rule whose text this could not work out is a rule this did not read, and what that
             // costs is the leaf's to say — over every position the clause names, which is more than
             // this one wherever the text is written out of another.
@@ -209,9 +221,13 @@ final class AdmissibleReading implements ClauseReading<PlannedValues<FactSubject
      * <p>No {@code default}: a construct the subset learns to stop at is one somebody decides about
      * here, rather than one that quietly takes the answer its neighbours were given.
      */
-    private PlannedValues<FactSubject> stoppedBy(PatternRead.Unsupported why, FactSubject position) {
+    private PlannedValues<FactSubject> stoppedBy(Core e, PatternRead.Unsupported why,
+                                                 FactSubject position) {
         return switch (why) {
-            case NESTED_TOO_DEEPLY -> PlannedValues.unreadable(Set.of(position),
+            // The clause as well as the position. What a rule is answerable for is about the
+            // pattern somebody wrote, and the position is where the reading was left short — read
+            // back off the second, this would be every rule that named the place.
+            case NESTED_TOO_DEEPLY -> shortOf(e, Set.of(position),
                     UnreadReason.PATTERN_TOO_DEEPLY_NESTED);
             case A_GROUP_ABOUT_THE_MATCH,
                  A_BACK_REFERENCE,
@@ -254,8 +270,84 @@ final class AdmissibleReading implements ClauseReading<PlannedValues<FactSubject
      * one path and {@code ==} another, and a relation came out as a form nobody could read.
      */
     private PlannedValues<FactSubject> unreadable(Core e, Denotations at) {
-        return PlannedValues.unreadable(names(e, at), relatesTwoPositions(e, at)
+        return shortOf(e, names(e, at), relatesTwoPositions(e, at)
                 ? UnreadReason.RELATES_TWO_POSITIONS : UnreadReason.FORM_NOT_READ);
+    }
+
+    /**
+     * What {@code e} leaves the positions it names, said twice: to the places, and about the clause.
+     *
+     * <p>Both from the one decision and neither from the other. What a place is left holding is the
+     * reading's answer about the place; what a rule is answerable for is about the thing somebody
+     * wrote, which is the node in hand here and is nowhere in what the places come back with. Read
+     * off the places afterwards, the second is a list of reasons and no clause — every rule reaching
+     * a position pays into its answer, so the place has as many claimants as it has rules.
+     *
+     * <p>Written down against the node rather than returned beside the values, because the fold
+     * carries one answer upward and this is not part of it. What is recorded here is asked for at
+     * the leaf that was read ({@link #shortfallsAt}), which is a handing over and not a second
+     * reading: nothing looks at what the clause came to in order to work out what was decided.
+     */
+    private PlannedValues<FactSubject> shortOf(Core e, Set<FactSubject> named, UnreadReason why) {
+        List<RuleShortfall> mine = shortfalls.computeIfAbsent(e, _ -> new ArrayList<>());
+        RuleShortfall.Site site = new RuleShortfall.Site.AtALeaf(e);
+        named.forEach(each -> {
+            RuleShortfall one = new RuleShortfall(each, why, site);
+            if (!mine.contains(one)) {
+                mine.add(one);
+            }
+        });
+        return PlannedValues.unreadable(named, why);
+    }
+
+    /**
+     * The position held to {@code plan}, with the clause that asked for it written down.
+     *
+     * <p>A machine is made far from here, under the position's allowance, and refused there. What
+     * asked for it is this clause, and it is known here and nowhere after — every rule reaching the
+     * position pays into that allowance, so the place cannot say which of them asked (#1341), and
+     * the pattern alone is the same pattern wherever somebody wrote it.
+     */
+    private PlannedValues<FactSubject> asking(Core e, FactSubject position,
+                                              AdmittedPlan.Pattern plan) {
+        asked.computeIfAbsent(e, _ -> new LinkedHashSet<>())
+                .add(new AskedAt(position, plan.plan(), e));
+        return PlannedValues.at(position, plan);
+    }
+
+    /** What was asked for at {@code e}, as it was asked. */
+    Set<AskedAt> askedAt(Core e) {
+        return Set.copyOf(asked.getOrDefault(e, Set.of()));
+    }
+
+    /**
+     * One machine a clause asked for: the position it is being built for, the pattern it is, and
+     * the clause that asked.
+     *
+     * <p>The first two are what a refusal is about ({@link souther.compiler.values.Unbuilt
+     * .RuleShortfall}) and are what routes it back here; the third is the written place it is then
+     * answerable at. Two clauses writing one pattern about one position ask for one machine and are
+     * two of these, which is two rules answerable for one refusal.
+     */
+    record AskedAt(FactSubject position, PatternPlan plan, Core node) {
+
+        AskedAt {
+            if (position == null || plan == null || node == null) {
+                throw new IllegalArgumentException(
+                        "a machine is asked for by a clause, for a position");
+            }
+        }
+    }
+
+    /**
+     * What the reading decided it was short of at {@code e}, of the rules somebody wrote there.
+     *
+     * <p>Asked at the leaf it was decided at, and answered out of what was written down when the
+     * decision was made. Empty where the reading took the clause in, which is what a leaf nothing
+     * was short of says.
+     */
+    List<RuleShortfall> shortfallsAt(Core e) {
+        return List.copyOf(shortfalls.getOrDefault(e, List.of()));
     }
 
     /**

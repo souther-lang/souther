@@ -285,13 +285,32 @@ public final class RuleAccounting {
          * choice among an author's rules, made where the only thing to choose by is which part came
          * first.
          */
-        record TheValueReadingSays(List<UnreadReason> why) implements Why {
+        record TheValueReadingSays(java.util.Set<RuleShortfall> shortfalls) implements Why {
 
             public TheValueReadingSays {
-                if (why == null || why.isEmpty()) {
+                if (shortfalls == null || shortfalls.isEmpty()) {
                     throw new IllegalArgumentException("a reading that stopped says why");
                 }
-                why = List.copyOf(why);
+                shortfalls = java.util.Collections.unmodifiableSet(
+                        new java.util.LinkedHashSet<>(shortfalls));
+            }
+
+            /**
+             * The reasons alone, for a reader that has no use for where they were decided.
+             *
+             * <p>The projection out of this and never what is held. Two choices of one rule each
+             * offering an alternative nothing could read leave the position open twice and are two
+             * things an author can look at; asked as reasons they are one, and which of the two a
+             * reader is sent to would be whichever the walk met first.
+             */
+            public List<UnreadReason> why() {
+                List<UnreadReason> out = new java.util.ArrayList<>();
+                shortfalls.forEach(each -> {
+                    if (!out.contains(each.why())) {
+                        out.add(each.why());
+                    }
+                });
+                return List.copyOf(out);
             }
         }
 

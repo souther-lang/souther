@@ -1,13 +1,10 @@
 package souther.compiler.check;
 
 import souther.compiler.values.AdmissibleValues;
-import souther.compiler.values.UnreadReason;
 
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -66,9 +63,18 @@ final class ReadingEvidence {
      *
      * <p>Empty for a rule this reading took in, and empty as well for one it was short of without
      * recording why. The second is what {@link #stoppedBy} answers for.
+     *
+     * <p><b>Facts and not a map of positions to reasons.</b> Each of these says the written place
+     * the reading decided it at as well as the position and the reason, and a map keyed by position
+     * has nowhere to put the third — two choices of one rule each offering an alternative nothing
+     * could read leave one position open, and an author has two of them to look at. Held as reasons
+     * per position they were one, and which of the two a reader was sent to was whichever the walk
+     * met first.
+     *
+     * <p>A set, because nothing here is in an order anybody may read. Which of two an author wrote
+     * first is the source's to say and is asked where a document is written.
      */
-    private final Map<RuleRef, Map<FactSubject, List<UnreadReason>>> stopped =
-            new LinkedHashMap<>();
+    private final Map<RuleRef, Set<RuleShortfall>> stopped = new LinkedHashMap<>();
 
     /** A reading took {@code rule} in at {@code position}. */
     void record(RuleRef rule, FactSubject position) {
@@ -116,19 +122,8 @@ final class ReadingEvidence {
      * Refused rather than dropped, because a caller handing one over has an account of a rule made
      * out of something that is not about it, and that is worth stopping where it is written.
      */
-    void stoppedBy(RuleRef rule, Map<FactSubject, List<UnreadReason>> read) {
-        Map<FactSubject, List<UnreadReason>> here =
-                stopped.computeIfAbsent(rule, _ -> new LinkedHashMap<>());
-        read.forEach((position, why) -> {
-            why.forEach(each -> {
-                if (each.about() != UnreadReason.About.A_RULE) {
-                    throw new IllegalArgumentException(
-                            "a reason about " + each.about() + " is not one a rule is answerable"
-                                    + " for: " + each);
-                }
-            });
-            here.merge(position, why, ReadingEvidence::appended);
-        });
+    void stoppedBy(RuleRef rule, Set<RuleShortfall> read) {
+        stopped.computeIfAbsent(rule, _ -> new LinkedHashSet<>()).addAll(read);
     }
 
     /**
@@ -138,24 +133,14 @@ final class ReadingEvidence {
      * under whichever the reading recognised. Empty where this reading recorded nothing of the
      * rule there, which a caller has to answer for rather than fill in from the position.
      */
-    List<UnreadReason> stoppedBy(RuleRef rule, Collection<FactSubject> positions) {
-        Map<FactSubject, List<UnreadReason>> here = stopped.get(rule);
+    Set<RuleShortfall> stoppedBy(RuleRef rule, Collection<FactSubject> positions) {
+        Set<RuleShortfall> here = stopped.get(rule);
         if (here == null) {
-            return List.of();
+            return Set.of();
         }
-        List<UnreadReason> out = new ArrayList<>();
-        for (FactSubject position : positions) {
-            out = appended(out, here.getOrDefault(position, List.of()));
-        }
-        return out;
-    }
-
-    /** The reasons of both, in the order they were met, and each said once. */
-    private static List<UnreadReason> appended(List<UnreadReason> these,
-                                               List<UnreadReason> those) {
-        List<UnreadReason> out = new ArrayList<>(these);
-        those.forEach(each -> {
-            if (!out.contains(each)) {
+        Set<RuleShortfall> out = new LinkedHashSet<>();
+        here.forEach(each -> {
+            if (positions.contains(each.position())) {
                 out.add(each);
             }
         });
