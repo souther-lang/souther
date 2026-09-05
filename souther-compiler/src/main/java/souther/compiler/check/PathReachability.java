@@ -73,6 +73,12 @@ public final class PathReachability {
          * <p>A place this reading has nothing filed under is one the walk did not get to, which is
          * an answer and not a gap: it is {@link WhyUnsettled.TheWalkDidNotReachIt}, and every
          * consumer treats it as it treats any other unsettled place.
+         *
+         * <p><b>Asked with the place and never with an address of one.</b> A probe says where a run
+         * through an arm is recorded, and which arm that is is the numbering's answer, given where
+         * the number was handed out. Asked here, it would be that correspondence worked out again
+         * by search — over the entries of one reading, which knows of no numbering and could not
+         * tell two arms answering to one probe apart if a walk ever made them.
          */
         public Reachability at(ControlPointId where) {
             Reachability answer = found.get(where);
@@ -153,18 +159,6 @@ public final class PathReachability {
          *  only ever answer "keep everything" can skip on. */
         public boolean provesNothingUnreached() {
             return found.values().stream().noneMatch(Reachability.Unreachable.class::isInstance);
-        }
-
-        /** Whether nothing arrives at the arm recorded at {@code probe}. What every denominator
-         *  takes an arm out by, and the one arm of the answer that takes anything out. */
-        public boolean nothingArrivesAt(ArmProbe probe) {
-            for (Map.Entry<ControlPointId, Reachability> each : found.entrySet()) {
-                if (each.getKey() instanceof ControlPointId.ArmOccurrence arm
-                        && arm.probe().isPresent() && arm.probe().get().equals(probe)) {
-                    return each.getValue() instanceof Reachability.Unreachable;
-                }
-            }
-            return false;
         }
     }
 

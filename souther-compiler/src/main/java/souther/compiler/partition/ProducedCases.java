@@ -2,9 +2,10 @@ package souther.compiler.partition;
 
 import souther.compiler.core.Core;
 import souther.compiler.check.PathReachability;
-import souther.compiler.coverage.ArmProbe;
 import souther.compiler.coverage.ControlPointId;
 import souther.compiler.coverage.CoverageSites;
+import souther.compiler.reach.Reachability;
+import souther.compiler.types.CoverageOrigin;
 import souther.compiler.types.TypeSymbol;
 
 import java.util.ArrayList;
@@ -34,9 +35,11 @@ import java.util.Set;
  * is a case the report asks for, and an author reading a gap they cannot fill has at least been told
  * something true about their model.
  *
- * <p>Only guards take an arm away, because only a guard's arm has a reachability proof behind it. A
- * {@code match} arm is left alone here: which cases of a sum can arrive is a different question, and
- * it is asked of the reading of the input ({@link PathReachability}).
+ * <p>Only a condition's arm takes a producer away. A {@code match} arm is left alone here: which
+ * cases of a sum can arrive is a different question, asked of the reading of the position matched
+ * on, and an arm of one taken as a refusal would drop a case of the output for a fact about the
+ * input. Which construct an arm is one of is the origin's answer and not the lowered tree's — an
+ * {@code if} and a {@code guard} are one node by the time this walks.
  */
 public final class ProducedCases {
 
@@ -88,7 +91,7 @@ public final class ProducedCases {
      * value a {@code let} binds — is not what the behavior answers with, and counting it would keep a
      * case owed because the body happened to build one on its way past.
      */
-    private static void walk(Core e, List<ArmProbe> under,
+    private static void walk(Core e, List<ControlPointId.ArmOccurrence> under,
                              CoverageSites.Plan plan,
                              PathReachability.Answers arrives, Set<TypeSymbol> declared, Seen seen) {
         if (seen.anythingUnreadable) {
@@ -126,10 +129,11 @@ public final class ProducedCases {
     }
 
     /** Where one producer puts the case it answers with. */
-    private static void produce(TypeSymbol built, List<ArmProbe> under,
+    private static void produce(TypeSymbol built, List<ControlPointId.ArmOccurrence> under,
                                 PathReachability.Answers arrives,
                                 Set<TypeSymbol> declared, Seen seen) {
-        boolean proven = under.stream().anyMatch(arrives::nothingArrivesAt);
+        boolean proven = under.stream().anyMatch(arm ->
+                arrives.at(arm) instanceof Reachability.Unreachable);
         if (built == null || !declared.contains(built)) {
             // Not a case this can name. Reachable, it could be any of them and nothing is taken away;
             // behind a proven arm it answers nothing and says nothing about any case either.
@@ -143,18 +147,55 @@ public final class ProducedCases {
         }
     }
 
-    /** The arms of an inner fork, added to the ones already above it. An arm with no probe adds
-     * nothing: there is no site for a proof to have been about. */
-    private static List<ArmProbe> beneath(
-            List<ArmProbe> under,
+    /**
+     * The arms of an inner fork that refuse a producer under them, added to the ones already above.
+     *
+     * <p>Whether a run can be recorded in the arm is not among the questions. That is what an arm
+     * is instrumented for, and what this asks is whether anything arrives — a place with no probe
+     * is a place all the same, and the reading answers about it like any other.
+     */
+    private static List<ControlPointId.ArmOccurrence> beneath(
+            List<ControlPointId.ArmOccurrence> under,
             ControlPointId.ArmOccurrence[] arms, int index) {
         if (arms == null || index >= arms.length || arms[index] == null
-                || arms[index].probe().isEmpty()) {
+                || !takesAProducerAway(arms[index])) {
             return under;
         }
-        List<ArmProbe> out = new ArrayList<>(under);
-        out.add(arms[index].probe().get());
+        List<ControlPointId.ArmOccurrence> out = new ArrayList<>(under);
+        out.add(arms[index]);
         return List.copyOf(out);
+    }
+
+    /**
+     * Whether a proof about this arm says anything about what the body can answer with.
+     *
+     * <p>Asked of the construct the author wrote and not of the shape it was lowered to, which is
+     * what {@link CoverageOrigin} carries the construct for. A {@code match} arm is not one of
+     * these: which cases of a sum can arrive is asked of the reading of the input, and an arm of
+     * one taken to refuse a producer would take a case away for a fact about the scrutinee.
+     *
+     * <p>An arm no source wrote takes nothing away either, and an arm carrying nothing that says
+     * what wrote it is one of those. What this walk answers about is what the author's body can
+     * answer with, and a fork nothing wrote is not their construct. Refused rather than answered
+     * for, this would hold a place to more than what makes one: an occurrence names an origin where
+     * it has one, and a reader wanting a construct is a reader that can be told there is none.
+     */
+    private static boolean takesAProducerAway(ControlPointId.ArmOccurrence arm) {
+        CoverageOrigin origin = arm.origin();
+        if (origin == null) {
+            return false;   // nothing here says what wrote it, which is not a construct either
+        }
+        return switch (origin.kind()) {
+            case IF, GUARD, COMPREHENSION -> true;
+            case MATCH, NOT_WRITTEN -> false;
+            // Not an arm of anything. Every arm is one of a fork, and no fork is written as a
+            // comparison — so a value arriving here as one was built by nothing that makes arms,
+            // and either answer about it would be an answer about the author's body made out of
+            // that.
+            case BINARY -> throw new IllegalStateException(
+                    "an arm of " + origin.kind() + " at " + arm.at()
+                            + "; an arm is one of a fork the author wrote");
+        };
     }
 
     private ProducedCases() {}

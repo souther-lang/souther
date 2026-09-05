@@ -48,9 +48,10 @@ class WhatWasObservedDecidesWhatAReportMayNameTest {
     private static CoverageSites.ArmSite arm(CoverageOrigin fork, int index, DecidedBy decided) {
         return new CoverageSites.ArmSite("b",
                 new SourceOutcome.Held(new SourceOutcome.HeldBy.Condition()),
-                souther.compiler.diag.Citation.of(new souther.compiler.diag.SourcePos(1, 1,
-                        new souther.compiler.source.SourceId("0"))),
-                PLACES.get(index), index,
+                Numberings.armPlace(index, PLACES.get(index), fork,
+                        souther.compiler.diag.Citation.of(new souther.compiler.diag.SourcePos(1, 1,
+                                new souther.compiler.source.SourceId("0")))),
+                index,
                 new CoverageSites.Obligation("b", fork, index, decided));
     }
 

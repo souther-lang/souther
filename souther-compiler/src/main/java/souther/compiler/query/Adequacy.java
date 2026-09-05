@@ -10,6 +10,7 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.coverage.ArmProbe;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.coverage.SiteNumbering;
+import souther.compiler.reach.Reachability;
 import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.msg.DeadBranchMessage;
 import souther.compiler.diag.msg.ExampleMessage;
@@ -2273,7 +2274,9 @@ public final class Adequacy {
                 List<CoverageSites.ArmSite> all,
                 souther.compiler.check.PathReachability.Answers.AsRun reachable) {
             return all.stream()
-                    .filter(site -> !reachable.answers().nothingArrivesAt(site.index())).toList();
+                    .filter(site -> !(reachable.answers().at(site.occurrence())
+                            instanceof Reachability.Unreachable))
+                    .toList();
         }
 
         /**
