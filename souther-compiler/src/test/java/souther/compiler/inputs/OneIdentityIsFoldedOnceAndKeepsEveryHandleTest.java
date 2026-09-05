@@ -9,7 +9,9 @@ import souther.compiler.diag.SourcePos;
 import souther.compiler.types.CoverageConstruct;
 import souther.compiler.types.CoverageOrigin;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -111,42 +113,33 @@ class OneIdentityIsFoldedOnceAndKeepsEveryHandleTest {
      *  wrote it short of is untouched. */
     @Test
     void oneQuestionCitedTwoWaysKeepsBothHandlesAndTheAuthorsOrder() {
-        List<BlockReason.QuestionStandingReason> stopped =
-                List.of(new BlockReason.UnreadComparisonForm(),
-                        new BlockReason.ExactValuesTooCostly());
-
-        StandingQuestion both = asked(NAMED, stopped).mergedWith(asked(PLACED, stopped));
+        StandingQuestion both = asked(NAMED, standingOn()).mergedWith(asked(PLACED, standingOn()));
 
         assertEquals(Set.of(NAMED, PLACED), both.cited());
-        assertEquals(WhatAQuestionStandsOn.sortedOutOf(stopped), both.stopped());
+        assertEquals(standingOn(), both.stopped());
     }
 
     /** And two accounts of one question that disagree about that order are not put together. */
     @Test
     void twoAccountsOfOneQuestionCannotDisagreeAboutWhatTheAuthorWrote() {
-        BlockReason.QuestionStandingReason form = new BlockReason.UnreadComparisonForm();
-        BlockReason.QuestionStandingReason domain = new BlockReason.UnreadComparisonDomain();
-        StandingQuestion one = asked(NAMED, List.of(form, domain));
-        StandingQuestion theOtherWayRound = asked(PLACED, List.of(domain, form));
+        BlockReason.RuleReadingStopped form = new BlockReason.UnreadComparisonForm();
+        BlockReason.RuleReadingStopped domain = new BlockReason.UnreadComparisonDomain();
+        StandingQuestion one = asked(NAMED, standingOn(form, domain));
+        StandingQuestion theOtherWayRound = asked(PLACED, standingOn(domain, form));
 
         assertThrows(TwoAccountsOfOneQuestion.class, () -> one.mergedWith(theOtherWayRound));
     }
 
     /**
-     * And a difference in where the answer's limit was met is not a disagreement about anything.
+     * And where the answer's limit was met is not something two accounts can disagree about.
      *
      * <p>The order the author wrote runs over the parts of the rule and stops there. A limit the
-     * position's answer ran into is no part of any of them, so where a reading happened to record
-     * it says nothing about the model — and two accounts that put it at different points in a list
-     * are two accounts of one question that agree.
+     * position's answer ran into is no part of any of them, so it is held where nothing puts it
+     * among them — and two accounts of one question have nowhere to put it differently.
      */
     @Test
     void whereTheAnswersLimitWasMetIsNoDisagreement() {
-        BlockReason.QuestionStandingReason form = new BlockReason.UnreadComparisonForm();
-        BlockReason.QuestionStandingReason answer = new BlockReason.ExactValuesTooCostly();
-
-        StandingQuestion both = asked(NAMED, List.of(form, answer))
-                .mergedWith(asked(PLACED, List.of(answer, form)));
+        StandingQuestion both = asked(NAMED, standingOn()).mergedWith(asked(PLACED, standingOn()));
 
         assertEquals(Set.of(NAMED, PLACED), both.cited());
     }
@@ -154,7 +147,7 @@ class OneIdentityIsFoldedOnceAndKeepsEveryHandleTest {
     /** And a question that asks something is not an account of one that asks nothing. */
     @Test
     void theTwoKindsOfStandingQuestionAreNotTwoAccountsOfOneThing() {
-        StandingQuestion asks = asked(NAMED, List.of(new BlockReason.UnreadComparisonForm()));
+        StandingQuestion asks = asked(NAMED, standingOn());
         StandingQuestion unclassified = StandingQuestion.NothingClassifiesIt.of(
                 comparison(), NAMED, at("x"), new BlockReason.UnreadComparisonForm());
 
@@ -206,11 +199,25 @@ class OneIdentityIsFoldedOnceAndKeepsEveryHandleTest {
         return new FilingCoordinate.AtPosition(TermPath.of(path));
     }
 
-    private static StandingQuestion asked(RuleCitation cited,
-                                          List<BlockReason.QuestionStandingReason> stopped) {
+    private static StandingQuestion asked(RuleCitation cited, WhatAQuestionStandsOn stopped) {
         return StandingQuestion.Exact.of(comparison(), cited,
-                new InputQuestion.AboutAPosition(TermPath.of("x")),
-                WhatAQuestionStandsOn.sortedOutOf(stopped));
+                new InputQuestion.AboutAPosition(TermPath.of("x")), stopped);
+    }
+
+    /** One question short in both ways, which is what a fold has to keep whole. */
+    private static WhatAQuestionStandsOn standingOn() {
+        return new WhatAQuestionStandsOn(
+                RuleReasons.one(new BlockReason.UnreadComparisonForm()),
+                Optional.of(new BlockReason.ExactValuesTooCostly()));
+    }
+
+    /** One question short in as many ways as somebody wrote, in the order they wrote them. */
+    private static WhatAQuestionStandsOn standingOn(BlockReason.RuleReadingStopped... these) {
+        List<RuleReasons.Placed> written = new ArrayList<>();
+        for (int i = 0; i < these.length; i++) {
+            written.add(new RuleReasons.Placed(new SourcePos(1, i + 1), these[i]));
+        }
+        return new WhatAQuestionStandsOn(RuleReasons.from(written), Optional.empty());
     }
 
     private static RuleRef comparison() {

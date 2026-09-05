@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.inputs.BlockReason;
+import souther.compiler.inputs.RuleReasons;
 import souther.compiler.inputs.WhatAQuestionStandsOn;
 import souther.compiler.values.UnreadReason;
 
@@ -10,6 +11,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
 
@@ -260,31 +262,28 @@ public final class RuleAccounting {
          * .ReportedReason}'s. Two vocabularies with a projection between them is what keeps a
          * published word from reaching back into what a reading is allowed to record.
          *
-         * <p>Each said once: two parts one limit stopped are one thing for a reader to lift. In no
-         * order anybody may read as the author's — what is carried is a set of facts, and the order
-         * they come out in is the order they were met, which is kept so that one compiler over one
-         * source publishes one document and is asserted as nothing more. Which written place a
-         * reader is sent to first is the source's to say and is settled where a document is written.
+         * <p>Each said once, and the places they stand on go with them as far as the one thing that
+         * reads places ({@link RuleReasons}): two parts one limit stopped are one thing for a
+         * reader to lift, and which of two an author is sent to first is settled by where they wrote
+         * them and not by where a walk met them. This is the last call that holds the places, so it
+         * is the last that could hand them over.
          *
-         * <p>Both kinds go in and {@link WhatAQuestionStandsOn} tells them apart by what each of
-         * them is, so nothing here decides which of the two a reader meets first. What a rule is
-         * answerable for and what its position's answer was short of come out of two carriers and
-         * stay two: a list holding both would give a limit the rules ran into a place among the
-         * things somebody wrote.
+         * <p>Each half through the carrier it belongs in. What a rule is answerable for stands
+         * somewhere and what its position's answer was short of stands nowhere, so a list holding
+         * both would give a limit the rules ran into a place among the things somebody wrote.
          */
         default WhatAQuestionStandsOn stopped() {
-            List<BlockReason.QuestionStandingReason> out = new ArrayList<>();
-            for (BlockReason.QuestionStandingReason each : switch (this) {
-                case TheValueReadingSays it -> java.util.stream.Stream.concat(
-                                it.why().stream(), it.aboutTheAnswer().reasons().stream())
-                        .map(BlockReason::ofAQuestionStandingOn).toList();
-                case TheEndReadingSays it -> List.<BlockReason.QuestionStandingReason>of(it.why());
-            }) {
-                if (!out.contains(each)) {
-                    out.add(each);
-                }
-            }
-            return WhatAQuestionStandsOn.sortedOutOf(out);
+            return switch (this) {
+                case TheValueReadingSays it -> new WhatAQuestionStandsOn(
+                        RuleReasons.from(it.shortfalls().stream()
+                                .map(each -> new RuleReasons.Placed(each.site().writtenAt(),
+                                        BlockReason.ofARuleTheValueReadingLeft(each.why())))
+                                .toList()),
+                        WhatAQuestionStandsOn.oneOf(it.aboutTheAnswer().reasons().stream()
+                                .map(BlockReason::ofTheAnswerTheReadingCouldNotBuild).toList()));
+                case TheEndReadingSays it -> new WhatAQuestionStandsOn(
+                        RuleReasons.one(it.why()), Optional.empty());
+            };
         }
 
         /**

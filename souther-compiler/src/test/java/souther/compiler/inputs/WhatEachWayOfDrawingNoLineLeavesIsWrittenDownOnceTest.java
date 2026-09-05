@@ -7,6 +7,7 @@ import tools.jackson.databind.json.JsonMapper;
 
 import souther.compiler.check.RuleCitation;
 import souther.compiler.check.RuleRef;
+import souther.compiler.diag.SourcePos;
 import souther.compiler.observe.RunSensitivity;
 import souther.compiler.partition.ReportedReason;
 import souther.compiler.partition.UndividedPosition;
@@ -601,14 +602,17 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
      */
     @Test
     void whatAQuestionStandsOnIsSaidAsTheTwoOrdersThatAnswerForIt() {
-        WhatAQuestionStandsOn said = WhatAQuestionStandsOn.sortedOutOf(List.of(
-                new BlockReason.UnreadComparisonDomain(),
-                new BlockReason.ExactValuesTooCostly(),
-                new BlockReason.UnreadValueRule()));
+        WhatAQuestionStandsOn said = new WhatAQuestionStandsOn(
+                RuleReasons.from(List.of(
+                        new RuleReasons.Placed(new SourcePos(1, 1),
+                                new BlockReason.UnreadComparisonDomain()),
+                        new RuleReasons.Placed(new SourcePos(1, 9),
+                                new BlockReason.UnreadValueRule()))),
+                Optional.of(new BlockReason.ExactValuesTooCostly()));
 
         assertEquals(List.of(UndividedPosition.Reason.UNSUPPORTED_DOMAIN,
                         UndividedPosition.Reason.UNSUPPORTED_SYNTAX),
-                ReportedReason.asWritten(said.itsRuleLeft()).written(),
+                ReportedReason.wordsFor(said.itsRuleLeft()).written(),
                 "the parts of the rule, in the order they were written");
         assertEquals(Optional.of(UndividedPosition.Reason.EXACT_VALUES_TOO_COSTLY),
                 said.itsPositionWasShortOf().map(ReportedReason::of),

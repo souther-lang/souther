@@ -1,6 +1,7 @@
 package souther.compiler.inputs;
 
 import souther.compiler.observe.RunSensitivity;
+import souther.compiler.values.UnreadReason;
 
 /**
  * Why a derivation did not finish, in this compiler's own terms.
@@ -347,6 +348,29 @@ public sealed interface BlockReason {
             case NOT_REACHED, NOT_REACHED_PAST_DEPTH_LIMIT -> throw new IllegalArgumentException(
                     "a reason about " + why.about() + " leaves no question of a rule standing: "
                             + why);
+        };
+    }
+
+    /**
+     * The same, for a caller holding what the answer at a position was short of.
+     *
+     * <p>The other half of the pair above, and refused the same way: a reason about a rule is filed
+     * under that rule and does not come this way, and a reason about neither is a reading that never
+     * arrived. What is left is a fact about what the rules of a position come to between them, which
+     * names no rule and sends a reader to no clause.
+     */
+    static AnswerRealizationStopped ofTheAnswerTheReadingCouldNotBuild(UnreadReason why) {
+        if (why.about() != UnreadReason.About.THE_ANSWER) {
+            throw new IllegalArgumentException(
+                    "a reason about " + why.about() + " is not one the answer was short of: " + why);
+        }
+        return switch (why) {
+            case EXACT_VALUES_TOO_COSTLY -> new ExactValuesTooCostly();
+            // Refused above, each of them, and named here so that a reason added to the vocabulary
+            // stops this rather than arriving as whichever arm is nearest.
+            case RELATES_TWO_POSITIONS, FORM_NOT_READ, ALTERNATIVE_NOT_READ, PATTERN_TOO_COSTLY,
+                 PATTERN_TOO_DEEPLY_NESTED, NOT_REACHED, NOT_REACHED_PAST_DEPTH_LIMIT ->
+                    throw new IllegalStateException("refused above: " + why);
         };
     }
 

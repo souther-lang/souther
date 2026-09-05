@@ -22,12 +22,15 @@ import java.util.Optional;
  * conjunct nothing reads, written beside a choice whose meet ran past the allowance, is short in
  * two ways that different work lifts.
  *
- * @param itsRuleLeft what the parts of the rule left, in the order they were written
+ * @param itsRuleLeft what the parts of the rule left, saying whether that is an order anybody
+ *                    wrote ({@link RuleReasons}). Carried and not decided: what settles it is the
+ *                    places the reasons stand on, and those are gone by the time anything here
+ *                    holds a word
  * @param itsPositionWasShortOf what its position's answer was short of, which names no part of the
  *                              rule and so has no place among them
  */
 public record WhatAQuestionStandsOn(
-        AuthoredOrder<BlockReason.RuleReadingStopped> itsRuleLeft,
+        RuleReasons itsRuleLeft,
         Optional<BlockReason.AnswerRealizationStopped> itsPositionWasShortOf) {
 
     public WhatAQuestionStandsOn {
@@ -42,36 +45,25 @@ public record WhatAQuestionStandsOn(
     }
 
     /**
-     * The two sorted out of what a reading recorded, in the order it recorded them.
+     * One limit the answer ran into, out of what the position was short of.
      *
-     * <p>Sorted by the reason's own capability and never by where a caller found it. Which of the
-     * two a reason is is what {@link BlockReason.QuestionStandingReason}'s members say, so a reason
-     * added to either is placed by its type.
-     *
-     * <p>One limit the answer ran into, and a second is refused rather than put in an order. There
-     * is one such reason today; a second would be a pair with no order between them either, and
-     * what a document should then write is a decision to take when there is something to decide
-     * about — taken here by silence, it would be taken by whichever arrived first.
+     * <p>A second is refused rather than put in an order. There is one such reason today; a second
+     * would be a pair with no order between them either, and what a document should then write is a
+     * decision to take when there is something to decide about — taken here by silence, it would be
+     * taken by whichever arrived first.
      */
-    public static WhatAQuestionStandsOn sortedOutOf(
-            List<BlockReason.QuestionStandingReason> recorded) {
-        List<BlockReason.RuleReadingStopped> itsRule = new ArrayList<>();
-        BlockReason.AnswerRealizationStopped itsPosition = null;
-        for (BlockReason.QuestionStandingReason each : recorded) {
-            switch (each) {
-                case BlockReason.RuleReadingStopped it -> itsRule.add(it);
-                case BlockReason.AnswerRealizationStopped it -> {
-                    if (itsPosition != null && !itsPosition.equals(it)) {
-                        throw new IllegalArgumentException(
-                                "two limits the answer ran into stand at one question with no order"
-                                        + " between them: " + itsPosition + " and " + it);
-                    }
-                    itsPosition = it;
-                }
+    public static Optional<BlockReason.AnswerRealizationStopped> oneOf(
+            List<BlockReason.AnswerRealizationStopped> recorded) {
+        BlockReason.AnswerRealizationStopped out = null;
+        for (BlockReason.AnswerRealizationStopped each : recorded) {
+            if (out != null && !out.equals(each)) {
+                throw new IllegalArgumentException(
+                        "two limits the answer ran into stand at one question with no order"
+                                + " between them: " + out + " and " + each);
             }
+            out = each;
         }
-        return new WhatAQuestionStandsOn(AuthoredOrder.asWritten(itsRule),
-                Optional.ofNullable(itsPosition));
+        return Optional.ofNullable(out);
     }
 
     /**
@@ -83,8 +75,7 @@ public record WhatAQuestionStandsOn(
      * {@link #itsRuleLeft} and nowhere else.
      */
     public List<BlockReason.QuestionStandingReason> all() {
-        List<BlockReason.QuestionStandingReason> out =
-                new ArrayList<>(itsRuleLeft.written());
+        List<BlockReason.QuestionStandingReason> out = new ArrayList<>(itsRuleLeft.reasons());
         itsPositionWasShortOf.ifPresent(out::add);
         return List.copyOf(out);
     }

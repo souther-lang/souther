@@ -9,6 +9,7 @@ import souther.compiler.diag.EveryShippedMessageCatalogIsCompleteAndValidTest;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.InputQuestion;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.RuleReasons;
 import souther.compiler.inputs.StandingQuestion;
 import souther.compiler.inputs.StructuralInspection;
 import souther.compiler.inputs.WhatAQuestionStandsOn;
@@ -22,6 +23,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
 
@@ -110,7 +112,8 @@ class AnAbsenceIsWhatCompletingAPositionProducesTest {
                         java.util.Optional.empty())),
                 new RuleCitation.Named("invariant N"),
                 new InputQuestion.AboutAPosition(AT),
-                WhatAQuestionStandsOn.sortedOutOf(List.of(new BlockReason.UnreadValueRule())));
+                new WhatAQuestionStandsOn(RuleReasons.one(new BlockReason.UnreadValueRule()),
+                        Optional.empty()));
     }
 
     /**

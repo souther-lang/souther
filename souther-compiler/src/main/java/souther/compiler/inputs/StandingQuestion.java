@@ -5,7 +5,7 @@ import souther.compiler.check.RuleCitation;
 import souther.compiler.check.RuleRef;
 
 import java.util.HashSet;
-import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -328,7 +328,7 @@ public sealed interface StandingQuestion {
         /** The one reason, as the list every one of these is read through. */
         @Override
         public WhatAQuestionStandsOn stopped() {
-            return WhatAQuestionStandsOn.sortedOutOf(List.of(filed.why()));
+            return new WhatAQuestionStandsOn(RuleReasons.one(filed.why()), Optional.empty());
         }
 
         @Override
@@ -433,7 +433,7 @@ public sealed interface StandingQuestion {
 
         @Override
         public WhatAQuestionStandsOn stopped() {
-            return WhatAQuestionStandsOn.sortedOutOf(List.of(filed.why()));
+            return new WhatAQuestionStandsOn(RuleReasons.one(filed.why()), Optional.empty());
         }
 
         @Override

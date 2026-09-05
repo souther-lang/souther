@@ -2438,9 +2438,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * author's order from a walk's, and a claim made here would be a claim about something this
      * cannot see.
      */
-    private static SourceOrdered<UndividedPosition.Reason> whyStanding(
-            PartitionEvidence.Unanswered asked) {
-        return ReportedReason.asWritten(asked.stopped().itsRuleLeft());
+    private static ReportedReason.Published whyStanding(PartitionEvidence.Unanswered asked) {
+        return ReportedReason.wordsFor(asked.stopped().itsRuleLeft());
     }
 
     /**
@@ -3066,7 +3065,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 // the parts of the rule left keeps the order they were written in; what the
                 // position's answer was short of names no part of the rule, so it is written on
                 // its own rather than given a place among things it is not one of.
-                if (!whyStanding(each).isEmpty()) {
+                if (!whyStanding(each).written().isEmpty()) {
                     ArrayNode stopped = one.putArray("stopped");
                     whyStanding(each).written().forEach(reason -> stopped.add(word(reason)));
                 }

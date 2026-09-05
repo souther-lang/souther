@@ -814,8 +814,10 @@ class EverySchemaWordIsAccountedForTest {
                         souther.compiler.diag.Citation.of(
                                 new souther.compiler.diag.SourcePos(1, 1))),
                 about,
-                souther.compiler.inputs.WhatAQuestionStandsOn.sortedOutOf(
-                        List.of(new souther.compiler.inputs.BlockReason.UnreadComparisonForm())));
+                new souther.compiler.inputs.WhatAQuestionStandsOn(
+                        souther.compiler.inputs.RuleReasons.one(
+                                new souther.compiler.inputs.BlockReason.UnreadComparisonForm()),
+                        java.util.Optional.empty()));
     }
 
     /**
