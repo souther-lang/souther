@@ -181,13 +181,6 @@ class AStandInsStatementIsHeldToWhatTheImplementationAnswersTest {
                 | _           -> NotFound { id = TodoId(0) }
             """;
 
-    private static final String TWICE_IMPL = """
-            package example.twice;
-            public final class FindTodoImpl extends FindTodo {
-                public FindTodoResult apply(TodoId id) { return new NotFound(id); }
-            }
-            """;
-
     /**
      * A behavior two blocks name has no entries here, because it has no stand-in.
      *
