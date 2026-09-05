@@ -179,7 +179,7 @@ public final class ConjoinedAdmissibleValues<A> {
      * <p>Nothing read is every value at every position, which stands whatever is asked — the
      * question is one about which values a rule leaves, and no rule left any.
      */
-    public Emptiness anyAlternativeAdmits(AskedOfEachPosition<A> asked) {
+    public Emptiness anyAlternativeAdmits(AskedOfEachBlock<A> asked) {
         Emptiness stands = Emptiness.NONEMPTY;
         for (AdmissibleValues<A> each : factors) {
             stands = stands.met(each.anyAlternativeAdmits(asked));
@@ -198,7 +198,7 @@ public final class ConjoinedAdmissibleValues<A> {
      * that position is — and a position every alternative of its own factor is refused at is one
      * every alternative of the conjunction is refused at.
      */
-    public Set<A> refusedInEveryAlternativeAt(AskedOfEachPosition<A> asked) {
+    public Set<A> refusedInEveryAlternativeAt(AskedOfEachBlock<A> asked) {
         Set<A> out = new LinkedHashSet<>();
         factors.forEach(each -> out.addAll(each.refusedInEveryAlternativeAt(asked)));
         return Collections.unmodifiableSet(out);
@@ -237,6 +237,28 @@ public final class ConjoinedAdmissibleValues<A> {
     public List<UnreadReason> whyUnread(A subject) {
         AdmissibleValues<A> names = naming.get(subject);
         return names == null ? List.of() : names.whyUnread(subject);
+    }
+
+    /**
+     * Which positions one subject is held as one value with, which is the coordinate its answer is
+     * in.
+     *
+     * <p>Asked of the reading that names it. A subject no reading names is one nothing said an
+     * equality about, so it is its own — and two readings kept apart never name one subject
+     * between them, which is what lets this be the one reading's answer rather than a relation
+     * assembled out of several.
+     */
+    public Sameness.Block<A> blockOf(A subject) {
+        AdmissibleValues<A> names = naming.get(subject);
+        return names == null ? Sameness.Block.of(subject) : names.blockOf(subject);
+    }
+
+    /** The blocks of several positions the rules left no value, over every reading held here —
+     *  see {@link AdmissibleValues#emptiedBlocks}. */
+    public Set<Sameness.Block<A>> emptiedBlocks() {
+        Set<Sameness.Block<A>> out = new LinkedHashSet<>();
+        factors.forEach(each -> out.addAll(each.emptiedBlocks()));
+        return Collections.unmodifiableSet(out);
     }
 
     /** Every subject any factor names. */

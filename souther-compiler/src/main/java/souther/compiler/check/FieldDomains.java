@@ -416,7 +416,7 @@ public final class FieldDomains {
                 // leave between them is the machine that name pays for. Where it could not be
                 // built, the set widens and says so in the same breath — which is the list below.
                 souther.compiler.values.Allowance.Composed made =
-                        values.sets().meet(name, here, values.at(name));
+                        values.sets().meet(values.blockOf(name), here, values.at(name));
                 here = made.set();
                 if (made.gaveUp()) {
                     why.add(UnreadReason.EXACT_VALUES_TOO_COSTLY);

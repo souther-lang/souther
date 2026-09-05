@@ -35,7 +35,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class EveryPairOfShapesIsOneSetTest {
 
-    private static final String POSITION = "value";
+    private static final Sameness.Block<String> POSITION = Sameness.Block.of("value");
 
     /** What puts the sets together, and what it is allowed to build doing it. */
     private final Allowance<String> sets = AsACompilationAllows.forAdmittedValues();

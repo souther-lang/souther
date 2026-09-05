@@ -98,6 +98,7 @@ class HowAlternativesRelateTwoPositionsIsPartOfWhatAReadingCostsTest {
 
     /** How much of one position's allowance has gone. */
     private static int spentOn(Allowance<String> by) {
-        return PatternPlan.Budget.OF_ADMITTED_VALUES.mostBuilt() - by.left("left");
+        return PatternPlan.Budget.OF_ADMITTED_VALUES.mostBuilt()
+                - by.left(Sameness.Block.of("left"));
     }
 }

@@ -223,8 +223,9 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
         // Spent from this reading's own allowance, which is what every position of it is met out
         // of. The two sides were read from two declarations and each was read in full where it was
         // written; what is being built here is a third set, the one this position finally admits.
-        souther.compiler.values.Allowance.Composed made =
-                sets.meet(path, here.approximation(), outer.approximation());
+        souther.compiler.values.Allowance.Composed made = sets.meet(
+                souther.compiler.values.Sameness.Block.of(path),
+                here.approximation(), outer.approximation());
         AdmissibleSet.Completeness read = bothRead(here.completeness(), outer.completeness());
         // And where it was not built, that is not a rule going unread. Both rules were read; what
         // was not worked out is what they leave between them, and a reader told a rule went unread

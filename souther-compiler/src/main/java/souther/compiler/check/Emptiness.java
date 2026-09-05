@@ -100,6 +100,20 @@ public sealed interface Emptiness {
     record NoAllowedValueInRange() implements Emptiness {}
 
     /**
+     * Positions the rules hold as one value are left no value they can all hold.
+     *
+     * <p>Not a position's own lack. Each of them on its own is left something — {@code p} may be
+     * {@code Done} and {@code r} may be {@code Ready} — and what has nothing is the one value the
+     * rules say the two of them are. So the place this is said at is the positions together, and
+     * a sentence naming one of them would send an author after a rule that place is fine with.
+     *
+     * <p>And not {@link ConflictingRules} either, which is what it read as for as long as an
+     * equality between two positions reached no reading: the rules do contradict, and this says
+     * which two facts about which places cannot both hold.
+     */
+    record NoCommonValueForEqualPositions() implements Emptiness {}
+
+    /**
      * A set is asked to hold more values that differ than there are of what it holds.
      *
      * <p>One number and not two. What was compared is whether the rules admit any size this small,
@@ -191,6 +205,31 @@ public sealed interface Emptiness {
     }
 
     /**
+     * Several positions of the declaration hold one value, and that value has none.
+     *
+     * <p>{@link AtAField} where the place is more than one place. A step and not a proof, the same
+     * way: what is proven is {@link #under}, and this says where — and where is all of them at
+     * once, because the lack is the one value they share and no one of them is answerable for it.
+     *
+     * <p>Beside {@link AtAField} rather than a widening of it. That one names a place, and a
+     * reader of it is shown a place; two of them would make a reader work out from the count of
+     * names whether it was being shown a position or a set of them, and the singleton case would
+     * read as both.
+     *
+     * @param where the places, in the order the value declares them
+     */
+    record AtEqualPositions(List<AtAField.Where> where, Emptiness under) implements Emptiness {
+
+        public AtEqualPositions {
+            where = List.copyOf(where);
+            if (where.size() < 2) {
+                throw new IllegalArgumentException(
+                        "one place is a place, and is said as being at a field");
+            }
+        }
+    }
+
+    /**
      * Every case of a sum, or every member of a union, has no value.
      *
      * <p>All of them and not one of them. A sum has a value wherever any case does, so what proves it
@@ -254,12 +293,13 @@ public sealed interface Emptiness {
         return switch (this) {
             // The declaration's own rules. An empty interval is one of these and not a shape: it is
             // the rules contradicting, with the place and the reason filled in.
-            case ConflictingRules _, EmptyOrderedInterval _, NoAllowedValueInRange _ ->
-                    Nearness.DIRECT;
+            case ConflictingRules _, EmptyOrderedInterval _, NoAllowedValueInRange _,
+                 NoCommonValueForEqualPositions _ -> Nearness.DIRECT;
             case EmptyNumericInterval _, SetRequiresTooManyDistinctValues _,
                  NoAllowedCollectionSize _ -> Nearness.STRUCTURAL;
             case TheNameHasNone _, NoBaseInComponent _ -> Nearness.PROPAGATED;
             case AtAField at -> at.under().category();
+            case AtEqualPositions at -> at.under().category();
             case NonEmptyCollectionWithNoElement held -> held.element().category();
             // As far off as its furthest case: the sum has none because all of them have none, so a
             // proof reaching another declaration is a proof this one reaches it too.

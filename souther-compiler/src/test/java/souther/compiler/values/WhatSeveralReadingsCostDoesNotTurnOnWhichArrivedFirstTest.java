@@ -107,6 +107,6 @@ class WhatSeveralReadingsCostDoesNotTurnOnWhichArrivedFirstTest {
     /** How much of one position's allowance has gone, which is what the work order decides. */
     private static int spentOn(Allowance<String> allowed) {
         return PatternPlan.Budget.OF_ADMITTED_VALUES.mostBuilt()
-                - allowed.left("value");
+                - allowed.left(Sameness.Block.of("value"));
     }
 }

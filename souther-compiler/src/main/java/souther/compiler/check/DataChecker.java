@@ -519,10 +519,19 @@ public final class DataChecker {
                                            Emptiness why, boolean alone) {
         return switch (why) {
             case Emptiness.AtAField it -> told(at, data, it.where(), true, it.under(), alone);
+            // The places together, which is what the proof names. Read one at a time, an author
+            // would be sent to a position whose own rules leave it something.
+            case Emptiness.AtEqualPositions it ->
+                    at.say(new DataMessage.NoValueTheseCanAllHold(data, written(it.where())));
             case Emptiness.NoBaseInComponent it -> {
                 Diagnostic.Builder said = at.say(new DataMessage.DataCannotBeConstructed(data));
                 yield alone ? suggested(said, data, it.through()) : said;
             }
+            // Positions held as one value with no place to name them by, which is what a reading
+            // whose subjects are not among the declaration's own leaves. What can be said then is
+            // that the rules contradict, which is what this proof is the particular form of.
+            case Emptiness.NoCommonValueForEqualPositions _ ->
+                    at.say(new DataMessage.ItsRulesCannotAllHold(data));
             case Emptiness.ConflictingRules _, Emptiness.EmptyNumericInterval _ ->
                     at.say(new DataMessage.ItsRulesCannotAllHold(data));
             case Emptiness.EmptyOrderedInterval _ ->
@@ -585,6 +594,19 @@ public final class DataChecker {
             case Emptiness.AtAField.Where.TheValueItself _ -> "value";
             case Emptiness.AtAField.Where.In(String spelled) -> spelled;
         };
+    }
+
+    /**
+     * Several places, in the order the value declares them.
+     *
+     * <p>The order is the proof's and not this reader's. Which places a lack is at is settled where
+     * the proof is made, off the map the declaration's own positions are read from — sorted here,
+     * a sentence would list them by a rule of this compiler's and the same model would read two
+     * ways under two spellings.
+     */
+    private static String written(List<Emptiness.AtAField.Where> where) {
+        return where.stream().map(each -> "`" + written(each) + "`")
+                .collect(java.util.stream.Collectors.joining(", "));
     }
 
     /**

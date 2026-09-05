@@ -35,6 +35,9 @@ class WhatAPositionPublishesAboutItsStringsIsAllOfItOrNoneTest {
                 assertInstanceOf(PatternRead.Read.class, said).syntax()));
     }
 
+    /** The one block these are published for, which is one position on its own. */
+    private static final Sameness.Block<String> HERE = Sameness.Block.of("here");
+
     /** One string, and a machine of some hundreds of states. */
     private static final AdmittedPlan CHEAP = matching("x");
     private static final AdmittedPlan DEAR = matching("a{300}");
@@ -50,7 +53,7 @@ class WhatAPositionPublishesAboutItsStringsIsAllOfItOrNoneTest {
 
     @Test
     void everyPlanIsBuiltOrNoneOfThemIs() {
-        Realizations made = allowing(50_000).realizeAll("here", List.of(CHEAP, DEAR));
+        Realizations made = allowing(50_000).realizeAll(HERE,List.of(CHEAP, DEAR));
 
         Realizations.Exact exact = assertInstanceOf(Realizations.Exact.class, made);
         assertNotNull(exact.of(CHEAP), "the cheap rule's strings");
@@ -70,10 +73,10 @@ class WhatAPositionPublishesAboutItsStringsIsAllOfItOrNoneTest {
         // is being asked. Without this, an allowance too small for either would pass the same
         // assertion and say nothing about a group.
         assertInstanceOf(Realizations.Exact.class,
-                allowing(20).realizeAll("here", List.of(CHEAP)),
+                allowing(20).realizeAll(HERE,List.of(CHEAP)),
                 "the cheap rule is one this allowance can build");
 
-        Realizations made = allowing(20).realizeAll("here", List.of(CHEAP, DEAR));
+        Realizations made = allowing(20).realizeAll(HERE,List.of(CHEAP, DEAR));
 
         assertInstanceOf(Realizations.NotBuilt.class, made,
                 "a rule that was not built takes the ones beside it with it");
@@ -91,13 +94,13 @@ class WhatAPositionPublishesAboutItsStringsIsAllOfItOrNoneTest {
         Allowance<String> one = allowing(50_000);
         Allowance<String> other = allowing(50_000);
 
-        Realizations first = one.realizeAll("here", List.of(CHEAP, DEAR));
-        Realizations second = other.realizeAll("here", List.of(DEAR, CHEAP));
+        Realizations first = one.realizeAll(HERE,List.of(CHEAP, DEAR));
+        Realizations second = other.realizeAll(HERE,List.of(DEAR, CHEAP));
 
         assertEquals(assertInstanceOf(Realizations.Exact.class, first).of(DEAR),
                 assertInstanceOf(Realizations.Exact.class, second).of(DEAR),
                 "the same rules leave the same strings");
-        assertEquals(one.left("here"), other.left("here"),
+        assertEquals(one.left(HERE), other.left(HERE),
                 "and cost the same, however the caller held them");
     }
 
@@ -114,15 +117,15 @@ class WhatAPositionPublishesAboutItsStringsIsAllOfItOrNoneTest {
     void whatAnotherQuestionBuiltIsUsedInsideAPlanBuiltOutOfIt() {
         AdmittedPlan both = AdmittedPlan.meeting(List.of(CHEAP, DEAR));
         Allowance<String> answers = allowing(50_000);
-        assertInstanceOf(Realizations.Exact.class, answers.realizeAll("here", List.of(CHEAP, DEAR)),
+        assertInstanceOf(Realizations.Exact.class, answers.realizeAll(HERE,List.of(CHEAP, DEAR)),
                 "the two patterns are what the other question built");
 
         Allowance<String> borrowing = Allowance.besides(budget(50_000), answers);
         Allowance<String> alone = allowing(50_000);
         assertInstanceOf(Realizations.Exact.class,
-                borrowing.realizeAll("here", List.of(CHEAP, DEAR, both)));
+                borrowing.realizeAll(HERE,List.of(CHEAP, DEAR, both)));
         assertInstanceOf(Realizations.Exact.class,
-                alone.realizeAll("here", List.of(CHEAP, DEAR, both)));
+                alone.realizeAll(HERE,List.of(CHEAP, DEAR, both)));
 
         // The two patterns and everything the meet made of them, against the meet alone. What the
         // difference is worth is the two machines that already existed, which is what a caller
@@ -133,7 +136,7 @@ class WhatAPositionPublishesAboutItsStringsIsAllOfItOrNoneTest {
     }
 
     private static int spent(Allowance<String> allowance) {
-        return 50_000 - allowance.left("here");
+        return 50_000 - allowance.left(HERE);
     }
 
     /**
@@ -145,7 +148,7 @@ class WhatAPositionPublishesAboutItsStringsIsAllOfItOrNoneTest {
      */
     @Test
     void anAnswerIsOnlyReadableForAPlanThatWasAskedFor() {
-        Realizations made = allowing(50_000).realizeAll("here", List.of(CHEAP));
+        Realizations made = allowing(50_000).realizeAll(HERE,List.of(CHEAP));
 
         assertThrows(IllegalArgumentException.class,
                 () -> assertInstanceOf(Realizations.Exact.class, made).of(DEAR));

@@ -106,6 +106,17 @@ public sealed interface DataMessage extends Message {
     record NoValueItsRulesAllowIsInThatRange(String data, String at)
             implements DataMessage, Reported {}
 
+    /**
+     * Positions the rules hold as one value are left no value they can all hold.
+     *
+     * <p>The places together and not one of them. Each of these is left something on its own, so a
+     * sentence naming one would send an author to a place whose own rules are fine — what has
+     * nothing is the one value the rules say they are, and the rules that say so are what an
+     * author has to look at.
+     */
+    @Code(DiagnosticCode.E1013)
+    record NoValueTheseCanAllHold(String data, String at) implements DataMessage, Reported {}
+
     /** A set is asked to hold more values that differ than there are of what it holds. */
     @Code(DiagnosticCode.E1013)
     record ASetCannotBeFilledFromItsElement(String data, String at, long available)

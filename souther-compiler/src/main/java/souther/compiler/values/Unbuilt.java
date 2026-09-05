@@ -2,10 +2,8 @@ package souther.compiler.values;
 
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 
 /**
@@ -87,15 +85,32 @@ public final class Unbuilt<A> {
 
     private final Set<RuleShortfall<A>> aboutARule = new LinkedHashSet<>();
     private final List<AnswerShortfall<A>> aboutTheAnswer = new ArrayList<>();
+    /** The blocks whose answer was not built, which is the coordinate the machine was to be made
+     *  in. Beside the shortfalls rather than read off them: those name the positions an author
+     *  wrote, and several of those are one answer wherever a rule holds them as one value. */
+    private final Set<Sameness.Block<A>> widened = new LinkedHashSet<>();
 
-    /** Records what {@code made} says about {@code atom}, where it says the answer was not built. */
-    void note(A atom, Realization made) {
+    /**
+     * Records what {@code made} says about {@code block}, where it says the answer was not built.
+     *
+     * <p>Written down twice and about two things. What was not built is the block's one answer, so
+     * that is what is short; what an author can act on is a rule they wrote at a position, so every
+     * position of the block carries the reason. A block of one position is both of those at once,
+     * which is what this was before any rule held two positions as one value.
+     */
+    void note(Sameness.Block<A> block, Realization made) {
         switch (made) {
             case Realization.Exact _ -> { }
-            case Realization.OverTheMachineLimit it -> add(new RuleShortfall<>(atom,
-                    it.asked(), UnreadReason.PATTERN_TOO_COSTLY));
-            case Realization.OverTheAnswerLimit _ -> add(new AnswerShortfall<>(atom,
-                    UnreadReason.EXACT_VALUES_TOO_COSTLY));
+            case Realization.OverTheMachineLimit it -> {
+                widened.add(block);
+                block.members().forEach(atom -> add(new RuleShortfall<>(atom,
+                        it.asked(), UnreadReason.PATTERN_TOO_COSTLY)));
+            }
+            case Realization.OverTheAnswerLimit _ -> {
+                widened.add(block);
+                block.members().forEach(atom -> add(new AnswerShortfall<>(atom,
+                        UnreadReason.EXACT_VALUES_TOO_COSTLY)));
+            }
         }
     }
 
@@ -110,15 +125,12 @@ public final class Unbuilt<A> {
     }
 
     boolean isEmpty() {
-        return aboutARule.isEmpty() && aboutTheAnswer.isEmpty();
+        return aboutARule.isEmpty() && aboutTheAnswer.isEmpty() && widened.isEmpty();
     }
 
-    /** The positions, for a reader that needs to know which of them widened. */
-    Set<A> names() {
-        Set<A> out = new LinkedHashSet<>();
-        aboutARule.forEach(each -> out.add(each.at()));
-        aboutTheAnswer.forEach(each -> out.add(each.at()));
-        return Collections.unmodifiableSet(out);
+    /** The blocks, for a reader that needs to know which answers widened. */
+    Set<Sameness.Block<A>> names() {
+        return Collections.unmodifiableSet(new LinkedHashSet<>(widened));
     }
 
     /**
@@ -151,21 +163,14 @@ public final class Unbuilt<A> {
      * says how wide it is and why, and which written thing paid for that is a different question
      * with a different reader.
      */
-    Map<A, List<UnreadReason>> beside(Map<A, List<UnreadReason>> standing) {
-        if (isEmpty()) {
-            return standing;
+    Standing<A> beside(Standing<A> standing) {
+        Standing<A> out = standing;
+        for (RuleShortfall<A> each : aboutARule) {
+            out = out.alsoAt(Set.of(each.at()), each.why());
         }
-        Map<A, List<UnreadReason>> out = new LinkedHashMap<>(standing);
-        aboutARule.forEach(each -> put(out, each.at(), each.why()));
-        aboutTheAnswer.forEach(each -> put(out, each.at(), each.why()));
+        for (AnswerShortfall<A> each : aboutTheAnswer) {
+            out = out.alsoAt(Set.of(each.at()), each.why());
+        }
         return out;
-    }
-
-    private void put(Map<A, List<UnreadReason>> out, A atom, UnreadReason why) {
-        List<UnreadReason> all = new ArrayList<>(out.getOrDefault(atom, List.of()));
-        if (!all.contains(why)) {
-            all.add(why);
-        }
-        out.put(atom, all);
     }
 }

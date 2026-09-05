@@ -788,7 +788,7 @@ public final class InvariantChecker {
         StatedByClauses.Answered<Written> answered = asked.resolve(reader, allowed,
                 policy.allowanceForWhatARuleLeaves(allowed));
         // What the answer has left, before a word of the account is read.
-        Map<FactSubject, Integer> unspent = leftOf(allowed, positions.keySet());
+        int unspent = spentBy(allowed);
         AdmissibleValues<FactSubject> values = answered.whole().values();
         answered.perClause().forEach((each, one) -> {
             narrowedBy.put(each.from(), one);
@@ -809,7 +809,7 @@ public final class InvariantChecker {
         // An assertion because it is about this compiler and not about any model, and here
         // rather than in one test because every declaration a corpus holds goes through it.
         // What comes after this line is the answer being carried on with, which may spend.
-        assert unspent.equals(leftOf(allowed, positions.keySet()))
+        assert unspent == spentBy(allowed)
                 : "reading the account of " + named.name() + " spent its allowance";
         // What was counted bounds what was built, which is the whole of why counting before
         // reading is enough. It is an induction and its steps are held where they are taken —
@@ -1030,14 +1030,16 @@ public final class InvariantChecker {
      * is. */
     private record Written(RuleRef.Invariant from, Core clause) {}
 
-    /** What each of {@code positions} has left of its allowance, for holding an answer to what it
-     *  spent between two moments. */
-    private static Map<FactSubject, Integer> leftOf(
-            souther.compiler.values.Allowance<FactSubject> allowed,
-            Set<FactSubject> positions) {
-        Map<FactSubject, Integer> out = new LinkedHashMap<>();
-        positions.forEach(each -> out.put(each, allowed.left(each)));
-        return out;
+    /**
+     * How much an allowance has spent in all, for holding an answer to what it spent between two
+     * moments.
+     *
+     * <p>One number and not a purse for every position this reading knows about. A purse belongs
+     * to a factor, and which factors there are is settled by the rules rather than before them, so
+     * a list of the expected ones would leave out the one an equality made.
+     */
+    private static int spentBy(souther.compiler.values.Allowance<FactSubject> allowed) {
+        return allowed.spentSoFar();
     }
 
     /**

@@ -8,6 +8,8 @@ import souther.compiler.numeric.Rel;
 import souther.compiler.values.AdmissibleValues;
 import souther.compiler.values.ConjoinedAdmissibleValues;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.SequencedMap;
@@ -142,10 +144,24 @@ public record ConstraintState<A>(NumericDomain<A> numbers, PredicateFacts<A> fac
         Emptiness said = switch (shown.by()) {
             case ORDER -> new Emptiness.EmptyOrderedInterval();
             case SET_AND_RANGE -> new Emptiness.NoAllowedValueInRange();
+            case POSITIONS_HELD_AS_ONE -> new Emptiness.NoCommonValueForEqualPositions();
             case NOTHING_SHOWN, VALUES, RULES_TOGETHER -> null;
         };
         if (said == null) {
             return Optional.ofNullable(why);
+        }
+        // Positions the rules hold as one value are named together. Each of them is left something
+        // on its own, so no one of them is the place — and the sentence read off one would send an
+        // author after a rule that place is fine with.
+        if (shown.by() == Confinement.EmptyBy.POSITIONS_HELD_AS_ONE) {
+            List<Emptiness.AtAField.Where> where = new ArrayList<>();
+            positions.forEach((position, place) -> {
+                if (shown.at().contains(position)) {
+                    where.add(place);
+                }
+            });
+            return Optional.of(where.size() < 2 ? Emptiness.preferred(why, said)
+                    : Emptiness.preferred(why, new Emptiness.AtEqualPositions(where, said)));
         }
         for (Map.Entry<A, Emptiness.AtAField.Where> each : positions.entrySet()) {
             if (shown.at().contains(each.getKey())) {
