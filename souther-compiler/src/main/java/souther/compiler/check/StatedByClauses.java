@@ -64,7 +64,26 @@ sealed interface StatedByClauses {
                 Adoption<FactSubject> byValues, Adoption<FactSubject> byOrder,
                 Map<FactSubject, StringRestriction> strings,
                 Map<Core, Part> parts)
-            implements StatedByClauses {
+            implements StatedByClauses, Confinement<FactSubject> {
+
+        /**
+         * What the values leave, as far as that is settled without building anything.
+         *
+         * <p>The same answer {@link StatedTogether.Said} gives of the same pair, this being the
+         * account's copy of it. A description of what a position admits is not a set, so the
+         * alternatives cannot be asked where their positions stop until one is built, and building
+         * one here would spend the budget the answer is bounded by to write an account.
+         */
+        @Override
+        public Emptiness ofTheValues() {
+            return values.emptiness();
+        }
+
+        /** The same, out of what was built for the positions rather than by building. */
+        @Override
+        public Emptiness ofTheValuesAlreadyBuilt(Allowance<FactSubject> by) {
+            return values.holdsNothingAsBuilt(by) ? Emptiness.EMPTY : Emptiness.UNDECIDED;
+        }
 
         // No copy on the way in. The parts are filed by the node itself and not by what a node is
         // equal to — two conjuncts written the same way are two places in a clause — so the map is
@@ -205,7 +224,7 @@ sealed interface StatedByClauses {
     default Emptiness emptiness() {
         return switch (this) {
             case Choice it -> it.left().emptiness().joined(it.right().emptiness());
-            case Said it -> new StatedTogether.Said(it.values(), it.ordered()).emptiness();
+            case Said it -> it.admits();
         };
     }
 
@@ -596,7 +615,7 @@ sealed interface StatedByClauses {
          */
         private Settlement.Sided probed(StatedTogether.Said read,
                                         souther.compiler.values.Allowance<FactSubject> by) {
-            Emptiness said = read.emptiness();
+            Emptiness said = read.admits();
             if (said != Emptiness.UNDECIDED) {
                 return Settlement.Sided.settledAs(said);
             }
@@ -605,7 +624,7 @@ sealed interface StatedByClauses {
             // question as above and a different answer, the descriptions having become sets.
             Emptiness worked = new Confinement.OfAConjunction<>(
                     souther.compiler.values.ConjoinedAdmissibleValues.of(made.values(), by),
-                    read.ordered(), ordered.carriers()).emptiness();
+                    read.ordered(), ordered.carriers()).admits();
             if (worked == Emptiness.EMPTY) {
                 return Settlement.Sided.settledAs(Emptiness.EMPTY);
             }

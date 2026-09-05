@@ -42,8 +42,8 @@ import java.util.function.Function;
  *
  * @param <A> what a position is called
  */
-sealed interface Confinement<A> permits Confinement.OfAConjunction, ReadByClauses,
-        StatedTogether.Said {
+sealed interface Confinement<A> permits Confinement.OfAConjunction, ReadByClauses, Settlement,
+        StatedByClauses.Said, StatedTogether.Said {
 
     /** Where each position's order stops, over the rules taken in. */
     OrderedIntervals<A> ordered();
@@ -64,13 +64,13 @@ sealed interface Confinement<A> permits Confinement.OfAConjunction, ReadByClause
      * value at some position leaves the value none whatever the sets admit; otherwise the answer is
      * the values', which is where the sets and the ranges meet.
      */
-    default Emptiness emptiness() {
+    default Emptiness admits() {
         return ordered().isBottom() ? Emptiness.EMPTY : ofTheValues();
     }
 
     /** Whether it is settled that nothing satisfies them. */
     default boolean holdsNothing() {
-        return emptiness() == Emptiness.EMPTY;
+        return admits() == Emptiness.EMPTY;
     }
 
     /**

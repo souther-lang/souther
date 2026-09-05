@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.numeric.OrderedIntervals;
+import souther.compiler.values.Allowance;
 import souther.compiler.values.Emptiness;
 import souther.compiler.values.Realized;
 import souther.compiler.values.UnreadReason;
@@ -34,7 +35,26 @@ import java.util.Set;
  * @param outcomes the fate of both branches of every written choice, by its id
  */
 record Settlement(Realized<FactSubject> made, OrderedIntervals<FactSubject> ordered,
-                  Map<ChoiceId, OfAChoice> outcomes) {
+                  Map<ChoiceId, OfAChoice> outcomes) implements Confinement<FactSubject> {
+
+    /**
+     * What the values leave, which is whether any alternative stands at all.
+     *
+     * <p>Nothing is asked of the order at a position here. What put this together already asked it
+     * of every branch, with the carriers in hand ({@code StatedByClauses.Reading}), and this is what
+     * that work came to — asked again from here it would be asked without them, and an answer worked
+     * out under less than the reading had is a second answer to a settled question.
+     */
+    @Override
+    public Emptiness ofTheValues() {
+        return made.values().anyAlternativeAdmits((_, _) -> Emptiness.NONEMPTY);
+    }
+
+    /** The same. What is here was worked out already, so there is nothing further to build. */
+    @Override
+    public Emptiness ofTheValuesAlreadyBuilt(Allowance<FactSubject> by) {
+        return ofTheValues();
+    }
 
     /** Both branches of one written choice, each aggregated over its occurrences. */
     record OfAChoice(Sided left, Sided right) {

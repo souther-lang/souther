@@ -421,8 +421,7 @@ public final class FieldDomains {
                 if (made.gaveUp()) {
                     why.add(UnreadReason.EXACT_VALUES_TOO_COSTLY);
                 }
-                separated = separated
-                        && (values.isBottom() || values.projectionExactAt(name));
+                separated = separated && values.projectionExactAt(name);
                 // Every one of them. Two subjects of one name are two ways the same rules were
                 // filed, and a rule filed under one of them is not the rule filed under the other:
                 // an ordering the interval algebra knows the place by and a pattern the values

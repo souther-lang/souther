@@ -484,7 +484,10 @@ public record AdmissibleValues<A>(Held<A> held, Map<A, ValueSet> perPosition,
      * asking is asking about a position no value ever stands at.
      */
     public boolean projectionExactAt(A atom) {
-        return !widened.contains(atom);
+        // A reading that admits nothing is exact everywhere. What stands at a position then is read
+        // off what the arithmetic was left holding rather than off the alternatives, there being
+        // none, so there is no projection here for an answer to be wider than.
+        return held instanceof Held.Nothing || !widened.contains(atom);
     }
 
     /** Whether what this holds can be guaranteed to be the whole of what the read rules admit,

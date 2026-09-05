@@ -33,8 +33,9 @@ import java.util.function.Function;
  * makes the answers exact rather than approximate:
  *
  * <pre>
- *     isBottom()   any factor holding nothing, since the rest constrain none of its positions
- *     at(subject)  the one factor that names it, since no other says anything about it
+ *     anyAlternativeAdmits   every factor having one, since an alternative of the conjunction is
+ *                            one alternative of each of them side by side
+ *     at(subject)            the one factor that names it, since no other says anything about it
  * </pre>
  *
  * <p>So a conjunction is kept factored only where keeping it factored loses nothing. Where two
@@ -163,17 +164,6 @@ public final class ConjoinedAdmissibleValues<A> {
      */
     public boolean hasReadings() {
         return !factors.isEmpty();
-    }
-
-    /**
-     * Whether nothing satisfies the readings together.
-     *
-     * <p>Any factor on its own. The others say nothing about the positions it names, so nothing they
-     * hold can put a value back into a factor that has none — and a factor that holds nothing leaves
-     * the conjunction nothing whatever the rest admit.
-     */
-    public boolean isBottom() {
-        return factors.stream().anyMatch(AdmissibleValues::isBottom);
     }
 
     /**
