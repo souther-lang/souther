@@ -14,13 +14,17 @@ import souther.compiler.types.WrittenOwner;
 import souther.compiler.types.TypeSymbols;
 import souther.compiler.types.ValueName;
 
+import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 import tools.jackson.databind.node.ObjectNode;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -238,6 +242,53 @@ class EveryKindOfRuleADocumentCanNameHasAnIdentityAndAWordTest {
         assertEquals(List.of("Declaration", "Examples", "Fake"), refused,
                 "and the owners that write no such rule are refused where one is made, which is"
                         + " what keeps the list above from being every owner there is");
+    }
+
+    /**
+     * The coordinates a kind may carry are the ones its rules are written with.
+     *
+     * <p>The schema and the writer are two accounts of one identity, and what holds them together
+     * is that each kind names what it carries and takes nothing else. Read the other way — each kind
+     * listing what it may <em>not</em> have — every coordinate added has to be forbidden again in
+     * every other kind by hand, and the first one added after that shape was settled leaked into
+     * two of them: an invariant could carry what wrote a predicate's application, which is a shape
+     * this compiler never writes and the schema promised to refuse.
+     *
+     * <p>So the two lists are compared rather than kept alike. A key the writer starts writing that
+     * the kind does not name fails here, and a key a kind names that nothing writes fails here too —
+     * the second is the direction that was open.
+     */
+    @Test
+    void theCoordinatesAKindMayCarryAreTheOnesItsRulesAreWrittenWith() {
+        Map<String, Set<String>> written = new LinkedHashMap<>();
+        for (RuleRef each : eachCoordinateVaried()) {
+            ObjectNode into = JsonMapper.builder().build().createObjectNode();
+            AdequacyReport.ruleId(into, each);
+            written.computeIfAbsent(AdequacyReport.schemaRuleKind(each), _ -> new TreeSet<>())
+                    .addAll(into.propertyNames());
+        }
+
+        Map<String, Set<String>> allowed = new LinkedHashMap<>();
+        for (JsonNode arm : schema().get("$defs").get("ruleId").get("oneOf")) {
+            assertEquals(false, arm.get("additionalProperties").asBoolean(),
+                    "a kind takes only what it names, so there is no list of what it may not have"
+                            + " to fall behind: " + arm);
+            allowed.put(arm.get("properties").get("kind").get("const").asString(),
+                    new TreeSet<>(arm.get("properties").propertyNames()));
+        }
+
+        assertEquals(allowed, written,
+                "each kind allows the coordinates its rules are written with, and no others");
+    }
+
+    /** The schema shipped beside this compiler, which is what a reader validates against. */
+    private static JsonNode schema() {
+        try (java.io.InputStream in = AdequacyReport.class.getResourceAsStream(
+                "/souther/adequacy-schema-" + AdequacyReport.SCHEMA_VERSION + ".json")) {
+            return JsonMapper.builder().build().readTree(in);
+        } catch (java.io.IOException cannotRead) {
+            throw new IllegalStateException("the schema is shipped beside this", cannotRead);
+        }
     }
 
     /**

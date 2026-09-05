@@ -1101,7 +1101,7 @@
     },
     "ruleId": {
       "type": "object",
-      "description": "What tells one rule of the model from every other, which is not what a reader is shown. The coordinates differ by kind because rules are told apart by different things, and every part of an identity is written: a declaration is its module and its name — two modules may each declare an `Amount`, and they are two types — and a comparison is the construct a definition wrote, numbered from zero within that definition, so which definition is part of which construct. A document written before the numbering was counted within a definition carries no `definition` and numbers over the whole source instead, which is what its absence says. A predicate carries one where a definition's body wrote it and says so in `writtenIn`, since a behavior writes such a rule in its body and in its own clauses alike; the remaining kinds never carry one. A key within this document rather than a name; a consumer groups by it and shows `rule`. It names the rule and not the question — one rule raises more than one, and `question` and `subject` beside it are what tell those apart.",
+      "description": "What tells one rule of the model from every other, which is not what a reader is shown. The coordinates differ by kind because rules are told apart by different things, and every part of an identity is written: a declaration is its module and its name — two modules may each declare an `Amount`, and they are two types — and a comparison is the construct a definition wrote, numbered from zero within that definition, so which definition is part of which construct. A document written before the numbering was counted within a definition carries no `definition` and numbers over the whole source instead, which is what its absence says. A predicate carries one where a definition's body wrote it and says so in `writtenIn`, since a behavior writes such a rule in its body and in its own clauses alike; the remaining kinds never carry one. Each kind names the coordinates it carries and takes no others, which is why none of them lists what it may not have: a coordinate a later version adds for one kind is refused by the rest for not having been named there, rather than by somebody remembering to forbid it in each. A key within this document rather than a name; a consumer groups by it and shows `rule`. It names the rule and not the question — one rule raises more than one, and `question` and `subject` beside it are what tell those apart.",
       "required": [
         "kind",
         "declaredIn"
@@ -1112,145 +1112,71 @@
           "properties": {
             "kind": {
               "const": "invariant"
-            }
+            },
+            "declaredIn": true,
+            "declaredOn": true,
+            "clause": true
           },
+          "additionalProperties": false,
           "required": [
             "declaredOn",
             "clause"
-          ],
-          "not": {
-            "anyOf": [
-              {
-                "required": [
-                  "behavior"
-                ]
-              },
-              {
-                "required": [
-                  "definition"
-                ]
-              },
-              {
-                "required": [
-                  "arm"
-                ]
-              },
-              {
-                "required": [
-                  "ordinal"
-                ]
-              },
-              {
-                "required": [
-                  "lowered"
-                ]
-              }
-            ]
-          }
+          ]
         },
         {
           "properties": {
             "kind": {
               "const": "ensures"
-            }
+            },
+            "declaredIn": true,
+            "behavior": true,
+            "clause": true,
+            "arm": true
           },
+          "additionalProperties": false,
           "required": [
             "behavior",
             "clause",
             "arm"
-          ],
-          "not": {
-            "anyOf": [
-              {
-                "required": [
-                  "declaredOn"
-                ]
-              },
-              {
-                "required": [
-                  "definition"
-                ]
-              },
-              {
-                "required": [
-                  "ordinal"
-                ]
-              },
-              {
-                "required": [
-                  "lowered"
-                ]
-              }
-            ]
-          }
+          ]
         },
         {
           "properties": {
             "kind": {
               "const": "comparison"
-            }
+            },
+            "declaredIn": true,
+            "definition": true,
+            "behavior": true,
+            "ordinal": true,
+            "lowered": true
           },
+          "additionalProperties": false,
           "required": [
             "behavior",
             "ordinal",
             "lowered"
-          ],
-          "not": {
-            "anyOf": [
-              {
-                "required": [
-                  "declaredOn"
-                ]
-              },
-              {
-                "required": [
-                  "clause"
-                ]
-              },
-              {
-                "required": [
-                  "arm"
-                ]
-              },
-              {
-                "required": [
-                  "writtenIn"
-                ]
-              }
-            ]
-          }
+          ]
         },
         {
           "properties": {
             "kind": {
               "const": "predicate"
-            }
+            },
+            "declaredIn": true,
+            "definition": true,
+            "writtenIn": true,
+            "behavior": true,
+            "ordinal": true,
+            "lowered": true
           },
+          "additionalProperties": false,
           "required": [
             "behavior",
             "writtenIn",
             "ordinal",
             "lowered"
           ],
-          "not": {
-            "anyOf": [
-              {
-                "required": [
-                  "declaredOn"
-                ]
-              },
-              {
-                "required": [
-                  "clause"
-                ]
-              },
-              {
-                "required": [
-                  "arm"
-                ]
-              }
-            ]
-          },
           "if": {
             "properties": {
               "writtenIn": {
