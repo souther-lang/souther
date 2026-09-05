@@ -114,32 +114,44 @@ class WhoMaySayThisCheckMetALimitIsWrittenDownTest {
     }
 
     /**
-     * And that no way in takes an arbitrary failure.
+     * What the ways in are allowed to take, written out rather than a list of what they may not.
      *
      * <p>This is the half that keeps a {@code catch} of everything from becoming a limit again in
-     * one line. A factory taking a {@code Throwable} would let any failure through while the count
-     * above stayed exactly where it is, and a census reading the same number would say nothing was
-     * decided.
+     * one line: a way in that takes a failure a caller merely caught lets any of them through while
+     * the counts above stay exactly where they are. Written the other way round — the kinds nobody
+     * may take — the guard is only as good as the names somebody thought of, and an overload taking
+     * one more concrete exception passes it while saying nothing.
+     *
+     * <p>So a new parameter type has to be admitted here, and admitting one is saying that a
+     * failure of that kind is something this reading met rather than something it was handed.
      */
+    private static final Set<String> MAY_BE_TAKEN = Set.of(
+            "Lsouther/compiler/diag/CompileException;",
+            "Lsouther/compiler/check/Unanswerable;",
+            "Ljava/lang/String;",
+            "Lsouther/compiler/diag/SourcePos;");
+
     @Test
-    void andNoneOfThemTakesAFailureItWasHandedRatherThanSomethingItMet() throws IOException {
+    void aWayInTakesWhatThisReadingMetAndNothingItWasHanded() throws IOException {
         Map<String, String> taking = new TreeMap<>();
         for (ClassModel model : compiled()) {
             if (!model.thisClass().asInternalName().equals(LIMIT)) {
                 continue;
             }
             for (MethodModel method : model.methods()) {
+                if (method.methodName().stringValue().startsWith("<")) {
+                    continue;
+                }
                 method.methodTypeSymbol().parameterList().forEach(each -> {
-                    if (each.descriptorString().equals("Ljava/lang/Throwable;")
-                            || each.descriptorString().equals("Ljava/lang/RuntimeException;")
-                            || each.descriptorString().equals("Ljava/lang/Exception;")) {
+                    if (!MAY_BE_TAKEN.contains(each.descriptorString())) {
                         taking.put(method.methodName().stringValue(), each.descriptorString());
                     }
                 });
             }
         }
         assertEquals(Map.of(), taking,
-                "a way in that takes whatever a caller caught is a way in that decides nothing");
+                "a way in takes what was met. What may be taken, and why each is not a failure a"
+                        + " caller caught and passed on: " + MAY_BE_TAKEN);
     }
 
     @Test

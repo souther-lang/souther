@@ -104,7 +104,8 @@ public record StatedContract(ValueName.Behavior behavior, List<Param> params, Ty
                 for (ClausesForDischarge.ClauseReading written : declaring.conjunctsOf(
                         rule.statement(), BehaviorContract.ownerOf(contract.behavior()))) {
                     conjuncts.add(new Conjunct(written.at(),
-                            SecondaryClauseReading.of(written.asExpanded(), scope, ctx,
+                            SecondaryClauseReading.of(written.asExpanded(),
+                                    () -> new SecondaryClauseReading.Over(scope, ctx),
                                     "typing " + contract.behavior().name())));
                 }
                 rules.add(new StatedRule(rule.id(), rule.guard(), rule.value(), clause.name(),

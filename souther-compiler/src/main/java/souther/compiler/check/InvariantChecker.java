@@ -819,8 +819,9 @@ public final class InvariantChecker {
         // no second walk to disagree about which shape is a choice.
         //
         // This is where the two ends are tied, over whatever declarations a corpus holds. An
-        // assertion because it is about this compiler and not about the model, and because a
-        // throw would be caught by the fail-open above and leave the reading silently dropped.
+        // assertion because it is about this compiler and not about the model: what it would say
+        // if it were false is that a count this reading was bounded by did not bound it, which is
+        // not something an author can act on.
         assert alternatives == Alternatives.MERGED
                 || heldApart(values) <= expansion
                 : "a reading of " + named.name() + " expanded to " + heldApart(values)

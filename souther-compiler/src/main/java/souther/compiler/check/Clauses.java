@@ -102,8 +102,9 @@ final class Clauses {
     TypedClause typed(ClauseAsExpanded clause, TypeSymbol.AtModule named, Hir.Data data) {
         return typed.computeIfAbsent(named, _ -> new IdentityHashMap<>())
                 .computeIfAbsent(clause.read(), _ -> SecondaryClauseReading.of(clause,
-                        DataChecker.fieldScope(named, data, symbols),
-                        CheckContext.of(symbols).forData(data).forDischarge(),
+                        () -> new SecondaryClauseReading.Over(
+                                DataChecker.fieldScope(named, data, symbols),
+                                CheckContext.of(symbols).forData(data).forDischarge()),
                         "typing a clause of " + named));
     }
 

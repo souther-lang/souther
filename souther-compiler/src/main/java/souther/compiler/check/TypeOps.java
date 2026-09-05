@@ -1321,8 +1321,8 @@ public final class TypeOps {
             case ExpandedClauseResult.Found(ExpandedClauses clauses) -> {
                 List<Declared> out = new ArrayList<>();
                 for (int ordinal = 0; ordinal < clauses.clauses().size(); ordinal++) {
-                    out.add(new Declared(named, ordinal, clauses.clauses().get(ordinal),
-                            clauses.standing()));
+                    ExpandedClauses.Expanded each = clauses.clauses().get(ordinal);
+                    out.add(new Declared(named, ordinal, each.clause(), each.standing()));
                 }
                 yield new ExpandedRules(out, true);
             }

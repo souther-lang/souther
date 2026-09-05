@@ -79,7 +79,8 @@ class AConstructionIsWrittenAsOneInTheAnalysisRepresentationTest {
             assertInstanceOf(ExpandedClauseResult.Found.class, expanded,
                     data.declares() + " is read in the representation its module expanded");
             List<Hir.InvariantClause> read =
-                    ((ExpandedClauseResult.Found) expanded).clauses().clauses();
+                    ((ExpandedClauseResult.Found) expanded).clauses().clauses().stream()
+                            .map(ExpandedClauses.Expanded::clause).toList();
             Hir.Def again = NewtypeDesugar.rewriteInvariantsOf(
                     new Hir.Data(data.written(), data.declares(), data.newtype(), data.includes(),
                             data.fields(), read, data.pos()),

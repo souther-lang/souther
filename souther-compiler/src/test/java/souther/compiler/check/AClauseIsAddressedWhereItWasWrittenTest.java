@@ -77,7 +77,8 @@ class AClauseIsAddressedWhereItWasWrittenTest {
         ExpandedClauseResult declared =
                 RuleReadings.of(compilation, module).invariants().of(even.key());
         assertInstanceOf(ExpandedClauseResult.Found.class, declared);
-        return ((ExpandedClauseResult.Found) declared).clauses().clauses();
+        return ((ExpandedClauseResult.Found) declared).clauses().clauses().stream()
+                .map(ExpandedClauses.Expanded::clause).toList();
     }
 
     /** {@code Even}'s clauses as the declaration writes them, with no helper expanded into them. */

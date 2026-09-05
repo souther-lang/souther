@@ -12,7 +12,9 @@ import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeSymbols;
+import souther.compiler.diag.CompileException;
 import souther.compiler.diag.SourcePos;
+import souther.compiler.diag.Diagnostic;
 
 import org.junit.jupiter.api.Test;
 
@@ -139,6 +141,37 @@ class WhatFallsOpenIsWhatSomebodyNamedALimitTest {
                         + compiling(STANDING_AND_READABLE));
     }
 
+    /**
+     * And what a clause is read over is worked out inside the reading.
+     *
+     * <p>A declaration whose fields this compiler refuses is refused by the check that answers for
+     * the program. Working the fields out before the reading begins would let that refusal leave by
+     * a door this policy has no name for, though it is the same reading failing — so this holds
+     * that the compile ends the way the authoritative check ends it, and not with something thrown
+     * out of the analysis.
+     */
+    @Test
+    void whatAClauseIsReadOverIsWorkedOutInsideTheReading() {
+        Compilation c = answered(STANDING);
+        TypeSymbol.AtModule named = TypeSymbols.declared(new TypeKey("demo", "制限木"));
+        TypeOps.Declared clause = expandedClauseOf(c, named, declarationOf(c, named));
+        List<GaveUp> gaveUp = new ArrayList<>();
+        InvariantChecker.GAVE_UP = gaveUp;
+        try {
+            TypedClause read = SecondaryClauseReading.of(clause.asExpanded(), () -> {
+                throw CompileException.of(Diagnostic
+                        .say(new souther.compiler.diag.msg.ModuleMessage.DuplicateModule("demo")).nowhere().build());
+            }, "a test");
+
+            assertInstanceOf(TypedClause.Stopped.class, read,
+                    "what a clause is read over is part of reading it, so a refusal working it out"
+                            + " is this reading not finishing");
+            assertEquals(1, gaveUp.size(), () -> "and it is recorded as the limit it is: " + gaveUp);
+        } finally {
+            InvariantChecker.GAVE_UP = null;
+        }
+    }
+
     // --- what is not ------------------------------------------------------------------------------
 
     /**
@@ -192,17 +225,19 @@ class WhatFallsOpenIsWhatSomebodyNamedALimitTest {
         TypeSymbol.AtModule named = TypeSymbols.declared(new TypeKey("demo", "制限木"));
         Hir.Data data = declarationOf(c, named);
         TypeOps.Declared clause = expandedClauseOf(c, named, data);
-        Scope over = DataChecker.fieldScope(named, data, symbolsOf(c));
-        CheckContext ctx = CheckContext.of(symbolsOf(c)).forData(data).forDischarge();
+        java.util.function.Supplier<SecondaryClauseReading.Over> over =
+                () -> new SecondaryClauseReading.Over(
+                        DataChecker.fieldScope(named, data, symbolsOf(c)),
+                        CheckContext.of(symbolsOf(c)).forData(data).forDischarge());
 
         assertInstanceOf(TypedClause.Stopped.class,
-                SecondaryClauseReading.of(clause.asExpanded(), over, ctx, "a test"),
+                SecondaryClauseReading.of(clause.asExpanded(), over, "a test"),
                 "the expansion says it left the call standing, so this reading stops on it");
 
         assertThrows(IllegalStateException.class,
                 () -> SecondaryClauseReading.of(
                         new ClauseAsExpanded(clause.clause().expr(), CallsLeftStanding.NONE),
-                        over, ctx, "a test"),
+                        over, "a test"),
                 "and where no expansion left it there, it is this compiler that failed");
     }
 
