@@ -174,6 +174,58 @@ class IncrementalCompilationTest {
         return c.db().ask(new Output.Classes("shop.prices")).value();
     }
 
+    /** A module that writes definitions of its own before the declaration an importer names — one
+     *  the importer reads through and one nothing at all reads. */
+    private static final String PRICES_WITH_HELPERS = """
+            module shop.prices exposing ( Amount )
+
+            let floor = 0
+
+            let describe (n: Int): Int = n
+
+            data Amount = Int
+                invariant value >= floor
+            """;
+
+    /** Names `Amount` and nothing else of it. */
+    private static final String CART_OF_AMOUNT = """
+            module shop.cart exposing ( Total )
+
+            import shop.prices ( Amount )
+
+            data Total = { paid: Amount }
+
+            let ten = Amount(10)
+            """;
+
+    /**
+     * And an edit to a body written <em>before</em> the declaration leaves the importer alone as
+     * well. What a construct was numbered as is part of the declaration the importer builds
+     * against, so a count over the file put every definition of a module into every importer's
+     * dependency: editing a helper no importer can name renumbered the comparison in `Amount`'s
+     * invariant, `Amount` came out different, and every module that imported it was compiled again
+     * to the same class files.
+     */
+    @Test
+    void editingABodyWrittenBeforeADeclarationDoesNotReachAnImporterEither() {
+        Map<String, String> byId = new LinkedHashMap<>();
+        byId.put("prices.sou", PRICES_WITH_HELPERS);
+        byId.put("cart.sou", CART_OF_AMOUNT);
+        Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
+        c.answerEverything();
+        assertTrue(c.db().allReports().isEmpty(), "the workspace compiles to begin with");
+        Answer<?> cart = c.db().ask(new Output.Classes("shop.cart"));
+
+        Map<String, String> edited = new LinkedHashMap<>();
+        edited.put("prices.sou", PRICES_WITH_HELPERS.replace("Int = n\n", "Int = n + 1\n"));
+        edited.put("cart.sou", CART_OF_AMOUNT);
+        c.update(edited, Set.of());
+        c.answerEverything();
+
+        assertSame(cart, c.db().ask(new Output.Classes("shop.cart")),
+                "`describe` is written before `Amount` and is none of shop.cart's business");
+    }
+
     /** Two behaviors and a helper both of them call, in one module. */
     private static final String ORDERS = """
             module shop.orders exposing ( Amount )
