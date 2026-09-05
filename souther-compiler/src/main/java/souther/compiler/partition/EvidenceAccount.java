@@ -53,17 +53,17 @@ final class EvidenceAccount {
 
     /** One piece of evidence and what became of it, held together so that holding the stage to a
      *  {@link Disposition.Measured} can ask the evidence what it should have left behind. */
-    private record Answered(LineEvidence what, Disposition how) {}
+    private record Answered(PartitionEvidence what, Disposition how) {}
 
-    private final Map<LineEvidence.FiledEvidenceId, LineEvidence> owed = new LinkedHashMap<>();
-    private final Map<LineEvidence.FiledEvidenceId, Answered> answered = new LinkedHashMap<>();
+    private final Map<PartitionEvidence.FiledEvidenceId, PartitionEvidence> owed = new LinkedHashMap<>();
+    private final Map<PartitionEvidence.FiledEvidenceId, Answered> answered = new LinkedHashMap<>();
 
     /**
      * The evidence this stage was handed, and the one thing about it this has to establish rather
      * than assume.
      *
      * <p><b>That the identity tells the pieces apart.</b> Everything below counts by
-     * {@link LineEvidence#id}, so two pieces sharing one is one entry here — and then the piece that
+     * {@link PartitionEvidence#id}, so two pieces sharing one is one entry here — and then the piece that
      * went missing is the one the other answered for. An account whose denominator is short before
      * any work happens reports a complete measure over evidence it never held, which is the sentence
      * this whole type exists to refuse.
@@ -75,9 +75,9 @@ final class EvidenceAccount {
      * <p>The same piece handed over twice is one piece. What that would say about the stage is
      * nothing, and nothing here counts arrivals.
      */
-    EvidenceAccount(List<LineEvidence> evidence) {
-        for (LineEvidence each : evidence) {
-            LineEvidence already = owed.put(each.id(), each);
+    EvidenceAccount(List<PartitionEvidence> evidence) {
+        for (PartitionEvidence each : evidence) {
+            PartitionEvidence already = owed.put(each.id(), each);
             if (already != null && !already.equals(each)) {
                 throw new IllegalStateException("two pieces of evidence are called " + each.id()
                         + ": " + already + " and " + each
@@ -86,11 +86,11 @@ final class EvidenceAccount {
         }
     }
 
-    void disposedOf(LineEvidence what, Disposition how) {
+    void disposedOf(PartitionEvidence what, Disposition how) {
         // Held against what was handed over rather than against whatever else was disposed of. The
         // identity is one to one over the input, so a piece arriving here under an id belonging to
         // another is a piece this stage was never given.
-        LineEvidence given = owed.get(what.id());
+        PartitionEvidence given = owed.get(what.id());
         if (given != null && !given.equals(what)) {
             throw new IllegalStateException("this stage disposed of " + what
                     + " under the name of " + given);
@@ -102,7 +102,7 @@ final class EvidenceAccount {
         }
     }
 
-    void measured(LineEvidence what, AxisId at) {
+    void measured(PartitionEvidence what, AxisId at) {
         disposedOf(what, new Disposition.Measured(at));
     }
 
@@ -141,25 +141,33 @@ final class EvidenceAccount {
 
     /** Whether {@code axis} carries what {@code evidence} draws, asked in that evidence's own
      *  terms. */
-    private static boolean carries(Axis axis, LineEvidence evidence) {
-        LineOrigin by = evidence.by();
+    private static boolean carries(Axis axis, PartitionEvidence evidence) {
         return switch (evidence) {
+            // A set told from the rest is carried by the classes and by nothing below them: there
+            // is no cut it is an origin of and no parting it is an alternative in. Refused rather
+            // than answered `false`, which would file it as a rule this measure said nothing about
+            // while the thing that would have said it is the class vocabulary this cannot read.
+            case PartitionEvidence.BySet set -> throw new IllegalStateException(
+                    "a set division reached the account before the classes could carry one: "
+                            + set.division().origin());
             // A line the position has no value beside is not a cut of it. It parts the values all
             // the same, and where it parts them is what carries the rule — as the authored line,
             // which is the key that side keeps.
-            case LineEvidence.Divides(Threshold line) when line.value() == null ->
-                    axis.parted().stream()
-                            .anyMatch(each -> each.alternatives().contains(by.authoredLine()));
+            case PartitionEvidence.Divides(Threshold line) when line.value() == null ->
+                    axis.parted().stream().anyMatch(each ->
+                            each.alternatives().contains(line.origin().authoredLine()));
             // And one it has a value beside is a cut, as is a value singled out: a rule that
             // singles nothing out is not one of those, so there is always a value here.
-            case LineEvidence.Divides _, LineEvidence.Singles _ ->
-                    axis.cuts().stream().anyMatch(each -> each.origins().contains(by));
+            case PartitionEvidence.Divides it ->
+                    axis.cuts().stream().anyMatch(each -> each.origins().contains(it.by()));
+            case PartitionEvidence.Singles it ->
+                    axis.cuts().stream().anyMatch(each -> each.origins().contains(it.by()));
         };
     }
 
     /** That this stage said what became of everything it was handed. */
     private void everyPieceWasDisposedOf() {
-        List<LineEvidence.FiledEvidenceId> lost = owed.keySet().stream()
+        List<PartitionEvidence.FiledEvidenceId> lost = owed.keySet().stream()
                 .filter(each -> !answered.containsKey(each)).toList();
         if (!lost.isEmpty()) {
             throw new IllegalStateException(
@@ -167,7 +175,7 @@ final class EvidenceAccount {
                             + " — a measure reported as complete over evidence that went missing"
                             + " is what this account exists to refuse");
         }
-        List<LineEvidence.FiledEvidenceId> strangers = answered.keySet().stream()
+        List<PartitionEvidence.FiledEvidenceId> strangers = answered.keySet().stream()
                 .filter(each -> !owed.containsKey(each)).toList();
         if (!strangers.isEmpty()) {
             throw new IllegalStateException(

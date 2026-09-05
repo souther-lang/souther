@@ -514,12 +514,12 @@ public final class Partitions {
      * are in the order an author wrote them.
      */
     private static List<NumericTerm.FromOnePosition> numbersMeasuring(
-            PositionMeasurements at, List<LineEvidence> evidence, EvidenceAccount account) {
+            PositionMeasurements at, List<PartitionEvidence> evidence, EvidenceAccount account) {
         TermPath path = at.position().path();
-        List<LineEvidence> here = evidence.stream()
+        List<PartitionEvidence> here = evidence.stream()
                 .filter(each -> each.at().position().equals(path)).toList();
         List<NumericTerm.FromOnePosition> numbers = new ArrayList<>();
-        for (LineEvidence each : here) {
+        for (PartitionEvidence each : here) {
             if (!numbers.contains(each.at())) {
                 numbers.add(each.at());
             }
@@ -546,7 +546,7 @@ public final class Partitions {
      * route through this would be a second answer to what a rule about a number comes to.
      */
     private static BodyCutInspection measureAt(List<Axis> out, PositionMeasurements at, Axis axis,
-                                  NumericTerm.FromOnePosition term, List<LineEvidence> evidence,
+                                  NumericTerm.FromOnePosition term, List<PartitionEvidence> evidence,
                                   Quantities reading, RuleReadingSource ruleSource,
                                   ReadingPolicy policy,
                                   RulesWithNoLine rules, EvidenceAccount account) {
@@ -556,10 +556,10 @@ public final class Partitions {
         // evidence said to be measured here and the measure it was measured at are one name.
         AxisId id = AxisId.of(behavior, term);
         Type type = at.position().type();
-        List<LineEvidence> mine = evidence.stream()
+        List<PartitionEvidence> mine = evidence.stream()
                 .filter(each -> each.at().equals(term)).toList();
-        List<Threshold> here = LineEvidence.linesIn(mine);
-        List<GuardThresholds.Guards.Singled> points = LineEvidence.pointsIn(mine);
+        List<Threshold> here = PartitionEvidence.linesIn(mine);
+        List<GuardThresholds.Guards.Singled> points = PartitionEvidence.pointsIn(mine);
         // What this term's values can be, which is the type's bound already narrowed by whatever
         // the record it sits in says about it. Reading the type again here would put a threshold
         // back inside a range the record has no values in.
@@ -587,8 +587,8 @@ public final class Partitions {
         // which is the thing being fixed here happening again one field over. The end the
         // position stops short of is outside it as much as anything past it is.
         List<Threshold> reachable = new ArrayList<>();
-        for (LineEvidence each : mine) {
-            if (!(each instanceof LineEvidence.Divides(Threshold line))) {
+        for (PartitionEvidence each : mine) {
+            if (!(each instanceof PartitionEvidence.Divides(Threshold line))) {
                 // A value singled out beside an ordering. The model has drawn the further
                 // distinction itself, so the value is one more line among the ranges and it is
                 // merged with them below.
@@ -784,9 +784,9 @@ public final class Partitions {
                                        List<GuardThresholds.Guards.Singled> singled,
                                        List<LineDrawn> between,
                                        ReachingCuts reaching) {
-        List<LineEvidence> evidence = new ArrayList<>();
-        thresholds.forEach(each -> evidence.add(new LineEvidence.Divides(each)));
-        singled.forEach(each -> evidence.add(new LineEvidence.Singles(each)));
+        List<PartitionEvidence> evidence = new ArrayList<>();
+        thresholds.forEach(each -> evidence.add(new PartitionEvidence.Divides(each)));
+        singled.forEach(each -> evidence.add(new PartitionEvidence.Singles(each)));
         return withEvidence(base, reading, evidence, ruleSource, policy, rulesWithoutALine, between,
                 reaching);
     }
@@ -803,7 +803,7 @@ public final class Partitions {
      */
     public static Partitioning withEvidence(Partitioning base,
                                             Quantities reading,
-                                            List<LineEvidence> evidence,
+                                            List<PartitionEvidence> evidence,
                                             RuleReadingSource ruleSource, ReadingPolicy policy,
                                             RulesWithNoLine rulesWithoutALine,
                                             List<LineDrawn> between,

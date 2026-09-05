@@ -70,7 +70,7 @@ public final class GuardThresholds {
      * {@code c} on the low side and are two different rules about it — so it is read where the
      * operator is still in hand, and which values arrive is asked of the reading of the whole body.
      */
-    public record Guards(List<LineEvidence> evidence,
+    public record Guards(List<PartitionEvidence> evidence,
                          RulesWithNoLine noLine,
                          List<LineDrawn> between,
                          ReachingCuts reaching) {
@@ -86,12 +86,12 @@ public final class GuardThresholds {
         /** The lines, read off what the walk said. Not a list of their own: the walk met these and
          *  the values it singled out in one order, and holding two lists loses it. */
         public List<Threshold> thresholds() {
-            return LineEvidence.linesIn(evidence);
+            return PartitionEvidence.linesIn(evidence);
         }
 
         /** The values singled out, likewise. */
         public List<Singled> singled() {
-            return LineEvidence.pointsIn(evidence);
+            return PartitionEvidence.pointsIn(evidence);
         }
 
         /**
@@ -147,7 +147,7 @@ public final class GuardThresholds {
                             souther.compiler.check.ElementBindings elements,
                             souther.compiler.check.PathReachability.Answers arrives) {
         InputDomain inputs = read.domain();
-        List<LineEvidence> found = new ArrayList<>();
+        List<PartitionEvidence> found = new ArrayList<>();
         RulesWithNoLine.Gathered withoutALine = new RulesWithNoLine.Gathered();
         List<LineDrawn> between = new ArrayList<>();
         // One reading of the body, and everything below is that reading asked something. Where a
@@ -422,7 +422,7 @@ public final class GuardThresholds {
     private static void lineAt(ComparisonCatalog.Catalogued each,
                                CoverageSites.Plan plan,
                                ComparisonAssessment read,
-                               List<LineEvidence> out,
+                               List<PartitionEvidence> out,
                                List<LineDrawn> between,
                                RulesWithNoLine.Gathered withoutALine) {
         publish(each, read, withoutALine);
@@ -442,11 +442,11 @@ public final class GuardThresholds {
                     // here — the position is divided all the same, and what divides it is the line.
                     case ComparisonClaim.Singled _ -> {
                         if (at.value() != null) {
-                            out.add(new LineEvidence.Singles(
+                            out.add(new PartitionEvidence.Singles(
                                     new Guards.Singled(at.position(), at.value(), origin)));
                         }
                     }
-                    case ComparisonClaim.Cut order -> out.add(new LineEvidence.Divides(
+                    case ComparisonClaim.Cut order -> out.add(new PartitionEvidence.Divides(
                             new Threshold(at.position(), at.cutting().seam(),
                                     order.valueBelongs(), origin)));
                 }
