@@ -92,11 +92,9 @@ class ABehaviorDividesAPositionByWhatItsRulesTellApartTest {
                         .flatMap(each -> each.classes().stream()).toList().size(),
                 "the clause divides the position into what it admits and what it leaves: "
                         + divided.axes());
-        assertEquals(List.of(), divided.rulesWithoutALine().stream()
-                        .map(RuleWithoutALine::why)
-                        .filter(BlockReason.UnreadComparisonForm.class::isInstance).toList(),
-                "and no reader says it could not read the rule that was read: "
-                        + divided.rulesWithoutALine());
+        assertEquals(List.of(), divided.unanswered(),
+                "and no question about that rule is held open: a statement read as a rule about"
+                        + " the strings is not also one whose questions nothing worked out");
     }
 
     /**
