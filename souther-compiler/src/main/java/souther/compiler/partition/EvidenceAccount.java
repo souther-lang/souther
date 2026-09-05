@@ -1,5 +1,7 @@
 package souther.compiler.partition;
 
+import souther.compiler.inputs.NumericTerm;
+
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -60,7 +62,7 @@ final class EvidenceAccount {
          * Left out of the account, a position both kinds of rule reach would look like one whose
          * evidence went missing.
          */
-        record TheClassesWereNotComposed(souther.compiler.inputs.NumericTerm.FromOnePosition at)
+        record TheClassesWereNotComposed(NumericTerm.FromOnePosition at)
                 implements Disposition {}
     }
 

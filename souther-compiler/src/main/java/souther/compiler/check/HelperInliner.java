@@ -145,10 +145,6 @@ public final class HelperInliner {
                            Set<BindingId> dependencies,
                            Map<BindingId, ScopedLambda> scopedLambdas) {
 
-        Writing(BindingOwner into, Hir.Binders binders, Set<BindingId> dependencies) {
-            this(into, into, binders, dependencies, new HashMap<>());
-        }
-
         /**
          * The same writing, one copy deeper.
          *

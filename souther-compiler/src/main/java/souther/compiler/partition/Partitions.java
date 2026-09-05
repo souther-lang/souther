@@ -19,6 +19,7 @@ import souther.compiler.inputs.Quantities;
 import souther.compiler.inputs.Position;
 import souther.compiler.inputs.StructuralInspection;
 import souther.compiler.inputs.TypeBounds;
+import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.FilingCoordinate;
 import souther.compiler.inputs.RuleWithoutALine;
@@ -717,7 +718,7 @@ public final class Partitions {
         for (SetDivision each : divisions) {
             found.add(RuleWithoutALine.of(each.origin().rule(), each.origin().cited(),
                     new FilingCoordinate.AtPosition(term.position()),
-                    new souther.compiler.inputs.BlockReason.ClassesNotComposed()));
+                    new BlockReason.ClassesNotComposed()));
         }
         return found.found();
     }

@@ -141,11 +141,21 @@ class WhatABehaviorsRuleAboutItsStringsDividesAPositionIntoTest {
     }
 
     /**
-     * A rule about a value made from the position is about no position, and is said to.
+     * A rule about a value made from the position divides no position.
      *
      * <p>What it states is true of something the position was turned into, and there is no
-     * denominator for it to divide: a class of the values here cannot be read off a class of what
-     * an operation made from them.
+     * denominator for it to divide: a class of the values here cannot be read off a class of what an
+     * operation made from them.
+     *
+     * <p><b>And nothing is filed, because nothing places it.</b> A finding is shown at a position,
+     * and the value this rule is about came from none that the reading can name — an operation
+     * standing between the rule and the position is exactly what the reading has no path through. So
+     * the rule is read, it divides nothing, and there is nowhere to say so.
+     *
+     * <p>Which is what the reading of a comparison does with the same shape
+     * ({@link ComparisonAssessment}), and it is a limitation the two share rather than one of this
+     * walk. Pinned here so that it is a fact somebody wrote down: an author writing this rule is
+     * told nothing about it.
      */
     @Test
     void aRuleAboutAValueMadeFromThePositionDividesNoPosition() {
@@ -155,9 +165,9 @@ class WhatABehaviorsRuleAboutItsStringsDividesAPositionIntoTest {
                 """);
 
         assertEquals(List.of(), read.divided(), "no position is divided");
-        assertEquals(List.of(new BlockReason.RuleAboutADerivedValue()),
-                read.undivided().stream().map(SetDivisions.Undivided::why).toList(),
-                "and the rule is answered for as one about a value made from this one");
+        assertEquals(List.of(), read.undivided(),
+                "and nothing is filed, because the value it is about came from no position the"
+                        + " reading can name");
     }
 
     /**

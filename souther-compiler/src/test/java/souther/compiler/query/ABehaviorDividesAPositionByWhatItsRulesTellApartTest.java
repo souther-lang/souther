@@ -2,6 +2,8 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.inputs.BlockReason;
+import souther.compiler.inputs.RuleWithoutALine;
 import souther.compiler.partition.Axis;
 import souther.compiler.partition.PartitionClass;
 import souther.compiler.partition.Partitions;
@@ -114,8 +116,42 @@ class ABehaviorDividesAPositionByWhatItsRulesTellApartTest {
                 "while where the rules cut the position is still what it was");
     }
 
+    /**
+     * And a rule that divided nothing is shown to somebody.
+     *
+     * <p>Every string begins with the empty one, so this rule puts every value the position holds on
+     * one side of itself and the model draws no line. What must not happen is silence: a rule an
+     * author wrote reached the measure, came to nothing, and a reader has to be told which rule and
+     * where — otherwise the position comes back as one the model says nothing about, and the rule
+     * sitting in the body says otherwise.
+     */
+    @Test
+    void aRuleThatDividedNothingIsSaidOfTheRule() {
+        Partitions.Partitioning divided = partitioningOf("""
+                behavior route : (code: String) -> Where
+                let route (code) = {
+                    guard String.startsWith("", code) else Abroad
+                    Home
+                }
+                """);
+
+        assertEquals(List.of(), divided.axes(), "the position is divided by nothing");
+        assertEquals(List.of(new BlockReason.PredicateTellingNothingApart()),
+                divided.rulesWithoutALine().stream()
+                        .map(RuleWithoutALine::why).toList(),
+                "and the rule is named as one that tells nothing apart");
+    }
+
     /** The one measure the model under test makes of its position. */
     private static Axis dividing(String behavior) {
+        Partitions.Partitioning divided = partitioningOf(behavior);
+        assertEquals(1, divided.axes().size(),
+                "the model under test measures one number: " + divided.axes());
+        return divided.axes().get(0);
+    }
+
+    /** What the model under test divides its behavior into. */
+    private static Partitions.Partitioning partitioningOf(String behavior) {
         String source = """
                 module demo
 
@@ -133,8 +169,6 @@ class ABehaviorDividesAPositionByWhatItsRulesTellApartTest {
         Partitions.Partitioning divided = compilation.db()
                 .ask(new Adequacy.Divided(compilation.modules().get(0), "route")).value();
         assertNotNull(divided, "the behavior was divided");
-        assertEquals(1, divided.axes().size(),
-                "the model under test measures one number: " + divided.axes());
-        return divided.axes().get(0);
+        return divided;
     }
 }

@@ -6,6 +6,8 @@ import souther.compiler.check.PredicateStatement;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.StringPredicates;
 import souther.compiler.inputs.BlockReason;
+import souther.compiler.inputs.FilingCoordinate;
+import souther.compiler.inputs.RuleWithoutALine;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.PathResolution;
@@ -140,18 +142,29 @@ public final class SetDivisions {
     /**
      * One rule that reached here and divided no position.
      *
-     * <p>The rule and not the position. A rule whose subject no position answers has no position to
-     * file this under, and one whose group was refused is answered for at the position all the same
-     * — so what a reader is given is which rule it was, and where the reason is about a position it
-     * is the reason that says so.
+     * <p>Filed where a reader will look for it, which is the position the rule is about. A rule
+     * written about a value an operation made from a position is filed at the position the value
+     * came from — the rule plainly concerns it, and filed nowhere it would go out as a rule about
+     * nothing while that position came back as one the model states nothing about.
+     *
+     * <p>One of these is only made where there is somewhere to file it. A rule about a value that
+     * came from no position of the input has no reader to be shown it, which is the same answer the
+     * reading of a comparison gives ({@link ComparisonAssessment}).
      */
-    public record Undivided(PredicateOrigin by, BlockReason why) {
+    public record Undivided(PredicateOrigin by, FilingCoordinate at,
+                            BlockReason.RuleWithoutLineReason why) {
 
         public Undivided {
-            if (by == null || why == null) {
+            if (by == null || at == null || why == null) {
                 throw new IllegalArgumentException(
-                        "a rule that divided nothing is some rule, and something became of it");
+                        "a rule that divided nothing is some rule, somewhere, and something became"
+                                + " of it");
             }
+        }
+
+        /** The finding a reader is shown, which is what every rule with no line here comes out as. */
+        public RuleWithoutALine reported() {
+            return RuleWithoutALine.of(by.rule(), by.cited(), at, why);
         }
     }
 
@@ -244,6 +257,7 @@ public final class SetDivisions {
             if (made == null) {
                 divided.removeIf(each -> each.at().equals(term));
                 here.forEach(each -> undivided.add(new Undivided(each.origin(),
+                        FilingCoordinate.at(term.position()),
                         new BlockReason.BehaviorDistinctionsTooCostly())));
                 continue;
             }
@@ -301,23 +315,30 @@ public final class SetDivisions {
         // answers is a rule about a value made from the position rather than about the position, and
         // there is no denominator for it to divide.
         if (!(each.reads().pathOf(each.subject(), symbols) instanceof PathResolution.At at)) {
-            undivided.add(new Undivided(each.origin(),
-                    new BlockReason.RuleAboutADerivedValue()));
+            // Where the value it is about came from, which is not where it stands: a rule about
+            // what an operation made from a position divides no position, and the one the value
+            // came from is where a reader looks for what became of the rule.
+            if (each.reads().cameFrom(each.subject(), symbols)
+                    instanceof PathResolution.At(var from)) {
+                undivided.add(new Undivided(each.origin(), FilingCoordinate.at(from),
+                        new BlockReason.RuleAboutADerivedValue()));
+            }
             return;
         }
         NumericTerm.FromOnePosition term = new NumericTerm.ValueOf(at.path());
+        FilingCoordinate where = FilingCoordinate.at(at.path());
         switch (each.reading()) {
             case StringPredicates.Reading.Accepting it -> asked.add(new Asked(each.origin(),
                     each.statement(), term,
                     new AdmittedPlan.Pattern(PatternPlan.of(it.accepts())),
                     new AdmittedPlan.Pattern(PatternPlan.notMatching(it.accepts()))));
             case StringPredicates.Reading.PatternNotRead it -> undivided.add(new Undivided(
-                    each.origin(), BlockReason.forAPatternNotRead(it.why())));
+                    each.origin(), where, BlockReason.forAPatternNotRead(it.why())));
             // A rule whose text this compiler did not work out is a rule it did not read. Said as
             // anything about the values, it would be a distinction reported as absent from the model
             // when what is absent is this compiler's reading of it.
             case StringPredicates.Reading.WrittenArgumentNotKnown _ -> undivided.add(
-                    new Undivided(each.origin(), new BlockReason.UnreadValueRule()));
+                    new Undivided(each.origin(), where, new BlockReason.UnreadValueRule()));
         }
     }
 
@@ -325,7 +346,7 @@ public final class SetDivisions {
     private static void divide(Asked each, Realizations answer,
                                List<PartitionEvidence> divided, List<Undivided> undivided) {
         if (!(answer instanceof Realizations.Exact built)) {
-            undivided.add(new Undivided(each.by(),
+            undivided.add(new Undivided(each.by(), FilingCoordinate.at(each.term().position()),
                     new BlockReason.BehaviorDistinctionsTooCostly()));
             return;
         }
@@ -335,7 +356,7 @@ public final class SetDivisions {
         // is the position undivided. Published, it would put a class in the denominator that no run
         // is ever counted at and every row would be owed one for it.
         if (whenTrue.isEmpty() || whenFalse.isEmpty()) {
-            undivided.add(new Undivided(each.by(),
+            undivided.add(new Undivided(each.by(), FilingCoordinate.at(each.term().position()),
                     new BlockReason.PredicateTellingNothingApart()));
             return;
         }
