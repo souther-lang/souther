@@ -89,14 +89,29 @@ class WhatARuleCostsDoesNotTurnOnWhereItIsWrittenTest {
     /** The same three rules in every order, and one answer between them. */
     @Test
     void everyOrderOfTheSameRulesLeavesTheSameAnswer() {
-        AdmissibleSet first = admitted(RULES, ORDERS.get(0));
+        AdmissibleSet first = sameInEveryOrder(RULES);
 
-        for (List<Integer> order : ORDERS) {
-            assertEquals(first, admitted(RULES, order),
-                    "the values and the account of them, written as " + order);
-        }
         assertEquals(AdmissibleSet.READ_IN_FULL, first.completeness(),
                 "and every one of them is read in full, since no product of patterns is built");
+    }
+
+    /**
+     * What {@code rules} admit, which every order of them comes to.
+     *
+     * <p>The first order is what the rest are held against, so it is read before the loop and the
+     * loop is over the other five. Read inside the loop as well it would be read twice, and what
+     * the two readings of it are held against each other for is that one order comes out the same
+     * way twice — which is a claim about a compile repeating itself and not about where the rules
+     * are written. That is what is given up here, for the two machines a reading of an order costs.
+     */
+    private static AdmissibleSet sameInEveryOrder(List<String> rules) {
+        AdmissibleSet first = admitted(rules, ORDERS.getFirst());
+
+        for (List<Integer> order : ORDERS.subList(1, ORDERS.size())) {
+            assertEquals(first, admitted(rules, order),
+                    "the values and the account of them, written as " + order);
+        }
+        return first;
     }
 
     /**
@@ -113,12 +128,8 @@ class WhatARuleCostsDoesNotTurnOnWhereItIsWrittenTest {
      */
     @Test
     void theSameHoldsWhereEveryRuleIsAPattern() {
-        AdmissibleSet first = admitted(ALL_PATTERNS, ORDERS.get(0));
+        AdmissibleSet first = sameInEveryOrder(ALL_PATTERNS);
 
-        for (List<Integer> order : ORDERS) {
-            assertEquals(first, admitted(ALL_PATTERNS, order),
-                    "the values and the account of them, written as " + order);
-        }
         assertEquals(AdmissibleSet.READ_IN_FULL, first.completeness(),
                 "and the small one is met first, so nothing large is built");
     }

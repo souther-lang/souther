@@ -1,9 +1,13 @@
 package souther.bench;
 
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.query.Compilation;
+
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -21,10 +25,36 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @Tag("population")
 class CorpusTest {
 
+    /**
+     * Each corpus compiled once for the class.
+     *
+     * <p>Three questions are asked of the same compiles and none of them changes one, so a compile
+     * per question is the same answer worked out again — and a corpus is the size someone writes,
+     * so working it out again is most of what this class costs.
+     */
+    private static final Map<Corpus, Compilation> COMPILED = new LinkedHashMap<>();
+
+    private static synchronized Compilation compiled(Corpus corpus) {
+        return COMPILED.computeIfAbsent(corpus, Corpus::compile);
+    }
+
+    /**
+     * And given back when the class is done with them.
+     *
+     * <p>A fork runs its classes one after another and keeps the JVM, so what is held statically is
+     * held for every class after this one as well. What is kept here is two answered compilations of
+     * models the size somebody writes, with their classes materialised — a floor under the heap that
+     * the rest of this module's tests would be running above for a saving that is this class's.
+     */
+    @AfterAll
+    static void released() {
+        COMPILED.clear();
+    }
+
     @Test
     void everyCorpusCompiles() {
         for (Corpus corpus : Corpus.all()) {
-            corpus.check(corpus.compile());
+            corpus.check(compiled(corpus));
         }
     }
 
@@ -49,8 +79,7 @@ class CorpusTest {
             if (corpus.sources().size() < 2) {
                 continue;
             }
-            Compilation compilation = corpus.compile();
-            if (compilation.modules().size() >= 2) {
+            if (compiled(corpus).modules().size() >= 2) {
                 return;
             }
         }
@@ -65,7 +94,7 @@ class CorpusTest {
     void aCorpusOfOneSourceNamesOneModule() {
         for (Corpus corpus : Corpus.all()) {
             if (corpus.sources().size() == 1) {
-                assertTrue(corpus.compile().modules().size() == 1,
+                assertTrue(compiled(corpus).modules().size() == 1,
                         () -> corpus + " is one source and names several modules");
             }
         }
