@@ -610,6 +610,24 @@ final class AnswerClosure {
                 then(then(A_SUBJECT, A_MEASUREMENT), HELD,
                         part("souther.compiler.partition.Axis", "classes"), HELD,
                         part("souther.compiler.partition.PartitionClass", "denotes")));
+        // And the same machine reached through what the class means rather than through what it
+        // writes out. A class whose meaning is a set of values holds one, so the strings are on the
+        // meaning as well as on the denotation — two routes to one machine and not a second one,
+        // and both are places the walk arrives at.
+        for (String question : List.of(Q + "Adequacy$Divided", Q + "Adequacy$Generated")) {
+            TypePath.Step[] toTheAxes = question.endsWith("Divided")
+                    ? new TypePath.Step[] {
+                            part("souther.compiler.partition.Partitions$Partitioning",
+                                    "measurements"), HELD,
+                            part("souther.compiler.partition.PositionMeasurements", "axes")}
+                    : then(A_SUBJECT, A_MEASUREMENT);
+            theMachineUnderALanguage(out, question,
+                    then(toTheAxes, HELD,
+                            part("souther.compiler.partition.Axis", "classes"), HELD,
+                            part("souther.compiler.partition.PartitionClass", "recognises"),
+                            arm("souther.compiler.partition.Recognition$OfASet"),
+                            part("souther.compiler.partition.Recognition$OfASet", "values")));
+        }
         // The same ends, reached where an axis carries what the reading left the position.
         bothEndsOfARange(out, Q + "Adequacy$Divided",
                 part("souther.compiler.partition.Partitions$Partitioning", "measurements"), HELD,
