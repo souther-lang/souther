@@ -12,8 +12,10 @@ import java.lang.constant.ClassDesc;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Stream;
 
@@ -150,13 +152,28 @@ public final class WhatWasCompiled {
     /**
      * Every class that calls {@code method} on {@code on}.
      *
-     * <p>For a rule about who may do something rather than about who may name a type. A call is in
-     * the caller's constant pool whatever it is spelled like at the call site, and a lambda's body
-     * is compiled into the class that wrote it, so a caller cannot get out of this by writing the
-     * call somewhere shorter.
+     * <p>For a rule about who may do something rather than about who may name a type. A lambda's
+     * body is compiled into the class that wrote it, so a caller cannot get out of this by writing
+     * the call somewhere shorter.
+     *
+     * <p><b>Through whatever type it is named.</b> What a call site puts in the constant pool is
+     * the type the receiver was declared as, so a method of an interface called through one of its
+     * implementations is a reference to the implementation. A rule about who may do something is
+     * about the operation and not about the spelling of the variable it was reached through, and a
+     * rule reading only the type it was asked about would be escaped by declaring the receiver one
+     * step down. So the owners are that type and every compiled type that answers it
+     * ({@link #implementing}).
+     *
+     * <p>A type this module did not compile has no implementations to gather, and the walk over
+     * what it did compile finds none — which is the right answer for a rule about this module's own
+     * calls into somebody else's type.
      */
     public static Set<String> callersOf(Class<?> on, String method) {
-        ClassDesc owner = on.describeConstable().orElseThrow();
+        Set<ClassDesc> owners = new LinkedHashSet<>();
+        owners.add(on.describeConstable().orElseThrow());
+        for (String each : implementing(on)) {
+            owners.add(ClassDesc.of(each));
+        }
         Set<String> found = new LinkedHashSet<>();
         for (String each : classes()) {
             ConstantPool pool = parse(each).constantPool();
@@ -168,7 +185,7 @@ public final class WhatWasCompiled {
                     continue;
                 }
                 if (entry instanceof java.lang.classfile.constantpool.MemberRefEntry asCall
-                        && asCall.owner().asSymbol().equals(owner)
+                        && owners.contains(asCall.owner().asSymbol())
                         && asCall.name().stringValue().equals(method)) {
                     found.add(each);
                 }
@@ -217,24 +234,42 @@ public final class WhatWasCompiled {
         return named;
     }
 
+    /**
+     * What each class file holds, read once for however many rules ask about it.
+     *
+     * <p>A rule asks about every class this module compiled, and a suite holds many rules. Read per
+     * question, the same files are parsed again for each of them — which is what a rule about who
+     * calls what does twice over, once for the callers and once for the types the call could be
+     * named through. What is read cannot change while the tests run, since it is what surefire was
+     * handed.
+     */
+    private static final Map<String, ClassModel> READ = new HashMap<>();
+
     /** {@code name} as this module compiled it, or nothing where it is not this module's — the JDK's
      *  own types and anything on the class path, which a rule about this module does not read. */
     private static ClassModel parsedOrNull(String name) {
+        if (READ.containsKey(name)) {
+            return READ.get(name);
+        }
         Path at = CLASSES.resolve(name.replace('.', '/') + ".class");
-        if (!Files.exists(at)) {
-            return null;
-        }
-        try {
-            return ClassFile.of().parse(Files.readAllBytes(at));
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
-        }
+        ClassModel read = Files.exists(at) ? parsed(at) : null;
+        READ.put(name, read);
+        return read;
     }
 
     private static ClassModel parse(String name) {
+        ClassModel read = parsedOrNull(name);
+        if (read == null) {
+            throw new UncheckedIOException(new IOException(
+                    CLASSES.resolve(name.replace('.', '/') + ".class") + " is not a class this"
+                            + " module compiled"));
+        }
+        return read;
+    }
+
+    private static ClassModel parsed(Path at) {
         try {
-            return ClassFile.of().parse(
-                    Files.readAllBytes(CLASSES.resolve(name.replace('.', '/') + ".class")));
+            return ClassFile.of().parse(Files.readAllBytes(at));
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }

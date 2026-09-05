@@ -124,43 +124,63 @@ public record OrderedIntervals<A>(Map<A, OrderedInterval> ranges, boolean nothin
     }
 
     /**
-     * Either reading holding.
+     * A choice no alternative of which anybody can take, said of the ranges.
      *
-     * <p>Over the positions both spoke about, since a position one of them left open is one the two
-     * of them together leave open.
-     *
-     * <p>A side holding nothing is an alternative nobody can take, so the choice is the other one.
-     * Asked of the whole side rather than position by position: a branch with one position empty is
-     * a branch no value satisfies, and hulling its other positions in would widen the answer by ends
-     * no value of the model is ever at.
-     *
-     * <p><b>Both sides holding nothing is a different case.</b> No side speaks for the other there,
-     * so answering with either would settle which position is named by the order the two were
-     * written in. Nor may the two be met: a meet is a conjunction, and the alternatives were never
-     * stated together — {@code (a < "" && b == 0) || (a < "" && b == 1)} met is a {@code b} bounded
-     * at 0 and at 1, which is a contradiction neither alternative contains and a position the rules
-     * are fine with.
+     * <p>No side speaks for the other, so answering with either would settle which position is
+     * named by the order the two were written in. Nor may the two be met: a meet is a conjunction,
+     * and the alternatives were never stated together — {@code (a < "" && b == 0) || (a < "" && b
+     * == 1)} met is a {@code b} bounded at 0 and at 1, which is a contradiction neither alternative
+     * contains and a position the rules are fine with.
      *
      * <p>What the choice leaves empty is what <em>every</em> alternative leaves empty, which is the
      * positions in both. Where there are none, the choice still admits nothing and no position is at
      * fault, and that is said as itself.
+     *
+     * <p>This realises a decision rather than making one, and it does not ask what it was made of.
+     * Which alternatives nobody can take turns on what every language reading the clause left, and
+     * a branch these ranges are perfectly happy with is one the values may have refused — so what
+     * arrives is the ranges as they were read, of a branch something else settled. What is answered
+     * is what the two of them leave empty between them, and the whole is said to hold nothing
+     * because the choice does, not because these ranges show it.
+     *
+     * <p>Which is why there is no question here about the sides. Asked whether they hold nothing,
+     * this would be deciding what it was called to realise; told a side that stands, it answers
+     * that a choice somebody can take admits nothing, which is the one direction a state deciding
+     * emptiness may not move in. What keeps that from arriving is the caller having settled it,
+     * and there is no reading of a caller that has not.
      */
-    public OrderedIntervals<A> join(OrderedIntervals<A> other) {
-        if (isBottom() && other.isBottom()) {
-            Map<A, OrderedInterval> both = new LinkedHashMap<>();
-            for (A position : holdingNothing()) {
-                if (other.holdingNothing().contains(position)) {
-                    both.put(position, at(position).meet(other.at(position)));
-                }
+    public OrderedIntervals<A> bothDead(OrderedIntervals<A> other) {
+        Map<A, OrderedInterval> both = new LinkedHashMap<>();
+        for (A position : holdingNothing()) {
+            if (other.holdingNothing().contains(position)) {
+                both.put(position, at(position).meet(other.at(position)));
             }
-            return new OrderedIntervals<>(both, true);
         }
-        if (isBottom()) {
-            return other;
-        }
-        if (other.isBottom()) {
-            return this;
-        }
+        return new OrderedIntervals<>(both, true);
+    }
+
+    /**
+     * Either reading holding, both alternatives being ones somebody can take.
+     *
+     * <p>Over the positions both spoke about, since a position one of them left open is one the two
+     * of them together leave open.
+     *
+     * <p>Which alternatives those are is not decided here, for the reason {@link #bothDead} gives:
+     * a branch nobody can be in is shown by what every language left, and a choice settled from the
+     * ranges alone would drop a branch no order admits while keeping one no set of values admits.
+     * A choice every alternative of which is dead is {@link #bothDead}, and a choice with one dead
+     * alternative is the other alternative, which the caller holds already.
+     *
+     * <p>An assertion and not a branch, because a caller passing a side nobody can take is this
+     * compiler disagreeing with itself rather than anything a model says. With assertions off the
+     * hull is taken over what the two spoke about, which admits everything either of them did: an
+     * empty range at a position both named contributes nothing to the hull, and a position only the
+     * live side named is left out and so left open. What is lost is what the dead side proved, and
+     * no end is invented — which is the direction this state is only ever allowed to move in.
+     */
+    public OrderedIntervals<A> joinLive(OrderedIntervals<A> other) {
+        assert !isBottom() && !other.isBottom()
+                : "a choice of two live alternatives was asked of " + this + " and " + other;
         Map<A, OrderedInterval> out = new LinkedHashMap<>();
         ranges.forEach((position, range) -> {
             OrderedInterval there = other.ranges.get(position);

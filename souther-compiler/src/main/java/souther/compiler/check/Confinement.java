@@ -487,8 +487,8 @@ sealed interface Confinement<A> {
          *  nothing has shown the choice empty. */
         Planned<A> either(Planned<A> other, boolean apart) {
             return new Planned<>(
-                    apart ? values.joinApart(other.values) : values.join(other.values),
-                    ordered.join(other.ordered),
+                    apart ? values.joinLiveApart(other.values) : values.joinLive(other.values),
+                    ordered.joinLive(other.ordered),
                     Confinement.both(carriers, other.carriers));
         }
 
@@ -504,10 +504,23 @@ sealed interface Confinement<A> {
          * <p>What the choice was shown by is what both of them were shown by, and where is where
          * both were refused. Neither speaks for the other: alternatives refused at different
          * positions leave a choice no position is why, which is what the proof has to say.
+         *
+         * <p>Each language is asked what two dead branches leave it, and neither is asked whether
+         * they are dead — a language may be perfectly happy with a branch the other refused, and
+         * asked through the entry for a choice that stands it would answer for that branch with the
+         * ends it read.
+         *
+         * <p>The values are taken as leaving nothing before they are asked and the ranges are not.
+         * A reading that already admits nothing is left as it is, so that is not the difference it
+         * looks like: what a branch another language killed leaves the values is a reading that
+         * holds nothing and names no position, and what a branch the values killed leaves them is
+         * the positions they emptied. Either language names a position only where every alternative
+         * of that language left it empty.
          */
         Planned<A> bothDead(Planned<A> other, Admission<A> shown) {
             return new Planned<>(values.leavingNothing().bothDead(other.values.leavingNothing()),
-                    ordered.join(other.ordered), Confinement.both(carriers, other.carriers), shown);
+                    ordered.bothDead(other.ordered),
+                    Confinement.both(carriers, other.carriers), shown);
         }
 
         /** This, holding what working it out could not build. */

@@ -72,7 +72,7 @@ class WhatOrderedRulesLeaveEachPositionTest {
     @Test
     void aChoiceBetweenTwoRulesLeavesTheEndsAroundBoth() {
         OrderedIntervals<String> either = OrderedIntervals.at(A, from(5, 9))
-                .join(OrderedIntervals.at(A, from(20, 30)));
+                .joinLive(OrderedIntervals.at(A, from(20, 30)));
 
         assertEquals(from(5, 30), either.at(A));
     }
@@ -86,38 +86,17 @@ class WhatOrderedRulesLeaveEachPositionTest {
     @Test
     void aChoiceLeavesAPositionOnlyOneSideBoundedOpen() {
         OrderedIntervals<String> either = OrderedIntervals.at(A, from(5, 9))
-                .join(OrderedIntervals.at(B, from(1, 2)));
+                .joinLive(OrderedIntervals.at(B, from(1, 2)));
 
         assertEquals(OrderedInterval.OPEN, either.at(A));
         assertEquals(OrderedInterval.OPEN, either.at(B));
     }
 
     /**
-     * An alternative that holds nothing is one nobody can take, so the choice is the other one.
-     *
-     * <p>Asked of the whole side and not position by position. A branch with one position empty is
-     * a branch no value satisfies, and hulling its other positions into the answer would widen the
-     * result by ends no value of the model is ever at.
-     */
-    @Test
-    void anAlternativeHoldingNothingLeavesTheChoiceToTheOther() {
-        OrderedIntervals<String> impossible = OrderedIntervals.at(A, above(6))
-                .meet(OrderedIntervals.at(A, below(2)))
-                .meet(OrderedIntervals.at(B, from(100, 200)));
-
-        OrderedIntervals<String> either = impossible.join(OrderedIntervals.at(B, from(1, 2)));
-
-        assertEquals(from(1, 2), either.at(B));
-        assertFalse(either.isBottom());
-    }
-
-    /**
      * A choice both sides of which hold nothing holds nothing, and names what both leave empty.
      *
-     * <p>Where one side can be taken, the other's ranges go with it — nothing satisfies that side,
-     * so what it said narrows nothing. Where neither can be taken, no side speaks for the other,
-     * and the two may not be met either: a meet is a conjunction and the alternatives were never
-     * stated together.
+     * <p>No side speaks for the other, and the two may not be met either: a meet is a conjunction
+     * and the alternatives were never stated together.
      */
     @Test
     void aChoiceWithNothingOnEitherSideNamesWhatBothLeaveEmpty() {
@@ -126,10 +105,10 @@ class WhatOrderedRulesLeaveEachPositionTest {
         OrderedIntervals<String> right = OrderedIntervals.at(B, above(6))
                 .meet(OrderedIntervals.at(B, below(2)));
 
-        assertTrue(left.join(right).isBottom(), "neither side can be taken");
-        assertEquals(Set.of(), left.join(right).holdingNothing(),
+        assertTrue(left.bothDead(right).isBottom(), "neither side can be taken");
+        assertEquals(Set.of(), left.bothDead(right).holdingNothing(),
                 "and no one position is what the choice leaves empty");
-        assertEquals(left.join(right).holdingNothing(), right.join(left).holdingNothing(),
+        assertEquals(left.bothDead(right).holdingNothing(), right.bothDead(left).holdingNothing(),
                 "and the same either way round");
     }
 
@@ -141,8 +120,8 @@ class WhatOrderedRulesLeaveEachPositionTest {
         OrderedIntervals<String> left = empty.meet(OrderedIntervals.at(B, from(0, 0)));
         OrderedIntervals<String> right = empty.meet(OrderedIntervals.at(B, from(1, 1)));
 
-        assertEquals(Set.of(A), left.join(right).holdingNothing());
-        assertEquals(Set.of(A), right.join(left).holdingNothing(), "and either way round");
+        assertEquals(Set.of(A), left.bothDead(right).holdingNothing());
+        assertEquals(Set.of(A), right.bothDead(left).holdingNothing(), "and either way round");
     }
 
     /**
@@ -159,8 +138,8 @@ class WhatOrderedRulesLeaveEachPositionTest {
         OrderedIntervals<String> left = empty.meet(OrderedIntervals.at(B, from(0, 0)));
         OrderedIntervals<String> right = empty.meet(OrderedIntervals.at(B, from(1, 1)));
 
-        assertFalse(left.join(right).holdingNothing().contains(B));
-        assertFalse(right.join(left).holdingNothing().contains(B));
+        assertFalse(left.bothDead(right).holdingNothing().contains(B));
+        assertFalse(right.bothDead(left).holdingNothing().contains(B));
     }
 
     /** A side shown impossible by something outside this holds nothing and names no position. */
