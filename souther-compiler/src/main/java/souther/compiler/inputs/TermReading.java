@@ -192,9 +192,6 @@ final class TermReading {
         }
         java.math.BigDecimal total = java.math.BigDecimal.ZERO;
         for (ObservedValue each : values) {
-            if (each == null) {
-                return new Reading.NoValue();
-            }
             Membership.Incomplete unread = Membership.unread(each);
             if (unread != null) {
                 return new Reading.Missing(unread.code());
