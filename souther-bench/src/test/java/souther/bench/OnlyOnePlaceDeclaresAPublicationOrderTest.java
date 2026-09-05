@@ -30,6 +30,7 @@ class OnlyOnePlaceDeclaresAPublicationOrderTest {
     private static final String AUTHORITY = "souther.compiler.publish.PublicationOrders";
     private static final String SOURCE_ORDERED = "souther.compiler.publish.SourceOrdered";
     private static final String AUTHORED_ORDER = "souther.compiler.inputs.AuthoredOrder";
+    private static final String REASONS = "souther.compiler.inputs.RuleReasons";
     private static final String REPORT = "souther.compiler.report.";
     private static final String PROJECTION = "souther.compiler.partition.ReportedReason";
 
@@ -134,6 +135,32 @@ class OnlyOnePlaceDeclaresAPublicationOrderTest {
         assertEquals(List.of(), claimed,
                 "the model's order is claimed for a sequence by something holding published words,"
                         + " which is a claim about what it cannot see");
+    }
+
+    /**
+     * And the claim is made in the one place that reads the places it is a claim about.
+     *
+     * <p>Narrower than the rule above, and for the same reason one step further in. What settles
+     * whether a sequence of reasons is in the author's order is where each of them stands, and the
+     * carrier that holds the places is what may answer: a caller with the reasons alone is holding
+     * the half that cannot say, and a caller that had them and let them go said it too late.
+     *
+     * <p>So a second maker is a second answer to one question, and the two would disagree the day
+     * one of them learned something. Which callers there may be is a list because there is one.
+     */
+    @Test
+    void theModelsOrderIsClaimedWhereThePlacesAreRead() throws Exception {
+        List<String> claiming = new ArrayList<>();
+        for (Compiled.Site site : Compiled.sites()) {
+            if (site.owner().equals(AUTHORED_ORDER) && site.member().equals("asWritten")
+                    && !claiming.contains(site.from())) {
+                claiming.add(site.from());
+            }
+        }
+
+        assertEquals(List.of(REASONS), claiming,
+                "a sequence is called the order somebody wrote it in somewhere that is not the"
+                        + " one place holding what they wrote");
     }
 
     /** And the crossing carries that claim rather than making a second one. */
