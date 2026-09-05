@@ -40,6 +40,21 @@ moved to where the code was written. A clone turns it on once:
 plugin is in the root pom's `pluginManagement` and bound to no phase, so `mvn
 verify` does not run it.
 
+## Review findings
+
+Name the one cause before touching anything. Findings arrive as a list of
+places, and they are usually one mistake made in several of them; fixed one at a
+time, the cause stays and grows the list back on the next round.
+
+- Say the cause in a sentence. Then count everything it covers, derived from the
+  invariant rather than from the words the review happened to use — the review
+  saw the places it saw.
+- Close it where the value is made, not where the finding pointed.
+- A sentence that rules the fix and a mechanism narrower than it is the same
+  mistake again. Read them against each other before saying it is done.
+- Show it with a mutation that reaches the state, and with a control that has to
+  stay green.
+
 ## Editing a file
 
 One file, any number of lines: Edit or Write. Never `sed`, a heredoc, or a
