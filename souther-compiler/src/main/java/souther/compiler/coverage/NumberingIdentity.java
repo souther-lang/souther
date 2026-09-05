@@ -60,9 +60,16 @@ public final class NumberingIdentity {
         this.hash = Objects.hash(this.module, this.executable, this.byNumber);
     }
 
-    /** The numbering of nothing, which is what a module with no bodies to walk has. */
-    static NumberingIdentity of(String module) {
-        return new NumberingIdentity(module, Map.of(), List.of());
+    /**
+     * The numbering the plan of nothing carries: no places, of nobody's module.
+     *
+     * <p>Whose module is not asked for, and there is no way to say. A numbering of a module named
+     * here would be one somebody decided without walking a body — the thing every other door into
+     * this value exists to stop — and it would be indistinguishable afterwards from the one the
+     * check issued. What has no bodies to walk has none to be named after either.
+     */
+    static NumberingIdentity forThePlanOfNothing() {
+        return new NumberingIdentity(ModuleBodies.none().module(), Map.of(), List.of());
     }
 
     /** Whose bodies these are numbered from. */

@@ -56,8 +56,6 @@ class WhatDerivesANumberingIsWhatHoldsTheBodiesTest {
 
     private static final String SITES = "souther/compiler/coverage/CoverageSites";
 
-    private static final String NUMBERING = "souther/compiler/coverage/NumberingIdentity";
-
     /** A method that may derive one, how many times it does, and why it is one of the ones that
      *  does. */
     private record Licence(String who, int calls, String why) { }
@@ -68,15 +66,43 @@ class WhatDerivesANumberingIsWhatHoldsTheBodiesTest {
                             + " numbering of anything at all. What it decides here is carried by"
                             + " the answer, and every later walk of these bodies realizes it"));
 
-    /** A method that may construct one, how many times it does, and why. Beside the table above
-     *  and not the same one: deciding what a module's numbers mean is one act, and putting an
-     *  already decided numbering into a value is another. */
-    private static final List<Licence> MAY_CONSTRUCT = List.of(
-            new Licence("souther.compiler.coverage.SiteNumbering.Building.finish", 1,
+    /**
+     * A door a numbering comes out of, and who may go through it.
+     *
+     * <p>One row per way of coming by a numbering, and the row names the way's own callers rather
+     * than the constructor's. A method that wraps the constructor is a way of its own: the call
+     * inside it stays one however many callers it gains, so a table counting the constructor alone
+     * says nothing about them. The constructor is a door like the others, and what it opens onto is
+     * the two that wrap it — so a third wrapper is a caller of the constructor that this does not
+     * name, and it turns the constructor's own row red before it can quietly widen anybody else's.
+     *
+     * @param door  the method a numbering comes out of, as the classes name it
+     * @param who   what may go through it, and how many times each does
+     * @param why   what makes those the ones
+     */
+    private record Door(String door, Map<String, Integer> who, String why) { }
+
+    private static final String THE_CONSTRUCTOR =
+            "souther.compiler.coverage.NumberingIdentity.<init>";
+
+    private static final List<Door> DOORS = List.of(
+            new Door(THE_CONSTRUCTOR,
+                    Map.of("souther.compiler.coverage.SiteNumbering.Building.finish", 1,
+                            "souther.compiler.coverage.NumberingIdentity.forThePlanOfNothing", 1),
+                    "the two ways a numbering is come by, and the reason each is one is on its own"
+                            + " row below. A caller here that is not one of them is a third way,"
+                            + " and it would be a way nothing counts the callers of"),
+            new Door("souther.compiler.coverage.SiteNumbering.Building.finish",
+                    Map.of("souther.compiler.coverage.CoverageSites.of", 1),
                     "the walk that hands the numbers out is what knows what each addresses, and it"
-                            + " is one act with the numbering being made"),
-            new Licence("souther.compiler.coverage.NumberingIdentity.of", 1,
-                    "the numbering of nothing, which is what a module with no bodies to walk has"));
+                            + " is one act with the numbering being made. Which walk may decide one"
+                            + " rather than realize one is the table above"),
+            new Door("souther.compiler.coverage.NumberingIdentity.forThePlanOfNothing",
+                    Map.of("souther.compiler.coverage.CoverageSites.Plan.<clinit>", 1),
+                    "the plan of nothing, which numbers no place and is of nobody's module. It is"
+                            + " not what a module whose bodies were not read has — that has no"
+                            + " numbering — so a second caller here is a reader about to stand it"
+                            + " in for one"));
 
     @Test
     void onlyTheCheckThatHoldsThemDerivesAModulesNumbering() throws IOException {
@@ -104,9 +130,22 @@ class WhatDerivesANumberingIsWhatHoldsTheBodiesTest {
      */
     @Test
     void nothingElseInTheCompilerMakesANumbering() throws IOException {
-        assertEquals(declared(MAY_CONSTRUCT), constructions(),
+        Map<String, Map<String, Integer>> declared = new TreeMap<>();
+        Map<String, String> why = new LinkedHashMap<>();
+        for (Door each : DOORS) {
+            declared.put(each.door(), new TreeMap<>(each.who()));
+            why.put(each.door(), each.why());
+        }
+        Map<String, Map<String, Integer>> found = new TreeMap<>();
+        for (Door each : DOORS) {
+            found.put(each.door(), new TreeMap<>(callersOf(each.door())));
+        }
+
+        assertEquals(declared, found,
                 "a numbering made elsewhere in this module says what numbers mean without having"
-                        + " handed any out. What may make one, and why: " + why(MAY_CONSTRUCT));
+                        + " handed any out, and a way of coming by one that nobody counts the"
+                        + " callers of is where the next such caller goes unseen."
+                        + " What each door is for: " + why);
     }
 
     private static Map<String, Integer> declared(List<Licence> licences) {
@@ -129,10 +168,14 @@ class WhatDerivesANumberingIsWhatHoldsTheBodiesTest {
                 && call.name().stringValue().equals("of"));
     }
 
-    /** How many times each method of the compiler makes a numbering. */
-    private static Map<String, Integer> constructions() throws IOException {
-        return calls(call -> call.owner().asInternalName().equals(NUMBERING)
-                && call.name().stringValue().equals("<init>"));
+    /** How many times each method of the compiler goes through {@code door}, which is written the
+     *  way the classes name a method: the owning class, then the method. */
+    private static Map<String, Integer> callersOf(String door) throws IOException {
+        int split = door.lastIndexOf('.');
+        String owner = door.substring(0, split).replace('.', '/');
+        String method = door.substring(split + 1);
+        return calls(call -> call.owner().asInternalName().replace('$', '/').equals(owner)
+                && call.name().stringValue().equals(method));
     }
 
     private static Map<String, Integer> calls(java.util.function.Predicate<InvokeInstruction> what)

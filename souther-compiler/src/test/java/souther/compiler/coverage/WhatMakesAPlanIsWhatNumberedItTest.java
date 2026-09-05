@@ -52,7 +52,7 @@ class WhatMakesAPlanIsWhatNumberedItTest {
     private record Licence(String who, int calls, String why) { }
 
     private static final List<Licence> MAY_MAKE = List.of(
-            new Licence("souther.compiler.coverage.CoverageSites.sites", 1,
+            new Licence("souther.compiler.coverage.CoverageSites.asPlan", 1,
                     "the one walk of a module's bodies: it hands the numbers out and says what each"
                             + " addresses in the same breath, so the two cannot have been put"
                             + " together by anybody who believed they went together. Whether the"
