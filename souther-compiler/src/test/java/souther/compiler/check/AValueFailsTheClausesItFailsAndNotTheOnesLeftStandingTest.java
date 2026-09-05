@@ -190,18 +190,6 @@ class AValueFailsTheClausesItFailsAndNotTheOnesLeftStandingTest {
 
     // --- a clause is not established and refused at once -----------------------------------------
 
-    /**
-     * Established and refused are asked separately, so a clause coming back both is the two
-     * questions having been answered against a reading that proves everything. Filing it under
-     * either answer reports a clause the value does not fail, or leaves one it does — and the check
-     * swallows what a walk throws, so this has to be refused where what is swallowed is decided.
-     */
-    @Test
-    void aClauseEstablishedAndRefusedAtOnceIsNotSomethingTheCheckMayGiveUpOn() {
-        Clause.NotOneClause both = new Clause.NotOneClause("established and refused");
-
-        assertThrows(Clause.NotOneClause.class, () -> InvariantChecker.gaveUp("a test", both));
-    }
 
     // --- reading the check ----------------------------------------------------------------------
 

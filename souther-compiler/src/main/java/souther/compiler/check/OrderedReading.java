@@ -75,6 +75,18 @@ final class OrderedReading implements ClauseReading<OrderedIntervals<FactSubject
         return new OrderedReading(terms, carriers);
     }
 
+    /**
+     * What each position's values are ordered on, for a reader putting a range together with a set
+     * of values.
+     *
+     * <p>The table this reading already worked out, handed on rather than built again. Which order a
+     * position is counted by is settled where its type is read, and a second table would be a second
+     * answer to that question.
+     */
+    Map<FactSubject, Carrier> carriers() {
+        return carriers;
+    }
+
     @Override
     public OrderedIntervals<FactSubject> nothingSaid() {
         return OrderedIntervals.top();

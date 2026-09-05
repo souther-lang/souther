@@ -155,8 +155,7 @@ class WhetherAPathIsReachedIsAskedOfEveryDomainTest {
         assertTrue(nothing.reachesNothing());
         assertFalse(nothing.numbers().isBottom(), "no domain was made to carry the argument");
         assertFalse(nothing.facts().isBottom());
-        assertFalse(nothing.constraints().values().isBottom());
-        assertFalse(nothing.constraints().ordered().isBottom());
+        assertFalse(nothing.constraints().confinement().holdsNothing());
         assertFalse(nothing.unguarded().constraints().isBottom(),
                 "it is the guards that cannot all hold, not the values that fail");
     }
@@ -179,17 +178,17 @@ class WhetherAPathIsReachedIsAskedOfEveryDomainTest {
         // clauses of a declaration are read, and never at the state's boundary.
         souther.compiler.values.Allowance<FactSubject> sets =
                 souther.compiler.values.AsACompilationAllows.forAdmittedValues();
-        return ConstraintState.<FactSubject>top().takingValuesRead(
+        return ConstraintState.<FactSubject>top().takingRead(Confinement.Worked.of(
                 AdmissibleValues.at(A_POSITION, ValueSet.just(Value.text("A")))
                         .meet(AdmissibleValues.at(A_POSITION, ValueSet.just(Value.text("B"))),
-                                sets), sets);
+                                sets), OrderedIntervals.top(), Map.of()), sets);
     }
 
     private static ConstraintState<FactSubject> orderedAtBottom() {
         return ConstraintState.<FactSubject>top()
                 .taking(OrderedIntervals.at(A_POSITION,
-                        new OrderedInterval(Endpoint.inclusive(Count.of(6)), null)))
+                        new OrderedInterval(Endpoint.inclusive(Count.of(6)), null)), Map.of())
                 .taking(OrderedIntervals.at(A_POSITION,
-                        new OrderedInterval(null, Endpoint.inclusive(Count.of(2)))));
+                        new OrderedInterval(null, Endpoint.inclusive(Count.of(2)))), Map.of());
     }
 }

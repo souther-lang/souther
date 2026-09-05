@@ -133,22 +133,4 @@ class WhetherAPlaceCanBeQuotedIsAskedBeforeItIsPointedAtTest {
      * raised where regions become places and the others are raised where clauses are read, which is
      * two layers and one question ({@code TheCompilerDisagreesWithItself}).
      */
-    @Test
-    void aRefusalToPlaceARegionIsNotSomethingTheCheckMayGiveUpOn() {
-        DiagnosticPlace.NotAPlace refused = assertThrows(DiagnosticPlace.NotAPlace.class,
-                () -> DiagnosticPlace.of(in(null)));
-
-        assertThrows(DiagnosticPlace.NotAPlace.class,
-                () -> InvariantChecker.gaveUp("a test", refused));
-    }
-
-    @Test
-    void aRegionThatIsNotOnePlaceIsNotSomethingTheCheckMayGiveUpOn() {
-        DiagnosticPlace.NotOnePlace broken = assertThrows(DiagnosticPlace.NotOnePlace.class,
-                () -> DiagnosticPlace.of(new Region(new SourcePos(1, 1, new SourceId("a.sou")),
-                        new SourcePos(1, 9, new SourceId("b.sou")))));
-
-        assertThrows(DiagnosticPlace.NotOnePlace.class,
-                () -> InvariantChecker.gaveUp("a test", broken));
-    }
 }

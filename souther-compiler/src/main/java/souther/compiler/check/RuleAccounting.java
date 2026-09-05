@@ -2,8 +2,10 @@ package souther.compiler.check;
 
 import souther.compiler.values.UnreadReason;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -258,8 +260,11 @@ public final class RuleAccounting {
          * .ReportedReason}'s. Two vocabularies with a projection between them is what keeps a
          * published word from reaching back into what a reading is allowed to record.
          *
-         * <p>In the order the parts of the clause were met, and each said once: two parts one limit
-         * stopped are one thing for a reader to lift.
+         * <p>Each said once: two parts one limit stopped are one thing for a reader to lift. In no
+         * order anybody may read as the author's — what is carried is a set of facts, and the order
+         * they come out in is the order they were met, which is kept so that one compiler over one
+         * source publishes one document and is asserted as nothing more. Which written place a
+         * reader is sent to first is the source's to say and is settled where a document is written.
          */
         default List<souther.compiler.inputs.BlockReason.AboutARule> stopped() {
             List<souther.compiler.inputs.BlockReason.AboutARule> out = new java.util.ArrayList<>();
@@ -281,19 +286,41 @@ public final class RuleAccounting {
         /**
          * The reading that turns a clause into a set of values.
          *
-         * <p>Everything it was stopped by, in the order the parts of the clause were met. One
-         * position is named by as many parts as the author wrote about it, and two of them stop
-         * this reading in two ways that are lifted by different work — so a single reason here is a
-         * choice among an author's rules, made where the only thing to choose by is which part came
-         * first.
+         * <p>Everything it was stopped by, as facts and not as an order. One position is named by
+         * as many parts as the author wrote about it, and two of them stop this reading in two ways
+         * that are lifted by different work — so a single reason here would be a choice among an
+         * author's rules, and each of these says the written place it was decided at instead.
+         *
+         * <p>The set is held in the order the facts were met, and that order is asserted of
+         * nothing: it is what keeps one compiler over one source publishing one document. What
+         * {@link #why()} answers with is a projection that loses the places, and where a reader is
+         * owed the author's order it is the source that is asked.
          */
-        record TheValueReadingSays(List<UnreadReason> why) implements Why {
+        record TheValueReadingSays(Set<RuleShortfall> shortfalls) implements Why {
 
             public TheValueReadingSays {
-                if (why == null || why.isEmpty()) {
+                if (shortfalls == null || shortfalls.isEmpty()) {
                     throw new IllegalArgumentException("a reading that stopped says why");
                 }
-                why = List.copyOf(why);
+                shortfalls = Collections.unmodifiableSet(new LinkedHashSet<>(shortfalls));
+            }
+
+            /**
+             * The reasons alone, for a reader that has no use for where they were decided.
+             *
+             * <p>The projection out of this and never what is held. Two choices of one rule each
+             * offering an alternative nothing could read leave the position open twice and are two
+             * things an author can look at; asked as reasons they are one, and which of the two a
+             * reader is sent to would be whichever the walk met first.
+             */
+            public List<UnreadReason> why() {
+                List<UnreadReason> out = new ArrayList<>();
+                shortfalls.forEach(each -> {
+                    if (!out.contains(each.why())) {
+                        out.add(each.why());
+                    }
+                });
+                return List.copyOf(out);
             }
         }
 

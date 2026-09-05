@@ -112,13 +112,20 @@ class ARowAtAnotherCaseStandsNowhereBelowItTest {
                 .then(field);
     }
 
+    /** What the walk came to, held to its having been taken first. */
+    private static List<ObservedValue> stood(WalkResult<List<ObservedValue>> walked) {
+        if (walked instanceof WalkResult.Reached(List<ObservedValue> values)) {
+            return values;
+        }
+        throw new AssertionError("the walk was taken: nothing went wrong with the row");
+    }
+
     /** The row that wrote the case stands at the positions under it. */
     @Test
     void aRowAtTheCaseStandsAtItsFields() {
         Read read = read();
-        List<ObservedValue> values = read.inputs().valuesAt(read.rows().get(0).inputs(),
-                under("example.q", "GlobalQuery", "tag"));
-        assertNotNull(values, "the walk was taken");
+        List<ObservedValue> values = stood(read.inputs().valuesAt(read.rows().get(0).inputs(),
+                under("example.q", "GlobalQuery", "tag")));
         assertEquals(1, values.size(), values.toString());
     }
 
@@ -131,9 +138,8 @@ class ARowAtAnotherCaseStandsNowhereBelowItTest {
     @Test
     void aRowAtAnotherCaseIsReadAndStandsNowhere() {
         Read read = read();
-        List<ObservedValue> values = read.inputs().valuesAt(read.rows().get(1).inputs(),
-                under("example.q", "GlobalQuery", "tag"));
-        assertNotNull(values, "the walk was taken: nothing went wrong with the row");
+        List<ObservedValue> values = stood(read.inputs().valuesAt(read.rows().get(1).inputs(),
+                under("example.q", "GlobalQuery", "tag")));
         assertEquals(List.of(), values, "and the row put nothing at a position it is not at");
     }
 
@@ -142,7 +148,8 @@ class ARowAtAnotherCaseStandsNowhereBelowItTest {
     void thePathAndTheDeclarationAgreeAtBothRows() {
         Read read = read();
         for (RowOutcome row : read.rows()) {
-            assertNotNull(read.inputs().occurrencesAt(row.inputs(),
+            assertInstanceOf(WalkResult.Reached.class,
+                    read.inputs().occurrencesAt(row.inputs(),
                             under("example.q", "FeedQuery", "limit")),
                     () -> "the walk was taken for " + row.inputs());
         }

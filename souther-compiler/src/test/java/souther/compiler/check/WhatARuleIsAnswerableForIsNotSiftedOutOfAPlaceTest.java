@@ -22,12 +22,12 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
  * <p>A position says what it was left holding and says it for every reason there is. Sifting those
  * for the ones a rule could be answerable for gives a list of reasons and no rule: an allowance is
  * the position's and every rule reaching it pays in, so what comes back is every rule that named the
- * place, standing in for the one that asked. That is the whole of what #1341 was.
+ * place, standing in for the one that asked.
  *
- * <p>The call site was closed and the sift was left behind — a method on a finished reading that did
- * exactly it, unused and one call away from putting it back. So what is held is the sift itself:
- * naming {@link souther.compiler.values.UnreadReason.About#A_RULE} is how a caller separates the two
- * kinds, and the places entitled to are counted.
+ * <p>Closing a call site leaves the sift behind — a method on a finished reading that does exactly
+ * it, unused and one call away from being put back. So what is held is the sift itself: naming
+ * {@link souther.compiler.values.UnreadReason.About#A_RULE} is how a caller separates the two kinds,
+ * and the places entitled to are counted.
  *
  * <p><b>A tripwire and not a proof.</b> A second sift written inside one of the files below passes
  * this, and so does one written without naming the classification. What it stops is the shape that
@@ -40,15 +40,16 @@ class WhatARuleIsAnswerableForIsNotSiftedOutOfAPlaceTest {
      * Where the two kinds may be told apart, and why each is entitled to.
      *
      * <p>{@code UnreadReason} is the classification itself. {@code Unbuilt} makes the two facts and
-     * refuses a reason of the wrong kind in either. {@code ReadingEvidence} and {@code BlockReason}
+     * refuses a reason of the wrong kind in either. {@code BlockReason} and {@code RuleShortfall}
      * refuse rather than sift: a reason no rule is answerable for is turned away where it would have
-     * been filed under one. {@code StatedByClauses} is the one place a sift is right, and what it
-     * sifts is a part's own record of its own reading — not a place's reasons, which is the
-     * difference this is about.
+     * been filed under one, so what is filed is of the right kind by having been made at all.
+     *
+     * <p>Nowhere reads it to answer with. What a rule is answerable for is made where the asking
+     * is and handed on as {@code RuleShortfall}, and a reading with one in hand has the answer
+     * rather than a place to sift for it.
      */
     private static final Set<String> ENTITLED = Set.of(
-            "UnreadReason.java", "Unbuilt.java", "ReadingEvidence.java", "BlockReason.java",
-            "StatedByClauses.java");
+            "UnreadReason.java", "Unbuilt.java", "BlockReason.java", "RuleShortfall.java");
 
     @Test
     void onlyTheseTellTheTwoKindsApart() throws IOException {

@@ -1,6 +1,5 @@
 package souther.compiler.check;
 
-import souther.compiler.numeric.OrderedIntervals;
 import souther.compiler.values.AdmissibleValues;
 
 import java.util.LinkedHashSet;
@@ -33,9 +32,14 @@ import java.util.Set;
  * ({@code OfAPart.aboutARule}, filled by routing a shortfall to the part that asked for the machine
  * it names), and there is nothing here that turns a place's reasons back into an account of a rule.
  */
-record ReadByClauses(AdmissibleValues<FactSubject> values, OrderedIntervals<FactSubject> ordered,
+record ReadByClauses(Confinement.Worked<FactSubject> confinement,
                      Adoption<FactSubject> byValues, Adoption<FactSubject> byOrder,
                      java.util.Map<souther.compiler.core.Core, OfAPart> parts) {
+
+    /** What every position of this reading may hold. */
+    AdmissibleValues<FactSubject> values() {
+        return confinement.values();
+    }
 
     /**
      * What one rule came to on its own tree, once every branch of the value is decided.
@@ -75,7 +79,11 @@ record ReadByClauses(AdmissibleValues<FactSubject> values, OrderedIntervals<Fact
      * branch this declaration has already dropped — and would pay for machines the whole answer
      * never needed to find out.
      *
-     * @param aboutARule what a rule of this part is answerable for, per position
+     * @param aboutARule what a rule of this part is answerable for, each saying the written place
+     *                   the reading decided it at. Not sifted out of what the positions were left
+     *                   holding: a place holds the reasons of every rule that reached it and names
+     *                   none of them, so what came back from sifting it was a list of reasons and
+     *                   no clause
      * @param aboutStrings which strings this part admits at each position it states a rule about.
      *                     Beside the adoptions and not among them: what a part took a position in
      *                     at is what the readings settled, and this is what the clause states — a
@@ -88,8 +96,7 @@ record ReadByClauses(AdmissibleValues<FactSubject> values, OrderedIntervals<Fact
      *                     what the model admits at a position, made by whoever asked second
      */
     record OfAPart(Adoption<FactSubject> byValues, Adoption<FactSubject> byOrder,
-                   java.util.Map<FactSubject,
-                           java.util.List<souther.compiler.values.UnreadReason>> aboutARule,
+                   Set<RuleShortfall> aboutARule,
                    java.util.Map<FactSubject, AdmittedStrings> aboutStrings) {
 
         /** The positions some reading took the whole of this part in at. */
@@ -150,16 +157,6 @@ record ReadByClauses(AdmissibleValues<FactSubject> values, OrderedIntervals<Fact
             }
         });
         return out;
-    }
-
-    /**
-     * Whether nothing satisfies what has been read.
-     *
-     * <p>Either language, because each can hold the whole answer on its own: what one of them
-     * cannot express it leaves alone.
-     */
-    boolean holdsNothing() {
-        return values.isBottom() || ordered.isBottom();
     }
 
     /**

@@ -1952,13 +1952,25 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         return said.isEmpty() ? "" : ", and " + String.join(", and ", said);
     }
 
-    /** What one reading met at a border instead of a number, in the reading's own words. */
-    private static String atTheBorder(ReadingGap why) {
+    /**
+     * What one reading met at a border instead of a number, in the reading's own words.
+     *
+     * <p>Where the reasons stay apart. Several of them weaken a document the same way and are one
+     * word to the vocabulary that sorts on that; a reader is still owed which of them happened, and
+     * this is what says it. So it is open to the census that holds every reason to a sentence
+     * nothing else writes.
+     */
+    static String atTheBorder(ReadingGap why) {
         return switch (why) {
             case ReadingGap.Observation(Incompleteness.Code code) -> whatStopped(code);
             // Nothing was observed here, so nothing about an observation is said. What a reader is
             // owed is that no value arrived at all, which no budget would have changed.
             case ReadingGap.NoValue _ -> "the walk reached no value there to read";
+            // And where nothing was looked at, what a reader is owed is that the position was never
+            // read -- said the way it happened, since "no value there" is a claim about the row and
+            // nothing here found anything out about one.
+            case ReadingGap.CouldNotWalk _ -> "the walk to that position could not be taken";
+            case ReadingGap.CouldNotReadRow _ -> "no row came back to read there";
         };
     }
 
@@ -3836,6 +3848,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             case Weakening.BorderValueUnreadable it -> switch (it.why()) {
                 case ReadingGap.Observation _ -> WeakeningWord.BORDER_VALUE_UNREADABLE;
                 case ReadingGap.NoValue _ -> WeakeningWord.BORDER_VALUE_ABSENT;
+                // One word, and the reason underneath keeps which of the two it was. A position
+                // that was read and holds nothing is news about the row; neither of these is, and a
+                // reader weighing the document acts on both the same way.
+                case ReadingGap.CouldNotWalk _, ReadingGap.CouldNotReadRow _ ->
+                        WeakeningWord.BORDER_OBSERVATION_UNAVAILABLE;
             };
             case Weakening.ModelReadingIncomplete it -> switch (it.cause()) {
                 case ClosureGap.PositionNotReachedInto _ ->

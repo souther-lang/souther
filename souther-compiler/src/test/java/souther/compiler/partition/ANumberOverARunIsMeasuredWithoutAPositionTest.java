@@ -154,15 +154,15 @@ class ANumberOverARunIsMeasuredWithoutAPositionTest {
         return new BorderQuantity.Observation() {
 
             @Override
-            public ObservedValue at(TermPath path) {
+            public WalkResult<ObservationAtPoint> at(TermPath path) {
                 throw new AssertionError("a number over a run is not read from one value, and"
                         + " asking for one is the defect this term exists to stop");
             }
 
             @Override
-            public List<ObservedValue> everyValueAt(TermPath path) {
+            public WalkResult<List<ObservedValue>> everyValueAt(TermPath path) {
                 assertEquals(UNDER, path, "read from where the run says its values are");
-                return values;
+                return WalkResult.reached(values);
             }
         };
     }

@@ -35,6 +35,21 @@ public enum Emptiness {
     }
 
     /**
+     * What two that have to hold together come to.
+     *
+     * <p>Nothing is admitted where either admits nothing, and something where both admit something.
+     * Where one is settled that something is admitted and the other is not known, the two together
+     * are what the second one is — which is not known either, since what each of them says is about
+     * a different part of the same value.
+     */
+    public Emptiness met(Emptiness other) {
+        if (this == EMPTY || other == EMPTY) {
+            return EMPTY;
+        }
+        return this == NONEMPTY && other == NONEMPTY ? NONEMPTY : UNDECIDED;
+    }
+
+    /**
      * What a choice between two comes to.
      *
      * <p>Something is admitted where either side admits something, and nothing where both admit

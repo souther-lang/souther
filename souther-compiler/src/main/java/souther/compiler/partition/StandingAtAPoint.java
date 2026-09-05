@@ -119,15 +119,10 @@ public final class StandingAtAPoint {
             Set<ReadingGap> stopped = new java.util.LinkedHashSet<>();
             for (OneReadingOfARow reading : readings(where, one, quantity, criterion, first, held)) {
                 switch (quantity.standsAt(criterion, reading)) {
-                    // A reading that could not look, unless what it could not find was an element
-                    // the row wrote none of — that is a row that was read and does not stand, and
-                    // said of the reading it happened in rather than of the row, since another
-                    // reading of the same row may reach the point.
-                    case BorderQuantity.Stands.CouldNotTell it -> {
-                        if (!reading.wroteNothing()) {
-                            stopped.addAll(it.why());
-                        }
-                    }
+                    // A reading that could not look. What the row wrote nothing at is not among
+                    // these: the quantity answers for the row there, since it is the quantity that
+                    // knows whether a position it wrote nothing at leaves it a value.
+                    case BorderQuantity.Stands.CouldNotTell it -> stopped.addAll(it.why());
                     case BorderQuantity.Stands.No _ -> { }
                     case BorderQuantity.Stands.Yes _ -> stands = true;
                 }
@@ -185,7 +180,6 @@ public final class StandingAtAPoint {
         private final Map<TermPath, Integer> chosen;
         /** How many elements each step was found to have, over every reading so far. */
         private final Map<TermPath, Integer> held;
-        private boolean wroteNothing;
 
         OneReadingOfARow(BehaviorInputs where, ObservedInputs observedInputs,
                          Map<TermPath, Integer> chosen,
@@ -197,30 +191,37 @@ public final class StandingAtAPoint {
         }
 
         @Override
-        public ObservedValue at(TermPath path) {
-            List<BehaviorInputs.Occurrence> values = where.occurrencesAt(observedInputs.inputs(), path);
-            if (values == null) {
-                return null;   // the walk and the type disagree, which is the quantity's to report
-            }
+        public WalkResult<ObservationAtPoint> at(TermPath path) {
+            // Over the arms, so that a walk coming to answer a third way is one this has to be
+            // taught about rather than one quietly read as a walk that could not be made.
+            return switch (where.occurrencesAt(observedInputs.inputs(), path)) {
+                // The walk and the type disagree, which is the quantity's to report.
+                case WalkResult.CouldNotWalk<List<BehaviorInputs.Occurrence>> _ ->
+                        WalkResult.couldNotWalk();
+                case WalkResult.Reached(List<BehaviorInputs.Occurrence> values) ->
+                        WalkResult.reached(standingAmong(values));
+            };
+        }
+
+        /** Which of the row's answers this reading gets at a position the walk arrived at. */
+        private ObservationAtPoint standingAmong(List<BehaviorInputs.Occurrence> values) {
             if (values.isEmpty()) {
-                // The row wrote no element here, so nothing of it stands anywhere on this line.
-                // That is a row that was read and does not reach the point, and reporting it as a
-                // value nothing could read leaves the point undecided over a row that plainly
-                // settles it.
-                wroteNothing = true;
-                return null;
+                // The row wrote no element here, which is a row that was read. What that leaves a
+                // quantity is the quantity's to say, and it says it where it knows what the
+                // position is worth to the number it is reading.
+                return ObservationAtPoint.WROTE_NOTHING;
             }
             for (BehaviorInputs.Occurrence each : values) {
                 each.at().forEach((step, ordinal) -> held.merge(step, ordinal + 1, Math::max));
             }
             for (BehaviorInputs.Occurrence each : values) {
                 if (agrees(each)) {
-                    return each.value();
+                    return new ObservationAtPoint.Value(each.value());
                 }
             }
             // No value here under this reading. Not a stop: the reading names an element this
             // position does not have, and another reading is where its values are.
-            return null;
+            return ObservationAtPoint.ANOTHER_READING;
         }
 
         /**
@@ -235,9 +236,9 @@ public final class StandingAtAPoint {
          * written nothing here: it wrote a container, and what it holds is none.
          */
         @Override
-        public List<ObservedValue> everyValueAt(TermPath path) {
-            // Null where the walk and the type disagree, which is the quantity's to report, as it
-            // is for the one value a place holds.
+        public WalkResult<List<ObservedValue>> everyValueAt(TermPath path) {
+            // The walk's own answer handed on, which is the quantity's to report where it could not
+            // be taken, as it is for the one value a place holds.
             return where.valuesAt(observedInputs.inputs(), path);
         }
 
@@ -250,11 +251,6 @@ public final class StandingAtAPoint {
                 }
             }
             return true;
-        }
-
-        /** Whether the row wrote nothing at some position this line is over. */
-        boolean wroteNothing() {
-            return wroteNothing;
         }
     }
 

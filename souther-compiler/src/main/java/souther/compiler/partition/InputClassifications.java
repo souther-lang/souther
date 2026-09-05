@@ -88,11 +88,19 @@ public final class InputClassifications {
      */
     private static Classification classify(List<ObservedValue> inputs, BehaviorInputs where,
                                            Axis axis) {
-        List<BehaviorInputs.Occurrence> values = where.occurrencesAt(inputs, axis.path());
-        if (values == null) {
-            return Classification.unreadable(Incompleteness.Code.VALUE_UNREADABLE,
-                    axis.id().behavior(), axis.id().term());
-        }
+        // Over the arms, so a walk that comes to answer a third way is one this is taught about
+        // rather than one folded into the word for a walk that could not be made.
+        return switch (where.occurrencesAt(inputs, axis.path())) {
+            case WalkResult.CouldNotWalk<List<BehaviorInputs.Occurrence>> _ ->
+                    Classification.unreadable(Incompleteness.Code.VALUE_UNREADABLE,
+                            axis.id().behavior(), axis.id().term());
+            case WalkResult.Reached(List<BehaviorInputs.Occurrence> values) ->
+                    among(axis, values);
+        };
+    }
+
+    /** Where each value the walk arrived at falls, and what stopped any that nothing could read. */
+    private static Classification among(Axis axis, List<BehaviorInputs.Occurrence> values) {
         // Every value here, the class it is in, and the element it came from. One value at most
         // positions; as many as were written at a position inside a sequence, where they need not
         // fall together — and where one of them being unreadable leaves the classes the others
