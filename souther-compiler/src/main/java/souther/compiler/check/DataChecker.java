@@ -866,7 +866,7 @@ public final class DataChecker {
                                                  SourcePos pos, CheckContext ctx) {
         Map<String, Type> shared =
                 TypeView.of(Type.ref(sum.declares()), ctx.symbols()).shape() instanceof Shape.Sum s
-                        ? ReadableFields.of(s).fields() : Map.of();
+                        ? ReadableFields.of(s).declaredFields() : Map.of();
         if (shared.isEmpty()) {
             throw CompileException.of(Diagnostic.at(pos)
                     .say(new DataMessage.SpreadOfASumWhoseCasesShareNothing(name, Type.show(bound)))

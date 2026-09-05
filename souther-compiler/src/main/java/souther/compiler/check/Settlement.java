@@ -74,13 +74,47 @@ record Settlement(Realized<FactSubject> made, OrderedIntervals<FactSubject> orde
      * the reason nobody knows, or the account would call a position open where the truth is that
      * nothing looked. Read only where the aggregate stays {@link Emptiness#UNDECIDED}; a branch
      * shown live somewhere needs no excuse, and a branch dead everywhere takes its reasons with it.
+     *
+     * <p><b>Two halves and not one map, because they are routed and not distributed alike.</b> What
+     * the answer at a position was short of holds of every rule whose question waited on that
+     * answer, so it goes to each of them. What a machine somebody's pattern asked for was refused
+     * for holds of the pattern that asked and of nothing else — every rule reaching a position pays
+     * into one allowance, so a place cannot say which of them asked, and a half that travelled as a
+     * position's reasons was read back as every rule's.
+     *
+     * <p>So there is no map here holding both. A position's own account is that projection
+     * ({@link #asPositionStanding()}) and is made where a position is being described; nothing
+     * builds an account of a rule out of it, which is the direction the loss runs in.
      */
-    record Sided(Emptiness emptiness, Map<FactSubject, List<UnreadReason>> standing,
+    record Sided(Emptiness emptiness, Map<FactSubject, List<UnreadReason>> answerStanding,
+                 Set<souther.compiler.values.Unbuilt.RuleShortfall<FactSubject>> ruleShortfalls,
                  Set<FactSubject> unbuilt) {
 
         /** A branch nobody has probed yet, which everything joins onto. */
         static Sided settledAs(Emptiness emptiness) {
-            return new Sided(emptiness, Map.of(), Set.of());
+            return new Sided(emptiness, Map.of(), Set.of(), Set.of());
+        }
+
+        /**
+         * What the position was left with, which is both halves said of the place.
+         *
+         * <p>The one direction that is allowed. A position is as wide as it is because a machine
+         * was refused and because an answer was not built, and a reader of the place is owed both —
+         * what is dropped on the way is which written thing asked, which is a fact about a rule and
+         * not about the place. Read the other way, this is where the account of a rule came to be
+         * built out of a place's reasons.
+         */
+        Map<FactSubject, List<UnreadReason>> asPositionStanding() {
+            Map<FactSubject, List<UnreadReason>> out =
+                    new java.util.LinkedHashMap<>(answerStanding);
+            ruleShortfalls.forEach(each -> out.merge(each.at(), List.of(each.why()),
+                    ReadByClauses::alsoSaying));
+            // Said in the vocabulary's declared order, as a joined side is. The two halves are put
+            // together here and each arrived in its own, so a place holding one of each would come
+            // out in the order this happened to append them — which is an order of this method's
+            // and not one a reader is promised.
+            out.replaceAll((_, reasons) -> reasons.stream().sorted().toList());
+            return out;
         }
 
         /**
@@ -96,9 +130,18 @@ record Settlement(Realized<FactSubject> made, OrderedIntervals<FactSubject> orde
             Set<FactSubject> gaveUp = new java.util.LinkedHashSet<>(unbuilt);
             gaveUp.addAll(other.unbuilt());
             Map<FactSubject, List<UnreadReason>> why = new java.util.LinkedHashMap<>();
-            ReadByClauses.alsoSaying(standing, other.standing()).forEach((position, reasons) ->
-                    why.put(position, reasons.stream().sorted().toList()));
-            return new Sided(emptiness.joined(other.emptiness()), why, gaveUp);
+            ReadByClauses.alsoSaying(answerStanding, other.answerStanding())
+                    .forEach((position, reasons) ->
+                            why.put(position, reasons.stream().sorted().toList()));
+            // And the other half as a union, which is what this half is: a shortfall is one fact
+            // about one pattern at one position, so two copies of one are one and two are two.
+            // Held in the order the copies were met, a branch's aggregate would say which copy was
+            // settled first, and the class above promises that it cannot.
+            Set<souther.compiler.values.Unbuilt.RuleShortfall<FactSubject>> asked =
+                    new java.util.LinkedHashSet<>(ruleShortfalls);
+            asked.addAll(other.ruleShortfalls());
+            return new Sided(emptiness.joined(other.emptiness()), why,
+                    java.util.Collections.unmodifiableSet(asked), gaveUp);
         }
     }
 }

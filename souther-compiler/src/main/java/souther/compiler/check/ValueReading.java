@@ -101,7 +101,7 @@ sealed interface ValueReading {
 
         @Override
         public Map<String, Type> named() {
-            return readable.fields();
+            return readable.declaredFields();
         }
     }
 

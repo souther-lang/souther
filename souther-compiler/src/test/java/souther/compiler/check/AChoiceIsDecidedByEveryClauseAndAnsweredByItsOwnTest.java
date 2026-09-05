@@ -175,11 +175,12 @@ class AChoiceIsDecidedByEveryClauseAndAnsweredByItsOwnTest {
         StatedByClauses.Part read = new StatedByClauses.Part(
                 new Adoption<>(java.util.Set.of(CONSTRAINED), java.util.Set.of(SETTLED),
                         java.util.Set.of(), false),
-                Adoption.nothing(), Map.of(), Map.of());
+                Adoption.nothing(), Map.of(), Map.of(), java.util.Set.of());
         StatedByClauses.Part unread = new StatedByClauses.Part(
                 new Adoption<>(java.util.Set.of(), java.util.Set.of(), java.util.Set.of(UNREAD),
                         true),
-                Adoption.nothing(), Map.of(UNREAD, List.of(UnreadReason.FORM_NOT_READ)), Map.of());
+                Adoption.nothing(), Map.of(UNREAD, List.of(UnreadReason.FORM_NOT_READ)), Map.of(),
+                java.util.Set.of());
 
         assertEquals(Map.of(UNREAD, List.of(UnreadReason.FORM_NOT_READ),
                         CONSTRAINED, List.of(UnreadReason.ALTERNATIVE_NOT_READ)),
@@ -198,16 +199,30 @@ class AChoiceIsDecidedByEveryClauseAndAnsweredByItsOwnTest {
      */
     @Test
     void aFateAggregatesTheSameWhicheverOccurrenceComesFirst() {
+        // Two of the same half, which is where an order could reach the answer. A pair of
+        // shortfalls held in the order the copies were met would come out one way round from one
+        // side and the other way round from the other, and the aggregate of a branch would be a
+        // fact about which copy was settled first.
         Settlement.Sided one = new Settlement.Sided(
-                souther.compiler.values.Emptiness.UNDECIDED,
-                Map.of(UNREAD, List.of(UnreadReason.PATTERN_TOO_COSTLY)), java.util.Set.of());
+                souther.compiler.values.Emptiness.UNDECIDED, Map.of(),
+                java.util.Set.of(new souther.compiler.values.Unbuilt.RuleShortfall<>(UNREAD,
+                        aPattern("a{300}"), UnreadReason.PATTERN_TOO_COSTLY)),
+                java.util.Set.of());
         Settlement.Sided other = new Settlement.Sided(
-                souther.compiler.values.Emptiness.UNDECIDED,
-                Map.of(UNREAD, List.of(UnreadReason.EXACT_VALUES_TOO_COSTLY)),
+                souther.compiler.values.Emptiness.UNDECIDED, Map.of(),
+                java.util.Set.of(new souther.compiler.values.Unbuilt.RuleShortfall<>(UNREAD,
+                        aPattern("b{300}"), UnreadReason.PATTERN_TOO_COSTLY)),
                 java.util.Set.of());
 
         assertEquals(one.alsoSeen(other), other.alsoSeen(one),
                 "one branch, one aggregate, whichever copy was settled first");
+    }
+
+    /** The pattern a rule would have this compiler build, as a plan. */
+    private static souther.compiler.regex.PatternPlan aPattern(String regex) {
+        return souther.compiler.regex.PatternPlan.of(
+                ((souther.compiler.regex.PatternRead.Read)
+                        souther.compiler.regex.PatternParser.read(regex)).syntax());
     }
 
     /** Every question of every rule that nothing answered, and what stopped this reading of it. */

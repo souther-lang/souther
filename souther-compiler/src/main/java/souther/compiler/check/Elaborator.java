@@ -471,32 +471,21 @@ public final class Elaborator {
     static Core elaborateFieldAccess(Hir.FieldAccess fa, Scope env, CheckContext ctx) {
         Core targetCore = elaborate(fa.target(), env, ctx);
         Type target = targetCore.type();
-        if (target instanceof Type.Ref ref && ctx.symbols().declaredNode(ref.name()) instanceof Hir.Data owner) {
-            Type ft = TypeOps.fieldType(owner, fa.field(), ctx.symbols());
-            if (ft != null) {
-                return new Core.FieldAccess(targetCore, fa.field(), ft, fa.pos());
-            }
+        // What a `.` may name here, asked of the one reader of it: a record's own fields, a name
+        // every case of a sum spreads, and a newtype's `value` and nothing of what it wraps. Which
+        // of those this position is, and how far the names it wears come off, are answered there —
+        // an elaboration deciding either for itself is a second reading of a field access, and the
+        // reading a text is typed by and the reading an editor is told would then be two.
+        Type read = fieldRead(ctx).of(target, fa.field());
+        if (read != null) {
+            return new Core.FieldAccess(targetCore, fa.field(), read, fa.pos());
         }
-        // Asked of a sum only. What a type is made of answers for anything — a data that is no sum
-        // is the one atom it is — and the question here is whether there are cases to read at all,
-        // which a type that is its own single leaf is not.
+        // Nothing is readable, and what is left here is saying so. Asked of a sum only: what a type
+        // is made of answers for anything — a data that is no sum is the one atom it is — and the
+        // question is whether there are cases the author could open, which a type that is its own
+        // single leaf has not.
         if (TypeOps.isSumType(target, ctx.symbols())) {
             List<TypeSymbol> cases = AtomSpace.subjectAtoms(target, ctx.symbols());
-            // A field every case spreads is the sum's own: the sharing is nominal, and the generated
-            // sealed interface declares the accessor its cases already carry (issue #160). Only a
-            // named sum, whose interface this compile emits — an anonymous union's cases are not
-            // written together, so nothing declares their shared part.
-            // Asked of the type as written and not through the names it wears: how far a read looks
-            // through a newtype is this elaboration's policy, and a `data X = S` over a sum is a
-            // value of X, whose fields are X's. `TypeView` keeps both directions available for that
-            // reason, and this reader takes the one it has always taken.
-            TypeView view = TypeView.of(target, ctx.symbols());
-            if (!view.isWrapped() && view.shape() instanceof Shape.Sum shape) {
-                Type readable = ReadableFields.of(shape).fields().get(fa.field());
-                if (readable != null) {
-                    return new Core.FieldAccess(targetCore, fa.field(), readable, fa.pos());
-                }
-            }
             // A sum carries no fields of its own — its cases do, and which case it is is not known
             // until it is opened. Saying that is the difference between "this value has no such
             // field" and "read it in each case", which is what the author has to write.
@@ -521,6 +510,14 @@ public final class Elaborator {
         }
         throw CompileException.of(Diagnostic
                         .at(fa.name().reportedAt()).say(new DeclarationMessage.CannotReadAFieldOnThisValue(fa.field())).build());
+    }
+
+    /** What a {@code .} may name, in the world an elaboration reads: the declarations as this text
+     *  has resolved them, which is what a check settling them has to go on — and refusing where one
+     *  of them does not read, which a check is what reports. */
+    private static FieldRead fieldRead(CheckContext ctx) {
+        return new FieldRead(ctx.symbols(), new ResolvedFieldTypes(ctx.symbols()),
+                FieldRead.Unreadable.REFUSED);
     }
 
     /**
