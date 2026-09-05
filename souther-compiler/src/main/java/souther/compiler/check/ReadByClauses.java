@@ -1,9 +1,6 @@
 package souther.compiler.check;
 
-import souther.compiler.numeric.OrderedIntervals;
 import souther.compiler.values.AdmissibleValues;
-import souther.compiler.values.Allowance;
-import souther.compiler.values.Emptiness;
 
 import java.util.LinkedHashSet;
 import java.util.Set;
@@ -35,10 +32,14 @@ import java.util.Set;
  * ({@code OfAPart.aboutARule}, filled by routing a shortfall to the part that asked for the machine
  * it names), and there is nothing here that turns a place's reasons back into an account of a rule.
  */
-record ReadByClauses(AdmissibleValues<FactSubject> values, OrderedIntervals<FactSubject> ordered,
+record ReadByClauses(Confinement.Worked<FactSubject> confinement,
                      Adoption<FactSubject> byValues, Adoption<FactSubject> byOrder,
-                     java.util.Map<souther.compiler.core.Core, OfAPart> parts)
-        implements Confinement<FactSubject> {
+                     java.util.Map<souther.compiler.core.Core, OfAPart> parts) {
+
+    /** What every position of this reading may hold. */
+    AdmissibleValues<FactSubject> values() {
+        return confinement.values();
+    }
 
     /**
      * What one rule came to on its own tree, once every branch of the value is decided.
@@ -153,26 +154,6 @@ record ReadByClauses(AdmissibleValues<FactSubject> values, OrderedIntervals<Fact
             }
         });
         return out;
-    }
-
-    /**
-     * What the values leave here, which is whether any alternative stands at all.
-     *
-     * <p>Nothing is asked of the order at a position, and that is the account's rule rather than a
-     * gap: a set of values and a range share a value or they do not, and finding out takes a machine
-     * — which is the budget the answer is bounded by, spent to say what a rule adopted. So this
-     * declines to claim what nothing already established, which is the direction an account has to
-     * fail in.
-     */
-    @Override
-    public Emptiness ofTheValues() {
-        return values.anyAlternativeAdmits((_, _) -> Emptiness.NONEMPTY);
-    }
-
-    /** The same. Nothing here builds, so what was already built is all there is. */
-    @Override
-    public Emptiness ofTheValuesAlreadyBuilt(Allowance<FactSubject> by) {
-        return ofTheValues();
     }
 
     /**

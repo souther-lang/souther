@@ -104,8 +104,8 @@ class WhetherAValueExistsIsAskedOfEveryDomainTest {
         assertFalse(setBesideARangeItIsOutside().numbers().isBottom(),
                 "and neither half of it holds nothing on its own");
         assertFalse(setBesideARangeItIsOutside().facts().isBottom());
-        assertFalse(setBesideARangeItIsOutside().confinement().ordered()
-                .at(A_POSITION).holdsNothing());
+        assertFalse(setBesideARangeItIsOutside().confinement().holdingNothing()
+                .contains(A_POSITION));
         assertEquals(ValueSet.just(Value.text("A")),
                 setBesideARangeItIsOutside().values().at(A_POSITION));
     }
@@ -135,10 +135,10 @@ class WhetherAValueExistsIsAskedOfEveryDomainTest {
         // clauses of a declaration are read, and never at the state's boundary.
         souther.compiler.values.Allowance<FactSubject> sets =
                 souther.compiler.values.AsACompilationAllows.forAdmittedValues();
-        return ConstraintState.<FactSubject>top().takingValuesRead(
+        return ConstraintState.<FactSubject>top().takingRead(Confinement.Worked.of(
                 AdmissibleValues.at(A_POSITION, ValueSet.just(Value.text("A")))
                         .meet(AdmissibleValues.at(A_POSITION, ValueSet.just(Value.text("B"))),
-                                sets), sets);
+                                sets), OrderedIntervals.top(), Map.of()), sets);
     }
 
     private static ConstraintState<FactSubject> orderedAtBottom() {
@@ -153,12 +153,11 @@ class WhetherAValueExistsIsAskedOfEveryDomainTest {
     private static ConstraintState<FactSubject> setBesideARangeItIsOutside() {
         souther.compiler.values.Allowance<FactSubject> sets =
                 souther.compiler.values.AsACompilationAllows.forAdmittedValues();
-        return ConstraintState.<FactSubject>top()
-                .takingValuesRead(
-                        AdmissibleValues.at(A_POSITION, ValueSet.just(Value.text("A"))), sets)
-                .taking(OrderedIntervals.at(A_POSITION, new OrderedInterval(
-                                Endpoint.inclusive(souther.compiler.numeric.Text.of("B")), null)),
-                        Map.of(A_POSITION, Carrier.TEXT));
+        return ConstraintState.<FactSubject>top().takingRead(Confinement.Worked.of(
+                AdmissibleValues.at(A_POSITION, ValueSet.just(Value.text("A"))),
+                OrderedIntervals.at(A_POSITION, new OrderedInterval(
+                        Endpoint.inclusive(souther.compiler.numeric.Text.of("B")), null)),
+                Map.of(A_POSITION, Carrier.TEXT)), sets);
     }
 
     private static ConstraintState<FactSubject> shownAtBottom() {

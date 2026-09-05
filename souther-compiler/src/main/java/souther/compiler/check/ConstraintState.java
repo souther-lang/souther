@@ -56,12 +56,12 @@ import java.util.Set;
  * happened to ask had nothing to say.
  */
 public record ConstraintState<A>(NumericDomain<A> numbers, PredicateFacts<A> facts,
-                                 Confinement.OfAConjunction<A> confinement, boolean shown) {
+                                 Confinement.Conjoined<A> confinement, boolean shown) {
 
     /** Nothing taken in, so nothing ruled out. */
     public static <A> ConstraintState<A> top() {
         return new ConstraintState<>(NumericDomain.top(), PredicateFacts.none(),
-                Confinement.OfAConjunction.top(), false);
+                Confinement.Conjoined.top(), false);
     }
 
     /**
@@ -140,7 +140,7 @@ public record ConstraintState<A>(NumericDomain<A> numbers, PredicateFacts<A> fac
         // a state the numbers refuse is refused by the numbers, whatever the sets and the ranges
         // leave beside them.
         boolean onlyTogether = confinement.holdNothingOnlyTogether();
-        Set<A> empty = confinement.ordered().holdingNothing();
+        Set<A> empty = confinement.holdingNothing();
         Set<A> outside = onlyTogether ? confinement.sharingNothingAt() : Set.of();
         Emptiness placed = null;
         for (Map.Entry<A, Emptiness.AtAField.Where> each : positions.entrySet()) {
@@ -249,27 +249,9 @@ public record ConstraintState<A>(NumericDomain<A> numbers, PredicateFacts<A> fac
      * conjunctions firing on a side that read nothing, and lifting it is about which rules went
      * unread rather than about how the alternatives are held.
      */
-    ConstraintState<A> takingValuesRead(AdmissibleValues<A> read,
-                                        souther.compiler.values.Allowance<A> sets) {
-        // The allowance the reading was worked out under, and not a fresh one. What this state
-        // holds is that reading, and what a later reader builds out of it is more of the same
-        // answer at the same positions — given an allowance of its own, a position would be allowed
-        // its machine again for every phase that touched it, and the bound would be on a phase
-        // rather than on what the model is finally told.
-        // Said once, and what stands here until it is said is what nothing read leaves. Saying it
-        // twice would keep the second reading and drop the first without a word, which is the one
-        // way this can be got wrong now that it cannot combine two of them. An assertion because a
-        // throw would be caught by the fail-open around the reading and leave it silently dropped.
-        assert !confinement.values().hasReadings()
-                : "the values of a state are read once, and these were read over "
-                        + confinement.values();
-        // The reading met with what nothing read leaves, and then held as a conjunction of one.
-        // Met and not assigned, which is not the same answer, and the difference is a reading of one
-        // declaration's clauses — so it is worked out here and the conjunction takes what it comes
-        // to. Written the other way round, a factor would be a reading nobody had met with top.
-        return new ConstraintState<>(numbers, facts, confinement.withValues(
-                ConjoinedAdmissibleValues.of(AdmissibleValues.<A>top().meet(read, sets), sets)),
-                shown);
+    ConstraintState<A> takingRead(Confinement.Worked<A> read,
+                                  souther.compiler.values.Allowance<A> sets) {
+        return new ConstraintState<>(numbers, facts, confinement.taking(read, sets), shown);
     }
 
     /**

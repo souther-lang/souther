@@ -1,9 +1,6 @@
 package souther.compiler.check;
 
-import souther.compiler.numeric.OrderedIntervals;
-import souther.compiler.values.Allowance;
-import souther.compiler.values.Emptiness;
-import souther.compiler.values.PlannedValues;
+import java.util.Map;
 
 /**
  * What every clause of one value says between them, with the choices still open.
@@ -23,35 +20,14 @@ import souther.compiler.values.PlannedValues;
  */
 sealed interface StatedTogether {
 
-    /** What the clauses reaching here leave, in both languages. */
-    record Said(PlannedValues<FactSubject> values, OrderedIntervals<FactSubject> ordered)
-            implements StatedTogether, Confinement<FactSubject> {
-
-        /**
-         * What the values leave, as far as that is settled without building anything.
-         *
-         * <p>A description of what a position admits is not a set, so the alternatives cannot be
-         * asked where their positions stop: which strings a pattern names is a machine somebody has
-         * to make, and making one here is the work this reading exists to put off. What is settled
-         * before that — a description that already says it admits nothing — is settled, and the rest
-         * waits.
-         */
-        @Override
-        public Emptiness ofTheValues() {
-            return values.emptiness();
-        }
-
-        /**
-         * The same, out of what was built for the positions rather than by building.
-         *
-         * <p>A description settled empty is settled whoever asks; where it is not, what stands is
-         * whatever the answer being put together has already worked out at those positions.
-         */
-        @Override
-        public Emptiness ofTheValuesAlreadyBuilt(Allowance<FactSubject> by) {
-            return values.holdsNothingAsBuilt(by) ? Emptiness.EMPTY : Emptiness.UNDECIDED;
-        }
-    }
+    /**
+     * What the clauses reaching here leave, in both languages.
+     *
+     * <p>One field and not two. Which values a position may take and where its order stops are one
+     * answer, and a reader holding them apart is a reader that can ask each of them whether anything
+     * satisfies the rules — which is what read a branch nobody can be in as one somebody can.
+     */
+    record Said(Confinement.Planned<FactSubject> confinement) implements StatedTogether {}
 
     /**
      * A choice whose branches are not settled yet, standing for the written {@code ||} named by
@@ -68,8 +44,8 @@ sealed interface StatedTogether {
     }
 
     /** Nothing read, so nothing ruled out — the identity of {@link #meet}. */
-    static StatedTogether top() {
-        return new Said(PlannedValues.top(), OrderedIntervals.top());
+    static StatedTogether top(Map<FactSubject, Carrier> carriers) {
+        return new Said(Confinement.Planned.top(carriers));
     }
 
     /**
@@ -88,7 +64,6 @@ sealed interface StatedTogether {
         }
         Said here = (Said) this;
         Said there = (Said) other;
-        return new Said(here.values().meet(there.values()),
-                here.ordered().meet(there.ordered()));
+        return new Said(here.confinement().meet(there.confinement()));
     }
 }

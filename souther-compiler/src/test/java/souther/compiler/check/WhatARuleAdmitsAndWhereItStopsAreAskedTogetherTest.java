@@ -21,6 +21,7 @@ import souther.compiler.values.ValueSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -96,6 +97,45 @@ class WhatARuleAdmitsAndWhereItStopsAreAskedTogetherTest {
     }
 
     /**
+     * A choice both of whose branches are that pair, and neither of which anybody can be in.
+     *
+     * <p>Which branch of a choice anybody can be in is settled while the declaration is read, and
+     * what settles it is the same question — so a branch whose set and whose range share no value
+     * is a branch nobody can be in, and a choice of two of them admits nothing.
+     *
+     * <p>The shape that tells this from the pattern above is that nothing has to be built to answer
+     * it. A denial is a set already, so a reading that answered "something is admitted" off the
+     * descriptions alone settled both branches as live before anything asked the order — and two
+     * branches nothing satisfies were then joined into a choice that does.
+     */
+    @Test
+    void aChoiceOfTwoSuchBranchesAdmitsNothing() {
+        assertEquals(new Emptiness.ConflictingRules(), only("""
+                module demo
+
+                data Code = String
+                    invariant no =
+                        (value /= "A" && value >= "A" && value <= "A")
+                        || (value /= "B" && value >= "B" && value <= "B")
+                """));
+    }
+
+    /** And the same over an enumeration, where the interval algebra carries nothing at all. */
+    @Test
+    void aChoiceOfTwoSuchBranchesOverAnEnumerationAdmitsNothing() {
+        assertEquals(new Emptiness.ConflictingRules(), only("""
+                module demo
+
+                data Ready
+                data Done
+                data Stage = Ready | Done
+
+                data Held = { q: Stage }
+                    invariant no = (q /= Ready && q <= Ready) || (q /= Done && q >= Done)
+                """));
+    }
+
+    /**
      * Every alternative refused, each at a position the others stand at.
      *
      * <p>What the alternatives leave one position is their union, and the range at that position
@@ -157,20 +197,19 @@ class WhatARuleAdmitsAndWhereItStopsAreAskedTogetherTest {
                 .meet(AdmissibleValues.at(Y, ValueSet.just(Value.text("B"))), sets);
         AdmissibleValues<FactSubject> there = AdmissibleValues.at(X, ValueSet.just(Value.text("C")))
                 .meet(AdmissibleValues.at(Y, ValueSet.just(Value.text("D"))), sets);
+        OrderedIntervals<FactSubject> ends = OrderedIntervals
+                .at(X, new OrderedInterval(null, Endpoint.inclusive(Text.of("A"))))
+                .meet(OrderedIntervals.at(Y, new OrderedInterval(
+                        Endpoint.inclusive(Text.of("D")), null)));
         ConstraintState<FactSubject> state = ConstraintState.<FactSubject>top()
-                .takingValuesRead(here.joinApart(there, sets), sets)
-                .taking(OrderedIntervals.at(X, new OrderedInterval(null,
-                                Endpoint.inclusive(Text.of("A")))),
-                        Map.of(X, Carrier.TEXT, Y, Carrier.TEXT))
-                .taking(OrderedIntervals.at(Y, new OrderedInterval(
-                                Endpoint.inclusive(Text.of("D")), null)),
-                        Map.of(X, Carrier.TEXT, Y, Carrier.TEXT));
+                .takingRead(Confinement.Worked.of(here.joinApart(there, sets), ends,
+                        Map.of(X, Carrier.TEXT, Y, Carrier.TEXT)), sets);
 
         assertEquals(ValueSet.oneOf(new LinkedHashSet<>(List.of(
                         Value.text("A"), Value.text("C")))), state.values().at(X),
                 "each position holds a value the range reaches");
-        assertTrue(state.confinement().ordered().at(X).admits(Text.of("A")));
-        assertTrue(state.confinement().ordered().at(Y).admits(Text.of("D")));
+        assertEquals(Set.of(), state.confinement().holdingNothing(),
+                "and neither range is one the order leaves nothing in");
         assertTrue(state.isBottom(), "and no alternative of them stands");
     }
 

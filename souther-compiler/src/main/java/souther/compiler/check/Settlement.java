@@ -1,7 +1,5 @@
 package souther.compiler.check;
 
-import souther.compiler.numeric.OrderedIntervals;
-import souther.compiler.values.Allowance;
 import souther.compiler.values.Emptiness;
 import souther.compiler.values.Realized;
 import souther.compiler.values.UnreadReason;
@@ -30,30 +28,16 @@ import java.util.Set;
  * so is every other component of a side ({@link Sided#alsoSeen}), so the order the copies are met
  * in, and how the conjunctions were bracketed, cannot reach the answer.
  *
- * @param made     the whole reading worked out, with what could not be built beside it
- * @param ordered  where every position stops, settled by the same work
- * @param outcomes the fate of both branches of every written choice, by its id
+ * @param confinement the whole reading worked out — what every position may hold and where its
+ *                    order stops — with what could not be built beside it
+ * @param outcomes    the fate of both branches of every written choice, by its id
  */
-record Settlement(Realized<FactSubject> made, OrderedIntervals<FactSubject> ordered,
-                  Map<ChoiceId, OfAChoice> outcomes) implements Confinement<FactSubject> {
+record Settlement(Confinement.Worked<FactSubject> confinement,
+                  Map<ChoiceId, OfAChoice> outcomes) {
 
-    /**
-     * What the values leave, which is whether any alternative stands at all.
-     *
-     * <p>Nothing is asked of the order at a position here. What put this together already asked it
-     * of every branch, with the carriers in hand ({@code StatedByClauses.Reading}), and this is what
-     * that work came to — asked again from here it would be asked without them, and an answer worked
-     * out under less than the reading had is a second answer to a settled question.
-     */
-    @Override
-    public Emptiness ofTheValues() {
-        return made.values().anyAlternativeAdmits((_, _) -> Emptiness.NONEMPTY);
-    }
-
-    /** The same. What is here was worked out already, so there is nothing further to build. */
-    @Override
-    public Emptiness ofTheValuesAlreadyBuilt(Allowance<FactSubject> by) {
-        return ofTheValues();
+    /** The values worked out, for a reader that asks what a position came to. */
+    Realized<FactSubject> made() {
+        return confinement.made();
     }
 
     /** Both branches of one written choice, each aggregated over its occurrences. */

@@ -47,15 +47,19 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class WhatDecidesWhetherAValueExistsHoldsBothLanguagesTest {
 
     /**
-     * Every type that holds where the positions stop also answers what they admit.
+     * Where the positions stop is held by {@link Confinement} and by nothing else.
      *
      * <p>Derived from what the types hold and not from what anybody wrote. A reading of an order is
-     * half of the question, so a type carrying one is a type somebody may ask the question of, and
-     * the answer it has to give is {@link Confinement}'s — which is one method and cannot be half
-     * asked.
+     * half of the question, and a type holding that half beside the other is a type whose reader can
+     * compose them — which is the sentence this whole arrangement is against, and it was written in
+     * five places before any of them was called wrong.
+     *
+     * <p>So the halves are not separately in hand anywhere. What a reader wants of one of them is a
+     * question with a name on this type, and the question about both has one implementation that no
+     * holder can answer around.
      */
     @Test
-    void everyTypeThatHoldsWhereThePositionsStopAnswersWhatTheyAdmit() {
+    void whereThePositionsStopIsHeldByTheConfinementAndByNothingElse() {
         Set<String> apart = new TreeSet<>();
         int found = 0;
         for (Class<?> each : compiled()) {
@@ -69,8 +73,8 @@ class WhatDecidesWhetherAValueExistsHoldsBothLanguagesTest {
         }
         assertTrue(found > 0, "found no type holding an order at all — the scan missed the tree");
         assertEquals(Set.of(), apart,
-                "a type holding where the positions stop is one a reader can ask whether a value"
-                        + " exists, and it has to answer with what they admit as well");
+                "a type holding where the positions stop beside what they admit is one whose reader"
+                        + " can ask each of them whether anything satisfies the rules");
     }
 
     /** Whether a class holds where a value's positions stop. */

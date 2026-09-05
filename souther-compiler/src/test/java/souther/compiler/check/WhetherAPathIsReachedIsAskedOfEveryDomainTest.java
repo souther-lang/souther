@@ -178,10 +178,10 @@ class WhetherAPathIsReachedIsAskedOfEveryDomainTest {
         // clauses of a declaration are read, and never at the state's boundary.
         souther.compiler.values.Allowance<FactSubject> sets =
                 souther.compiler.values.AsACompilationAllows.forAdmittedValues();
-        return ConstraintState.<FactSubject>top().takingValuesRead(
+        return ConstraintState.<FactSubject>top().takingRead(Confinement.Worked.of(
                 AdmissibleValues.at(A_POSITION, ValueSet.just(Value.text("A")))
                         .meet(AdmissibleValues.at(A_POSITION, ValueSet.just(Value.text("B"))),
-                                sets), sets);
+                                sets), OrderedIntervals.top(), Map.of()), sets);
     }
 
     private static ConstraintState<FactSubject> orderedAtBottom() {

@@ -96,17 +96,60 @@ public sealed interface PlannedValues<A> {
      * decision made on what the walk had reached.
      */
     default Emptiness emptiness() {
+        return anyAlternativeAdmits((_, _) -> Emptiness.NONEMPTY);
+    }
+
+    /**
+     * Whether an alternative survives a question asked of every position it names, out of the
+     * descriptions alone.
+     *
+     * <p>{@link AdmissibleValues#anyAlternativeAdmits}'s walk over a reading that has not been
+     * worked out, and the same rule: an alternative stands where every position of it still admits
+     * something, and the reading stands where any alternative does.
+     *
+     * <p><b>The question is asked of a position only where answering it needs no machine.</b> A
+     * description this has already got a set for is one the caller may be asked about; a pattern is
+     * a machine somebody has to make, and making one here is the work this whole arrangement puts
+     * off — so the position waits, and the alternative waits with it. What must not happen is
+     * answering the caller's question from the description alone: a position whose plan is already
+     * a set admits something and may still share none with what the caller knows, and a reading
+     * that called that alternative live settled a branch nobody can be in as one somebody can.
+     */
+    default Emptiness anyAlternativeAdmits(AskedOfEachPosition<A> asked) {
         return switch (this) {
             case Settled<A> it -> switch (it.held()) {
                 case PlannedHeld.Nothing<A> _ -> Emptiness.EMPTY;
-                // An alternative every position of which is settled to admit something is one
-                // something stands in. Anywhere else the answer waits.
-                case PlannedHeld.Alternatives<A> boxes -> boxes.boxes().stream()
-                        .anyMatch(box -> box.at().values().stream()
-                                .allMatch(plan -> plan instanceof AdmittedPlan.Of
-                                        || plan instanceof AdmittedPlan.Everything))
-                        ? Emptiness.NONEMPTY : Emptiness.UNDECIDED;
+                case PlannedHeld.Alternatives<A> boxes -> {
+                    Emptiness any = Emptiness.EMPTY;
+                    for (PlannedHeld.Box<A> box : boxes.boxes()) {
+                        Emptiness stands = Emptiness.NONEMPTY;
+                        for (Map.Entry<A, AdmittedPlan> each : box.at().entrySet()) {
+                            stands = stands.met(askedOf(each.getKey(), each.getValue(), asked));
+                            if (stands == Emptiness.EMPTY) {
+                                break;
+                            }
+                        }
+                        any = any.joined(stands);
+                        if (any == Emptiness.NONEMPTY) {
+                            yield any;
+                        }
+                    }
+                    yield any;
+                }
             };
+        };
+    }
+
+    /** What one position's description comes to under the question, waiting where a machine would
+     *  have to be made to ask it. */
+    private static <A> Emptiness askedOf(A position, AdmittedPlan plan,
+                                         AskedOfEachPosition<A> asked) {
+        return switch (plan) {
+            case AdmittedPlan.Nothing _ -> Emptiness.EMPTY;
+            case AdmittedPlan.Everything _ -> asked.of(position, ValueSet.ANY);
+            case AdmittedPlan.Of it -> asked.of(position, it.set());
+            case AdmittedPlan.Pattern _, AdmittedPlan.Both _, AdmittedPlan.Either _ ->
+                    Emptiness.UNDECIDED;
         };
     }
 
