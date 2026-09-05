@@ -2,6 +2,7 @@ package souther.compiler.codegen;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.generated.ProbeImage;
 import souther.compiler.jvm.GeneratedClass;
 import souther.compiler.jvm.SoutherJvmAbi;
 
@@ -32,7 +33,7 @@ class AClassIsHeldUnderTheNameItDeclaresTest {
 
     @Test
     void bytesDeclaringAnotherClassAreRefused() {
-        Emissions emissions = new Emissions("app.twin");
+        Emissions emissions = new Emissions("app.twin", new ProbeImage.Uninstrumented());
         GeneratedClass held = new GeneratedClass.BehaviorInterface("app.twin", "f");
 
         IllegalStateException refused = assertThrows(IllegalStateException.class,
@@ -45,7 +46,7 @@ class AClassIsHeldUnderTheNameItDeclaresTest {
 
     @Test
     void aRewriteThatRenamesTheClassIsRefused() {
-        Emissions emissions = new Emissions("app.twin");
+        Emissions emissions = new Emissions("app.twin", new ProbeImage.Uninstrumented());
         GeneratedClass held = new GeneratedClass.BehaviorInterface("app.twin", "f");
         emissions.put(held, declaring(SoutherJvmAbi.nameOf(held).binaryName()));
 
@@ -57,7 +58,7 @@ class AClassIsHeldUnderTheNameItDeclaresTest {
 
     @Test
     void bytesDeclaringTheNameTheyAreHeldUnderAreKept() {
-        Emissions emissions = new Emissions("app.twin");
+        Emissions emissions = new Emissions("app.twin", new ProbeImage.Uninstrumented());
         GeneratedClass held = new GeneratedClass.BehaviorInterface("app.twin", "f");
         String name = SoutherJvmAbi.nameOf(held).binaryName();
 
