@@ -1211,6 +1211,11 @@
                 "required": [
                   "arm"
                 ]
+              },
+              {
+                "required": [
+                  "writtenIn"
+                ]
               }
             ]
           }
@@ -1223,6 +1228,7 @@
           },
           "required": [
             "behavior",
+            "writtenIn",
             "ordinal",
             "lowered"
           ],
@@ -1255,7 +1261,7 @@
             "comparison",
             "predicate"
           ],
-          "description": "Which kind of rule of the model this is, and so which coordinates below are written. A `predicate` is a rule a body writes as one of the language\u0027s own operations over the values at a position — `String.startsWith(\"JP\", code)` — which tells a set of them from the rest and draws no line; it is identified the way a comparison is, by the application the author wrote. A rule of a body is a comparison and not the construct it is written in: it may stand in the condition of an `if` or a `guard`, be given a name above the fork that tests it, or be what the behavior answers with, and it is one rule in all of those. Documents of version 3 wrote `guard` here, from the days when a rule was found by finding a fork."
+          "description": "Which kind of rule of the model this is, and so which coordinates below are written. A `predicate` is a rule a body writes as one of the language\u0027s own operations over the values at a position — `String.startsWith(\"JP\", code)` — which tells a set of them from the rest and draws no line; a behavior states one in its body and in its own `ensures` alike, and it is identified by the application the author wrote together with what wrote it, which `writtenIn` says. A rule of a body is a comparison and not the construct it is written in: it may stand in the condition of an `if` or a `guard`, be given a name above the fork that tests it, or be what the behavior answers with, and it is one rule in all of those. Documents of version 3 wrote `guard` here, from the days when a rule was found by finding a fork."
         },
         "declaredIn": {
           "type": "string",
@@ -1271,7 +1277,14 @@
         },
         "definition": {
           "type": "string",
-          "description": "The definition whose source wrote the comparison, present in a document whose `ordinal` is counted within one. A document written before construct numbering became a count within a definition has none, and its `ordinal` is a count over the whole source instead — so which of the two a number means is read from whether this is here."
+          "description": "The definition whose source wrote the construct, present in a document whose `ordinal` is counted within one. For a comparison, a document written before construct numbering became a count within a definition has none, and its `ordinal` is a count over the whole source instead — so which of the two a number means is read from whether this is here. For a predicate, what counted the ordinal is said by `writtenIn`, and this is written exactly where that is `body`."
+        },
+        "writtenIn": {
+          "enum": [
+            "body",
+            "stated"
+          ],
+          "description": "What wrote the application a predicate is, which is what its `ordinal` was counted within. A behavior states such a rule in a definition's body and in its own `ensures`, the constructs of the two are numbered apart, and both start at zero — so without this the first of each is one identity. `body` writes `definition` beside it; `stated` is the behavior's own statement of itself, which `behavior` already names."
         },
         "clause": {
           "type": "integer",

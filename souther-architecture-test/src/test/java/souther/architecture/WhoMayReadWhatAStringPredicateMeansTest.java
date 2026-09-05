@@ -134,6 +134,26 @@ class WhoMayReadWhatAStringPredicateMeansTest {
     private static final String WHAT_A_RULE_STATES =
             "souther/compiler/partition/BehaviorSetStatements -> " + OWNER;
 
+    /**
+     * And the reading of what a behavior's own clauses state, which is the other place such a rule
+     * is written.
+     *
+     * <p>A third entry point and not a third answer, for the reason the two above are two: what
+     * reaches the text an author wrote differs. A clause is read against what the declaration binds
+     * and under the statements the clause makes outright, which is that reader's own walk.
+     *
+     * <p>Here rather than in the walk that publishes it, because which reader a statement belongs to
+     * is settled where the statements are. Asked later, the reader of comparisons and the reader of
+     * predicates would each be deciding whether a statement is theirs, and a rule read as a set of
+     * strings was also reported as a comparison whose form could not be read.
+     */
+    private static final String WHAT_A_CLAUSE_STATES =
+            "souther/compiler/partition/ClauseStatements -> " + OWNER;
+
+    /** And what that reading hands on, which names the answer it carries. */
+    private static final String A_CLAUSES_RULE =
+            "souther/compiler/partition/ClauseStatements$Statement$TellsStringsApart -> " + OWNER;
+
     private static final String IN_A_DESCRIPTOR = " (in a descriptor)";
 
     private static final List<String> READING_ONE = List.of(
@@ -161,6 +181,16 @@ class WhoMayReadWhatAStringPredicateMeansTest {
             WHAT_A_RULE_STATES
                     + "$Reading$PatternNotRead#why()Lsouther/compiler/regex/PatternRead$Unsupported;",
             WHAT_A_RULE_STATES + "$Reading$WrittenArgumentNotKnown",
+            WHAT_A_CLAUSE_STATES,
+            WHAT_A_CLAUSE_STATES + IN_A_DESCRIPTOR,
+            WHAT_A_CLAUSE_STATES + "#statedBy(Lsouther/compiler/core/Core;"
+                    + "Lsouther/compiler/check/Symbols;L" + OWNER + "$WrittenText;)L"
+                    + OWNER + "$Stated;",
+            WHAT_A_CLAUSE_STATES + "$Stated",
+            WHAT_A_CLAUSE_STATES + "$WrittenText",
+            A_CLAUSES_RULE,
+            A_CLAUSES_RULE + IN_A_DESCRIPTOR,
+            A_CLAUSES_RULE + "$Stated",
             WITNESS,
             WITNESS + IN_A_DESCRIPTOR,
             WITNESS + "#statedByWritten(Lsouther/compiler/ast/Hir$Expr;"

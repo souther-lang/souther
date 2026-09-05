@@ -2707,10 +2707,25 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 into.put("ordinal", it.origin().ordinal());
                 into.put("lowered", it.origin().lowered());
             }
-            // The same coordinates as a comparison, because it is the same kind of thing: an
-            // application the author wrote, in a body, told from the others by which application it
-            // is. What differs is what the rule does to the position, which is not an identity.
+            // An application the author wrote, told from the others by which application it is —
+            // which takes what it was counted within, the way a comparison's does. What differs
+            // from a comparison is that a behavior writes one of these in two places: a definition
+            // wrote it, or the behavior's own statement of itself did, and both count from zero. So
+            // which of the two is written, and the definition with it where a definition wrote it.
+            // Told apart by whether `definition` is there, the two would rest on an absence that
+            // already says something else in this document.
             case RuleRef.Predicate it -> {
+                into.put("declaredIn", it.writtenIn().module());
+                switch (it.writtenIn()) {
+                    case WrittenOwner.Body body -> {
+                        into.put("writtenIn", "body");
+                        into.put("definition", body.definition());
+                    }
+                    // The behavior's own clauses. Which behavior that is is `behavior` below: a
+                    // clause is read for the behavior that states it, so the two are one name and
+                    // writing it twice would be one fact in two fields.
+                    default -> into.put("writtenIn", "stated");
+                }
                 into.put("behavior", it.behavior());
                 into.put("ordinal", it.origin().ordinal());
                 into.put("lowered", it.origin().lowered());

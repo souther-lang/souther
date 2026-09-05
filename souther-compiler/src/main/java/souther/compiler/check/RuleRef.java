@@ -126,6 +126,28 @@ public sealed interface RuleRef {
                 throw new IllegalArgumentException(
                         "no source wrote this application, so it states no rule: " + origin);
             }
+            // And written in one of the two places a behavior states such a rule. Held here rather
+            // than left to the doc: an ordinal means nothing outside what it was counted in, so
+            // what publishes one of these has to say which owner — and it can only be asked to say
+            // that for the owners this may hold.
+            if (!(origin.owner() instanceof WrittenOwner.Body)
+                    && !(origin.owner() instanceof WrittenOwner.Stated)) {
+                throw new IllegalArgumentException("a behavior states a rule about its strings in"
+                        + " its body or in its own clauses, and this was written by "
+                        + origin.owner());
+            }
+        }
+
+        /**
+         * What wrote the application — a definition's body, or the behavior's statement of itself.
+         *
+         * <p>Part of what tells this rule from every other, because {@link #origin}'s ordinal is
+         * counted within it: a behavior's first clause predicate and its body's first are two
+         * constructs and both are numbered zero. A reader given the number alone has an identity
+         * two rules answer to.
+         */
+        public WrittenOwner writtenIn() {
+            return origin.owner();
         }
     }
 

@@ -1085,6 +1085,11 @@ class EverySchemaWordIsAccountedForTest {
         held.add("/$defs/partition/properties/axes/items/properties/read/properties/extent");
         held.add("/$defs/partition/properties/unanswered/items/properties/subject/properties/kind");
         held.add("/$defs/ruleId/properties/kind");
+        // What wrote the application a predicate is. Its words are the owners such a rule may be
+        // written by, which is decided where one is made rather than by an enum — so they are held
+        // against what the constructor admits, in
+        // `EveryKindOfRuleADocumentCanNameHasAnIdentityAndAWord`.
+        held.add("/$defs/ruleId/properties/writtenIn");
         // The two guards, held by the test above rather than against a vocabulary. They say which
         // keys an object has where its measure produced a value, so what has to be true of them is
         // that they name the states that did — not that a reader knows the words.

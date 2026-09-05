@@ -6,6 +6,7 @@ import souther.compiler.check.Clause;
 import souther.compiler.check.ClauseName;
 import souther.compiler.check.BehaviorContract;
 import souther.compiler.check.RuleRef;
+import souther.compiler.diag.QuotedFrom;
 import souther.compiler.types.SourceConstruct;
 import souther.compiler.types.SourceConstructOrigin;
 import souther.compiler.types.TypeKey;
@@ -16,6 +17,7 @@ import souther.compiler.types.ValueName;
 import tools.jackson.databind.json.JsonMapper;
 import tools.jackson.databind.node.ObjectNode;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -94,6 +96,159 @@ class EveryKindOfRuleADocumentCanNameHasAnIdentityAndAWordTest {
             assertTrue(!AdequacyReport.schemaRuleKind(each).isBlank(),
                     "a document has a word for this kind of rule: " + each);
         }
+    }
+
+    /**
+     * Two rules that are not one rule are written down as two.
+     *
+     * <p>What an identity in a document is for. A consumer groups by it, so two rules under one of
+     * them are one rule to everything downstream — the second is counted at the first's classes,
+     * and a reader sent to it is sent to the wrong place. The compiler's own equality is over every
+     * coordinate; what is checked here is that the projection into the document keeps them apart.
+     *
+     * <p>The population varies each coordinate of each kind in turn, so a coordinate left out of
+     * the document shows up as two of these being written alike. It caught the one this was written
+     * for: a predicate's ordinal is counted within what wrote it, and a behavior writes such a rule
+     * in its body and in its own clauses, so the first of each was numbered zero and published as
+     * one rule.
+     *
+     * <p>What a rule is <em>called</em> is not among the coordinates, and two of these differing
+     * only there are written alike. That is not a collision: an author's name for a clause belongs
+     * to the clause the identity already names, and the label an {@code ensures} carries is read off
+     * the rule the identity already names — so no two rules of a model differ there and nowhere
+     * else. Nothing in the types says so, which is a question about those two kinds rather than
+     * about this projection.
+     */
+    @Test
+    void twoRulesThatAreNotOneAreWrittenDownAsTwo() {
+        List<RuleRef> distinct = eachCoordinateVaried();
+        assertEquals(distinct.size(), Set.copyOf(distinct).size(),
+                "the population is rules that are not one another");
+
+        List<String> written = distinct.stream().map(each -> {
+            ObjectNode into = JsonMapper.builder().build().createObjectNode();
+            AdequacyReport.ruleId(into, each);
+            return into.toString();
+        }).toList();
+
+        assertEquals(written.size(), Set.copyOf(written).size(),
+                "each of them is written under an identity of its own. Two written alike are two"
+                        + " rules a consumer counts as one: " + written);
+    }
+
+    /**
+     * The population above: for every kind, one rule per coordinate that tells it from another.
+     *
+     * <p>Varied one at a time rather than all together, so that a coordinate the document leaves
+     * out is what collides rather than being hidden by the ones beside it.
+     */
+    private static List<RuleRef> eachCoordinateVaried() {
+        WrittenOwner.Body body = new WrittenOwner.Body("m", "b");
+        Clause.Id on = new Clause.Id(TypeSymbols.declared(new TypeKey("m", "Amount")), 0);
+        ValueName.Behavior behavior = new ValueName.Behavior("m", "b");
+        return List.of(
+                new RuleRef.Invariant(new Clause.Ref(on, Optional.of(new ClauseName("cap")))),
+                new RuleRef.Invariant(new Clause.Ref(
+                        new Clause.Id(TypeSymbols.declared(new TypeKey("other", "Amount")), 0),
+                        Optional.of(new ClauseName("cap")))),
+                new RuleRef.Invariant(new Clause.Ref(
+                        new Clause.Id(TypeSymbols.declared(new TypeKey("m", "Other")), 0),
+                        Optional.of(new ClauseName("cap")))),
+                new RuleRef.Invariant(new Clause.Ref(
+                        new Clause.Id(TypeSymbols.declared(new TypeKey("m", "Amount")), 1),
+                        Optional.of(new ClauseName("cap")))),
+
+                new RuleRef.Ensures(new BehaviorContract.RuleId(behavior, 0, 0, null), "c"),
+                new RuleRef.Ensures(
+                        new BehaviorContract.RuleId(new ValueName.Behavior("other", "b"), 0, 0,
+                                null), "c"),
+                new RuleRef.Ensures(
+                        new BehaviorContract.RuleId(new ValueName.Behavior("m", "other"), 0, 0,
+                                null), "c"),
+                new RuleRef.Ensures(new BehaviorContract.RuleId(behavior, 1, 0, null), "c"),
+                new RuleRef.Ensures(new BehaviorContract.RuleId(behavior, 0, 1, null), "c"),
+
+                new RuleRef.Comparison("b", new SourceConstructOrigin(body, 1, 0,
+                        SourceConstruct.BINARY)),
+                new RuleRef.Comparison("other", new SourceConstructOrigin(body, 1, 0,
+                        SourceConstruct.BINARY)),
+                new RuleRef.Comparison("b", new SourceConstructOrigin(
+                        new WrittenOwner.Body("other", "b"), 1, 0, SourceConstruct.BINARY)),
+                new RuleRef.Comparison("b", new SourceConstructOrigin(
+                        new WrittenOwner.Body("m", "helper"), 1, 0, SourceConstruct.BINARY)),
+                new RuleRef.Comparison("b", new SourceConstructOrigin(body, 2, 0,
+                        SourceConstruct.BINARY)),
+                new RuleRef.Comparison("b", new SourceConstructOrigin(body, 1, 1,
+                        SourceConstruct.BINARY)),
+
+                new RuleRef.Predicate("b", new SourceConstructOrigin(body, 1, 0,
+                        SourceConstruct.CALL)),
+                new RuleRef.Predicate("other", new SourceConstructOrigin(body, 1, 0,
+                        SourceConstruct.CALL)),
+                new RuleRef.Predicate("b", new SourceConstructOrigin(
+                        new WrittenOwner.Body("other", "b"), 1, 0, SourceConstruct.CALL)),
+                new RuleRef.Predicate("b", new SourceConstructOrigin(
+                        new WrittenOwner.Body("m", "helper"), 1, 0, SourceConstruct.CALL)),
+                new RuleRef.Predicate("b", new SourceConstructOrigin(body, 2, 0,
+                        SourceConstruct.CALL)),
+                new RuleRef.Predicate("b", new SourceConstructOrigin(body, 1, 1,
+                        SourceConstruct.CALL)),
+                // The one the body's first predicate shares a number with: a behavior states a rule
+                // about its strings in its own clauses too, and that is another construct numbered
+                // from zero.
+                new RuleRef.Predicate("b", new SourceConstructOrigin(
+                        new WrittenOwner.Stated("m", "b"), 1, 0, SourceConstruct.CALL)));
+    }
+
+    /**
+     * The words for what wrote a predicate are the owners one can be written by.
+     *
+     * <p>The schema promises two, and what may reach the field is whatever a {@code Predicate} can
+     * be built with — so the two lists are one fact and are checked against each other rather than
+     * kept alike by hand. Every owner the seal has is offered to the constructor: the ones it takes
+     * are what a document may have to name, and the ones it refuses are the negative control that
+     * says the check is doing something.
+     */
+    @Test
+    void theWordsForWhatWroteAPredicateAreTheOwnersOneCanBeWrittenBy() {
+        List<String> written = new ArrayList<>();
+        List<String> refused = new ArrayList<>();
+        for (WrittenOwner owner : everyOwner()) {
+            SourceConstructOrigin at =
+                    new SourceConstructOrigin(owner, 0, 0, SourceConstruct.CALL);
+            RuleRef.Predicate rule;
+            try {
+                rule = new RuleRef.Predicate("b", at);
+            } catch (IllegalArgumentException refusedThere) {
+                refused.add(owner.getClass().getSimpleName());
+                continue;
+            }
+            ObjectNode into = JsonMapper.builder().build().createObjectNode();
+            AdequacyReport.ruleId(into, rule);
+            written.add(into.get("writtenIn").asString());
+        }
+
+        assertEquals(Set.of("body", "stated"), Set.copyOf(written),
+                "the words a document may carry are the owners a predicate may be written by");
+        assertEquals(List.of("Declaration", "Examples", "Fake"), refused,
+                "and the owners that write no such rule are refused where one is made, which is"
+                        + " what keeps the list above from being every owner there is");
+    }
+
+    /** Every owner the seal has, one of each. */
+    private static List<WrittenOwner> everyOwner() {
+        QuotedFrom text = new QuotedFrom.TextItCannotName();
+        List<WrittenOwner> out = List.of(
+                new WrittenOwner.Declaration(new TypeKey("m", "Amount")),
+                new WrittenOwner.Stated("m", "b"),
+                new WrittenOwner.Body("m", "b"),
+                new WrittenOwner.Examples(text, "m", "b"),
+                new WrittenOwner.Fake(text, "m", "b"));
+        assertEquals(Set.copyOf(List.of(WrittenOwner.class.getPermittedSubclasses())),
+                out.stream().map(each -> (Class<?>) each.getClass())
+                        .collect(Collectors.toSet()),
+                "one of each owner the seal has, and no other");
+        return out;
     }
 
     /** And the words tell the kinds apart, which is what a reader groups by. */
