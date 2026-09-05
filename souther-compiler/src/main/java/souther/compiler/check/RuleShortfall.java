@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.core.Core;
+import souther.compiler.diag.SourcePos;
 import souther.compiler.values.UnreadReason;
 
 /**
@@ -50,10 +51,15 @@ record RuleShortfall(FactSubject position, UnreadReason why, RuleShortfall.Site 
      * however many leaves are under it — filed at a leaf, an author would be sent to the branch that
      * was read.
      *
-     * <p>What is held is identity and nothing else: two of these are the same written place or are
-     * not. Where they stand relative to each other is the source's to say and is asked nowhere here.
+     * <p>Identity is what tells two apart: two of these are the same written place or are not, and
+     * that is settled by what each of them is rather than by where it is. Where it is, is what
+     * {@link #writtenAt} answers — asked of every kind, so that whoever puts these in the order
+     * somebody wrote them asks one question of all of them and a kind added later has to answer it.
      */
     sealed interface Site {
+
+        /** Where an author wrote it, which is what an order among them is taken over. */
+        SourcePos writtenAt();
 
         /** One clause the reading had no word for, as the node it was written as. */
         record AtALeaf(Core node) implements Site {
@@ -75,18 +81,45 @@ record RuleShortfall(FactSubject position, UnreadReason why, RuleShortfall.Site 
             }
 
             @Override
+            public SourcePos writtenAt() {
+                return node.pos();
+            }
+
+            @Override
             public String toString() {
                 return "leaf@" + Integer.toHexString(System.identityHashCode(node));
             }
         }
 
-        /** One choice an alternative of which nothing could read. */
-        record AtAChoice(ChoiceId id) implements Site {
+        /**
+         * One choice an alternative of which nothing could read.
+         *
+         * <p>The identity and the place beside each other, rather than one made to answer for the
+         * other. Which choice this is, is a question the whole reading asks and a source position
+         * cannot answer — a helper expanded twice writes one operator at one place and is two
+         * choices — and where it is written is a question the identity cannot answer, being nothing
+         * but itself. So the choice carries both from where it is made.
+         *
+         * @param writtenAt the operator, which is what a reader is sent to: the position an author
+         *                  wrote the {@code ||} at and not where the operand under it begins
+         */
+        record AtAChoice(ChoiceId id, SourcePos writtenAt) implements Site {
 
             public AtAChoice {
-                if (id == null) {
-                    throw new IllegalArgumentException("a choice is some choice of a clause");
+                if (id == null || writtenAt == null) {
+                    throw new IllegalArgumentException(
+                            "a choice is some choice of a clause, written somewhere");
                 }
+            }
+
+            @Override
+            public boolean equals(Object other) {
+                return other instanceof AtAChoice it && id == it.id;
+            }
+
+            @Override
+            public int hashCode() {
+                return System.identityHashCode(id);
             }
         }
     }

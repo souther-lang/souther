@@ -153,7 +153,7 @@ sealed interface StatedByClauses {
         }
 
         /** The same part of two branches somebody can be in, under the choice between them. */
-        Part either(ChoiceId choice, Part other) {
+        Part either(RuleShortfall.Site.AtAChoice choice, Part other) {
             // What a rule is answerable for is said of the choice, beside it and never out of it.
             // What happened is that this choice offered an alternative nothing could read, so an
             // author is sent to the choice — filed at a leaf under the branch that was read, they
@@ -208,14 +208,13 @@ sealed interface StatedByClauses {
          * reasons suppress which would be one more place the vocabulary has to be consulted, and a
          * reason added to it would quietly change what a choice says.
          */
-        private static void leftOpenBy(ChoiceId choice, Set<FactSubject> these,
+        private static void leftOpenBy(RuleShortfall.Site.AtAChoice choice, Set<FactSubject> these,
                                        Set<RuleShortfall> unread, Set<RuleShortfall> beside,
                                        Set<RuleShortfall> out) {
             these.stream()
                     .filter(each -> !accountedFor(each, unread, beside))
                     .forEach(each -> out.add(new RuleShortfall(each,
-                            souther.compiler.values.UnreadReason.ALTERNATIVE_NOT_READ,
-                            new RuleShortfall.Site.AtAChoice(choice))));
+                            souther.compiler.values.UnreadReason.ALTERNATIVE_NOT_READ, choice)));
         }
 
         /** Whether {@code unread} holds an account of {@code at} that {@code beside} does not. */
@@ -252,19 +251,20 @@ sealed interface StatedByClauses {
      * behind: the account said a rule of a branch nothing satisfies had gone unread, and there was
      * no branch for an author to go and look at.
      */
-    record Choice(ChoiceId id, StatedByClauses left, StatedByClauses right)
-            implements StatedByClauses {
+    record Choice(ChoiceId id, Core writtenAt, StatedByClauses left,
+                  StatedByClauses right) implements StatedByClauses {
 
         public Choice {
-            if (id == null || left == null || right == null) {
-                throw new IllegalArgumentException("a choice is between two named readings");
+            if (id == null || writtenAt == null || left == null || right == null) {
+                throw new IllegalArgumentException(
+                        "a choice is between two named readings, written somewhere");
             }
         }
 
         /** Into both branches, since which of them survives is not known yet. */
         @Override
         public StatedByClauses from(Core e) {
-            return new Choice(id, left.from(e), right.from(e));
+            return new Choice(id, writtenAt, left.from(e), right.from(e));
         }
     }
 
@@ -491,10 +491,12 @@ sealed interface StatedByClauses {
          */
         private static StatedByClauses met(StatedByClauses one, StatedByClauses other) {
             if (one instanceof Choice it) {
-                return new Choice(it.id(), met(it.left(), other), met(it.right(), other));
+                return new Choice(it.id(), it.writtenAt(),
+                        met(it.left(), other), met(it.right(), other));
             }
             if (other instanceof Choice it) {
-                return new Choice(it.id(), met(one, it.left()), met(one, it.right()));
+                return new Choice(it.id(), it.writtenAt(),
+                        met(one, it.left()), met(one, it.right()));
             }
             Said here = (Said) one;
             Said there = (Said) other;
@@ -550,7 +552,7 @@ sealed interface StatedByClauses {
          * sum — what proves it has none is the whole list — arrived at here for the same reason.
          */
         @Override
-        public StatedByClauses either(StatedByClauses one, StatedByClauses other) {
+        public StatedByClauses either(Core writtenAt, StatedByClauses one, StatedByClauses other) {
             if (one instanceof Said here && other instanceof Said there) {
                 Emptiness a = here.emptiness();
                 Emptiness b = there.emptiness();
@@ -579,8 +581,9 @@ sealed interface StatedByClauses {
                         && a == Emptiness.NONEMPTY && b == Emptiness.NONEMPTY) {
                     // Merged here and still one choice somebody wrote, which is what an alternative
                     // nothing could read is a fact about. Given no identity, the fact would have
-                    // nowhere to stand and an author would be sent to a branch that was read.
-                    return live(new ChoiceId(), here, there);
+                    // nowhere to stand and an author would be sent to a branch that was read; given
+                    // no place, nothing downstream could put it in the order it was written in.
+                    return live(new ChoiceId(), writtenAt, here, there);
                 }
             }
             // And where whether a branch can be taken is not settled, the question waits — the
@@ -588,7 +591,7 @@ sealed interface StatedByClauses {
             // what the positions admit, where they stop, and what each language is recorded as
             // having taken in; settled for some of those and held open for the rest, a branch that
             // turned out dead would have left an account of what it adopted behind it.
-            return new Choice(new ChoiceId(), one, other);
+            return new Choice(new ChoiceId(), writtenAt, one, other);
         }
 
         /**
@@ -814,7 +817,8 @@ sealed interface StatedByClauses {
                     if (there == Emptiness.EMPTY) {
                         yield beside(keptAs(one, fate.left()), other);
                     }
-                    yield live(it.id(), keptAs(one, fate.left()), keptAs(other, fate.right()));
+                    yield live(it.id(), it.writtenAt(),
+                            keptAs(one, fate.left()), keptAs(other, fate.right()));
                 }
             };
         }
@@ -913,7 +917,9 @@ sealed interface StatedByClauses {
          * The join knows that a branch was short of a rule and which positions the other promised —
          * neither of those is a thing an author wrote — and this is where what they wrote is known.
          */
-        private Said live(ChoiceId choice, Said here, Said there) {
+        private Said live(ChoiceId id, Core writtenAt, Said here, Said there) {
+            RuleShortfall.Site.AtAChoice choice =
+                    new RuleShortfall.Site.AtAChoice(id, writtenAt.pos());
             Set<RuleShortfall> raised = new LinkedHashSet<>(
                     shortOf(here.ruleShortfalls(), there.ruleShortfalls()));
             if (there.byValues().dropped()) {
