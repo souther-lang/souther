@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.partition.AdequacyPolicy;
 import souther.compiler.partition.Budgets;
 import souther.compiler.partition.GenerationReason;
+import souther.compiler.regex.PatternPlan;
 
 import java.util.List;
 import java.util.Map;
@@ -77,7 +78,11 @@ class ABudgetIsTheCompilationsToSetTest {
     @Test
     void aBudgetBelowOneIsRefused() {
         assertThrows(IllegalArgumentException.class,
-                () -> new AdequacyPolicy.OfTheMeasures(0), "a pair space of nought");
+                () -> new AdequacyPolicy.OfTheMeasures(0,
+                        PatternPlan.Budget.OF_BEHAVIOR_DISTINCTIONS), "a pair space of nought");
+        assertThrows(IllegalArgumentException.class,
+                () -> new AdequacyPolicy.OfTheMeasures(20_000, null),
+                "nothing to build a behavior's distinctions with");
         assertThrows(IllegalArgumentException.class,
                 () -> new AdequacyPolicy.OfTheGeneration(0, 4096), "no rows");
         assertThrows(IllegalArgumentException.class,
@@ -174,7 +179,9 @@ class ABudgetIsTheCompilationsToSetTest {
     private static PartitionEvidence evidenceFor(String source, int pairSpace) {
         Compilation compilation = Compilation.ofSource(source, "Main")
                 .withAdequacyPolicy(new AdequacyPolicy(
-                        new AdequacyPolicy.OfTheMeasures(pairSpace), Budgets.generation()));
+                        new AdequacyPolicy.OfTheMeasures(pairSpace,
+                                PatternPlan.Budget.OF_BEHAVIOR_DISTINCTIONS),
+                        Budgets.generation()));
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         Map<String, PartitionEvidence> partitions = compilation.db()

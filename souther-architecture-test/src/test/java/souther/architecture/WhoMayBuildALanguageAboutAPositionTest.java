@@ -35,15 +35,16 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * the model admits there — and because it would be building under an allowance of its own, the two
  * can differ over a pattern one of them can afford and the other cannot, with neither saying so.
  *
- * <p><b>Four allowances and four owners, which is the shape rather than four numbers.</b> The
- * numbers are equal today and that is a coincidence; what is not a coincidence is which question
- * each of them bounds. One is what a position may build to answer what it admits. One is what
- * handing each of its rules on as the set it leaves may build, which is a projection of that answer
- * and is granted beside it. One is what writing a value out of a pattern may cost, which is a
- * witness for a row and no answer about any position. And one is what walking a published set for
- * where it stops may cost, which is a report's question about an answer somebody else built. Each
- * is named by its owner and by nobody else, so a fifth reader wanting a machine has to say whose
- * allowance it is spending.
+ * <p><b>An allowance per question, which is the shape rather than a list of numbers.</b> The numbers
+ * are equal today and that is a coincidence; what is not a coincidence is which question each of
+ * them bounds. One is what a position may build to answer what it admits. One is what handing each
+ * of its rules on as the set it leaves may build, which is a projection of that answer and is
+ * granted beside it. One is what writing a value out of a pattern may cost, which is a witness for
+ * a row and no answer about any position. One is what walking a published set for where it stops
+ * may cost, which is a report's question about an answer somebody else built. And one is what
+ * working out the classes a behavior's rules about the strings at a position divide it into may
+ * build, which is what a measure spends rather than what a reading does. Each is named by its owner
+ * and by nobody else, so a reader wanting a machine has to say whose allowance it is spending.
  *
  * <p>Read off the compiled classes and not the source, so that a name reached through a constant is
  * a row here whatever it is spelled as. A row that is new is a finding: either the capability moved
@@ -86,6 +87,23 @@ class WhoMayBuildALanguageAboutAPositionTest {
             List.of("souther/compiler/query/Front$Reading");
 
     /**
+     * And what working out the classes a behavior's rules about the strings at a position divide it
+     * into may build, granted where a compilation grants what a measure may spend.
+     *
+     * <p>Its own figure and not either of the two above, because moving one of those must not move
+     * this. Those bound how exactly a declaration is read to admit what it admits; this bounds what
+     * a behavior is read to tell apart, and the two are not one question — a type stating a plain
+     * rule beside a body stating an expensive one is the model where sharing a figure would let
+     * raising one make a class appear that the other was never asked about.
+     *
+     * <p>Granted by {@code Front.Adequacy} and not by {@code Front.Reading}, because what runs out
+     * here leaves a measurement partial rather than a declaration read less exactly: the classes
+     * are not composed and the position is recorded as one this compiler did not divide.
+     */
+    private static final List<String> OF_BEHAVIOR_DISTINCTIONS =
+            List.of("souther/compiler/query/Front$Adequacy");
+
+    /**
      * Who may turn a granted figure into an allowance, which is the other half of the same rule.
      *
      * <p>Counting the figures alone leaves a way round: a policy hands out an allowance, and a
@@ -112,12 +130,18 @@ class WhoMayBuildALanguageAboutAPositionTest {
      * asks the policy for nothing, so neither of the counts above moves — and it has a meter at
      * every position all the same. What it cannot do is make one without saying so here.
      *
-     * <p>{@code ReadingPolicy} and nobody else, because that is where a compilation's grant becomes
-     * something a reading may spend. Two makers is two answers to how much a position may build,
-     * and the second of them is one nothing granted.
+     * <p>The policies a compilation hands out, and nobody else: that is where a grant becomes
+     * something a reader may spend. Two makers of one of them is two answers to how much a position
+     * may build, and the second of them is one nothing granted.
+     *
+     * <p>Two policies rather than one, because a compilation grants two different things. What a
+     * reading may build to say what a declaration admits is {@code ReadingPolicy}'s; what a measure
+     * may build to say what a behavior tells the values at a position apart is the measures' half
+     * of {@code AdequacyPolicy}, and the answer each of them leaves partial is a different answer.
      */
-    private static final List<String> MAKING_AN_ALLOWANCE =
-            List.of("souther/compiler/check/ReadingPolicy");
+    private static final List<String> MAKING_AN_ALLOWANCE = List.of(
+            "souther/compiler/check/ReadingPolicy",
+            "souther/compiler/partition/AdequacyPolicy$OfTheMeasures");
 
     /**
      * And who may write a figure out at all.
@@ -175,6 +199,15 @@ class WhoMayBuildALanguageAboutAPositionTest {
         assertEquals(OF_WHAT_A_RULE_LEAVES, namingTheBudget("OF_WHAT_A_RULE_LEAVES"),
                 "the second figure a reading builds against, granted where the first is: a namer"
                         + " elsewhere is a reader allowing itself what a compilation was to allow");
+    }
+
+    @Test
+    void whatABehaviorsDistinctionsMayCostIsNamedWhereAMeasureIsGranted() {
+        assertEquals(OF_BEHAVIOR_DISTINCTIONS, namingTheBudget("OF_BEHAVIOR_DISTINCTIONS"),
+                "what a behavior is read to tell apart is bounded where a compilation grants what a"
+                        + " measure may spend: a namer elsewhere is a measure allowing itself what"
+                        + " the compilation was to allow, and one among the figures a reading"
+                        + " spends is a declaration's exactness deciding a behavior's classes");
     }
 
     @Test

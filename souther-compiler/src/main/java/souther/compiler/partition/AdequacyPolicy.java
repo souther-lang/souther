@@ -3,19 +3,18 @@ package souther.compiler.partition;
 /**
  * What measuring one behavior and composing rows for it may spend.
  *
- * <p>Three numbers that were three private constants in three classes, none of them reachable from
- * a caller — which is the absence issue #969 opened on, and it was never only about the one limit
- * that issue removed. A limit is an input the query graph hands to the analysis (rule 4 of this
- * package's documentation), the way {@link souther.compiler.check.ReadingPolicy} and
+ * <p>Figures that were private constants in classes of their own, none of them reachable from a
+ * caller. A limit is an input the query graph hands to the analysis (rule 4 of this package's
+ * documentation), the way {@link souther.compiler.check.ReadingPolicy} and
  * {@link souther.compiler.execute.EvaluationPolicy} already are.
  *
  * <p><b>Grouped by which result each weakens, and not by being numbers.</b> A budget is only ever
  * read beside the answer it makes partial, and the two halves here are not interchangeable: the
- * pair space exhausting leaves a <em>measurement</em> partial and is reported as
- * {@code Weakening.PairSpaceTruncated}, while the row limit and the cell limit leave a
- * <em>generation</em> incomplete and are reported as {@link GenerationReason}s. Held as three
- * {@code int}s side by side, a caller raising one to fix a partial measurement would as readily
- * raise one that cannot change it.
+ * pair space running out leaves a <em>measurement</em> partial and is reported as
+ * {@code Weakening.PairSpaceTruncated}, and so does a position whose body's rules about the strings
+ * could not be composed into classes; the row limit and the cell limit leave a <em>generation</em>
+ * incomplete and are reported as {@link GenerationReason}s. Held side by side, a caller raising one
+ * to fix a partial measurement would as readily raise one that cannot change it.
  *
  * <p><b>Owned by the compilation and not made here.</b> Nothing that measures a behavior decides
  * what it may be measured with: a policy made where it is needed is one that can differ between two
@@ -30,16 +29,42 @@ public record AdequacyPolicy(OfTheMeasures measures, OfTheGeneration generation)
     }
 
     /**
-     * What a measure of one behavior may walk.
+     * What a measure of one behavior may walk, and what it may build.
      *
-     * @param pairSpace how many two-class combinations across the behavior's positions are counted
-     *                  off the rows. The space grows with the positions and their cardinalities
-     *                  together, so what bounds it is the space itself and never a count of
-     *                  positions (rules 1 and 2). Past it the measure is partial and says so
+     * <p>Two figures because a measure is left partial two ways, and both of them leave the same
+     * answer partial. The pair space runs out and the combinations past it go uncounted; the
+     * machines a body's rules about the strings at a position need are not made and the position
+     * comes back undivided. Which is what puts the second here rather than beside the figures a
+     * reading spends ({@link souther.compiler.check.ReadingPolicy}): those bound what a declaration
+     * is read to admit, and this one bounds what a behavior is read to tell apart. Raising either
+     * of those must not make a class appear, and raising this one must not change what a
+     * declaration admits.
+     *
+     * <p><b>Not a record, so that the figure stays in.</b> A record hands out its components, and
+     * what a caller could do with a budget is make itself an allowance — one per question it
+     * happened to ask, with the position allowed its machine once for each. So what leaves here is
+     * an allowance and never the figure it was made from.
      */
-    public record OfTheMeasures(int pairSpace) {
+    public static final class OfTheMeasures {
 
-        public OfTheMeasures {
+        private final int pairSpace;
+
+        private final souther.compiler.regex.PatternPlan.Budget behaviorDistinctions;
+
+        /**
+         * @param pairSpace            how many two-class combinations across the behavior's
+         *                             positions are counted off the rows. The space grows with the
+         *                             positions and their cardinalities together, so what bounds it
+         *                             is the space itself and never a count of positions (rules 1
+         *                             and 2). Past it the measure is partial and says so
+         * @param behaviorDistinctions what working out the classes a body's rules about the strings
+         *                             at one position divide it into may build. Past it the
+         *                             position's classes are not composed and it is recorded as one
+         *                             this compiler did not divide, rather than divided by the
+         *                             rules it could afford
+         */
+        public OfTheMeasures(int pairSpace,
+                             souther.compiler.regex.PatternPlan.Budget behaviorDistinctions) {
             // A guardrail is a positive number a count is compared against. Refused here rather
             // than left to whoever writes it: a bound that admits nothing measures nothing, and a
             // bound of nought would report every behavior as partial over a space it never walked.
@@ -48,6 +73,65 @@ public record AdequacyPolicy(OfTheMeasures measures, OfTheGeneration generation)
                         "a pair space holds at least one combination, so a limit below one bounds"
                                 + " nothing: " + pairSpace);
             }
+            if (behaviorDistinctions == null) {
+                throw new IllegalArgumentException(
+                        "a measure builds what a behavior tells apart under some budget");
+            }
+            this.pairSpace = pairSpace;
+            this.behaviorDistinctions = behaviorDistinctions;
+        }
+
+        public int pairSpace() {
+            return pairSpace;
+        }
+
+        /**
+         * A fresh allowance for the positions of one behavior's distinctions, at what this
+         * compilation allows.
+         *
+         * <p>One measure, one of these. Asked twice while measuring one behavior, a position would
+         * be allowed its machines once for each caller and what the two came to would be bought by
+         * nobody — so where the measure is made is where this is asked, and it is handed on from
+         * there.
+         *
+         * <p>On its own and not beside what a position's own answer built. Borrowing is for a
+         * machine that exists, and the machines here are a body's rules rather than a
+         * declaration's: a pattern written in both is the case where one would be made twice, and
+         * until a model does that there is nothing to borrow and a reader wired to borrow it would
+         * be carrying an allowance across a boundary for nothing. What must not follow from that is
+         * the other direction — a position whose own answer stopped short still has its body's
+         * rules read here, because what a behavior tells apart is not a projection of what the
+         * position admits.
+         *
+         * @param <A> what a position is called
+         */
+        public <A> souther.compiler.values.Allowance<A> allowanceForBehaviorDistinctions() {
+            return souther.compiler.values.Allowance.of(behaviorDistinctions);
+        }
+
+        /**
+         * Two of these are the same where they allow the same things.
+         *
+         * <p>Written out because this is not a record. What a reader compares two for is whether a
+         * behavior measured under one would be measured the same way under the other, which is what
+         * they allow and nothing about which object holds it.
+         */
+        @Override
+        public boolean equals(Object other) {
+            return this == other || (other instanceof OfTheMeasures it
+                    && pairSpace == it.pairSpace
+                    && behaviorDistinctions.equals(it.behaviorDistinctions));
+        }
+
+        @Override
+        public int hashCode() {
+            return java.util.Objects.hash(pairSpace, behaviorDistinctions);
+        }
+
+        @Override
+        public String toString() {
+            return "OfTheMeasures[pairSpace=" + pairSpace
+                    + ", behaviorDistinctions=" + behaviorDistinctions + "]";
         }
     }
 
