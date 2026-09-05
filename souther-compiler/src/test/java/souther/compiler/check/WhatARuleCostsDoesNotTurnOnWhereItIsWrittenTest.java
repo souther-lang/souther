@@ -99,8 +99,10 @@ class WhatARuleCostsDoesNotTurnOnWhereItIsWrittenTest {
      * What {@code rules} admit, which every order of them comes to.
      *
      * <p>The first order is what the rest are held against, so it is read before the loop and the
-     * loop is over the other five. Read inside it as well, the first comparison would be a value
-     * against itself, which asserts nothing and costs the two machines that reading an order is.
+     * loop is over the other five. Read inside the loop as well it would be read twice, and what
+     * the two readings of it are held against each other for is that one order comes out the same
+     * way twice — which is a claim about a compile repeating itself and not about where the rules
+     * are written. That is what is given up here, for the two machines a reading of an order costs.
      */
     private static AdmissibleSet sameInEveryOrder(List<String> rules) {
         AdmissibleSet first = admitted(rules, ORDERS.getFirst());

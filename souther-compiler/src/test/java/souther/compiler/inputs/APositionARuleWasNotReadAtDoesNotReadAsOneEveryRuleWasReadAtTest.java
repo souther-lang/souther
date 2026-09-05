@@ -1,5 +1,6 @@
 package souther.compiler.inputs;
 
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
@@ -145,6 +146,19 @@ class APositionARuleWasNotReadAtDoesNotReadAsOneEveryRuleWasReadAtTest {
         }
         everyReading = List.copyOf(out);
         return everyReading;
+    }
+
+    /**
+     * And given back when the class is done with them.
+     *
+     * <p>A fork keeps its JVM, so what is held statically is held for every class after this one.
+     * Less than what a corpus's compiles come to — the compilations these are read from are
+     * {@link RepositoryModels}' and stay whatever this does — but the readings themselves are this
+     * class's, and it is the class that wanted them.
+     */
+    @AfterAll
+    static void released() {
+        everyReading = null;
     }
 
     private static void readings(Compilation compilation, List<InputDomain> out) {

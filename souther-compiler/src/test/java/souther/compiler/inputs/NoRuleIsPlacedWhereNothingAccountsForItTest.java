@@ -1,5 +1,6 @@
 package souther.compiler.inputs;
 
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
@@ -208,13 +209,37 @@ class NoRuleIsPlacedWhereNothingAccountsForItTest {
         return out;
     }
 
-    /** The rules of every value every reading of this repository's models opens. */
-    private static List<PlacedRules> everyValueRead() {
+    /** The rules of every value the models open, once they have been read. */
+    private static List<PlacedRules> everyValueRead;
+
+    /**
+     * The rules of every value every reading of this repository's models opens.
+     *
+     * <p>Read once for the class. Two questions here walk these and neither changes one, so
+     * reading them per question is the same work over — and the models are compiled once for the
+     * JVM already, which is the same arrangement one step further down.
+     *
+     * <p>Read when a question asks rather than while the class is initialised: a population that
+     * cannot be read is what this class is about, and an initialiser that threw reports it on every
+     * method at once and names no cause.
+     */
+    private static synchronized List<PlacedRules> everyValueRead() {
+        if (everyValueRead != null) {
+            return everyValueRead;
+        }
         List<PlacedRules> out = new ArrayList<>();
         for (Compilation compilation : ASKED_ABOUT) {
             valuesRead(compilation, out);
         }
-        return out;
+        everyValueRead = List.copyOf(out);
+        return everyValueRead;
+    }
+
+    /** And given back when the class is done with them, as the readings of a corpus are: a fork
+     *  keeps its JVM, so what is held statically is held for every class after this one. */
+    @AfterAll
+    static void released() {
+        everyValueRead = null;
     }
 
     private static void valuesRead(Compilation compilation, List<PlacedRules> out) {
