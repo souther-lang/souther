@@ -83,8 +83,6 @@ public final class FixtureReader {
     private final OperandRunner operands;
     /** What a value looks like in the form a decoder reads — the rules both directions of a row read. */
     private final NeutralForm neutral;
-    /** What a value of a declaration is made of, as the check settled it. */
-    private final FieldTypes fields;
     /** The same answer as the places a comparison reads a value's parts at. */
     private final ValueTypes types;
 
@@ -93,10 +91,12 @@ public final class FixtureReader {
                   MemoryClassLoader loader) {
         this.module = module;
         this.symbols = symbols;
-        this.fields = fields;
         this.values = values;
         this.loader = loader;
         this.operands = new OperandRunner(module.name(), loader);
+        // What a declaration is laid out as reaches this reading through the two that read a value
+        // by it, and is not held beside them: a reader here asks one of those, and one that asked
+        // the declarations itself would be a third answer about what a value's parts are.
         this.neutral = new NeutralForm(symbols, fields);
         this.types = ValueTypes.over(fields);
     }
