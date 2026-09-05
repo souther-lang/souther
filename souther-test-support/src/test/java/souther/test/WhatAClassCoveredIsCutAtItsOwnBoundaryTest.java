@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.fail;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayDeque;
@@ -38,7 +39,7 @@ class WhatAClassCoveredIsCutAtItsOwnBoundaryTest {
         @Override
         public byte[] take() {
             count++;
-            byte[] record = ("take-" + count).getBytes();
+            byte[] record = ("take-" + count).getBytes(StandardCharsets.UTF_8);
             served.add(record);
             return record;
         }
