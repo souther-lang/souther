@@ -65,7 +65,6 @@ final class AdmissibleReading implements ClauseReading<PlannedValues<FactSubject
      * are two places in a declaration, and what each of them is about is asked of the one in hand.
      */
     private final Map<Core, StringPredicates.Stated> asStated = new IdentityHashMap<>();
-
     private AdmissibleReading(Terms terms, Map<FactSubject, Type> byName,
                               Symbols symbols, Alternatives alternatives, Allowance<FactSubject> allowed) {
         this.terms = terms;
