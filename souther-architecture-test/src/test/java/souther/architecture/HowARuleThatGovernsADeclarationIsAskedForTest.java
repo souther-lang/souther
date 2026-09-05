@@ -1,29 +1,26 @@
 package souther.architecture;
 
+import souther.architecture.WhatASignatureReaches.Scope;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.DerivedSymbols;
 import souther.compiler.check.ExpandedClauseLookup;
 import souther.compiler.check.Symbols;
-import souther.test.RepositoryLayout;
+import souther.test.Signatures;
 
 import org.junit.jupiter.api.Test;
 
-import java.io.IOException;
-import java.io.UncheckedIOException;
 import java.lang.classfile.Attributes;
-import java.lang.classfile.ClassFile;
 import java.lang.classfile.ClassModel;
 import java.lang.classfile.MethodModel;
+import java.lang.classfile.MethodSignature;
+import java.lang.classfile.Signature;
+import java.lang.classfile.attribute.SignatureAttribute;
 import java.lang.reflect.AccessFlag;
-import java.lang.reflect.RecordComponent;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -48,11 +45,19 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * interface holds its own answer; a rule here that demanded the derived world of it as well would
  * be reporting a walk that is already closed, by a stronger arrangement than this one.
  *
+ * <p>Both are read through {@link WhatASignatureReaches}, so that what a walk is handed is read for
+ * what the declaration guarantees rather than for how it was written. A world wrapped in a record,
+ * named through a type variable's bound, or written as the argument of a container is the world the
+ * caller has to have, and a rule that read only the types spelled beside the parameters would be
+ * answered by any of those rewrites.
+ *
  * <p>What this does not hold is that no walk of the kind can be written anywhere else. A class
  * reaching the declarations itself could compose its own, and no reading of a signature would say
  * so. The first line against that is which methods are reachable at all, and this is the second.
  */
 class HowARuleThatGovernsADeclarationIsAskedForTest {
+
+    private static final String TYPE_OPS = "souther/compiler/check/TypeOps";
 
     private static final String A_CLAUSE = internal(Hir.InvariantClause.class);
     private static final String A_DECLARATION = internal(Hir.Def.class);
@@ -63,9 +68,9 @@ class HowARuleThatGovernsADeclarationIsAskedForTest {
      *  is one a walk could be handed, and these rules have to see it arrive. */
     private static final Set<String> THE_WORLDS = worlds();
 
-    private static final Pattern NAMES_A_TYPE = Pattern.compile("L([^;<]+)[;<]");
+    private static final CompiledClasses COMPILED = CompiledClasses.ofRepository();
 
-    private static final RepositoryLayout REPOSITORY = RepositoryLayout.ofWorkingDirectory();
+    private static final WhatASignatureReaches READING = new WhatASignatureReaches(COMPILED);
 
     private static Set<String> worlds() {
         Set<String> out = new LinkedHashSet<>();
@@ -90,12 +95,40 @@ class HowARuleThatGovernsADeclarationIsAskedForTest {
         return type.getName().replace('.', '/');
     }
 
-    /** One method as these rules read it. Split at the parameters' close, because which half a type
-     *  is named in is what is being asked: a walk is handed a world and answers with clauses. */
-    private record Read(String name, String takes, String answersWith) {
+    /**
+     * One method as these rules read it.
+     *
+     * <p>The arguments and the answer apart, because which half a type is named in is what is being
+     * asked: a walk is handed a world and answers with clauses. The type parameters are neither
+     * half. They are what the variables the two halves write stand for, and a rule that started a
+     * reading at them would find a bound the method never uses.
+     */
+    private record Read(String name, MethodSignature signature, Scope scope) {
 
+        boolean takesOneOf(Set<String> wanted) {
+            return READING.anyOf(signature.arguments(), scope, wanted);
+        }
+
+        boolean answersWithOneOf(Set<String> wanted) {
+            return READING.reaches(signature.result(), scope, wanted);
+        }
+
+        /** As a failure names it: the type parameters shown, because a reader of a report about
+         *  {@code S} has to see what {@code S} was declared to be, and not read as roots. */
         String shown() {
-            return name + "(" + takes + ")" + answersWith;
+            String declared = signature.typeParameters().isEmpty() ? ""
+                    : signature.typeParameters().stream().map(Read::shown)
+                            .collect(Collectors.joining(", ", "<", "> "));
+            String takes = signature.arguments().stream().map(Signatures::shown)
+                    .collect(Collectors.joining(", "));
+            return declared + name + "(" + takes + "): " + Signatures.shown(signature.result());
+        }
+
+        private static String shown(Signature.TypeParam declared) {
+            List<Signature.RefTypeSig> bounds = WhatASignatureReaches.boundsOf(declared);
+            return bounds.isEmpty() ? declared.identifier()
+                    : declared.identifier() + " extends " + bounds.stream().map(Signatures::shown)
+                            .collect(Collectors.joining(" & "));
         }
     }
 
@@ -109,23 +142,23 @@ class HowARuleThatGovernsADeclarationIsAskedForTest {
      * what its neighbours here do with it, which is a thing to read rather than to check.
      */
     private static List<Read> reachableMethods() {
+        ClassModel typeOps = COMPILED.read(TYPE_OPS);
+        Scope ofTheClass = Scope.of(TYPE_OPS, WhatASignatureReaches.typeParametersOf(typeOps));
         List<Read> out = new ArrayList<>();
-        for (MethodModel method : typeOps().methods()) {
+        for (MethodModel method : typeOps.methods()) {
             if (method.flags().has(AccessFlag.PRIVATE) || method.flags().has(AccessFlag.SYNTHETIC)
                     || method.methodName().stringValue().startsWith("<")) {
                 continue;
             }
-            // The generic signature where there is one. A clause reached through a list, an
-            // `Optional`, a map value or a record is a clause a caller gets, and the containers
-            // erase to something naming no clause at all — so a rule read off the descriptor would
-            // hold of exactly the shape nobody writes.
-            String signature = method.findAttribute(Attributes.signature())
-                    .map(each -> each.signature().stringValue())
-                    .orElseGet(() -> method.methodType().stringValue());
-            int closed = signature.lastIndexOf(')');
-            out.add(new Read(method.methodName().stringValue(),
-                    signature.substring(signature.indexOf('(') + 1, closed),
-                    signature.substring(closed + 1)));
+            // The generic signature where there is one, and the descriptor read as one where there
+            // is not. A clause reached through a list, an `Optional`, a map value or a record is a
+            // clause a caller gets, and the containers erase to something naming no clause at all —
+            // so a rule read off the descriptor alone would hold of exactly the shape nobody writes.
+            MethodSignature signature = method.findAttribute(Attributes.signature())
+                    .map(SignatureAttribute::asMethodSignature)
+                    .orElseGet(() -> MethodSignature.of(method.methodTypeSymbol()));
+            String name = method.methodName().stringValue();
+            out.add(new Read(name, signature, ofTheClass.and(name, signature.typeParameters())));
         }
         return out;
     }
@@ -134,7 +167,7 @@ class HowARuleThatGovernsADeclarationIsAskedForTest {
     private static List<Read> walksOverWhatGoverns() {
         List<Read> found = new ArrayList<>();
         for (Read method : reachableMethods()) {
-            if (reachesAClause(method.answersWith()) && reachesOneOf(method.takes(), THE_WORLDS)) {
+            if (method.answersWithOneOf(Set.of(A_CLAUSE)) && method.takesOneOf(THE_WORLDS)) {
                 found.add(method);
             }
         }
@@ -145,7 +178,7 @@ class HowARuleThatGovernsADeclarationIsAskedForTest {
     void aWalkOverWhatGovernsIsGivenANameAndNotADeclaration() {
         List<String> handedANode = new ArrayList<>();
         for (Read walk : walksOverWhatGoverns()) {
-            if (reachesADeclaration(walk.takes())) {
+            if (walk.takesOneOf(declarationNodes())) {
                 handedANode.add(walk.shown());
             }
         }
@@ -161,10 +194,10 @@ class HowARuleThatGovernsADeclarationIsAskedForTest {
         List<String> loose = new ArrayList<>();
         for (Read walk : walksOverWhatGoverns()) {
             // What the expanded form states is the lookup's to answer, and it holds that itself.
-            if (reachesOneOf(walk.takes(), Set.of(THE_LOOKUP))) {
+            if (walk.takesOneOf(Set.of(THE_LOOKUP))) {
                 continue;
             }
-            if (!reachesOneOf(walk.takes(), Set.of(THE_DERIVED_WORLD))) {
+            if (!walk.takesOneOf(Set.of(THE_DERIVED_WORLD))) {
                 loose.add(walk.shown());
             }
         }
@@ -187,7 +220,7 @@ class HowARuleThatGovernsADeclarationIsAskedForTest {
         List<String> settled = new ArrayList<>();
         List<String> expanded = new ArrayList<>();
         for (Read walk : walksOverWhatGoverns()) {
-            (reachesOneOf(walk.takes(), Set.of(THE_LOOKUP)) ? expanded : settled).add(walk.shown());
+            (walk.takesOneOf(Set.of(THE_LOOKUP)) ? expanded : settled).add(walk.shown());
         }
 
         assertFalse(settled.isEmpty(),
@@ -210,7 +243,7 @@ class HowARuleThatGovernsADeclarationIsAskedForTest {
     void aClauseInsideWhatAWalkAnswersWithIsOneThisReads() {
         List<String> namingNoClause = new ArrayList<>();
         for (Read walk : walksOverWhatGoverns()) {
-            if (!walk.answersWith().contains(A_CLAUSE)) {
+            if (!walk.signature().result().signatureString().contains(A_CLAUSE)) {
                 namingNoClause.add(walk.shown());
             }
         }
@@ -226,95 +259,5 @@ class HowARuleThatGovernsADeclarationIsAskedForTest {
     void theClassTheseRulesAreAboutWasRead() {
         assertTrue(reachableMethods().size() > 1,
                 "the class these rules are about was read and has a public surface");
-    }
-
-    /**
-     * Whether what {@code signature} describes reaches a clause: it names one, or it names a record
-     * that holds one.
-     *
-     * <p>Held over what a type is made of and not over what it is called. A record carrying a clause
-     * hands its caller the clause, and a rule that read only the types written in the signature
-     * would be answered by wrapping a walk's answer in a record — one line, and no word about the
-     * reading having changed.
-     */
-    private static boolean reachesAClause(String signature) {
-        return reachesOneOf(signature, Set.of(A_CLAUSE));
-    }
-
-    /**
-     * Whether what {@code signature} describes reaches a declaration node.
-     *
-     * <p>Read the way the answer is read, and for the reason the answer is: a pair of a name and the
-     * declaration under it, wrapped in a record, is the same thing to be handed as the two written
-     * side by side. This is not a shape nobody writes — it is what a newtype layer was, and closing
-     * it is half of what this file is about.
-     */
-    private static boolean reachesADeclaration(String signature) {
-        return reachesOneOf(signature, declarationNodes());
-    }
-
-    private static boolean reachesOneOf(String signature, Set<String> wanted) {
-        Matcher named = NAMES_A_TYPE.matcher(signature);
-        while (named.find()) {
-            if (reaches(named.group(1), wanted, new LinkedHashSet<>())) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private static boolean reaches(String type, Set<String> wanted, Set<String> seen) {
-        if (wanted.contains(type)) {
-            return true;
-        }
-        if (!type.startsWith("souther/") || !seen.add(type)) {
-            return false;
-        }
-        Class<?> loaded;
-        try {
-            loaded = Class.forName(type.replace('/', '.'), false,
-                    HowARuleThatGovernsADeclarationIsAskedForTest.class.getClassLoader());
-        } catch (ClassNotFoundException _) {
-            return false;
-        }
-        if (!loaded.isRecord()) {
-            return false;
-        }
-        for (RecordComponent component : loaded.getRecordComponents()) {
-            String generic = component.getGenericSignature();
-            Matcher named = NAMES_A_TYPE.matcher(
-                    generic != null ? generic : component.getType().descriptorString());
-            while (named.find()) {
-                if (reaches(named.group(1), wanted, seen)) {
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
-
-    /**
-     * The compiled class these rules read, found through the repository.
-     *
-     * <p>Not through {@code java.class.path}. What a module is handed there is the reactor's to
-     * decide and it is not the same in every build — a module built beside this one arrives as its
-     * {@code target/classes}, and one already packaged arrives as a jar — so a walk over the entries
-     * is a walk over something that answers differently depending on which goal was run. What these
-     * rules are about is the compiled surface of a class of this repository, and the repository is
-     * where that is.
-     */
-    private static ClassModel typeOps() {
-        for (Path module : REPOSITORY.modules()) {
-            Path compiled = module.resolve("target").resolve("classes")
-                    .resolve("souther/compiler/check/TypeOps.class");
-            if (Files.isRegularFile(compiled)) {
-                try {
-                    return ClassFile.of().parse(Files.readAllBytes(compiled));
-                } catch (IOException e) {
-                    throw new UncheckedIOException(e);
-                }
-            }
-        }
-        throw new AssertionError("the class these rules are about was not built here");
     }
 }
