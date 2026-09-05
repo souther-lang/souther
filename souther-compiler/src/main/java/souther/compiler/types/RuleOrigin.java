@@ -18,21 +18,30 @@ package souther.compiler.types;
  * question about a different construct. They are counted apart: what numbers one is not what numbers
  * the other, and a construct is one or the other and never both.
  *
- * @param module  the module whose source wrote the block
- * @param ordinal which block of that source, by the builder's own count over it
+ * <p>Counted within the owner and not over the file, for the reason {@link CoverageOrigin} gives:
+ * a number counted over everything a source wrote moves when anything written before it does.
+ *
+ * @param owner   what wrote the block. Null exactly for {@link #unwritten}
+ * @param ordinal which block of that owner, by the builder's own count over it
  */
-public record RuleOrigin(String module, int ordinal) {
+public record RuleOrigin(WrittenOwner owner, int ordinal) {
 
     public RuleOrigin {
-        if ((module == null) != (ordinal < 0)) {
-            throw new IllegalArgumentException("a rule says whether a source wrote it: "
-                    + module + " with " + ordinal);
+        if ((owner == null) != (ordinal < 0)) {
+            throw new IllegalArgumentException("a rule says whether a source wrote it, and what it"
+                    + " was counted within: " + owner + " with " + ordinal);
         }
     }
 
-    /** The block {@code module}'s source wrote, counted as {@code ordinal}. */
-    public static RuleOrigin written(String module, int ordinal) {
-        return new RuleOrigin(module, ordinal);
+    /** The block {@code owner} wrote, counted as {@code ordinal} among the ones written there. */
+    public static RuleOrigin written(WrittenOwner owner, int ordinal) {
+        return new RuleOrigin(owner, ordinal);
+    }
+
+    /** The module whose source wrote the block, or null where nobody wrote it. Asked of the owner,
+     *  which is what knows. */
+    public String module() {
+        return owner == null ? null : owner.module();
     }
 
     /**
@@ -48,6 +57,6 @@ public record RuleOrigin(String module, int ordinal) {
 
     /** Whether a source wrote the block this names. */
     public boolean isWritten() {
-        return module != null;
+        return owner != null;
     }
 }

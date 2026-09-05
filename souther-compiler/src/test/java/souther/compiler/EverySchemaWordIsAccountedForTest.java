@@ -1,6 +1,7 @@
 package souther.compiler;
 
 import souther.compiler.source.SourceId;
+import souther.compiler.types.WrittenOwner;
 
 import org.junit.jupiter.api.Test;
 
@@ -548,7 +549,8 @@ class EverySchemaWordIsAccountedForTest {
      * word for rather than as a word this test forgot.
      */
     private static Set<String> armExclusionWords() {
-        CoverageOrigin fork = CoverageOrigin.written("m", 0, CoverageConstruct.IF);
+        CoverageOrigin fork = CoverageOrigin.written(
+                new WrittenOwner.Body("m", "b"), 0, CoverageConstruct.IF);
         return java.util.stream.Stream
                 .<ArmExclusion>of(new ArmExclusion.OccurrencesNotToldApart(fork))
                 .map(AdequacyReport::wire)
@@ -559,7 +561,7 @@ class EverySchemaWordIsAccountedForTest {
     private static Set<String> decidedByWords() {
         return java.util.stream.Stream.of(DecidedBy.THE_DECLARATION,
                         new DecidedBy.BySupplied(List.of(new SuppliedRules.RuleIdentity.Written(
-                                RuleOrigin.written("m", 0)))),
+                                RuleOrigin.written(new WrittenOwner.Body("m", "b"), 0)))),
                         DecidedBy.NOT_SAID)
                 .map(AdequacyReport::wire)
                 .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
@@ -626,7 +628,7 @@ class EverySchemaWordIsAccountedForTest {
     void theWordsAGuardKeysOnAreTheStatusesOfAMeasurementWithAValue() {
         souther.compiler.query.WeakeningSet by = souther.compiler.query.WeakeningSet.of(
                 new souther.compiler.query.Weakening.ArmsUnsettled(
-                        new souther.compiler.types.CoverageOrigin("m", 0, 0,
+                        new souther.compiler.types.CoverageOrigin(new WrittenOwner.Body("m", "b"), 0, 0,
                                 souther.compiler.types.CoverageConstruct.IF)));
         Set<String> withAValue = new LinkedHashSet<>();
         for (souther.compiler.query.Measure<String> each : List.<
@@ -779,7 +781,7 @@ class EverySchemaWordIsAccountedForTest {
     private static souther.compiler.inputs.StandingQuestion boundaryUndetermined() {
         return souther.compiler.inputs.StandingQuestion.BoundaryUndetermined.of(
                 new souther.compiler.check.RuleRef.Comparison("f",
-                        new souther.compiler.types.CoverageOrigin("m", 0, 0,
+                        new souther.compiler.types.CoverageOrigin(new WrittenOwner.Body("m", "b"), 0, 0,
                                 souther.compiler.types.CoverageConstruct.IF)),
                 new souther.compiler.check.RuleCitation.WrittenAt(
                         souther.compiler.diag.Citation.of(
@@ -793,7 +795,7 @@ class EverySchemaWordIsAccountedForTest {
     private static souther.compiler.inputs.StandingQuestion unclassified() {
         return souther.compiler.inputs.StandingQuestion.NothingClassifiesIt.of(
                 new souther.compiler.check.RuleRef.Comparison("f",
-                        new souther.compiler.types.CoverageOrigin("m", 0, 0,
+                        new souther.compiler.types.CoverageOrigin(new WrittenOwner.Body("m", "b"), 0, 0,
                                 souther.compiler.types.CoverageConstruct.IF)),
                 new souther.compiler.check.RuleCitation.WrittenAt(
                         souther.compiler.diag.Citation.of(
@@ -808,7 +810,7 @@ class EverySchemaWordIsAccountedForTest {
             souther.compiler.inputs.InputQuestion about) {
         return souther.compiler.inputs.StandingQuestion.Exact.of(
                 new souther.compiler.check.RuleRef.Comparison("f",
-                        new souther.compiler.types.CoverageOrigin("m", 0, 0,
+                        new souther.compiler.types.CoverageOrigin(new WrittenOwner.Body("m", "b"), 0, 0,
                                 souther.compiler.types.CoverageConstruct.IF)),
                 new souther.compiler.check.RuleCitation.WrittenAt(
                         souther.compiler.diag.Citation.of(
@@ -842,7 +844,7 @@ class EverySchemaWordIsAccountedForTest {
                                         new souther.compiler.types.ValueName.Behavior("m", "f"),
                                         0, 0, on), "Found")),
                         AdequacyReport.schemaRuleKind(new souther.compiler.check.RuleRef.Comparison("f",
-                                new souther.compiler.types.CoverageOrigin("m", 0, 0,
+                                new souther.compiler.types.CoverageOrigin(new WrittenOwner.Body("m", "b"), 0, 0,
                                         souther.compiler.types.CoverageConstruct.IF)))),
                 allowedAt(schema(), List.of("$defs", "ruleId", "properties", "kind")));
     }

@@ -84,6 +84,7 @@ import souther.compiler.query.BehaviorEvidence;
 import souther.compiler.query.PartitionEvidence;
 import souther.compiler.text.DisplayColumns;
 import souther.compiler.types.TypeSymbol;
+import souther.compiler.types.WrittenOwner;
 
 import tools.jackson.databind.node.ArrayNode;
 import tools.jackson.databind.node.ObjectNode;
@@ -2685,15 +2686,37 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 into.put("clause", it.rule().clause());
                 into.put("arm", it.rule().arm());
             }
-            // The comparison, by the behavior it is written in and the construct it was numbered
-            // as. The numbering starts at zero in each source, so the source is part of it.
+            // The comparison, by the definition that wrote it and the construct it was numbered as
+            // there, and by the behavior reading it. The two are not one: a helper's comparison is
+            // read by every behavior that calls it, and the numbering starts at zero in each
+            // definition, so without the definition two helpers' first comparisons are one rule.
             case RuleRef.Comparison it -> {
                 into.put("declaredIn", it.origin().module());
+                into.put("definition", definitionThatWrote(it.origin().owner()));
                 into.put("behavior", it.behavior());
                 into.put("ordinal", it.origin().ordinal());
                 into.put("lowered", it.origin().lowered());
             }
         }
+    }
+
+    /**
+     * The definition {@code owner} names — what a number counted within it is counted within, and so
+     * what a projection writing that number has to write beside it.
+     *
+     * <p>Raises for any other owner. What is published here is a rule of a body and a fork of one,
+     * and a construct written in a type's clauses or in a behavior's statement of itself reaches a
+     * reader by the clause and the arm it is in rather than by a number. So an owner of another kind
+     * arriving is this compiler disagreeing with itself about which projection a construct is
+     * published through, and answering with the module alone would put two definitions' first
+     * constructs under one identity.
+     */
+    private static String definitionThatWrote(WrittenOwner owner) {
+        if (owner instanceof WrittenOwner.Body body) {
+            return body.definition();
+        }
+        throw new IllegalStateException("a rule published here is a definition's, and this one is "
+                + owner + "'s");
     }
 
     /**
@@ -3280,6 +3303,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      */
     private static void armId(ObjectNode into, CoverageSites.Obligation arm) {
         into.put("module", arm.origin().module());
+        into.put("definition", definitionThatWrote(arm.origin().owner()));
         into.put("construct", arm.origin().ordinal());
         into.put("lowered", arm.origin().lowered());
         into.put("part", arm.part());
@@ -3293,6 +3317,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                             one.put("declaration", it.declaration().toString());
                     case SuppliedRules.RuleIdentity.Written it -> {
                         one.put("module", it.rule().module());
+                        one.put("definition", definitionThatWrote(it.rule().owner()));
                         one.put("block", it.rule().ordinal());
                     }
                 }

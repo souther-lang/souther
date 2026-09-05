@@ -270,7 +270,7 @@ public final class Placement {
     }
 
     /** Which source of this compilation this text is, as a finished answer. Off the text alone. */
-    QuotedFrom quotedFrom() {
+    public QuotedFrom quotedFrom() {
         return switch (text) {
             case ASourceOfThisCompile(SourceId source) ->
                     new QuotedFrom.ASourceThisCompileHolds(source);

@@ -39,7 +39,7 @@ public sealed interface RuleRef {
     }
 
     /**
-     * A comparison written in a behavior's body.
+     * A comparison a definition wrote, read for the answer of some behavior.
      *
      * <p>The comparison and not the fork testing it. A condition can be an application of a
      * function parameter, so one predicate handed to two calls is one rule and two predicates

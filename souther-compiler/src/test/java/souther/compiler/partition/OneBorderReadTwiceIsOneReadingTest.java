@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.AReadingOfAPosition;
+import souther.compiler.types.WrittenOwner;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.Clause;
 import souther.compiler.check.ClauseName;
@@ -217,7 +218,8 @@ class OneBorderReadTwiceIsOneReadingTest {
     /** A line of a body, for a place to be parted by something other than the bound. */
     private static AuthoredLine aComparison() {
         return new AuthoredLine(new RuleRef.Comparison("weigh",
-                new souther.compiler.types.CoverageOrigin("example.weigh", 2, 0,
+                new souther.compiler.types.CoverageOrigin(
+                        new WrittenOwner.Body("example.weigh", "weigh"), 2, 0,
                         souther.compiler.types.CoverageConstruct.BINARY)),
                 0, new LineFacts(new ComparisonClaim.Cut(Towards.BELOW, true)), List.of());
     }

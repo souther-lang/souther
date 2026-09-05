@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.coverage.ComparisonEmissionSite;
+import souther.compiler.types.WrittenOwner;
 import souther.compiler.coverage.Numberings;
 
 import org.junit.jupiter.api.Test;
@@ -104,7 +105,8 @@ class AnAccountEstablishesItsDenominatorBeforeItCountsTest {
     private static OriginRef origin() {
         return new OriginRef.ComparisonOrigin(
                 new RuleRef.Comparison("f", new souther.compiler.types.CoverageOrigin(
-                        "example.one", 2, 0, souther.compiler.types.CoverageConstruct.BINARY)),
+                        new WrittenOwner.Body("example.one", "f"), 2, 0,
+                        souther.compiler.types.CoverageConstruct.BINARY)),
                 new OriginRef.ComparisonOrigin.Read(
                         new souther.compiler.coverage.ComparisonOccurrence("example.one", "f", 0),
                         new RuleCitation.WrittenAt(Citation.of(
