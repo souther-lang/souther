@@ -7,18 +7,23 @@ import tools.jackson.databind.json.JsonMapper;
 
 import souther.compiler.check.RuleCitation;
 import souther.compiler.check.RuleRef;
+import souther.compiler.diag.SourcePos;
 import souther.compiler.observe.RunSensitivity;
 import souther.compiler.partition.ReportedReason;
+import souther.compiler.partition.UndividedPosition;
 import souther.compiler.types.CoverageConstruct;
 import souther.compiler.types.CoverageOrigin;
 import souther.compiler.values.UnreadReason;
 
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
  * Every way a reading comes back without a line, and what each of them leaves behind, in one table.
@@ -165,23 +170,20 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
     }
 
     /**
-     * And every reason that is neither of those, which is what a question is left standing by.
+     * And every reason that is neither of those, which is an answer nothing built.
      *
      * <p>Its own table because the two above are answers about a line: what a rule with none of one
-     * leaves, and what a position nothing was reached at leaves. A rule nothing established an
-     * interpretation of is neither — nothing stopped on it and nothing drew a line it is the
-     * absence of — so it has no {@code leavesShort} to answer and no position to be the account of.
+     * leaves, and what a position nothing was reached at leaves. An answer larger than the
+     * allowance is neither — it names no rule for a line to be missing from, and every rule of the
+     * position did arrive — so it has no {@code leavesShort} to answer and no position to be the
+     * account of.
      *
      * <p>What it does have is a word a document writes, which is why it is here at all: the whole
      * of the coarsening is meant to be reviewable in one place, and a reason with a capability of
      * its own would otherwise be projected where nothing reads the collapse back.
      */
-    private static Map<String, String> theOtherReasonsAboutARule() {
+    private static Map<String, String> theReasonsInNeitherHalf() {
         Map<String, String> table = new LinkedHashMap<>();
-        // Not `UNSUPPORTED_SYNTAX`, which promises a rule was read and could not be used: nothing
-        // engaged with this one. Not `RULES_NOT_READ_AT_ALL` either, which promises the rule was
-        // never arrived at: it was.
-        table.put("NoReadingTookItIn", "RULE_NOT_INTERPRETED_HERE/UNAFFECTED");
         // Here because it is in neither capability, which is the fact rather than an oversight. It
         // is not a rule without a line — it is about no rule — and it is not a position whose rules
         // were never reached, since every one of them arrived and was understood. What was not
@@ -227,14 +229,14 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
 
     /** And of the reasons that are in neither of those capabilities. */
     @Test
-    void everyOtherReasonAboutARuleSaysWhatItIsCalled() {
+    void everyReasonInNeitherHalfSaysWhatItIsCalled() {
         Map<String, String> said = new LinkedHashMap<>();
         for (BlockReason each : theOtherReasons()) {
             said.put(each.getClass().getSimpleName(),
                     ReportedReason.of(each).name() + "/" + sensitivityOf(each));
         }
 
-        assertEquals(theOtherReasonsAboutARule(), said);
+        assertEquals(theReasonsInNeitherHalf(), said);
     }
 
     /**
@@ -269,11 +271,8 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
      * those reasons weaken no measurement, so nothing may ask them.
      */
     private static String sensitivityOf(BlockReason reason) {
-        if (reason instanceof BlockReason.ReadingStopReason stopped) {
-            return stopped.runSensitivity().name();
-        }
-        return reason instanceof BlockReason.AboutARule rule
-                ? rule.runSensitivity().name() : "-";
+        return reason instanceof BlockReason.ReadingStopReason stopped
+                ? stopped.runSensitivity().name() : "-";
     }
 
     /**
@@ -320,7 +319,7 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
         java.util.Set<String> written = new java.util.LinkedHashSet<>();
         written.addAll(theRulesWithNoLine().keySet());
         written.addAll(theStopsAtAPosition().keySet());
-        written.addAll(theOtherReasonsAboutARule().keySet());
+        written.addAll(theReasonsInNeitherHalf().keySet());
 
         assertEquals(reasons(BlockReason.class), written,
                 "a reason a document has a word for, and no row saying which word");
@@ -391,8 +390,7 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
                         TermPath.of("c")),
                 new BlockReason.UnsupportedTraversal(BlockReason.Traversal.MAPPING_CONTENT),
                 new BlockReason.ValueRulesNotReached(),
-                new BlockReason.ValueRulesNotReachedPastDepthLimit(),
-                new BlockReason.NoReadingTookItIn());
+                new BlockReason.ValueRulesNotReachedPastDepthLimit());
     }
 
     /** Those of them that are rules with no line, asked of each rather than listed. */
@@ -407,14 +405,17 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
      *
      * <p>Two surfaces, and each is fed by the capabilities its producers hold. An entry about a
      * position is written from a rule that came to no line and from a stop at the position itself;
-     * a question's is written from what is short about a rule. Neither contains the other: a type
-     * that could not be worked out is a stop at a position and reaches no question, and a rule
-     * nothing claimed is about a rule and reaches no position.
+     * a question's is written from what leaves a question standing. Neither set of reasons contains
+     * the other: a type nothing could work out is a stop at a position and raises no question, and
+     * an answer larger than the allowance leaves a question standing and is no rule a position's
+     * entry names.
      *
-     * <p>Each held to its own capabilities and not to the other surface. Written as one vocabulary
-     * and the other plus a word, the question's admitted everything a position's did — a type
-     * nothing could work out among them, which no question can be left standing by — and a
-     * difference is all a check of two sets one of which is defined as the other can ever see.
+     * <p>Their words are another matter, and the words are what a document promises. An answer
+     * larger than the allowance and a pattern larger than one machine are one word out there, and
+     * the second is a rule with no line — so the question's vocabulary comes out inside the
+     * position's while the reasons behind them do not. Which is why each surface is held to its own
+     * producers: read off the other, either would be right about a word its own reasons never
+     * reach.
      */
     @Test
     void eachSurfaceAdmitsTheWordsItsOwnReasonsReach() throws Exception {
@@ -430,8 +431,13 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
 
         assertEquals(aPosition, words(schema, "notReadReason"),
                 "an entry about a position admits what a position's readings can be short of");
-        assertEquals(projected(everyReasonAboutARule()), words(schema, "questionStoppedReason"),
-                "a question admits what can be short about a rule");
+        assertEquals(projected(everyRuleReadingStopped()),
+                words(schema, "ruleStoppedReadingReason"),
+                "what a question's rule left admits what a reading can stop on");
+        assertEquals(projected(everyLimitAQuestionCanStandOn()),
+                words(schema, "answerRealizationStoppedReason"),
+                "and what its position was short of admits what an answer a question waited on can"
+                        + " be short of");
     }
 
     /**
@@ -466,6 +472,12 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
         assertNotNull(node, "the schema has no " + def);
         if (node.has("enum")) {
             node.get("enum").forEach(each -> out.add(each.asString()));
+        }
+        // A surface whose words are exactly another's is written as that one and not as a copy of
+        // it. Read only through `anyOf`, such a surface came back with no words at all and the
+        // vocabularies were held equal by both of them being empty.
+        if (node.has("$ref")) {
+            out.addAll(words(schema, node.get("$ref").asString().substring("#/$defs/".length())));
         }
         if (node.has("anyOf")) {
             for (JsonNode each : node.get("anyOf")) {
@@ -511,11 +523,156 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
                 .toList();
     }
 
-    /** And those of them that are a shortfall about a rule, which is what a question stands on. */
-    private static List<BlockReason.AboutARule> everyReasonAboutARule() {
+    /**
+     * What a value reading's reason is a fact about decides which capability it arrives in, and the
+     * two agree in both directions.
+     *
+     * <p>Enumerated from the reasons rather than listed. {@link UnreadReason#about()} is the one
+     * place the classification is taken, and what this holds is that the projection into these
+     * reasons keeps it: a reason about a rule reaches one a rule is named for, a reason about the
+     * answer reaches one that names none and still leaves a question standing, and a reason about
+     * neither reaches a stop at a position, which raises no question for anything to stand on.
+     *
+     * <p>Both directions, because one of them alone is satisfiable by a projection that sends
+     * everything to one arm. A reason added to the vocabulary fails here rather than arriving at
+     * whichever arm was nearest.
+     */
+    @Test
+    void whatAReasonIsAboutDecidesWhichCapabilityItArrivesIn() {
+        Map<String, String> arrived = new LinkedHashMap<>();
+        for (UnreadReason why : UnreadReason.values()) {
+            arrived.put(why.name(), capabilityOf(BlockReason.of(why)));
+        }
+
+        Map<String, String> expected = new LinkedHashMap<>();
+        for (UnreadReason why : UnreadReason.values()) {
+            expected.put(why.name(), switch (why.about()) {
+                case A_RULE -> "RuleReadingStopped";
+                case THE_ANSWER -> "AnswerRealizationStopped";
+                case NEITHER -> "AboutThePosition";
+            });
+        }
+
+        assertEquals(expected, arrived);
+    }
+
+    /** Which of the three a reason is, asked of the reason and not of where it was written. */
+    private static String capabilityOf(BlockReason.ReadingStopReason reason) {
+        return switch (reason) {
+            case BlockReason.RuleReadingStopped _ -> "RuleReadingStopped";
+            case BlockReason.AnswerRealizationStopped _ -> "AnswerRealizationStopped";
+            case BlockReason.AboutThePosition _ -> "AboutThePosition";
+        };
+    }
+
+    /**
+     * And a question a rule raised is left standing by the first two of those and by neither of the
+     * third.
+     *
+     * <p>The outlet, asked of every reason there is. A rule this reading gave up on and an answer
+     * it could not build both leave the question where they found it; a reading that never arrived
+     * at the position raises no question, so one of those reaching a question would be an account
+     * taken from a place nothing looked at.
+     */
+    @Test
+    void aQuestionIsLeftStandingByEverythingButAStopAtAPosition() {
+        for (UnreadReason why : UnreadReason.values()) {
+            if (why.about() == UnreadReason.About.NEITHER) {
+                assertThrows(IllegalArgumentException.class,
+                        () -> BlockReason.ofAQuestionStandingOn(why),
+                        () -> why + " reached no rule, so no question of one stands on it");
+            } else {
+                assertEquals(BlockReason.of(why), BlockReason.ofAQuestionStandingOn(why),
+                        () -> why + " leaves a question standing, and says the same thing there");
+            }
+        }
+    }
+
+    /**
+     * What a question stands on reaches a document as two, and each is under the order that can
+     * answer for it.
+     *
+     * <p>The parts of the rule have a written place and keep it. A limit the position's answer ran
+     * into has none — the same rules met in another order would have been built — so it stands
+     * under no order beside them, and a sequence across the two would publish a precedence read off
+     * which of this compiler's stores a reason came out of.
+     *
+     * <p>Sorted on the capability, so the placing is the reason's own answer rather than a
+     * convention whoever assembled the list knew.
+     */
+    @Test
+    void whatAQuestionStandsOnIsSaidAsTheTwoOrdersThatAnswerForIt() {
+        WhatAQuestionStandsOn said = new WhatAQuestionStandsOn(
+                RuleReasons.from(List.of(
+                        new RuleReasons.Placed(new SourcePos(1, 1),
+                                new BlockReason.UnreadComparisonDomain()),
+                        new RuleReasons.Placed(new SourcePos(1, 9),
+                                new BlockReason.UnreadValueRule()))),
+                Optional.of(new BlockReason.ExactValuesTooCostly()));
+
+        assertEquals(List.of(UndividedPosition.Reason.UNSUPPORTED_DOMAIN,
+                        UndividedPosition.Reason.UNSUPPORTED_SYNTAX),
+                ReportedReason.wordsFor(said.itsRuleLeft()).written(),
+                "the parts of the rule, in the order they were written");
+        assertEquals(Optional.of(UndividedPosition.Reason.EXACT_VALUES_TOO_COSTLY),
+                said.itsPositionWasShortOf().map(ReportedReason::of),
+                "and what the position's answer was short of, on its own");
+    }
+
+    /**
+     * And a second limit a question can stand on is a decision somebody takes.
+     *
+     * <p>{@code answerStopped} is one word and not an array, because there is one such limit. A
+     * second would be a pair with no order between them either, and what a document writes for a
+     * pair is a decision to take when there is one to take — taken by silence, it would be taken by
+     * whichever a walk met first.
+     *
+     * <p><b>Counted from what can reach the field and not from the capability.</b>
+     * {@link BlockReason.AnswerRealizationStopped} holds what an answer this compiler was building
+     * ran out on, wherever that answer was being built; a question of a rule stands on the half of
+     * it a value reading records, which is what {@link UnreadReason} has words for. A position that
+     * could not hand its rules on as sets is the other half — it is a line a reader is owed at the
+     * place, and no rule raises a question of it — so counting the capability would have this
+     * asking for a decision about a field that reason cannot reach.
+     */
+    @Test
+    void aSecondLimitAQuestionCanStandOnIsADecisionSomebodyTakes() {
+        assertEquals(List.of(UnreadReason.EXACT_VALUES_TOO_COSTLY),
+                Arrays.stream(UnreadReason.values())
+                        .filter(each -> each.about() == UnreadReason.About.THE_ANSWER).toList(),
+                "a second one is a decision about what a document writes, and this is where it"
+                        + " comes up for taking");
+    }
+
+    /**
+     * Those of them a question stands on because a reading stopped on a part of its rule, and those
+     * it stands on because the position's answer was not built.
+     *
+     * <p>Two lists because they are two surfaces. A question's account is written as what the parts
+     * of the rule left, in the order they were written, and what its position was short of beside
+     * it under no order at all — so a word each of them admits is a word the other need not, and a
+     * check over their union would pass on either of them holding a word only the other reaches.
+     */
+    private static List<BlockReason.RuleReadingStopped> everyRuleReadingStopped() {
         return everyReason().stream()
-                .filter(BlockReason.AboutARule.class::isInstance)
-                .map(BlockReason.AboutARule.class::cast).toList();
+                .filter(BlockReason.RuleReadingStopped.class::isInstance)
+                .map(BlockReason.RuleReadingStopped.class::cast).toList();
+    }
+
+    /**
+     * The other half a question stands on, which names no rule.
+     *
+     * <p>From what reaches the field and not from {@link BlockReason.AnswerRealizationStopped}. That
+     * capability holds what an answer this compiler was building ran out on, wherever it was being
+     * built — a position that could not hand its rules on as sets is one, and it is a line a reader
+     * is owed at the place rather than anything a rule raises a question of. What a question waits
+     * on is the half a value reading records, which is what {@link UnreadReason} has words for.
+     */
+    private static List<BlockReason.AnswerRealizationStopped> everyLimitAQuestionCanStandOn() {
+        return Arrays.stream(UnreadReason.values())
+                .filter(each -> each.about() == UnreadReason.About.THE_ANSWER)
+                .map(BlockReason::ofAQuestionStandingOn)
+                .map(BlockReason.AnswerRealizationStopped.class::cast).toList();
     }
 
     /** And those of them that name a position and no rule. */

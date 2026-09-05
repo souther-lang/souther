@@ -53,8 +53,16 @@ interface ClauseReading<S, E> {
     /** Both readings holding at once. */
     S both(S one, S other);
 
-    /** Either reading holding. */
-    S either(S one, S other);
+    /**
+     * Either reading holding, at the connective an author wrote it with.
+     *
+     * <p>The node is here because a reading with something to say about the choice has nowhere else
+     * to learn where it stands. What the fold hands up is two readings and a flag; which choice they
+     * are the two branches of is known at this call and at no call after it, so a reading that wants
+     * it and is not given it here works it out from something else — and the something else is
+     * whichever place a walk happened to reach, which is a fact about the walk.
+     */
+    S either(Core writtenAt, S one, S other);
 
     /**
      * What {@code e} leaves, stated where {@code positive} and denied where it is not, read from
@@ -100,7 +108,7 @@ interface ClauseReading<S, E> {
             case ClauseExpr.Leaf it -> leaf(it.of(), it.positive(), at);
             case ClauseExpr.Joined it -> switch (it.how()) {
                 case BOTH -> both(over(it.left(), at, scope, per), over(it.right(), at, scope, per));
-                case EITHER -> either(over(it.left(), at, scope, per),
+                case EITHER -> either(it.of(), over(it.left(), at, scope, per),
                         over(it.right(), at, scope, per));
             };
             // The one place the environment changes, and it changes for what is under the binding

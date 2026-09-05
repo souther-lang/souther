@@ -1,6 +1,5 @@
 package souther.compiler.inputs;
 
-import souther.compiler.diag.TheCompilerDisagreesWithItself;
 import souther.compiler.types.BindingId;
 
 import java.util.HashSet;
@@ -57,8 +56,7 @@ final class BindingTrail {
     }
 
     /** A binding whose value is read through the binding itself. */
-    static final class ReadThroughItself extends IllegalStateException
-            implements TheCompilerDisagreesWithItself {
+    static final class ReadThroughItself extends IllegalStateException {
 
         private static final long serialVersionUID = 1L;
 

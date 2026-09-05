@@ -151,14 +151,14 @@ public record Clause(Id id, Optional<ClauseName> name, DiagnosticPlace at) {
     /**
      * Two readings of one clause that do not agree about the clause.
      *
-     * <p>Its own type because the check that would build one swallows what it throws. An analysis
-     * that fell over leaves the run-time check standing, which is the right answer for a shape the
-     * walk has no rule for; this is not that. It says the compiler's own model of a declaration
-     * contradicts itself, and swallowed it comes out as a behavior with nothing to report — the same
-     * thing a behavior whose invariants all discharge comes out as.
-     * {@link InvariantChecker#gaveUp} refuses it for that reason.
+     * <p>What a declaration says is one thing, and two readings of it are two accounts of that one
+     * thing. Where they disagree about where a clause is written, one of them is about a clause the
+     * other is not, and everything either says of it is filed against the wrong obligation. There is
+     * no answer to compose out of the two: taking one publishes a reading the model does not decide,
+     * and a body that came back with nothing to say for that reason is a body whose invariants all
+     * discharge, said in the same words.
      */
-    static final class NotOneClause extends TheCheckDisagreesWithItself {
+    static final class NotOneClause extends IllegalStateException {
 
         private static final long serialVersionUID = 1L;
 

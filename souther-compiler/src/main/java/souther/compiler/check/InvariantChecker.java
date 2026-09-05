@@ -559,8 +559,8 @@ public final class InvariantChecker {
 
     /** {@link Seeded} for one declaration. A declaration this cannot read is one whose fields it says
      * nothing about, which is the same answer as a declaration with no rules — so nothing about the
-     * declaration throws. {@link Terms.OneTermTwoKinds} is not about the declaration and is not
-     * caught ({@link #gaveUp}). */
+     * declaration throws. {@link Terms.OneTermTwoKinds} is not about the declaration, and nothing
+     * below here catches it. */
     static Seeded seedFields(TypeSymbol.AtModule named, Hir.Data data, RuleReadingSource source,
                              ReadingPolicy policy) {
         return seedFields(named, data, source, policy, Map.of());
@@ -1200,12 +1200,13 @@ public final class InvariantChecker {
      * for a conjunct it never saw — and read as "nothing constrained here" it would answer for the
      * position that conjunct names.
      *
-     * <p>Not an ordinary limit, so not swallowed. A shape a walk has no rule for leaves the run-time
-     * check standing; this is the two walks disagreeing about what the clause is made of, and a
-     * value that came back with nothing to say for that reason reads exactly like a value whose
-     * rules were all read.
+     * <p>Not a rule this reading declines. The seeding hands over the same clause the readings went
+     * back over, so the two meet the same parts by construction — and where they do not, both of
+     * this compiler's accounts of one clause are standing and they are not the same clause. A value
+     * that came back with nothing to say for that reason reads exactly like a value whose rules were
+     * all read.
      */
-    static final class APartNoReadingSaw extends TheCheckDisagreesWithItself {
+    static final class APartNoReadingSaw extends IllegalStateException {
 
         private static final long serialVersionUID = 1L;
 

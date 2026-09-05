@@ -217,11 +217,11 @@ public final class Diagnostic {
      * has no answer of its own to read; one that has an answer is not asking, and being handed a
      * different one means somebody worked it out again from what was to hand.
      *
-     * <p>Marked, for the reason {@code DiagnosticPlace.NotAPlace} is: what raises this runs where an
-     * analysis may fall open, and an unmarked refusal would be swallowed there.
+     * <p>What was handed over, and not a state this got into: the report already answers where its
+     * code is written, and a caller supplying a different answer worked one out again from what was
+     * to hand rather than reading the one that is there.
      */
-    public static final class MovedSomewhereElsesCode extends IllegalArgumentException
-            implements TheCompilerDisagreesWithItself {
+    public static final class MovedSomewhereElsesCode extends IllegalArgumentException {
 
         private static final long serialVersionUID = 1L;
 

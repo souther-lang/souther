@@ -122,15 +122,4 @@ class WhetherAPlaceCanBeQuotedIsAskedBeforeItIsPointedAtTest {
                 () -> DiagnosticPlace.of(new Region(new SourcePos(3, 5),
                         new SourcePos(3, 20, new SourceId("model.sou")))));
     }
-
-    /**
-     * And it is not swallowed. The check that would build one fails open — an analysis that fell
-     * over leaves the run-time check standing — so an exception thrown down there is not an
-     * assertion but a behavior that quietly reports nothing, which is what a behavior whose
-     * invariants all discharge reports.
-     *
-     * <p>Asked of what the failure is and not of which ones the boundary has met. The refusal is
-     * raised where regions become places and the others are raised where clauses are read, which is
-     * two layers and one question ({@code TheCompilerDisagreesWithItself}).
-     */
 }

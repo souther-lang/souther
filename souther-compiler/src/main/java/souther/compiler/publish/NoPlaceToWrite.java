@@ -1,7 +1,6 @@
 package souther.compiler.publish;
 
 import souther.compiler.diag.Citation;
-import souther.compiler.diag.TheCompilerDisagreesWithItself;
 
 /**
  * A place a document was asked to write that names no file.
@@ -27,8 +26,7 @@ import souther.compiler.diag.TheCompilerDisagreesWithItself;
  * about the contract and not about one surface. What a document may point at is one answer however
  * many surfaces go on to say it.
  */
-public final class NoPlaceToWrite extends IllegalArgumentException
-        implements TheCompilerDisagreesWithItself {
+public final class NoPlaceToWrite extends IllegalArgumentException {
 
     private static final long serialVersionUID = 1L;
 

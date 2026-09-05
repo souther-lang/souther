@@ -1,6 +1,7 @@
 package souther.compiler.publish;
 
-import java.util.ArrayList;
+import souther.compiler.inputs.AuthoredOrder;
+
 import java.util.List;
 
 /**
@@ -35,25 +36,22 @@ public final class SourceOrdered<T> {
     }
 
     /**
-     * The reasons as the author wrote them, each once.
+     * The reasons as the author wrote them, carried across from where that was said.
      *
-     * <p>The caller says by calling this that the order it hands over is the model's own. Where it
-     * is this compiler's, the order belongs to {@link PublicationOrders} and the value is a
-     * {@link CanonicalSelection}.
+     * <p><b>Not a place the claim is made.</b> Whether an order is the model's is decided by
+     * whoever had the source in hand, and {@link AuthoredOrder} is that claim said there; this
+     * carries it to the crossing. Taking a bare list instead, the claim was made by whatever was
+     * holding one — and a projection two packages from anything that had seen a clause was stating
+     * a fact about the model, correctly for as long as there was one producer.
      *
-     * <p>A list and not a collection, which is the opposite of what {@link CanonicalSelection.Order}
-     * takes. That one throws the order away and reads membership, so anything holding the members
-     * will do; this one keeps the order, so what it is handed has to have one — a set handed over
-     * as written would be an order claimed for something that has none.</p>
+     * <p>Where the order is this compiler's, it belongs to {@link PublicationOrders} and the value
+     * is a {@link CanonicalSelection}. There is no third kind, and a plurality that is partly one
+     * and partly the other is two pluralities: nothing in the model puts a part somebody wrote
+     * before or after a limit that belongs to no part, so a sequence across the two would publish a
+     * precedence out of the store a reason was recorded in.
      */
-    public static <T> SourceOrdered<T> asWritten(List<? extends T> reasons) {
-        List<T> out = new ArrayList<>();
-        for (T each : reasons) {
-            if (!out.contains(each)) {
-                out.add(each);
-            }
-        }
-        return new SourceOrdered<>(List.copyOf(out));
+    public static <T> SourceOrdered<T> carrying(AuthoredOrder<T> written) {
+        return new SourceOrdered<>(List.copyOf(written.written()));
     }
 
     /** The reasons that are held, in the order they were written. */

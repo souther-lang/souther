@@ -1,6 +1,7 @@
 package souther.compiler.codegen;
 
 import souther.compiler.generated.GeneratedImplementations;
+import souther.compiler.generated.ProbeImage;
 import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.jvm.GeneratedClass;
 import souther.compiler.jvm.JvmClassName;
@@ -11,6 +12,7 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 /**
@@ -49,11 +51,21 @@ public final class Emissions {
     /** Which module these were emitted for, so a set with nothing of a kind in it still says whose
      *  it is. */
     private final String module;
+    /** Whose numbers these classes record a run in, where they record one at all. */
+    private final ProbeImage probes;
     /** What was handed out, once there is such a thing. */
     private Map<String, ClassFileImage> sealed;
 
-    public Emissions(String module) {
+    /**
+     * Not public. What these classes record a run in is the generation's answer, and the way to say
+     * that is that nothing outside the generation can build a set of them and put a numbering on it.
+     * A caller holding the bodies can make an equal plan and an equal identity, so a public way in
+     * here would be a second place the answer could come from, told apart from the first by nothing.
+     */
+    Emissions(String module, ProbeImage probes) {
         this.module = module;
+        this.probes = Objects.requireNonNull(probes,
+                "classes say whether a run through them leaves an account");
     }
 
     /**
@@ -173,6 +185,19 @@ public final class Emissions {
             }
         }
         return new GeneratedImplementations(module, behaviors);
+    }
+
+    /**
+     * Whose numbers a run through these classes is recorded in.
+     *
+     * <p>The generation's own answer, and not one worked out again beside it. A numbering is made
+     * from bodies, so anyone holding those bodies can make an equal one — and a report reading a run
+     * back would then be trusting that two makings came to the same answer rather than reading the
+     * one the probes were written from. What the emitter numbered is what the emitter says it
+     * numbered.
+     */
+    public ProbeImage probes() {
+        return probes;
     }
 
     /**

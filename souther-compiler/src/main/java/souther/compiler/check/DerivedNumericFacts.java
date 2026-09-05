@@ -1118,16 +1118,15 @@ final class DerivedNumericFacts {
      *
      * <p>Nothing a program can write reaches this: a recipe is recorded over the parts a value was
      * built from, and a part is a strictly smaller expression. What it says is that the naming built
-     * an atom out of itself, which is the check disagreeing with itself about which value an atom is
-     * — so it is refused rather than swallowed, for the reason
-     * {@link TheCheckDisagreesWithItself} gives.
+     * an atom out of itself, which is the check disagreeing with itself about which value an atom
+     * is.
      *
      * <p>Asked of what a reading walks, and so of the recipes its question reaches rather than of
      * every recipe the naming recorded. A cycle among recipes no reading reaches goes unremarked,
      * which is a narrowing of where an assertion about this check's own naming can fire and not of
      * what any program is told: what such a recipe would have derived is read by nothing.
      */
-    static final class AnAtomComputedFromItself extends TheCheckDisagreesWithItself {
+    static final class AnAtomComputedFromItself extends IllegalStateException {
 
         private static final long serialVersionUID = 1L;
 

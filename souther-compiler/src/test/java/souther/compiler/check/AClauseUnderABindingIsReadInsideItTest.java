@@ -67,7 +67,7 @@ class AClauseUnderABindingIsReadInsideItTest {
         }
 
         @Override
-        public List<AtALeaf> either(List<AtALeaf> one, List<AtALeaf> other) {
+        public List<AtALeaf> either(Core writtenAt, List<AtALeaf> one, List<AtALeaf> other) {
             return joined(one, other);
         }
 

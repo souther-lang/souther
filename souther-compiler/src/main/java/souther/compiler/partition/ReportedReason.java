@@ -1,6 +1,8 @@
 package souther.compiler.partition;
 
+import souther.compiler.inputs.AuthoredOrder;
 import souther.compiler.inputs.BlockReason;
+import souther.compiler.inputs.RuleReasons;
 import souther.compiler.publish.SourceOrdered;
 
 import java.util.ArrayList;
@@ -21,12 +23,14 @@ import java.util.List;
 public final class ReportedReason {
 
     /**
-     * The words for what a question stands on, in the order the parts that raised it were written.
+     * The words for what the parts of a rule left a question standing on, in the order they were
+     * written.
      *
-     * <p>Made here, where what the order is is still known. What a question was short of arrives in
-     * the order the author wrote the parts of the rule, a document promises a reader that order, and
-     * nothing downstream of this can tell it from the order a walk happened to take — so a reader
-     * that made the claim there would be claiming what it cannot see.
+     * <p><b>Carried and not claimed.</b> The order arrives already said — it was said where a
+     * reading's own record of a clause was still in hand — and this maps each member to the word a
+     * document writes. Handed a bare list instead, this stated an order it had nothing to see: it
+     * was right while every member came from one producer, and stopped being right when a second
+     * arrived with nobody in a position to notice.
      *
      * <p>Each projected on its own and the words made distinct afterwards, never the other way
      * round. What a document promises is deliberately coarser than what this compiler records, so
@@ -34,12 +38,77 @@ public final class ReportedReason {
      * projection saying they are one thing to lift, rather than a reader dropping one of them.
      */
     public static SourceOrdered<UndividedPosition.Reason> asWritten(
-            List<BlockReason.AboutARule> stopped) {
-        List<UndividedPosition.Reason> said = new ArrayList<>();
-        for (BlockReason.AboutARule each : stopped) {
-            said.add(of(each));
+            AuthoredOrder<BlockReason.RuleReadingStopped> stopped) {
+        return SourceOrdered.carrying(stopped.map(ReportedReason::of));
+    }
+
+    /**
+     * The same words, with whichever claim about their order the reading was able to make.
+     *
+     * <p>Two arms because there are two answers and a document is owed the right one. Reasons of one
+     * text stand in the order that text puts them in; reasons of two texts stand in no order
+     * anybody wrote, and a reader shown one anyway would be reading which text this compiler
+     * compared first. Nothing here decides which: {@link RuleReasons} decided it where the places
+     * were still in hand, and this carries the decision across.
+     */
+    public static Published wordsFor(RuleReasons stopped) {
+        return switch (stopped) {
+            case RuleReasons.AsWritten it ->
+                    new Published.AsTheAuthorWroteThem(asWritten(it.order()));
+            case RuleReasons.NoSingleAuthoredOrder it -> new Published.InNoAuthoredOrder(
+                    distinct(it.reasons()));
+        };
+    }
+
+    /** Each word once, keeping where it first stood, which is what a coarsening leaves. */
+    private static List<UndividedPosition.Reason> distinct(
+            List<BlockReason.RuleReadingStopped> these) {
+        List<UndividedPosition.Reason> out = new ArrayList<>();
+        for (BlockReason.RuleReadingStopped each : these) {
+            UndividedPosition.Reason said = of(each);
+            if (!out.contains(said)) {
+                out.add(said);
+            }
         }
-        return SourceOrdered.asWritten(said);
+        return List.copyOf(out);
+    }
+
+    /**
+     * What a document is handed, saying what its order is.
+     *
+     * <p>A writer that only prints the words asks {@link #written} and prints them. A writer that
+     * wants to tell a reader the order is the author's has to say which arm it is holding, which is
+     * the whole of what this is for: an array in a document says somebody put it in an order and
+     * never says who.
+     */
+    public sealed interface Published {
+
+        /** The words, in whatever order this arm answers for. */
+        List<UndividedPosition.Reason> written();
+
+        /** Reasons of one text, in the order that text puts the places they stand on. */
+        record AsTheAuthorWroteThem(SourceOrdered<UndividedPosition.Reason> order)
+                implements Published {
+
+            @Override
+            public List<UndividedPosition.Reason> written() {
+                return order.written();
+            }
+        }
+
+        /**
+         * Reasons written across texts, in an order that is steady and is nothing else.
+         *
+         * <p>Steady so that one compiler over one source writes one document. Not a claim: what
+         * settles it is which text this walk reached first, and nothing an author did says a word of
+         * one file comes before a word of another.
+         */
+        record InNoAuthoredOrder(List<UndividedPosition.Reason> written) implements Published {
+
+            public InNoAuthoredOrder {
+                written = List.copyOf(written);
+            }
+        }
     }
 
     /**
@@ -92,17 +161,6 @@ public final class ReportedReason {
             // the matter is how far in the rule goes.
             case BlockReason.PatternTooDeeplyNested _ ->
                     UndividedPosition.Reason.PATTERN_TOO_DEEPLY_NESTED;
-            // Its own word, and not the one above. That one promises a rule was read and could not
-            // be used, which sends an author after the form their clause is written in; here the
-            // rule was read and nothing complained of the form, so they would be looking for a
-            // complaint nobody made. Neither is it the rule never having been reached — it was.
-            // The published words had these two and the state between them is one a model reaches,
-            // so the partition is one finer rather than the state going out under a word whose
-            // promise it does not meet. What the word itself should be is #1335: it says nothing
-            // established an interpretation, and what happened is that the interpretations were
-            // established and building what they come to together ran past the allowance.
-            case BlockReason.NoReadingTookItIn _ ->
-                    UndividedPosition.Reason.RULE_NOT_INTERPRETED_HERE;
             // Its own word, and not the one above. Both are rules this reading did not turn into a
             // line, and a reader acting on them is doing different work: one wants a reader for a
             // form that was seen, and one wants the gathering to reach the rules at all. Collapsed

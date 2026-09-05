@@ -1,9 +1,5 @@
 package souther.compiler.inputs;
 
-import souther.compiler.diag.TheCompilerDisagreesWithItself;
-
-import java.util.List;
-
 /**
  * Two readings of one question that disagree about what the author wrote it short of.
  *
@@ -14,18 +10,16 @@ import java.util.List;
  * something they did not.
  *
  * <p>Not an argument somebody got wrong, which is what an {@link IllegalArgumentException} out of a
- * fold reads as. Both accounts were produced by this compiler from one model, so a difference
- * between them is this compiler contradicting itself, and it says so in the terms such a thing is
- * said in.
+ * fold reads as. Both accounts were produced by this compiler from one model, so what is wrong is
+ * the state they were read out of and not what a caller handed over — and the type says which.
  */
-public final class TwoAccountsOfOneQuestion extends IllegalArgumentException
-        implements TheCompilerDisagreesWithItself {
+public final class TwoAccountsOfOneQuestion extends IllegalStateException {
 
     private static final long serialVersionUID = 1L;
 
     public TwoAccountsOfOneQuestion(StandingQuestion.Exact.Fact question,
-                                    List<BlockReason.AboutARule> one,
-                                    List<BlockReason.AboutARule> other) {
+                                    WhatAQuestionStandsOn one,
+                                    WhatAQuestionStandsOn other) {
         super("two readings of " + question + " disagree about what the author wrote it short of: "
                 + one + " and " + other);
     }

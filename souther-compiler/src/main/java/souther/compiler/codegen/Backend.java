@@ -27,6 +27,8 @@ import souther.compiler.check.TypeOps;
 import souther.compiler.core.Composition;
 import souther.compiler.core.Core;
 
+import souther.compiler.coverage.CoverageSites;
+import souther.compiler.generated.ProbeImage;
 import souther.compiler.jvm.GeneratedClass;
 import souther.compiler.jvm.JvmClassName;
 import souther.compiler.jvm.SoutherJvmAbi;
@@ -168,10 +170,10 @@ public final class Backend {
      * that ask for them are an evaluation and a measurement. Anything that ships goes through the
      * signature above and gets bytecode with no reference to either in it at all.
      *
-     * <p>An {@code instrumentation} carrying a coverage plan must have been made from the bodies in
-     * {@code checked} — the same instances, not equal ones. The emitter looks each node up by identity
-     * and refuses to emit a body it cannot find an arm for, rather than emit one arm short and report
-     * the arm that ran as one nothing reaches.
+     * <p>Where {@code instrumentation} asks for coverage, the arms numbered are the arms of
+     * {@code checked}, and the plan that numbers them is made here from those bodies. The emitter
+     * looks each node up by identity, so a plan of any other bodies addresses none of the nodes
+     * being walked — which is why there is nowhere for a caller to supply one.
      */
     public static Emissions generate(Hir.Module module, DerivedSymbols symbols,
                                                KernelSignatures kernels,
@@ -246,7 +248,18 @@ public final class Backend {
         ctx.setDischargeInvariants(dischargeInvariants);
         ctx.setValueShapes(shapes);
         ctx.setEnsuresChecks(checks);
-        ctx.setCoveragePlan(instrumentation.coverage());
+        // The one place a coverage plan is made, and it is made from the bodies about to be emitted.
+        // Every number the emitter writes into the bytecode and every number a report reads back
+        // comes from this call, so there is no second numbering for either of them to disagree with.
+        CoverageSites.Plan coverage = instrumentation.measuresCoverage()
+                ? checked.plan() : CoverageSites.Plan.NONE;
+        // Said off what was asked for and not off what the plan came to hold. A module whose bodies
+        // have no arm to number is a module a run leaves an empty account of, which is not the same
+        // as one a run leaves no account of at all.
+        ProbeImage probes = instrumentation.measuresCoverage()
+                ? new ProbeImage.Instrumented(coverage.identity())
+                : new ProbeImage.Uninstrumented();
+        ctx.setCoveragePlan(coverage);
         ctx.setCounting(instrumentation.counting());
         Backend b = new Backend(ctx, checked);
         // Before anything is written: a declaration wide enough that its generated method cannot hold
@@ -302,7 +315,7 @@ public final class Backend {
             }
         });
         b.rejectBridgeCaseCollisions(module, bridgeCases, localTypes, behaviorClassOwner);
-        Emissions out = new Emissions(module.name());
+        Emissions out = new Emissions(module.name(), probes);
         behaviorResults.forEach((union, alternatives) -> {
             // the union and its encoder belong to the behavior whose output they are, not to the
             // module, though the behavior did not write them

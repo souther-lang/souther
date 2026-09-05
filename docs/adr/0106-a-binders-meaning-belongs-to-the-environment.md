@@ -137,9 +137,10 @@ admitted-values question without any reading recognising its positions.
 This does not make every standing question attributable to a rule-level reading failure. A reading
 may consume the rule completely and still be unable to construct the exact answer its rules come to
 within its allowance; such a loss is about the answer rather than about any rule that paid into it,
-and it remains represented separately (`RuleAccounting.Why.NothingTookItIn`, which is where a
-question with no reason filed under its rule arrives). A question with neither a rule's account nor
-the answer's is the accounting disagreeing with itself and is refused where it is made.
+and it is recorded at the position rather than filed under any rule. The question stands on it all
+the same, beside whatever its own rule left, so a rule short in both ways carries both accounts. A
+question with neither a rule's account nor the answer's is the accounting disagreeing with itself
+and is refused where it is made.
 
 The initializer is now read where a read of the binder asks for it, rather than once before the body.
 A binding the body never reads is no longer read at all, which is the intended reading: what a name

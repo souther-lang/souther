@@ -179,11 +179,11 @@ class AChoiceIsDecidedByEveryClauseAndAnsweredByItsOwnTest {
      */
     @Test
     void whatLeftTheConstraintOpenIsTheChoiceItWasOffered() {
-        ChoiceId choice = new ChoiceId();
+        RuleShortfall.Site.AtAChoice choice = aChoice();
 
         assertEquals(java.util.Set.of(new RuleShortfall(CONSTRAINED,
                         UnreadReason.ALTERNATIVE_NOT_READ,
-                        new RuleShortfall.Site.AtAChoice(choice))),
+                        choice)),
                 theBranchRead(java.util.Set.of())
                         .either(choice, theBranchNothingRead(java.util.Set.of()))
                         .ruleShortfalls(),
@@ -202,12 +202,12 @@ class AChoiceIsDecidedByEveryClauseAndAnsweredByItsOwnTest {
     @Test
     void aShortfallBothBranchesHoldIsNotWhatTheChoiceLeftOpen() {
         RuleShortfall brought = new RuleShortfall(CONSTRAINED, UnreadReason.ALTERNATIVE_NOT_READ,
-                new RuleShortfall.Site.AtAChoice(new ChoiceId()));
-        ChoiceId choice = new ChoiceId();
+                aChoice());
+        RuleShortfall.Site.AtAChoice choice = aChoice();
 
         assertEquals(java.util.Set.of(brought, new RuleShortfall(CONSTRAINED,
                         UnreadReason.ALTERNATIVE_NOT_READ,
-                        new RuleShortfall.Site.AtAChoice(choice))),
+                        choice)),
                 theBranchRead(java.util.Set.of(brought))
                         .either(choice, theBranchNothingRead(java.util.Set.of(brought)))
                         .ruleShortfalls(),
@@ -219,11 +219,11 @@ class AChoiceIsDecidedByEveryClauseAndAnsweredByItsOwnTest {
     @Test
     void aShortfallOnlyTheUnreadBranchHoldsAnswersForThePosition() {
         RuleShortfall inside = new RuleShortfall(CONSTRAINED, UnreadReason.ALTERNATIVE_NOT_READ,
-                new RuleShortfall.Site.AtAChoice(new ChoiceId()));
+                aChoice());
 
         assertEquals(java.util.Set.of(inside),
                 theBranchRead(java.util.Set.of())
-                        .either(new ChoiceId(), theBranchNothingRead(java.util.Set.of(inside)))
+                        .either(aChoice(), theBranchNothingRead(java.util.Set.of(inside)))
                         .ruleShortfalls(),
                 "answering it settles the position through this branch, which takes the choice's"
                         + " shortfall with it");
@@ -243,17 +243,22 @@ class AChoiceIsDecidedByEveryClauseAndAnsweredByItsOwnTest {
 
         assertEquals(java.util.Set.of(form),
                 theBranchRead(java.util.Set.of())
-                        .either(new ChoiceId(), theBranchNothingRead(java.util.Set.of(form)))
+                        .either(aChoice(), theBranchNothingRead(java.util.Set.of(form)))
                         .ruleShortfalls(),
                 "a form only the unread branch holds accounts for the position");
-        ChoiceId choice = new ChoiceId();
+        RuleShortfall.Site.AtAChoice choice = aChoice();
         assertEquals(java.util.Set.of(form, new RuleShortfall(CONSTRAINED,
                         UnreadReason.ALTERNATIVE_NOT_READ,
-                        new RuleShortfall.Site.AtAChoice(choice))),
+                        choice)),
                 theBranchRead(java.util.Set.of(form))
                         .either(choice, theBranchNothingRead(java.util.Set.of(form)))
                         .ruleShortfalls(),
                 "and the same form standing in both branches does not");
+    }
+
+    /** One choice somebody wrote, told from every other by being this one. */
+    private static RuleShortfall.Site.AtAChoice aChoice() {
+        return new RuleShortfall.Site.AtAChoice(new ChoiceId(), new SourcePos(1, 1));
     }
 
     /** A branch that was read, constraining one position and settling another. */
@@ -276,14 +281,14 @@ class AChoiceIsDecidedByEveryClauseAndAnsweredByItsOwnTest {
     /** And two choices leaving one position open are two things an author can look at. */
     @Test
     void twoChoicesLeavingOnePositionOpenAreTwo() {
-        ChoiceId one = new ChoiceId();
-        ChoiceId other = new ChoiceId();
+        RuleShortfall.Site.AtAChoice one = aChoice();
+        RuleShortfall.Site.AtAChoice other = aChoice();
 
         assertEquals(2, java.util.Set.of(
                         new RuleShortfall(CONSTRAINED, UnreadReason.ALTERNATIVE_NOT_READ,
-                                new RuleShortfall.Site.AtAChoice(one)),
+                                one),
                         new RuleShortfall(CONSTRAINED, UnreadReason.ALTERNATIVE_NOT_READ,
-                                new RuleShortfall.Site.AtAChoice(other))).size(),
+                                other)).size(),
                 "the position is open twice and there are two clauses to look at; held as reasons"
                         + " at the position they were one, and which of them a reader was sent to"
                         + " was whichever the walk met first");

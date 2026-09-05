@@ -158,12 +158,11 @@ public record SourcePos(int line, int column, Placement placement) {
     /**
      * A position asked where its code came from when its code is written at it.
      *
-     * <p>Marked, for the reason {@code DiagnosticPlace.NotAPlace} is: a caller that got here was
-     * branching on something other than the question, and an analysis that falls open would swallow
-     * an unmarked one and report a subject as having nothing wrong with it.
+     * <p>This position's own state and not a bad argument: where the code is written is settled when
+     * the position is made, and a caller asking where else it came from has already been told the
+     * answer is here. What such a caller branched on is not the question it is asking.
      */
-    public static final class NotWrittenElsewhere extends IllegalStateException
-            implements TheCompilerDisagreesWithItself {
+    public static final class NotWrittenElsewhere extends IllegalStateException {
 
         private static final long serialVersionUID = 1L;
 

@@ -69,11 +69,12 @@ class WhoMayMakeARuleShortfallTest {
      * <p>A leaf is settled where the node is being read, and nowhere after: a reading that met a
      * clause holds the place it met, and what is decided later about that clause is filed at the
      * place it was handed rather than at one made again from a node in hand. A choice is settled
-     * where the branches are joined, which is the only place the choice an author wrote is known.
+     * where the branches are joined, which is the one place that holds both what tells this choice
+     * from every other and the operator an author wrote it with.
      */
     private static final List<String> MAKING_A_SITE = List.of(
             "souther/compiler/check/AdmissibleReading -> " + A_LEAF + "#<init>",
-            "souther/compiler/check/StatedByClauses$Part -> " + A_CHOICE + "#<init>");
+            "souther/compiler/check/StatedByClauses$Reading -> " + A_CHOICE + "#<init>");
 
     @Test
     void everyClassThatSaysARuleIsAnswerableForAPositionIsWrittenDown() {

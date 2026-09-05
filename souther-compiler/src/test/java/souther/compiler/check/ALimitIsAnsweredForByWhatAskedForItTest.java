@@ -64,17 +64,20 @@ class ALimitIsAnsweredForByWhatAskedForItTest {
      *
      * <p>Both halves matter. Naming {@code huge} is right and is not enough: {@code r} standing on
      * a limit its neighbour reached is an author sent to a clause that reads perfectly well.
+     *
+     * <p>Asked of what a rule is answerable for and not of everything its question stands on. A
+     * question also stands on what the answer at its position was short of, which is a fact about
+     * the place and holds of every rule waiting on it — so both of these questions carry it, and
+     * neither is answerable for it.
      */
     @Test
     void aLimitIsCarriedByTheRuleThatAskedForItAndByNothingBeside() {
-        Map<String, List<UnreadReason>> standing = standingOn(A_LIMIT_ONE_RULE_ASKED_FOR);
+        Map<String, List<UnreadReason>> answerable = answerableFor(A_LIMIT_ONE_RULE_ASKED_FOR);
 
-        assertEquals(List.of(UnreadReason.PATTERN_TOO_COSTLY), standing.get("huge at y"),
+        assertEquals(List.of(UnreadReason.PATTERN_TOO_COSTLY), answerable.get("huge at y"),
                 "the rule whose pattern was refused answers for it");
-        assertEquals(List.of(), standing.getOrDefault("r at y", List.of()),
-                "and the rule beside it is answerable for nothing of it: what its own question"
-                        + " stands on is the answer at the position, which no rule is answerable"
-                        + " for and which is filed nowhere under a rule");
+        assertEquals(List.of(), answerable.getOrDefault("r at y", List.of()),
+                "and the rule beside it is answerable for nothing of it");
     }
 
     /** The same pattern written into two rules, which is one machine both of them asked for. */
@@ -121,14 +124,33 @@ class ALimitIsAnsweredForByWhatAskedForItTest {
     /**
      * And writing a rule beside another does not change what that other is reported as short of.
      *
-     * <p>The invariant, said as the thing an author can watch. What {@code huge} is short of is a
-     * fact about {@code huge}, so adding or removing a neighbour that asks for nothing costly leaves
-     * it where it was.
+     * <p>The invariant, said as the thing an author can watch. What {@code huge} is answerable for
+     * is a fact about {@code huge}, so adding or removing a neighbour that asks for nothing costly
+     * leaves it where it was.
+     *
+     * <p>What its question stands on does move, and that is not this. A neighbour whose rules the
+     * answer at the position could not be built out of leaves that answer unbuilt, and every
+     * question waiting on it stands on that — a fact about the place, arriving because the place
+     * changed and not because {@code huge} did.
      */
     @Test
-    void aRuleIsShortOfWhatItIsShortOfWhoeverIsWrittenBesideIt() {
-        assertEquals(standingOn(THE_RULE_THAT_ASKED_FOR_IT_ALONE).get("huge at y"),
-                standingOn(A_LIMIT_ONE_RULE_ASKED_FOR).get("huge at y"));
+    void aRuleIsAnswerableForWhatItIsAnswerableForWhoeverIsWrittenBesideIt() {
+        assertEquals(answerableFor(THE_RULE_THAT_ASKED_FOR_IT_ALONE).get("huge at y"),
+                answerableFor(A_LIMIT_ONE_RULE_ASKED_FOR).get("huge at y"));
+    }
+
+    /**
+     * The half of that a rule is answerable for, which is what this is about.
+     *
+     * <p>A question stands on what its own rule left and on what the answer at its position was
+     * short of, and only the first names a rule. Asked of both, this would be watching a fact about
+     * the place — which moves when the place does, whoever wrote what.
+     */
+    private static Map<String, List<UnreadReason>> answerableFor(String source) {
+        Map<String, List<UnreadReason>> out = new LinkedHashMap<>();
+        standingOn(source).forEach((question, why) -> out.put(question, why.stream()
+                .filter(each -> each.about() == UnreadReason.About.A_RULE).toList()));
+        return out;
     }
 
     /**
