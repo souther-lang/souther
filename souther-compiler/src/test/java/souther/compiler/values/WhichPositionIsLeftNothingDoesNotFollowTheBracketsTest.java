@@ -4,7 +4,6 @@ import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -56,8 +55,7 @@ class WhichPositionIsLeftNothingDoesNotFollowTheBracketsTest {
     private List<AdmissibleValues<String>> everyOrder() {
         AdmissibleValues<String> x = pair(ZERO, ZERO);
         AdmissibleValues<String> y = at(A, ZERO);
-        AdmissibleValues<String> z =
-                pair(ONE, ZERO).joinApart(pair(ZERO, ONE), sets, Set.of());
+        AdmissibleValues<String> z = pair(ONE, ZERO).joinApart(pair(ZERO, ONE), sets);
         List<AdmissibleValues<String>> out = new ArrayList<>();
         out.add(x.meet(y, sets).meet(z, sets));
         out.add(x.meet(z, sets).meet(y, sets));

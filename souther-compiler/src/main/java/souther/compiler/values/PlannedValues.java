@@ -489,14 +489,14 @@ public sealed interface PlannedValues<A> {
      * answers to one question, and the one made of values alone would drop a branch the order
      * refused and keep one the values did.
      */
-    default PlannedValues<A> join(PlannedValues<A> other, Set<A> opened) {
-        return joinedLive(other, false, opened);
+    default PlannedValues<A> join(PlannedValues<A> other) {
+        return joinedLive(other, false);
     }
 
     /** Either reading holding, with the alternatives of the two held apart — see
      *  {@link AdmissibleValues#joinApart}. */
-    default PlannedValues<A> joinApart(PlannedValues<A> other, Set<A> opened) {
-        return joinedLive(other, true, opened);
+    default PlannedValues<A> joinApart(PlannedValues<A> other) {
+        return joinedLive(other, true);
     }
 
     /**
@@ -531,7 +531,7 @@ public sealed interface PlannedValues<A> {
      * What is here is the same arithmetic over descriptions rather than sets, which is why it costs
      * nothing and can be done before anything is built.
      */
-    private PlannedValues<A> joinedLive(PlannedValues<A> other, boolean apart, Set<A> opened) {
+    private PlannedValues<A> joinedLive(PlannedValues<A> other, boolean apart) {
         Settled<A> here = settled();
         Settled<A> there = other.settled();
         PlannedHeld<A> held = apart ? apart(here, there) : merged(here, there);
@@ -540,9 +540,9 @@ public sealed interface PlannedValues<A> {
         Map<Sameness.Block<A>, AdmittedPlan> covered = guaranteedBy(here, there, heldAsOne, false);
         AdmittedPlan coveredElsewhere = AdmittedPlan.joining(
                 List.of(here.defaultGuaranteed(), there.defaultGuaranteed()));
-        // What the choice left open, handed in rather than worked out — see
+        // What an alternative nothing could read left open is not said here — see
         // {@link AdmissibleValues#join}, whose reasoning this is.
-        Standing<A> spoiled = here.standing().and(there.standing()).alsoOpenedAt(opened);
+        Standing<A> spoiled = here.standing().and(there.standing());
         Set<Sameness.Block<A>> shapedBy = mapped(promisedAt(here), heldAsOne);
         shapedBy.addAll(mapped(promisedAt(there), heldAsOne));
         return new Settled<>(held,

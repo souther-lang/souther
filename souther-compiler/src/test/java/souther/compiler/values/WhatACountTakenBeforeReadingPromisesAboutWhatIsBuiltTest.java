@@ -65,8 +65,8 @@ class WhatACountTakenBeforeReadingPromisesAboutWhatIsBuiltTest {
         for (AdmissibleValues<String> one : leaves()) {
             for (AdmissibleValues<String> other : leaves()) {
                 out.add(one.meet(other, sets));
-                out.add(one.joinApart(other, sets, Set.of()));
-                out.add(one.join(other, sets, Set.of()));
+                out.add(one.joinApart(other, sets));
+                out.add(one.join(other, sets));
             }
         }
         return out;
@@ -88,9 +88,9 @@ class WhatACountTakenBeforeReadingPromisesAboutWhatIsBuiltTest {
     void aChoiceHoldsAtMostTheSum() {
         for (AdmissibleValues<String> one : readings()) {
             for (AdmissibleValues<String> other : readings()) {
-                assertTrue(held(one.joinApart(other, sets, Set.of())) <= held(one) + held(other),
+                assertTrue(held(one.joinApart(other, sets)) <= held(one) + held(other),
                         one + " || " + other);
-                assertTrue(held(one.join(other, sets, Set.of())) <= held(one) + held(other),
+                assertTrue(held(one.join(other, sets)) <= held(one) + held(other),
                         "and merged it holds no more than that: " + one + " || " + other);
             }
         }
@@ -115,9 +115,9 @@ class WhatACountTakenBeforeReadingPromisesAboutWhatIsBuiltTest {
     @Test
     void andBothBoundsAreReached() {
         AdmissibleValues<String> here = AdmissibleValues.at(A, ValueSet.just(FIVE))
-                .joinApart(AdmissibleValues.at(A, ValueSet.just(SIX)), sets, Set.of());
+                .joinApart(AdmissibleValues.at(A, ValueSet.just(SIX)), sets);
         AdmissibleValues<String> there = AdmissibleValues.at(B, ValueSet.just(ZERO))
-                .joinApart(AdmissibleValues.at(B, ValueSet.just(ONE)), sets, Set.of());
+                .joinApart(AdmissibleValues.at(B, ValueSet.just(ONE)), sets);
 
         assertEquals(2, held(here), "a choice of two, and the sum of one and one is two");
         assertEquals(4, held(here.meet(there, sets)),

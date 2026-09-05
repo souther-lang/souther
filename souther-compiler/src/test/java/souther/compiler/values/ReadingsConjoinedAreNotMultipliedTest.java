@@ -193,8 +193,8 @@ class ReadingsConjoinedAreNotMultipliedTest {
     @Test
     void aPositionAChoiceOpenedIsOneTheReadingIsAbout() {
         AdmissibleValues<String> opened = AdmissibleValues.at("x", just("A"))
-                .join(AdmissibleValues.unreadable(Set.of(), UnreadReason.FORM_NOT_READ), SETS,
-                        Set.of("x"))
+                .join(AdmissibleValues.unreadable(Set.of(), UnreadReason.FORM_NOT_READ), SETS)
+                .alsoOpenedAt(Set.of("x"))
                 .leavingNothing();
 
         assertEquals(Set.of("x"), opened.subjects(),
@@ -252,7 +252,7 @@ class ReadingsConjoinedAreNotMultipliedTest {
         return AdmissibleValues.at(one, just("x"))
                 .meet(AdmissibleValues.at(other, just("y")), SETS)
                 .joinApart(AdmissibleValues.at(one, just("p"))
-                        .meet(AdmissibleValues.at(other, just("q")), SETS), SETS, Set.of());
+                        .meet(AdmissibleValues.at(other, just("q")), SETS), SETS);
     }
 
     private static ValueSet just(String text) {

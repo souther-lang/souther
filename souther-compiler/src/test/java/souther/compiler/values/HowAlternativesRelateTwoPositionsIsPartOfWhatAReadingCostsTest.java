@@ -7,7 +7,6 @@ import souther.compiler.regex.PatternPlan;
 import souther.compiler.regex.PatternRead;
 
 import java.util.List;
-import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -50,8 +49,8 @@ class HowAlternativesRelateTwoPositionsIsPartOfWhatAReadingCostsTest {
         ValueSet d = matching("x|d{300}");
         return crossed
                 // Every alternative here was read whole, so the choice left nothing open.
-                ? pair(a, d, by).joinApart(pair(c, b, by), by, Set.of())
-                : pair(a, b, by).joinApart(pair(c, d, by), by, Set.of());
+                ? pair(a, d, by).joinApart(pair(c, b, by), by)
+                : pair(a, b, by).joinApart(pair(c, d, by), by);
     }
 
     /** The same positions, the same sets, and the pairs the other way round. */

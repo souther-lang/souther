@@ -64,30 +64,29 @@ class WhatIsGuaranteedIsNeverMoreThanWhatIsAdmittedTest {
                 made("meet of two read", says(VALUE, A).meet(says(OTHER, B), SETS)),
                 made("meet with an unread", says(VALUE, A).meet(unreadable(Set.of(OTHER)), SETS)),
                 made("meet leaving nothing", says(VALUE, A).meet(says(VALUE, B), SETS)),
-                made("join of two read", says(VALUE, A).join(says(VALUE, B), SETS, Set.of())),
-                made("join with an unread",
-                        says(VALUE, A).join(unreadable(Set.of(VALUE)), SETS, Set.of(VALUE))),
+                made("join of two read", says(VALUE, A).join(says(VALUE, B), SETS)),
+                made("join with an unread", says(VALUE, A).join(unreadable(Set.of(VALUE)), SETS)
+                        .alsoOpenedAt(Set.of(VALUE))),
                 made("join covering the position",
                         AdmissibleValues.at(VALUE, ValueSet.just(A))
-                                .join(AdmissibleValues.at(VALUE, ValueSet.allBut(A)), SETS,
-                                        Set.of())),
+                                .join(AdmissibleValues.at(VALUE, ValueSet.allBut(A)), SETS)),
                 made("join of two that leave nothing",
                         says(VALUE, A).meet(says(VALUE, B), SETS)
-                                .join(says(OTHER, A).meet(says(OTHER, B), SETS), SETS, Set.of())),
+                                .join(says(OTHER, A).meet(says(OTHER, B), SETS), SETS)),
                 made("join of a meet and an unread",
                         says(VALUE, A).meet(unreadable(Set.of()), SETS)
-                                .join(says(VALUE, B), SETS, Set.of(VALUE))),
+                                .join(says(VALUE, B), SETS).alsoOpenedAt(Set.of(VALUE))),
                 made("choice over two positions",
                         says(VALUE, A).meet(says(OTHER, A), SETS)
-                                .join(says(VALUE, B).meet(says(OTHER, B), SETS), SETS, Set.of())),
+                                .join(says(VALUE, B).meet(says(OTHER, B), SETS), SETS)),
                 made("choice over two positions, met",
                         says(VALUE, A).meet(says(OTHER, A), SETS)
-                                .join(says(VALUE, B).meet(says(OTHER, B), SETS), SETS, Set.of())
+                                .join(says(VALUE, B).meet(says(OTHER, B), SETS), SETS)
                                 .meet(says(VALUE, A), SETS)),
                 made("join nested under a join",
                         says(VALUE, A).join(says(VALUE, B)
-                                .join(unreadable(Set.of(VALUE)), SETS, Set.of(VALUE)),
-                                SETS, Set.of(VALUE))));
+                                .join(unreadable(Set.of(VALUE)), SETS).alsoOpenedAt(Set.of(VALUE)),
+                                SETS).alsoOpenedAt(Set.of(VALUE))));
     }
 
     /**
@@ -117,7 +116,7 @@ class WhatIsGuaranteedIsNeverMoreThanWhatIsAdmittedTest {
                         says(OTHER, A).meet(says(VALUE, A), SETS).meet(says(VALUE, B), SETS)),
                 made("two alternatives neither of which can be taken",
                         says(VALUE, A).meet(says(VALUE, B), SETS)
-                                .join(says(OTHER, A).meet(says(OTHER, B), SETS), SETS, Set.of())));
+                                .join(says(OTHER, A).meet(says(OTHER, B), SETS), SETS)));
     }
 
     /**
@@ -140,8 +139,8 @@ class WhatIsGuaranteedIsNeverMoreThanWhatIsAdmittedTest {
         AdmissibleValues<String> apart = says(VALUE, B).meet(says(OTHER, B), SETS);
         AdmissibleValues<String> otherB = says(VALUE, B).meet(says(OTHER, A), SETS);
 
-        AdmissibleValues<String> one = together.join(apart, SETS, Set.of());
-        AdmissibleValues<String> two = together.join(otherB, SETS, Set.of());
+        AdmissibleValues<String> one = together.join(apart, SETS);
+        AdmissibleValues<String> two = together.join(otherB, SETS);
         AdmissibleValues<String> both = one.meet(two, SETS);
 
         assertEquals(ValueSet.oneOf(Set.of(A, B)), both.at(VALUE),

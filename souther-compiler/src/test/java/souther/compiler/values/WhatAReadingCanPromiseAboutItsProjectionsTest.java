@@ -65,9 +65,9 @@ class WhatAReadingCanPromiseAboutItsProjectionsTest {
      *  union of two of them is one and nothing is lost. */
     @Test
     void aChoiceAtOnePositionPromisesItsRelation() {
-        AdmissibleValues<String> either = says(A, FIVE).join(says(A, SIX), SETS, Set.of());
+        AdmissibleValues<String> either = says(A, FIVE).join(says(A, SIX), SETS);
 
-        assertEquals(ValueSet.oneOf(java.util.Set.of(FIVE, SIX)), either.at(A));
+        assertEquals(ValueSet.oneOf(Set.of(FIVE, SIX)), either.at(A));
         assertTrue(either.relationExact(), "two values of one position are a product");
         assertTrue(either.projectionExactAt(A));
     }
@@ -81,10 +81,10 @@ class WhatAReadingCanPromiseAboutItsProjectionsTest {
      */
     @Test
     void aChoiceAcrossTwoPositionsKeepsItsProjectionsAndLosesItsRelation() {
-        AdmissibleValues<String> one = pair(FIVE, ZERO).join(pair(SIX, ONE), SETS, Set.of());
+        AdmissibleValues<String> one = pair(FIVE, ZERO).join(pair(SIX, ONE), SETS);
 
-        assertEquals(ValueSet.oneOf(java.util.Set.of(FIVE, SIX)), one.at(A));
-        assertEquals(ValueSet.oneOf(java.util.Set.of(ZERO, ONE)), one.at(B));
+        assertEquals(ValueSet.oneOf(Set.of(FIVE, SIX)), one.at(A));
+        assertEquals(ValueSet.oneOf(Set.of(ZERO, ONE)), one.at(B));
         assertTrue(one.projectionExactAt(A), "the projection of a union is the union of projections");
         assertFalse(one.relationExact(), "which b went with which a is what the product cannot say");
     }
@@ -99,12 +99,12 @@ class WhatAReadingCanPromiseAboutItsProjectionsTest {
      */
     @Test
     void twoChoicesAcrossTwoPositionsMetTogetherPromiseNeither() {
-        AdmissibleValues<String> one = pair(FIVE, ZERO).join(pair(SIX, ONE), SETS, Set.of());
-        AdmissibleValues<String> two = pair(FIVE, ZERO).join(pair(SIX, ZERO), SETS, Set.of());
+        AdmissibleValues<String> one = pair(FIVE, ZERO).join(pair(SIX, ONE), SETS);
+        AdmissibleValues<String> two = pair(FIVE, ZERO).join(pair(SIX, ZERO), SETS);
 
         AdmissibleValues<String> both = one.meet(two, SETS);
 
-        assertEquals(ValueSet.oneOf(java.util.Set.of(FIVE, SIX)), both.at(A), "which is wider than the rules leave it");
+        assertEquals(ValueSet.oneOf(Set.of(FIVE, SIX)), both.at(A), "which is wider than the rules leave it");
         assertFalse(both.projectionExactAt(A), "so the reading may not say this is what a holds");
         assertFalse(both.relationExact());
     }
@@ -132,8 +132,8 @@ class WhatAReadingCanPromiseAboutItsProjectionsTest {
      */
     @Test
     void aPositionNoLostCorrelationReachesKeepsItsPromise() {
-        AdmissibleValues<String> one = pair(FIVE, ZERO).join(pair(SIX, ONE), SETS, Set.of());
-        AdmissibleValues<String> two = pair(FIVE, ZERO).join(pair(SIX, ZERO), SETS, Set.of());
+        AdmissibleValues<String> one = pair(FIVE, ZERO).join(pair(SIX, ONE), SETS);
+        AdmissibleValues<String> two = pair(FIVE, ZERO).join(pair(SIX, ZERO), SETS);
         AdmissibleValues<String> apart = AdmissibleValues.at(C, ValueSet.just(ZERO));
 
         AdmissibleValues<String> all = one.meet(two, SETS).meet(apart, SETS);
@@ -150,10 +150,10 @@ class WhatAReadingCanPromiseAboutItsProjectionsTest {
         for (AdmissibleValues<String> each : java.util.List.<AdmissibleValues<String>>of(
                 AdmissibleValues.top(),
                 says(A, FIVE),
-                says(A, FIVE).join(says(A, SIX), SETS, Set.of()),
-                pair(FIVE, ZERO).join(pair(SIX, ONE), SETS, Set.of()),
-                pair(FIVE, ZERO).join(pair(SIX, ONE), SETS, Set.of())
-                        .meet(pair(FIVE, ZERO).join(pair(SIX, ZERO), SETS, Set.of()), SETS))) {
+                says(A, FIVE).join(says(A, SIX), SETS),
+                pair(FIVE, ZERO).join(pair(SIX, ONE), SETS),
+                pair(FIVE, ZERO).join(pair(SIX, ONE), SETS)
+                        .meet(pair(FIVE, ZERO).join(pair(SIX, ZERO), SETS), SETS))) {
             assertTrue(!each.relationExact() || each.projectionExactAt(A),
                     each + " promises its relation and not its projections");
         }

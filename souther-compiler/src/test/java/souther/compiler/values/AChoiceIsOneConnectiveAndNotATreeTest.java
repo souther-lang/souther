@@ -39,9 +39,9 @@ class AChoiceIsOneConnectiveAndNotATreeTest {
      * What every choice here is told its unread alternative left open.
      *
      * <p>The same at every bracketing, which is what the property needs: whether a choice opened a
-     * position is settled where the alternatives an author wrote are in hand, so a bracketing
-     * cannot change it and this test may not let one. What is held is that everything the join does
-     * with it is associative and commutative too.
+     * position is settled where the clause an author wrote meets what became of its branches, so a
+     * bracketing cannot change it and this test may not let one. What is held is that everything a
+     * reading does with it afterwards is associative and commutative too.
      */
     private static final Set<String> OPENED = Set.of("value", "other");
     private static final Value A = Value.text("A");
@@ -109,8 +109,8 @@ class AChoiceIsOneConnectiveAndNotATreeTest {
         Map<String, AdmissibleValues<String>> readings = readings();
         readings.forEach((leftName, left) -> readings.forEach((middleName, middle) ->
                 readings.forEach((rightName, right) -> assertEquals(
-                        answers(left.join(middle, sets, OPENED).join(right, sets, OPENED)),
-                        answers(left.join(middle.join(right, sets, OPENED), sets, OPENED)),
+                        answers(left.join(middle, sets).alsoOpenedAt(OPENED).join(right, sets).alsoOpenedAt(OPENED)),
+                        answers(left.join(middle.join(right, sets).alsoOpenedAt(OPENED), sets).alsoOpenedAt(OPENED)),
                         () -> "(" + leftName + " || " + middleName + ") || " + rightName
                                 + "   against   " + leftName + " || (" + middleName + " || "
                                 + rightName + ")"))));
@@ -121,8 +121,8 @@ class AChoiceIsOneConnectiveAndNotATreeTest {
     void twoAlternativesLeaveTheSameHoweverTheyAreOrdered() {
         Map<String, AdmissibleValues<String>> readings = readings();
         readings.forEach((leftName, left) -> readings.forEach((rightName, right) ->
-                assertEquals(answers(left.join(right, sets, OPENED)),
-                        answers(right.join(left, sets, OPENED)),
+                assertEquals(answers(left.join(right, sets).alsoOpenedAt(OPENED)),
+                        answers(right.join(left, sets).alsoOpenedAt(OPENED)),
                         () -> leftName + " || " + rightName + "   against   "
                                 + rightName + " || " + leftName)));
     }
@@ -134,9 +134,9 @@ class AChoiceIsOneConnectiveAndNotATreeTest {
         AdmissibleValues<String> beside = AdmissibleValues.at("other", ValueSet.allBut(B));
         readings.forEach((leftName, left) -> readings.forEach((middleName, middle) ->
                 readings.forEach((rightName, right) -> assertEquals(
-                        answers(left.join(middle, sets, OPENED).join(right, sets, OPENED)
+                        answers(left.join(middle, sets).alsoOpenedAt(OPENED).join(right, sets).alsoOpenedAt(OPENED)
                                 .meet(beside, sets)),
-                        answers(left.join(middle.join(right, sets, OPENED), sets, OPENED)
+                        answers(left.join(middle.join(right, sets).alsoOpenedAt(OPENED), sets).alsoOpenedAt(OPENED)
                                 .meet(beside, sets)),
                         () -> "(" + leftName + " || " + middleName + ") || " + rightName
                                 + "   met with other /= B, against the other bracketing"))));
@@ -158,10 +158,10 @@ class AChoiceIsOneConnectiveAndNotATreeTest {
                 AdmissibleValues.unreadable(Set.of("value"), UnreadReason.FORM_NOT_READ);
         readings.forEach((leftName, left) -> readings.forEach((middleName, middle) ->
                 readings.forEach((rightName, right) -> assertEquals(
-                        answers(left.join(middle, sets, OPENED).join(right, sets, OPENED)
-                                .meet(beside, sets).join(after, sets, OPENED)),
-                        answers(left.join(middle.join(right, sets, OPENED), sets, OPENED)
-                                .meet(beside, sets).join(after, sets, OPENED)),
+                        answers(left.join(middle, sets).alsoOpenedAt(OPENED).join(right, sets).alsoOpenedAt(OPENED)
+                                .meet(beside, sets).join(after, sets).alsoOpenedAt(OPENED)),
+                        answers(left.join(middle.join(right, sets).alsoOpenedAt(OPENED), sets).alsoOpenedAt(OPENED)
+                                .meet(beside, sets).join(after, sets).alsoOpenedAt(OPENED)),
                         () -> "(" + leftName + " || " + middleName + ") || " + rightName
                                 + "   met with other /= B and joined with an unread rule about"
                                 + " value, against the other bracketing"))));

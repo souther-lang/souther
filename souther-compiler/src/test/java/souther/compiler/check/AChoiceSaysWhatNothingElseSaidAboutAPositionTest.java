@@ -128,6 +128,34 @@ class AChoiceSaysWhatNothingElseSaidAboutAPositionTest {
             """.replace("UNREAD_Y", souther.compiler.ARuleNoReadingTakesIn.about("y"))
             .replace("UNREAD_X", souther.compiler.ARuleNoReadingTakesIn.about("x"));
 
+    /**
+     * A form nothing reads inside a branch a clause written elsewhere shows nobody can be in.
+     *
+     * <p>Nothing here says so until every rule of the value has been read: the inner alternative
+     * holds a rule this reading takes in, and it is a neighbouring rule that leaves nobody able to
+     * be in it. Once that is settled the branch takes what it could not read with it, and the
+     * choice above has been offered no alternative anything failed to read.
+     */
+    private static final String A_NEIGHBOUR_SHOWS_THE_INNER_BRANCH_EMPTY = """
+            module demo
+
+            data N = { x: String, y: String }
+                invariant one =
+                    ((x == "A" && UNREAD_Y) || x == "B")
+                    || x == "C"
+                invariant two = x /= "A"
+            """.replace("UNREAD_Y", souther.compiler.ARuleNoReadingTakesIn.about("y"));
+
+    /** The same without the neighbour, where the inner branch stands. */
+    private static final String THE_SAME_WITH_THE_INNER_BRANCH_STANDING = """
+            module demo
+
+            data N = { x: String, y: String }
+                invariant one =
+                    ((x == "A" && UNREAD_Y) || x == "B")
+                    || x == "C"
+            """.replace("UNREAD_Y", souther.compiler.ARuleNoReadingTakesIn.about("y"));
+
     /** An alternative that constrains the position and holds a form nothing reads beside it. */
     private static final String THE_UNREAD_FORM_IS_UNDER_AN_ALTERNATIVE = """
             module demo
@@ -311,6 +339,42 @@ class AChoiceSaysWhatNothingElseSaidAboutAPositionTest {
         assertEquals(Set.of(),
                 whatARuleIsAnswerableFor(THE_UNREAD_FORM_IS_IN_A_BRANCH_NOBODY_CAN_BE_IN, "y"),
                 "and the form inside the branch nobody can be in went with it");
+    }
+
+    /**
+     * And a branch a neighbouring rule shows empty leaves the choice above it nothing either.
+     *
+     * <p>Which branches anybody can be in is the whole declaration's answer, so what an alternative
+     * nothing could read left open is not knowable until that is. Asked while the clauses are being
+     * read, the alternative holding the branch comes out as one nothing could read — the reading of
+     * it has given something up — and the choice above says so at a position that branch was the
+     * only thing to reach.
+     */
+    @Test
+    void aBranchANeighbourShowsEmptyLeavesTheChoiceAboveItNothingToAnswerFor() {
+        assertEquals(Set.of(), whatARuleIsAnswerableFor(A_NEIGHBOUR_SHOWS_THE_INNER_BRANCH_EMPTY,
+                        "x"),
+                "nobody can be in the branch the form nothing reads is in, so the alternative"
+                        + " holding it is one that was read whole");
+        assertEquals(Set.of(), whatARuleIsAnswerableFor(A_NEIGHBOUR_SHOWS_THE_INNER_BRANCH_EMPTY,
+                        "y"),
+                "and the form itself went with the branch");
+    }
+
+    /**
+     * And the same clauses without that neighbour keep it, which is what makes the one above a
+     * claim.
+     *
+     * <p>Nothing shows the inner branch empty here, so the alternative holding it is one nothing
+     * could read and the choice above is answerable at the position the other alternative
+     * promised. A reading that dropped what a nested choice left open would answer both models
+     * alike.
+     */
+    @Test
+    void andTheSameClausesWithoutThatNeighbourKeepIt() {
+        assertEquals(Set.of(UnreadReason.ALTERNATIVE_NOT_READ),
+                whatARuleIsAnswerableFor(THE_SAME_WITH_THE_INNER_BRANCH_STANDING, "x"),
+                "the branch stands, so the alternative holding it is one nothing could read");
     }
 
     /** What a rule of the declaration is answerable for at {@code field}. */

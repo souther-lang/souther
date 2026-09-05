@@ -1278,20 +1278,29 @@ public record AdmissibleValues<A>(Held<A> held, Map<A, ValueSet> perPosition,
      * <p>Over the positions both spoke about, since a position one of them left open is one the two
      * of them together leave open.
      *
-     * <p>{@code opened} is what an alternative nothing could read left open: those are open too,
-     * and open because of the reading rather than because of the model. Handed in rather than
-     * worked out here — which positions those are is a fact about the alternatives an author wrote
-     * and about which branches anybody can be in, and the two readings met here are branches every
-     * conjunction beside the choice was already distributed into.
-     *
-     * <p>It travels exactly as the reasons beside it do, which is what settles the branches where
-     * one side admits nothing. There the choice is the other reading and what comes back is that
-     * reading: its own account and nothing added, because a branch nobody can be in offered nobody
-     * an alternative. Where neither side admits anything the answer is built from both, and this
-     * comes with them — the one place a position could be named here and nowhere else.
+     * <p>What an alternative nothing could read left open is not said here, and cannot be. Which
+     * positions those are turns on which branches anybody can be in, and that is settled over the
+     * whole declaration — after this join, out of what it and every other one came to. So it
+     * arrives afterwards ({@link #alsoOpenedAt}), from the one walk that knows both the alternatives
+     * an author wrote and what became of them.
      */
-    public AdmissibleValues<A> join(AdmissibleValues<A> other, Allowance<A> sets, Set<A> opened) {
-        return joining(other, false, sets, opened);
+    public AdmissibleValues<A> join(AdmissibleValues<A> other, Allowance<A> sets) {
+        return joining(other, false, sets);
+    }
+
+    /**
+     * The same reading, also unable to speak for {@code these} because a choice offered an
+     * alternative nothing could read.
+     *
+     * <p>Evidence and not an explanation: {@link #speaksFor} weighs it exactly as it weighs a rule
+     * of the positions that went unread, and what a reader is told is the nearer of the two
+     * ({@link #whyUnread}). Added once, where the answer is finished — a reading handed on before
+     * it would speak for a position it cannot.
+     */
+    public AdmissibleValues<A> alsoOpenedAt(Set<A> these) {
+        return these.isEmpty() ? this
+                : new AdmissibleValues<>(held, perPosition, standing.alsoOpenedAt(these),
+                        guaranteed, defaultGuaranteed, guaranteedTogether, tangled, widened);
     }
 
     /**
@@ -1310,13 +1319,12 @@ public record AdmissibleValues<A>(Held<A> held, Map<A, ValueSet> perPosition,
      * clauses before any of them is read ({@code ExpansionCost}), so that precision cannot turn on
      * how a fold was bracketed.
      */
-    public AdmissibleValues<A> joinApart(AdmissibleValues<A> other, Allowance<A> sets,
-                                         Set<A> opened) {
-        return joining(other, true, sets, opened);
+    public AdmissibleValues<A> joinApart(AdmissibleValues<A> other, Allowance<A> sets) {
+        return joining(other, true, sets);
     }
 
-    private AdmissibleValues<A> joining(AdmissibleValues<A> other, boolean apart, Allowance<A> sets,
-                                        Set<A> opened) {
+    private AdmissibleValues<A> joining(AdmissibleValues<A> other, boolean apart,
+                                        Allowance<A> sets) {
         Set<Sameness.Block<A>> gaveUp = new LinkedHashSet<>();
         // An alternative nobody can take leaves the answer to the others. Both being that is a
         // different case: no side speaks for the other, and meeting them would state a conjunction
@@ -1330,11 +1338,7 @@ public record AdmissibleValues<A>(Held<A> held, Map<A, ValueSet> perPosition,
             Set<Sameness.Block<A>> emptied = new LinkedHashSet<>(emptiedBlocks());
             emptied.retainAll(other.emptiedBlocks());
             return new AdmissibleValues<>(new Held.Nothing<>(emptied), emptyInBoth(other),
-                    // What the choice left open comes here too. A reading holding nothing keeps
-                    // what it could not speak for, and this is the one path where a position could
-                    // be there and nowhere else — dropped, it would be a name this reading is
-                    // about that nothing it holds mentions.
-                    standing.and(other.standing).alsoOpenedAt(opened),
+                    standing.and(other.standing),
                     Map.of(), ValueSet.NONE, true,
                     eachApart(both(tangled, other.tangled)),
                     eachApart(both(widened, other.widened)));
@@ -1358,12 +1362,7 @@ public record AdmissibleValues<A>(Held<A> held, Map<A, ValueSet> perPosition,
                 guaranteedBy(this, other, heldAsOne, sets::joinPromised);
         ValueSet coveredElsewhere =
                 sets.joinPromised(null, defaultGuaranteed, other.defaultGuaranteed).set();
-        // What the choice left open, handed in rather than worked out. Which positions an
-        // alternative nothing could read left open is a fact about what an author wrote between the
-        // brackets and about which branches anybody can be in, and this join holds neither: every
-        // conjunction written beside the choice has been distributed into both of these before they
-        // meet here, so what is in hand is not the alternative.
-        Standing<A> spoiled = standing.and(other.standing).alsoOpenedAt(opened);
+        Standing<A> spoiled = standing.and(other.standing);
         // What each rule left standing is kept whole. Whether a position is answerable for it is
         // read off the two ends where the question is asked ({@link #speaksFor}) rather than
         // settled here: what covers a position is an alternative, and a rule stated beside the

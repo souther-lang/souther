@@ -193,7 +193,7 @@ class WhatIsReadIsHeldAgainstTheModelsItCouldBeTest {
         }
         return new Rule("(" + left.wrote() + " " + by + " " + right.wrote() + ")",
                 by.equals("&&") ? left.read().meet(right.read(), SETS)
-                        : left.read().join(right.read(), SETS, opened),
+                        : left.read().join(right.read(), SETS).alsoOpenedAt(opened),
                 List.copyOf(could), about, overOne,
                 left.holdsSomethingUnread() || right.holdsSomethingUnread());
     }
