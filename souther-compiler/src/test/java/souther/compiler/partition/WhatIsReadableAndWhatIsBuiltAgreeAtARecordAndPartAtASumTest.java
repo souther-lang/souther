@@ -187,24 +187,60 @@ class WhatIsReadableAndWhatIsBuiltAgreeAtARecordAndPartAtASumTest {
      * has the same two widths — a surface to list, and one name to look up. So it has the same two
      * chances to be answered differently, and the narrow one is held to the wide one here rather
      * than being trusted to fold the declarations in the same order.
+     *
+     * <p>Driven from the names this reading makes readable and not from what the world came back
+     * with. Read off the wide answer, a world that had widened or narrowed the surface would be
+     * compared against itself and the two widths would agree while both were wrong.
      */
     @Test
     void oneNameIsReadInAWorldTheWayEveryNameIs() {
         FieldTypes world = new ResolvedFieldTypes(symbols());
         for (Type type : List.of(typeOf("p"), typeOf("r"))) {
             Shape shape = shapeOf(type);
-            Map<String, Type> readable = ReadableFields.of(shape).in(world);
+            ReadableFields readable = ReadableFields.of(shape);
 
-            assertFalse(readable.isEmpty(),
+            assertFalse(readable.declaredFields().isEmpty(),
                     () -> "the model under test has names readable at " + Type.show(type));
-            for (Map.Entry<String, Type> name : readable.entrySet()) {
-                assertEquals(name.getValue(), ReadableFields.at(shape, name.getKey(), world),
-                        () -> "one name is what every name says it is, at " + name.getKey());
+            for (String name : readable.declaredFields().keySet()) {
+                assertEquals(readable.in(world).get(name),
+                        ReadableFields.at(shape, name, world),
+                        () -> "one name is what every name says it is, at " + name);
             }
             assertNull(ReadableFields.at(shape, "nothingDeclaresThis", world),
                     () -> "and a name nothing declares is readable nowhere, at "
                             + Type.show(type));
         }
+    }
+
+    /**
+     * A world says what a name holds and never which names there are.
+     *
+     * <p>The two halves of a reading are told apart by what each may decide, and a world that could
+     * add or drop a name would be deciding the nominal half from the other side. So a world with a
+     * name of its own does not make it readable, and one that says nothing about a name this reading
+     * has leaves it unreadable rather than putting a hole in the surface at both widths.
+     *
+     * <p>Held of both widths, because the whole point of having two is that neither is the other's
+     * implementation.
+     */
+    @Test
+    void aWorldSaysWhatANameHoldsAndNotWhichNamesThereAre() {
+        Shape shape = shapeOf(typeOf("r"));
+        ReadableFields readable = ReadableFields.of(shape);
+        assertTrue(readable.declaredFields().containsKey("deadline"),
+                "the model under test makes one name readable at the sum");
+
+        FieldTypes inventsOne = _ -> Map.of("nothingDeclaresThis", Type.STRING);
+        assertEquals(Map.of(), readable.in(inventsOne),
+                "a name only the world has is readable nowhere");
+        assertNull(ReadableFields.at(shape, "nothingDeclaresThis", inventsOne),
+                "and is not looked up either");
+
+        FieldTypes saysNothing = _ -> Map.of();
+        assertEquals(Map.of(), readable.in(saysNothing),
+                "and a name the world says nothing about is not readable in it");
+        assertNull(ReadableFields.at(shape, "deadline", saysNothing),
+                "at either width");
     }
 
     /**

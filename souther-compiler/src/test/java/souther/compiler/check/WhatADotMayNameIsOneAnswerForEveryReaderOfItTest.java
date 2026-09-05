@@ -155,6 +155,25 @@ class WhatADotMayNameIsOneAnswerForEveryReaderOfItTest {
                 "which is readable on the sum itself, so the barrier is the name and not the shape");
     }
 
+    /**
+     * And a world does not decide what a worn name makes readable either.
+     *
+     * <p>A newtype is written with one implicit field and that is the whole of its surface. Read as
+     * whatever the world holds for that declaration, a world with more to say about it would widen
+     * what a name makes readable — the same thing a world adding a name to a shape's surface would
+     * do, said of the other half of this reading.
+     */
+    @Test
+    void aWorldDoesNotDecideWhatAWornNameMakesReadable() {
+        FieldTypes inventsOne = _ -> Map.of("value", Type.INT, "andAnother", Type.STRING);
+        FieldRead reading = new FieldRead(symbols, inventsOne, FieldRead.Unreadable.REFUSED);
+
+        assertEquals(Map.of("value", Type.INT), reading.at(Type.ref(named("Wrapped"))),
+                "a name makes its one written field readable and nothing the world adds");
+        assertNull(reading.of(Type.ref(named("Wrapped")), "andAnother"),
+                "and the name the world added is not looked up either");
+    }
+
     // --- and one answer for every reader of it --------------------------------------------------
 
     /**

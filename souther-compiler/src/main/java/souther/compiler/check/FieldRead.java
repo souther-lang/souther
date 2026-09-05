@@ -78,7 +78,10 @@ public record FieldRead(Symbols symbols, FieldTypes world, Unreadable unreadable
      */
     public Map<String, Type> at(Type position) {
         return switch (surfaceOf(position)) {
-            case Surface.OfAName(TypeSymbol worn) -> world.of(worn);
+            case Surface.OfAName(TypeSymbol worn) -> {
+                Type held = wrapped(worn);
+                yield held == null ? Map.of() : Map.of(WRITTEN_WITH, held);
+            }
             case Surface.OfAShape(Shape shape) -> ReadableFields.of(shape).in(world);
             case Surface.OfNothing _ -> Map.of();
         };
@@ -95,10 +98,26 @@ public record FieldRead(Symbols symbols, FieldTypes world, Unreadable unreadable
      */
     public Type of(Type position, String field) {
         return switch (surfaceOf(position)) {
-            case Surface.OfAName(TypeSymbol worn) -> world.of(worn).get(field);
+            case Surface.OfAName(TypeSymbol worn) ->
+                    WRITTEN_WITH.equals(field) ? wrapped(worn) : null;
             case Surface.OfAShape(Shape shape) -> ReadableFields.at(shape, field, world);
             case Surface.OfNothing _ -> null;
         };
+    }
+
+    /**
+     * The one name a value written under a name makes readable (spec §newtype).
+     *
+     * <p>Nominal, and said here rather than left to the world. A newtype is written with a single
+     * implicit field and that is the whole of what a {@code .} on it may take; read as whatever the
+     * world happens to hold for that declaration, a world with more to say about it would widen what
+     * a name makes readable, which is not a world's to decide.
+     */
+    private static final String WRITTEN_WITH = "value";
+
+    /** What the name is written over, as {@code world} says the declaration holds it. */
+    private Type wrapped(TypeSymbol worn) {
+        return world.of(worn).get(WRITTEN_WITH);
     }
 
     /** What a {@code .} on a value here reads: the one declaration a worn name is, the shape a

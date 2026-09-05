@@ -131,21 +131,28 @@ public record ReadableFields(List<TypeSymbol> declaredBy, Map<String, Type> decl
     /**
      * The same surface, with what each name holds answered by {@code world}.
      *
-     * <p>The one step from the declarations a name is readable on to what they hold there. A reader
-     * of an accepted program takes its field types from the check and may not read them off the
-     * declarations beside it, and a reader of a text that has not checked has no such answer to
-     * take — so which world is being read in is the caller's, and neither of them works the step
-     * out for itself.
+     * <p><b>The names are this reading's and the types are the world's.</b> Which names a value here
+     * makes readable is nominal — a record's own fields, what every case of a sum spreads — and a
+     * world says what a declaration holds under a name, never which names there are. Asked for the
+     * whole of a declaration and merged, a world could widen the surface with a name nothing here
+     * makes readable or narrow it by leaving one out, and a reader going through the one owner of
+     * this question would still be reading a surface the world had decided.
      *
-     * <p>In the order {@link #declaredBy} writes them, which is the order a value is laid out in and
-     * the order this is walked in. A sum's shared names come from the declarations its cases spread,
-     * so an accepted program answers for each of those as it answers for any other declaration it
-     * holds.
+     * <p>A name this reading has and the world says nothing about is not readable in that world.
+     * That is the state a text still being typed is in — a field written at a type that does not
+     * resolve yet is a field its world says nothing about — and it does not arise in an accepted
+     * program, whose world answers for every name its declarations write.
+     *
+     * <p>In the order this reading holds the names, which is the order the declarations write them:
+     * the order a value is laid out in, and the order this is walked and reported in.
      */
     public Map<String, Type> in(FieldTypes world) {
         Map<String, Type> out = new LinkedHashMap<>();
-        for (TypeSymbol declaration : declaredBy) {
-            out.putAll(world.of(declaration));
+        for (String name : declaredFields.keySet()) {
+            Type held = heldIn(declaredBy, name, world);
+            if (held != null) {
+                out.put(name, held);
+            }
         }
         return Collections.unmodifiableMap(out);
     }
@@ -158,15 +165,28 @@ public record ReadableFields(List<TypeSymbol> declaredBy, Map<String, Type> decl
      * name in hand would otherwise have every name at the position asked of the world and copied out
      * to index one of them.
      *
-     * <p>The declarations are asked in the order {@link #declaredBy} holds them and the last that
-     * answers wins, which is what {@code in(world)} merging them in that order comes to. At most one
-     * of them writes a given name in a program that was accepted — a name two of a sum's shared
-     * spreads both declared is refused where the spread is checked — so the order settles nothing
-     * today, and it is followed rather than relied on being idle.
+     * <p>Whether the name is readable at all is settled here before the world is asked, so the two
+     * widths admit the same names — and neither lets a world make a name readable that this reading
+     * does not.
      */
     public static Type at(Shape shape, String name, FieldTypes world) {
+        Readable here = readableOn(shape);
+        return here.fields().containsKey(name) ? heldIn(here.declaredBy(), name, world) : null;
+    }
+
+    /**
+     * What {@code declaredBy} holds under {@code name} in {@code world}, or null where none of them
+     * says.
+     *
+     * <p>The one rule both widths use, so a name is looked up the same way whether it was asked for
+     * on its own or with every other. Asked in the order the declarations are held and the last that
+     * answers wins: at most one of them writes a given name in a program that was accepted — a name
+     * two of a sum's shared spreads both declared is refused where the spread is checked — so the
+     * order settles nothing today, and it is followed rather than relied on being idle.
+     */
+    private static Type heldIn(List<TypeSymbol> declaredBy, String name, FieldTypes world) {
         Type held = null;
-        for (TypeSymbol declaration : readableOn(shape).declaredBy()) {
+        for (TypeSymbol declaration : declaredBy) {
             Type there = world.of(declaration).get(name);
             if (there != null) {
                 held = there;
