@@ -126,6 +126,43 @@ public sealed interface Recognition {
         }
     }
 
+    /**
+     * The values a rule told apart from the rest, as the set of them.
+     *
+     * <p>The first arm that is a set rather than a place. Every other class about what stands at the
+     * position is one value, one case, or somewhere on an order — and a rule a behavior writes about
+     * a string need be none of those: {@code String.startsWith("JP", code)} admits strings without
+     * end and leaves out strings without end, and the two are what the behavior treats differently.
+     * Written as a place it would have to be a run, which the strings a pattern admits are not; left
+     * out, the position comes back divided nowhere by a body that plainly divides it.
+     *
+     * <p><b>Both sides are one of these.</b> What a rule admits and what it leaves are two classes
+     * of the position, and each is a set — so the far side is the set of the values on it, and never
+     * this class under a denial. A class that meant "not that one" would be a second way of saying
+     * what a set already says, and two of them could not be met with anything.
+     *
+     * <p>And the one arm that is asked about a value rather than about a place. The strings a
+     * behavior tells apart need not be an interval of the order they are written on, so there is no
+     * place a line could fall in this and it says so ({@link #answersAboutAPlace}).
+     */
+    record OfASet(souther.compiler.values.ValueSet values) implements Recognition {
+
+        public OfASet {
+            if (values == null) {
+                throw new IllegalArgumentException("a class of a set of values holds a set");
+            }
+            // A class holds something, and a class of the empty set holds nothing: it is not a
+            // class of the position at all, and among the classes of a measure it would be one a
+            // report counts, tells an author no row is in, and asks the generator for. What
+            // composes these leaves the cells that hold nothing out; one arriving here is that
+            // reader having passed one on, and it is refused where the value is made.
+            if (values.isEmpty()) {
+                throw new IllegalArgumentException(
+                        "a class holding no value is not a class of the position");
+            }
+        }
+    }
+
     /** A class that exists and cannot be told from another by looking. */
     record Nothing() implements Recognition {}
 
@@ -148,6 +185,11 @@ public sealed interface Recognition {
             case AtAValue one -> one.at() != null;
             case Truth ignored -> false;
             case Held ignored -> false;
+            // A set of values is not a run of them, so no place is inside it or outside it in the
+            // way a line asks about. Answered yes, a line would fall in whichever of these
+            // happened to hold the one value the place stands for, which is an answer about a
+            // value where the question was about an order.
+            case OfASet ignored -> false;
             case Nothing ignored -> false;
         };
     }
@@ -175,6 +217,11 @@ public sealed interface Recognition {
             case Held ignored -> number instanceof NumericTerm.ValueOf;
             case OfCase ignored -> number instanceof NumericTerm.ValueOf;
             case AtAValue ignored -> number instanceof NumericTerm.ValueOf;
+            // The values are the position's own, which is what the sets a rule about them names
+            // hold. A count taken of the position is a number, and a set of the position's values
+            // said to be a class of it would answer membership by reading a value of one where the
+            // other was owed.
+            case OfASet ignored -> number instanceof NumericTerm.ValueOf;
             case Nothing ignored -> number instanceof NumericTerm.ValueOf;
         };
     }
