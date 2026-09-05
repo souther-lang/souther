@@ -385,7 +385,10 @@ public record AdmissibleValues<A>(Held<A> held, Map<A, ValueSet> perPosition,
                 throw new IllegalArgumentException(
                         "a product with an empty side stands for nothing, and is not an alternative");
             }
-            Sameness.apart(at.keySet());
+            // Read as the relation they are the classes of, which is what refuses two sides that
+            // hold a position between them. Asked for here and not kept: a record holds what it was
+            // given, and what this asks is whether what it was given is a product at all.
+            Sameness.of(at.keySet());
         }
 
         /** One alternative over positions that are each their own block. */
@@ -974,18 +977,21 @@ public record AdmissibleValues<A>(Held<A> held, Map<A, ValueSet> perPosition,
     }
 
     /**
-     * The positions every alternative is refused at, for a reader writing down where a reading was
+     * The blocks every alternative is refused at, for a reader writing down where a reading was
      * left nothing.
      *
      * <p>Every alternative and not one of them. Where the alternatives are refused at different
-     * positions, no position is what the reading has no value at — each of them holds values some
+     * blocks, no block is what the reading has no value at — each of them holds values some
      * alternative stands at — so what can be said is that nothing satisfies the rules, and naming
-     * one would send an author after a rule the model does not contain.
+     * one would send an author after a rule the model does not contain. Which is why what is kept
+     * across the alternatives is the blocks themselves: two of them refused at blocks that overlap
+     * without being equal have shown nothing about what they share, and a set of positions
+     * intersected would say they had.
      *
      * <p>Asked to write a proof and not to reach an answer, so it walks the whole of every
-     * alternative where {@link #anyAlternativeAdmits} stops at the first position that settles one.
+     * alternative where {@link #anyAlternativeAdmits} stops at the first block that settles one.
      * What it cannot do is disagree with that answer about anything a reader acts on: what comes
-     * back is a place to name, and none of them is the general form.
+     * back is somewhere to name, and none of them is the general form.
      */
     public Set<Sameness.Block<A>> refusedInEveryAlternativeAt(AskedOfEachBlock<A> asked) {
         if (!(held instanceof Held.Alternatives<A> it)) {

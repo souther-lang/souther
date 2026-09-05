@@ -52,6 +52,20 @@ class AnEqualityBetweenTwoPositionsIsHeldByTheValuesTest {
         assertEquals(List.of(said), saidOf(source), "no value of this can be written");
     }
 
+    /** The places a refusal names, as it writes them. */
+    private static String named(String source) {
+        Compilation compilation = Compilation.ofSource(source, "Main");
+        compilation.answerEverything();
+        return compilation.diagnostics().values().stream()
+                .flatMap(List::stream)
+                .map(Located::diagnostic)
+                .map(each -> each.said())
+                .filter(souther.compiler.diag.msg.DataMessage.NoValueTheseCanAllHold.class::isInstance)
+                .map(each -> ((souther.compiler.diag.msg.DataMessage.NoValueTheseCanAllHold) each).at())
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("nothing said which places hold one value"));
+    }
+
     private static void admits(String source) {
         assertEquals(List.of(), saidOf(source), "a value of this can be written");
     }
@@ -186,6 +200,46 @@ class AnEqualityBetweenTwoPositionsIsHeldByTheValuesTest {
                 data Pair = { p: Int, r: Int }
                     invariant no = p == r && p /= 1 && r == 1
                 """);
+    }
+
+    /**
+     * Two branches left with no value at blocks that are not the same block have shown nothing
+     * about the positions the two blocks share.
+     *
+     * <p>Neither branch is one anybody can be in, and what the choice was shown by is what both of
+     * them were shown by. One was left nothing at the value {@code p}, {@code q}, {@code r} share
+     * and the other at the value {@code p}, {@code q}, {@code s} share — and neither says the value
+     * {@code p} and {@code q} share has none. Read as the positions each of them named, the two
+     * would meet at {@code p} and {@code q} and the choice would be refused for a pair no rule of
+     * it leaves empty.
+     */
+    @Test
+    void twoBranchesEmptiedAtDifferentBlocksShowNothingAboutWhatTheyShare() {
+        refuses("ItsRulesCannotAllHold", STAGE + """
+                data Quad = { p: Stage, q: Stage, r: Stage, s: Stage }
+                    invariant no = (p == q && q == r && p == Ready && r == Done)
+                        || (p == q && q == s && p == Ready && s == Done)
+                """);
+    }
+
+    /**
+     * A declaration whose rules empty two blocks names the one that was shown.
+     *
+     * <p>A branch is settled by the first thing that shows it empty and the proof is fixed there,
+     * so the second block is never reached from a clause. What this pins is that the sentence names
+     * the block and not the whole product — that two blocks stay two is
+     * {@code AProofNamesOneBlockAndNotAllOfThemTest}'s, where a reading holding both can be made.
+     */
+    @Test
+    void aDeclarationEmptyingTwoBlocksNamesTheOneThatWasShown() {
+        String source = STAGE + """
+                data Quad = { p: Stage, q: Stage, r: Stage, s: Stage }
+                    invariant no = p == q && p == Ready && q == Done
+                        && r == s && r == Ready && s == Done
+                """;
+
+        refuses("NoValueTheseCanAllHold", source);
+        assertEquals("`p`, `q`", named(source));
     }
 
     /**

@@ -67,7 +67,8 @@ sealed interface PlannedHeld<A> {
                 }
             });
             at = Collections.unmodifiableMap(said);
-            Sameness.apart(at.keySet());
+            // Read as the relation they are the classes of — see {@link AdmissibleValues.Box}.
+            Sameness.of(at.keySet());
         }
 
         /** One alternative over positions that are each their own block. */

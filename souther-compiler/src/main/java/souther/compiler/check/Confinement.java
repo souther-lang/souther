@@ -76,8 +76,18 @@ sealed interface Confinement<A> {
      * <p>{@code by} is a fact about the readings and not a sentence about the model. Which proof an
      * author is told is chosen from it in one place, and what is chosen is not decided here.
      *
-     * @param at   where every alternative was refused, empty where no one position is why. Only ever
-     *             read of {@link EmptyBy#SET_AND_RANGE} and {@link EmptyBy#ORDER}
+     * @param at   the blocks every alternative was refused at, empty where no one of them is why.
+     *             Read of {@link EmptyBy#SET_AND_RANGE}, {@link EmptyBy#ORDER} and
+     *             {@link EmptyBy#POSITIONS_HELD_AS_ONE}.
+     *
+     *             <p>Blocks and not the positions they are of. What was refused is the one value a
+     *             block holds, and each of its positions may be left something on its own — taken
+     *             apart here, a pair whose ranges share nothing would be reported at whichever of
+     *             them is declared first, whose own rules are fine with what they leave it. Two
+     *             blocks refused are two of these and stay two: their positions put in one set say
+     *             the rules hold all of them as one value, which no rule states, and a choice
+     *             between two dead branches would intersect those sets and claim a lack about
+     *             whatever the two happened to share
      */
     record Admission<A>(Emptiness emptiness, EmptyBy by, Set<Sameness.Block<A>> at) {
 

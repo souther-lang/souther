@@ -193,6 +193,10 @@ public record ConstraintState<A>(NumericDomain<A> numbers, PredicateFacts<A> fac
     private static <A> List<Emptiness.AtAField.Where> nearestBlock(
             Set<souther.compiler.values.Sameness.Block<A>> blocks,
             SequencedMap<A, Emptiness.AtAField.Where> positions) {
+        // Which blocks can be named at all, and then the earliest of those. A block one of whose
+        // positions this value does not declare is one no sentence can be written about, and it
+        // says nothing about the block declared after it — asked in one pass, the first block
+        // touched decided the answer for the rest.
         for (Map.Entry<A, Emptiness.AtAField.Where> first : positions.entrySet()) {
             for (souther.compiler.values.Sameness.Block<A> block : blocks) {
                 if (!block.holds(first.getKey())) {
@@ -204,7 +208,9 @@ public record ConstraintState<A>(NumericDomain<A> numbers, PredicateFacts<A> fac
                         where.add(place);
                     }
                 });
-                return where.size() == block.members().size() ? where : List.of();
+                if (where.size() == block.members().size()) {
+                    return where;
+                }
             }
         }
         return List.of();
