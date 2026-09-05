@@ -69,10 +69,13 @@ final class CompiledClasses {
     }
 
     private Optional<ClassModel> parse(String internalName) {
-        for (Path module : repository.modules()) {
-            Path target = module.resolve("target");
-            for (String output : outputs) {
-                Path compiled = target.resolve(output).resolve(internalName + ".class");
+        // Outputs outermost, because the order they are named in is an order between them: a class
+        // this repository publishes answers about that name wherever a module beside it also
+        // compiled one.
+        for (String output : outputs) {
+            for (Path module : repository.modules()) {
+                Path compiled = module.resolve("target").resolve(output)
+                        .resolve(internalName + ".class");
                 if (Files.isRegularFile(compiled)) {
                     try {
                         return Optional.of(ClassFile.of().parse(Files.readAllBytes(compiled)));

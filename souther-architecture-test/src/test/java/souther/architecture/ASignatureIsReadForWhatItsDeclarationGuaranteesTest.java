@@ -11,7 +11,9 @@ import java.lang.classfile.Attributes;
 import java.lang.classfile.ClassModel;
 import java.lang.classfile.MethodModel;
 import java.lang.classfile.MethodSignature;
+import java.lang.classfile.Signature;
 import java.lang.classfile.attribute.SignatureAttribute;
+import java.lang.constant.ClassDesc;
 import java.util.List;
 import java.util.Set;
 
@@ -98,6 +100,21 @@ class ASignatureIsReadForWhatItsDeclarationGuaranteesTest {
         assertFalse(takes(HERE + "$Owned", "shadowing", THE_DERIVED_WORLD),
                 "and not with the one it shadows, which a reading keyed by the name alone would"
                         + " have answered with");
+    }
+
+    @Test
+    void aBoundIsReadWhereItsVariableWasDeclared() {
+        for (String owner : List.of(HERE + "$BoundedByItsSibling",
+                HERE + "$BoundedThroughAnArgument")) {
+            assertTrue(takes(owner, "throughTheClassesBound", THE_DERIVED_WORLD),
+                    owner + ": a variable bounded by another of its class stands for what that one"
+                            + " was declared to be, and where that name was declared is where the"
+                            + " bound is read");
+            assertFalse(takes(owner, "throughTheClassesBound", THE_RESOLVED_WORLD),
+                    owner + ": and not where the variable was written — a method naming the same"
+                            + " letter binds it for what the method writes, never for what its"
+                            + " class already said");
+        }
     }
 
     @Test
@@ -191,12 +208,15 @@ class ASignatureIsReadForWhatItsDeclarationGuaranteesTest {
 
     @Test
     void aClassOfThisRepositoryThatWasNotBuiltFailsTheReading() {
-        AssertionError refused = assertThrows(AssertionError.class,
-                () -> COMPILED.read("souther/architecture/NothingCompiledThis"));
+        Signature absent = Signature.of(ClassDesc.of("souther.architecture.NothingCompiledThis"));
+
+        AssertionError refused = assertThrows(AssertionError.class, () -> READING.reaches(absent,
+                Scope.of("nothing", List.of()), Set.of(THE_DERIVED_WORLD)));
 
         assertTrue(refused.getMessage().contains("not built here"),
-                "the same holds of a class whose components a reading has to open and cannot find:"
-                        + " " + refused.getMessage());
+                "the same holds of a class whose components a reading has to open and cannot find,"
+                        + " and it is the reading that has to say so rather than the lookup under"
+                        + " it: " + refused.getMessage());
     }
 
     @Test
@@ -234,6 +254,24 @@ class ASignatureIsReadForWhatItsDeclarationGuaranteesTest {
         // could not say so.
         @SuppressWarnings("TypeParameterShadowing")
         <S extends ResolvedSymbols> void shadowing(S world) {
+        }
+    }
+
+    /** A class whose second variable is bounded by its first, with a method that names the first
+     *  again. What the second stands for is settled where it was declared. */
+    static class BoundedByItsSibling<B extends DerivedSymbols, A extends B> {
+
+        @SuppressWarnings("TypeParameterShadowing")
+        <B extends ResolvedSymbols> void throughTheClassesBound(A world) {
+        }
+    }
+
+    /** The same, with the bound reaching its sibling through a type argument and the sibling
+     *  declared after the variable that names it. */
+    static class BoundedThroughAnArgument<A extends List<B>, B extends DerivedSymbols> {
+
+        @SuppressWarnings("TypeParameterShadowing")
+        <B extends ResolvedSymbols> void throughTheClassesBound(A world) {
         }
     }
 

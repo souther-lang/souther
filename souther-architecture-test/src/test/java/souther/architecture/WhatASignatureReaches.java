@@ -29,8 +29,10 @@ import java.util.Set;
  * <p><b>A bound is read because it is what the declaration guarantees, not because it says what the
  * argument will be.</b> {@code <S extends Symbols>} may be given a derived world and this reading
  * does not say so; what it says is that {@code Symbols} is what every use of {@code S} is warranted
- * to be. That is the same answer to both of the questions a rule asks — whether a world could arrive
- * here at all, and whether the one that arrives is the derived one — so one reading serves both, and
+ * to be. That is the same answer to both of the questions a rule asks — whether the declaration
+ * guarantees a world arrives here at all, and whether the one it guarantees is the derived one, a
+ * question about what is written and never about what a run could pass — so one reading serves both,
+ * and
  * a walk bounded only by {@code Symbols} stays loose under the rule that wants the derived world.
  *
  * <p><b>A type parameter is an environment and not a root.</b> A bound is followed when the variable
@@ -133,12 +135,14 @@ final class WhatASignatureReaches {
         }
 
         private boolean reachesThroughBounds(Signature.TypeVarSig variable, Scope scope) {
-            Scope.Binding binding = scope.bindingOf(variable.identifier());
-            if (!followed.add(binding)) {
+            Scope.Resolved resolved = scope.bindingOf(variable.identifier());
+            if (!followed.add(resolved.binding())) {
                 return false;
             }
-            for (Signature.RefTypeSig bound : binding.bounds()) {
-                if (reaches(bound, scope)) {
+            // In the frame that declared it, never the one it was written in: what a bound names is
+            // read where the bound was written.
+            for (Signature.RefTypeSig bound : resolved.binding().bounds()) {
+                if (reaches(bound, resolved.declaredIn())) {
                     return true;
                 }
             }
@@ -189,33 +193,66 @@ final class WhatASignatureReaches {
     /**
      * What the type variables in scope stand for.
      *
+     * <p>A frame for each declaration that binds any — the class's, and the method's standing on
+     * it — kept as a chain and not as one map. A binding is two things at once: which parameter a
+     * name is, and the world that parameter's own bound is written in. A method naming a letter its
+     * class also names binds it for what the method writes, while what the class declared under
+     * that letter goes on standing for what its own frame says; one map keyed by the name holds the
+     * first of those and loses the second, and a bound read in the wrong frame answers with another
+     * variable's declaration.
+     *
      * <p>Built by whoever holds a signature, because which bindings are in scope is a fact about
-     * where the signature was written and not one the signature carries: a method's own parameters
-     * over the ones its class declares, and a name declared in both is the method's.
+     * where the signature was written and not one the signature carries.
      */
-    record Scope(Map<String, Binding> bindings) {
+    record Scope(String owner, Map<String, Signature.TypeParam> declared, Optional<Scope> under) {
 
         static Scope of(String owner, List<Signature.TypeParam> declared) {
-            return new Scope(Map.of()).and(owner, declared);
+            return new Scope(owner, byName(declared), Optional.empty());
         }
 
-        /** This scope with {@code declared} over it, where a repeated name is the newer binding. */
+        /** This scope with a frame over it, which is where a repeated name is bound from here. */
         Scope and(String owner, List<Signature.TypeParam> declared) {
-            Map<String, Binding> out = new LinkedHashMap<>(bindings);
-            for (Signature.TypeParam each : declared) {
-                out.put(each.identifier(), new Binding(owner, each.identifier(), each));
-            }
-            return new Scope(out);
+            return new Scope(owner, byName(declared), Optional.of(this));
         }
 
-        Binding bindingOf(String identifier) {
-            Binding found = bindings.get(identifier);
-            if (found == null) {
-                throw new AssertionError("the type variable " + identifier + " is bound nowhere this"
-                        + " reading was given, so what it stands for is a question this cannot"
-                        + " answer; the scope holds " + bindings.keySet());
+        private static Map<String, Signature.TypeParam> byName(List<Signature.TypeParam> declared) {
+            Map<String, Signature.TypeParam> out = new LinkedHashMap<>();
+            for (Signature.TypeParam each : declared) {
+                out.put(each.identifier(), each);
             }
-            return found;
+            return out;
+        }
+
+        /** The frames this stands on, outermost first, this one last. */
+        List<Scope> frames() {
+            List<Scope> out = new ArrayList<>(under.map(Scope::frames).orElse(List.of()));
+            out.add(this);
+            return out;
+        }
+
+        /** The binding {@code identifier} names here, and the frame that declared it. */
+        Resolved bindingOf(String identifier) {
+            Signature.TypeParam found = declared.get(identifier);
+            if (found != null) {
+                return new Resolved(new Binding(owner, identifier, found), this);
+            }
+            return under.map(frame -> frame.bindingOf(identifier))
+                    .orElseThrow(() -> new AssertionError("the type variable " + identifier
+                            + " is bound nowhere this reading was given, so what it stands for is a"
+                            + " question this cannot answer; the scope holds " + names()));
+        }
+
+        private List<String> names() {
+            List<String> out = new ArrayList<>();
+            for (Scope frame : frames()) {
+                out.addAll(frame.declared().keySet());
+            }
+            return out;
+        }
+
+        /** A variable's binding beside the frame it was declared in, which is where its bound is
+         *  read: that frame's own names, and the ones it stands on. */
+        record Resolved(Binding binding, Scope declaredIn) {
         }
 
         /** One type variable, told apart by what declared it: a method may name a variable its own

@@ -65,7 +65,7 @@ class HowARuleThatGovernsADeclarationIsAskedForTest {
     private static final String THE_LOOKUP = internal(ExpandedClauseLookup.class);
 
     /** The declaration worlds, read off the sealed interface rather than listed: a world added to it
-     *  is one a walk could be handed, and these rules have to see it arrive. */
+     *  is one a walk can be declared to take, and these rules have to see it arrive. */
     private static final Set<String> THE_WORLDS = worlds();
 
     private static final CompiledClasses COMPILED =
@@ -114,15 +114,36 @@ class HowARuleThatGovernsADeclarationIsAskedForTest {
             return READING.reaches(signature.result(), scope, wanted);
         }
 
-        /** As a failure names it: the type parameters shown, because a reader of a report about
-         *  {@code S} has to see what {@code S} was declared to be, and not read as roots. */
+        /**
+         * As a failure names it.
+         *
+         * <p>Every frame the method stands in, and not only its own: a report about {@code S} has
+         * to say what {@code S} was declared to be, and a method writing a letter its class
+         * declared is answered for by the class. Shown and not read as roots — which of the two a
+         * type parameter is is settled by the reading, not by whether a reader can see it.
+         */
         String shown() {
+            String enclosing = scope.under().map(Read::shown).orElse("");
             String declared = signature.typeParameters().isEmpty() ? ""
                     : signature.typeParameters().stream().map(Read::shown)
-                            .collect(Collectors.joining(", ", "<", "> "));
+                            .collect(Collectors.joining(", ", "<", ">"));
             String takes = signature.arguments().stream().map(Signatures::shown)
                     .collect(Collectors.joining(", "));
-            return declared + name + "(" + takes + "): " + Signatures.shown(signature.result());
+            return enclosing + name + declared + "(" + takes + "): "
+                    + Signatures.shown(signature.result());
+        }
+
+        /** The frames under a method's own, each as what declared it and what it declared. */
+        private static String shown(Scope enclosing) {
+            StringBuilder out = new StringBuilder();
+            for (Scope frame : enclosing.frames()) {
+                if (!frame.declared().isEmpty()) {
+                    out.append(frame.owner()).append(frame.declared().values().stream()
+                            .map(Read::shown).collect(Collectors.joining(", ", "<", ">")))
+                            .append('.');
+                }
+            }
+            return out.toString();
         }
 
         private static String shown(Signature.TypeParam declared) {
