@@ -356,12 +356,12 @@ public final class Output {
      * counted classes, because what holds a row to a budget it cannot exceed is the counting itself
      * — a row evaluated against uncounted classes has nothing but a clock behind it.
      *
-     * <p>Absent where this compile has no bodies for the module, which is the whole of what an
-     * absence here says. A generation that contradicts itself — a node reached that the plan it was
-     * made from does not hold, an arm numbered that nothing wrote — is not a measurement this could
-     * not make, and answering with nothing for it would report a module with no arms to read exactly
-     * as a module whose arms were all read. So it is not caught: what a caller of this gets is the
-     * classes or a program the compiler refused, and there is no third thing.
+     * <p>Two answers and not three. An absence with nothing of its own to report says this compile
+     * has no inputs to generate the module from; an absence carrying a refusal says the program was
+     * refused, and the refusal is what a reader is owed. A generation that contradicts itself — a
+     * node reached that the plan it was made from does not hold, an arm numbered that nothing wrote
+     * — is neither, and answering with the first for it would report a module with no arms to read
+     * exactly as a module whose arms were all read. So it is not caught here.
      */
     public record Evaluated(String name, ArmObservation arms)
             implements Key<EvaluationArtifact> {

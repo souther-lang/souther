@@ -214,10 +214,13 @@ public final class ConstEval {
      *
      * <p>A backtracking engine can take exponential time on a pattern written to make it, and can
      * exhaust the stack on one written to make that. Neither is this compiler's to survive by luck:
-     * the walk that asks fails open on a {@code RuntimeException} and a {@code StackOverflowError} is
-     * not one, so an unbounded attempt here ends the compilation rather than the fold. The subject is
-     * handed over through a reader that stops the engine past a budget, and what the engine spends
-     * before answering is what decides whether the answer is worth having.
+     * an unbounded attempt here ends the compilation rather than this fold, and what ends is a
+     * compile of a program nothing is wrong with. The subject is handed over through a reader that
+     * stops the engine past a budget, and what the engine spends before answering is what decides
+     * whether the answer is worth having.
+     *
+     * <p>What each of the three refusals answers is the same thing: this fold does not settle the
+     * match, and the run-time check does. None of them is about the program.
      */
     private static Optional<Object> matches(String pattern, String s) {
         try {

@@ -56,7 +56,13 @@ public final class Emissions {
     /** What was handed out, once there is such a thing. */
     private Map<String, ClassFileImage> sealed;
 
-    public Emissions(String module, ProbeImage probes) {
+    /**
+     * Not public. What these classes record a run in is the generation's answer, and the way to say
+     * that is that nothing outside the generation can build a set of them and put a numbering on it.
+     * A caller holding the bodies can make an equal plan and an equal identity, so a public way in
+     * here would be a second place the answer could come from, told apart from the first by nothing.
+     */
+    Emissions(String module, ProbeImage probes) {
         this.module = module;
         this.probes = Objects.requireNonNull(probes,
                 "classes say whether a run through them leaves an account");

@@ -20,6 +20,7 @@ import java.lang.classfile.instruction.SwitchCase;
 import java.lang.classfile.instruction.TableSwitchInstruction;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.lang.reflect.AccessFlag;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
@@ -85,19 +86,76 @@ class NoBroadFailureBecomesAnAnswerInTheAnalysisCoreTest {
             "souther/compiler/codegen/",
             "souther/compiler/query/");
 
+    /** A condition of the platform this compiler asks a question with, and what an answer to it is. */
+    private record Condition(String type, String answers) {}
+
     /**
-     * What counts as wide.
+     * The conditions, written down one at a time.
      *
-     * <p>Unchecked types of the JDK that this compiler gave no meaning to, so a handler naming one
-     * of them says nothing about what it met. A refusal this compiler declares is not here however
-     * many methods raise it: catching {@code NotOneClause} is catching one thing.
+     * <p>A platform type is not always a failure nobody named. Some of them are how the platform
+     * answers a question that was asked: {@code multiplyExact} says a product does not fit by
+     * throwing, and a fold that catches it and answers "more than can be counted" has read an
+     * answer rather than lost one. What makes those different from a wide catch is that something
+     * was asked — so which they are is a decision, and a decision is written down and read.
+     *
+     * <p><b>Written as what is asked, not as where it is caught.</b> A new method catching one of
+     * these needs no line here; a new kind of condition does, and that is the thing worth reading.
+     * And the default is the other way from the one this whole change is about: a platform type
+     * nobody wrote a line for is wide, so a handler for a condition nobody has named yet is loud
+     * rather than quiet.
      */
-    private static final Set<String> WIDE = Set.of(
-            "java/lang/Throwable",
-            "java/lang/Exception",
-            "java/lang/RuntimeException",
-            "java/lang/IllegalStateException",
-            "java/lang/IllegalArgumentException");
+    private static final List<Condition> ASKED_WITH = List.of(
+            new Condition("java.lang.ArithmeticException",
+                    "the exact-arithmetic methods say a count does not fit, and what is answered is"
+                            + " that there are more than can be counted"),
+            new Condition("java.util.regex.PatternSyntaxException",
+                    "the platform will not compile a pattern an author wrote, and what is answered"
+                            + " is that this fold does not settle the match"),
+            new Condition("java.lang.StackOverflowError",
+                    "a pattern whose matching does not finish inside what it was given, answered"
+                            + " the same way as one the engine refused"),
+            new Condition("java.lang.LinkageError",
+                    "generated classes that will not link, so nothing can be built to find out what"
+                            + " a model admits — answered as nothing tried, which is not the same"
+                            + " as everything tried being refused"));
+
+    /**
+     * Whether catching {@code type} says nothing about what was met.
+     *
+     * <p>Asked of the type rather than looked up in a list of the wide ones somebody thought of.
+     * Such a list is the shape this whole change is about: the failures nobody has named yet go
+     * through it, and nothing says so while they do. A handler catching {@link NullPointerException}
+     * is as wide as one catching {@link IllegalStateException}, and it is wide here without anybody
+     * having said so first.
+     *
+     * <p>Three things make it wide. It is the platform's, which is what says this compiler gave it
+     * no meaning of its own — a refusal declared in this build is a subclass of
+     * {@link RuntimeException} like any other, and catching {@code NotOneClause} is catching one
+     * thing. It is an unchecked failure: a {@link RuntimeException} or an {@link Error}, or
+     * something above them that takes either in. A checked exception of the platform is not one of
+     * these — {@code IOException} is a condition a method declared. And it is not one of the
+     * conditions above.
+     */
+    private static boolean isWide(String internalName) {
+        String binary = internalName.replace('/', '.');
+        if (ASKED_WITH.stream().anyMatch(condition -> condition.type().equals(binary))) {
+            return false;
+        }
+        Class<?> type;
+        try {
+            type = Class.forName(binary, false,
+                    NoBroadFailureBecomesAnAnswerInTheAnalysisCoreTest.class.getClassLoader());
+        } catch (ClassNotFoundException e) {
+            throw new IllegalStateException("a handler catches " + binary
+                    + ", which this cannot load — so whether it is wide was not decided", e);
+        }
+        if (type.getClassLoader() != null) {
+            return false;   // declared by this build, so it names what it catches
+        }
+        return RuntimeException.class.isAssignableFrom(type)
+                || Error.class.isAssignableFrom(type)
+                || type.isAssignableFrom(RuntimeException.class);
+    }
 
     /** A handler, where it is, and what it catches. */
     private record Handler(String where, String catches) implements Comparable<Handler> {
@@ -153,13 +211,20 @@ class NoBroadFailureBecomesAnAnswerInTheAnalysisCoreTest {
             if (READ_A_PROGRAM.stream().noneMatch(owner::startsWith)) {
                 continue;
             }
+            // A class nobody wrote. A switch over an enum compiles to a synthetic holder whose
+            // initializer catches a NoSuchFieldError per constant and carries on — a handler that
+            // does return, and one no line of this repository asked for. What a person wrote is in
+            // the class they wrote it in.
+            if (model.flags().has(AccessFlag.SYNTHETIC)) {
+                continue;
+            }
             for (MethodModel method : model.methods()) {
                 method.code().ifPresent(code -> {
                     Walk walk = Walk.of(code);
                     for (ExceptionCatch caught : code.exceptionHandlers()) {
                         String type = caught.catchType()
                                 .map(entry -> entry.asInternalName()).orElse(null);
-                        if (type == null || !WIDE.contains(type)) {
+                        if (type == null || !isWide(type)) {
                             continue;
                         }
                         Handler handler = new Handler(
