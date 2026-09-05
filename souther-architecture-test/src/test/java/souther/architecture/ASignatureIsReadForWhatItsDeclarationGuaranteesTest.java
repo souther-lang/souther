@@ -219,6 +219,10 @@ class ASignatureIsReadForWhatItsDeclarationGuaranteesTest {
         void fromTheClassesOwnVariable(S world) {
         }
 
+        // The name is its class's again, which is what this one is for: a reading keyed by the
+        // name alone answers with the wrong bound here, and a subject that spelled the two apart
+        // could not say so.
+        @SuppressWarnings("TypeParameterShadowing")
         <S extends ResolvedSymbols> void shadowing(S world) {
         }
     }
