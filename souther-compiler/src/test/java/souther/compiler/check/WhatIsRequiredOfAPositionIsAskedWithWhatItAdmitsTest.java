@@ -233,6 +233,28 @@ class WhatIsRequiredOfAPositionIsAskedWithWhatItAdmitsTest {
                 "an atom of rules nothing satisfies is at no value, not at every value");
     }
 
+    /**
+     * And a component holding nothing leaves no envelope, whether or not there is a position to
+     * ask about.
+     *
+     * <p>What a state with no assignment says is about the state. Read off the positions, it would
+     * be said only where there is one to say it at — and a reading with no position at all would
+     * come back saying that nothing was required of anything, which is what a state that holds
+     * something says.
+     */
+    @Test
+    void aComponentHoldingNothingLeavesNoEnvelopeEvenWithNoPositionToAskAbout() {
+        ConstraintState<String> nowhere = ConstraintState.<String>top()
+                .taking(LinearForm.<String>atom("x"), Rel.GE,
+                        Map.of("x", souther.compiler.numeric.Granularity.DISCRETE))
+                .taking(LinearForm.<String>constant(BigDecimal.valueOf(-1))
+                                .minus(LinearForm.atom("x")), Rel.GE,
+                        Map.of("x", souther.compiler.numeric.Granularity.DISCRETE));
+        assertTrue(nowhere.numbers().isBottom(), "x is at nought or above and below minus one");
+        assertEquals(Map.of(), nowhere.confinement().carriers(), "and no position is read at all");
+        assertInstanceOf(PositionEnvelope.NothingIsLeft.class, nowhere.positionEnvelope());
+    }
+
     /** And which orders a count crosses into is the carrier's answer, asked of what it counts. */
     @Test
     void aCountCrossesIntoAnOrderThatCountsAndIntoNoOther() {

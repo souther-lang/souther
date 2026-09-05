@@ -107,19 +107,18 @@ public record ConstraintState<A>(NumericDomain<A> numbers, PredicateFacts<A> fac
      * first domain added without touching the second would put them out of agreement.
      */
     public boolean isBottom() {
-        return bottomBy(admitted());
+        return shownByAnother() || admitted().holdsNothing();
     }
 
     /**
-     * The same question, out of an answer already worked out.
+     * Whether a component other than the pair of readings shows that nothing satisfies this.
      *
-     * <p>Here so that the rule is written once and the walk that answers it is made once. Whether
-     * anything satisfies the rules and why nothing does are read off one answer
-     * ({@link #holdsNothing}), and a second expression of the rule beside it would let the two say
-     * different things about one state.
+     * <p>Asked before the pair's answer wherever both are wanted, because the pair's takes a walk
+     * over every alternative and these take none. What that ordering is for is written at
+     * {@link #admitted}: it decides which proof a reader is told as well as what is worked out.
      */
-    private boolean bottomBy(Confinement.Admission<A> admitted) {
-        return shown || numbers.isBottom() || facts.isBottom() || admitted.holdsNothing();
+    private boolean shownByAnother() {
+        return shown || numbers.isBottom() || facts.isBottom();
     }
 
     /**
@@ -136,11 +135,16 @@ public record ConstraintState<A>(NumericDomain<A> numbers, PredicateFacts<A> fac
      * that says so is the numbers, and their own answer was asked above.
      */
     private Confinement.Admission<A> admitted() {
-        Confinement.Admission<A> said = confinement.admission();
-        if (said.holdsNothing() || shown || numbers.isBottom() || facts.isBottom()) {
-            return said;
+        if (shownByAnother()) {
+            return confinement.admission();
         }
-        return confinement.admission(positionEnvelope(confinement.carriers()));
+        return switch (positionEnvelope()) {
+            // Nowhere for any position to be is a component of this state holding nothing, which is
+            // that component's answer and is read where it is asked. What the pair leaves is what
+            // the pair leaves, and this says nothing to it.
+            case PositionEnvelope.NothingIsLeft<A> _ -> confinement.admission();
+            case PositionEnvelope.Restrictions<A> it -> confinement.admission(it);
+        };
     }
 
     /**
@@ -154,32 +158,40 @@ public record ConstraintState<A>(NumericDomain<A> numbers, PredicateFacts<A> fac
      * would be the one nobody remembered, and a reduction that quietly leaves a language out is the
      * defect this whole mechanism is about.
      *
-     * @param carriers what each position is ordered on, which is what a count crosses into a range
-     *                 through. Handed in because it is the reading's and not this state's: a state
-     *                 asked before any clause was read has no table of its own, and the answer it
-     *                 gives has to be about the positions being asked about
+     * <p>Over the positions this state's own reading holds, which is what makes it a projection of
+     * this state and not an answer about somebody else's table. What each of them is ordered on is
+     * what a count crosses into a range through, and that is the reading's answer rather than one
+     * worked out again here.
      */
-    PositionEnvelope<A> positionEnvelope(Map<A, Carrier> carriers) {
+    PositionEnvelope<A> positionEnvelope() {
+        Map<A, Carrier> carriers = confinement.carriers();
         Map<A, PositionRestriction> out = new LinkedHashMap<>();
         for (String component : COMPONENTS) {
             switch (component) {
                 // The numbers relate positions to each other, so where one of them is left is read
                 // off all the rules at once and never off what was written about it.
                 case "numbers" -> {
+                    // What the component says about itself before what it says about a place. A
+                    // domain admitting no assignment leaves nowhere for any position to be, which
+                    // is about the state and about no place in it — asked position by position, a
+                    // state with no position to ask about would answer that nothing was said.
+                    if (numbers.isBottom()) {
+                        return new PositionEnvelope.NothingIsLeft<>();
+                    }
                     for (Map.Entry<A, Carrier> each : carriers.entrySet()) {
-                        PositionRestriction said = switch (numbers.projectionOf(each.getKey())) {
-                            case NumericDomain.Projection.NotSpokenOf _ ->
-                                    new PositionRestriction.NotSpokenOf();
-                            case NumericDomain.Projection.Within it ->
-                                    each.getValue().within(it.bounds());
-                            // A domain admitting no assignment places no position: there is nowhere
-                            // for any of them to be, which is about the state and not about a place.
-                            case NumericDomain.Projection.NothingIsLeft _ -> null;
-                        };
-                        if (said == null) {
-                            return new PositionEnvelope.NothingIsLeft<>();
-                        }
-                        narrowing(out, each.getKey(), said);
+                        narrowing(out, each.getKey(),
+                                switch (numbers.projectionOf(each.getKey())) {
+                                    case NumericDomain.Projection.NotSpokenOf _ ->
+                                            new PositionRestriction.NotSpokenOf();
+                                    case NumericDomain.Projection.Within it ->
+                                            each.getValue().within(it.bounds());
+                                    // Answered above, where it is about the state rather than
+                                    // about the position this loop is at.
+                                    case NumericDomain.Projection.NothingIsLeft _ ->
+                                            throw new IllegalStateException(
+                                                    "a domain that holds nothing was asked where a"
+                                                            + " position is");
+                                });
                     }
                 }
                 // A predicate settled one way or the other, and an argument made outside the
@@ -249,7 +261,8 @@ public record ConstraintState<A>(NumericDomain<A> numbers, PredicateFacts<A> fac
      */
     public Optional<Emptiness> holdsNothing(SequencedMap<A, Emptiness.AtAField.Where> positions) {
         Confinement.Admission<A> shown = admitted();
-        Emptiness why = bottomBy(shown) ? new Emptiness.ConflictingRules() : null;
+        Emptiness why = shownByAnother() || shown.holdsNothing()
+                ? new Emptiness.ConflictingRules() : null;
         // A position whose ends cross, which is nearer than the general form: it says not only that
         // the rules contradict but where they leave nothing.
         //

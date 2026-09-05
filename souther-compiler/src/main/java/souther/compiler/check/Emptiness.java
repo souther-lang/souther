@@ -103,20 +103,21 @@ public sealed interface Emptiness {
      * The values a position is allowed and the bounds the rules require it to be within share none.
      *
      * <p>What no reading of the position showed on its own. Its values are a set some rule left it,
-     * its order is a range some rule left it, and the bounds here are what follows from rules
-     * written about it and its neighbours together — {@code x} between one and two, and {@code x}
-     * three or more because it is one past a {@code y} that is at least two. Each of those is
-     * satisfiable and no two of them were ever asked together.
+     * its order is a range some rule left it, and the bounds here are what follows from the rules
+     * once every reading of them has said where the position may be — {@code x} between one and
+     * two, and {@code x} three or more because it is one past a {@code y} that is at least two.
+     * Each of those is satisfiable and no two of them were ever asked together.
      *
-     * <p>Which is why this says the bounds are required and not where they come from. What can
-     * require a position to be somewhere is every reading of the state that has anything to say
-     * about one position at a time, and a proof naming the reading it came from would be a new proof
-     * for each of them — an author acts on the same fact whichever it was.
+     * <p>Which is why this says the bounds are required and not where they come from. Any reading
+     * of the state that can say where one position lies may require it, and a proof naming which of
+     * them did would be a new proof for each — an author acts on the same fact whichever it was,
+     * and a rule about the position alone can put a bound on it as readily as a rule relating it to
+     * another.
      *
-     * <p>Not {@link NoAllowedValueInRange}, which is the same shape between two readings of one
-     * declaration's own clauses. The difference is worth keeping: that one is answered by looking at
-     * the rules about the position, and this one is not answered until the rules about its
-     * neighbours are read with them.
+     * <p>Not {@link NoAllowedValueInRange}, which is the same shape between the two readings a
+     * declaration's own clauses are read into. The difference is worth keeping: that one is
+     * answered by those two, and this one is not answered until what every other reading requires
+     * of the position is asked with them.
      */
     record NoAllowedValueWithinRequiredBounds() implements Emptiness {}
 
