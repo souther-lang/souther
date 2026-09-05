@@ -106,7 +106,8 @@ public sealed interface BorderQuantity {
             // counts by one, so a reader handed the second decodes the first as nothing (#1027).
             return switch (readAt(of, observation.at(term.position()))) {
                 case WhatATermRead.CameToNothing(ReadingGap why) -> Stands.couldNotTell(why);
-                case WhatATermRead.NoNumberOfTheValue _ -> Stands.NO;
+                case WhatATermRead.NoNumberOfTheValue _, WhatATermRead.NothingWrittenThere _ ->
+                        Stands.NO;
                 case WhatATermRead.Number(Place value) ->
                         where.holds(new Level.OnACarrier(of.answered(), value))
                                 ? Stands.YES : Stands.NO;
@@ -317,6 +318,12 @@ public sealed interface BorderQuantity {
             // look at first.
             Set<ReadingGap> stopped = new java.util.LinkedHashSet<>();
             for (WhatATermRead end : List.of(here, there)) {
+                // A row that wrote nothing at one end has no pair to stand anywhere, whatever the
+                // other end came to. Answered after the reasons instead, a row that settles the
+                // point would leave it open because the end nobody needed was unreadable.
+                if (end instanceof WhatATermRead.NothingWrittenThere) {
+                    return Stands.NO;
+                }
                 if (end instanceof WhatATermRead.CameToNothing(ReadingGap why)) {
                     stopped.add(why);
                 }
@@ -562,6 +569,14 @@ public sealed interface BorderQuantity {
                     case NumericTerm.TakenOver over ->
                             readOver(orders, observation.everyValueAt(over.subjectPath()));
                 };
+                // A term whose position the row wrote nothing at leaves the form no value at this
+                // row, and that is the row's answer rather than a reading that came to nothing. It
+                // outranks every reason collected here for the same reason it is not one of them:
+                // the others are what this compiler could not find out, and this is what the row
+                // says.
+                if (read instanceof WhatATermRead.NothingWrittenThere) {
+                    return Stands.NO;
+                }
                 if (read instanceof WhatATermRead.CameToNothing(ReadingGap why)) {
                     stopped.add(why);
                     continue;
@@ -891,6 +906,17 @@ public sealed interface BorderQuantity {
          *  and not about anything that stopped. */
         record NoNumberOfTheValue() implements WhatATermRead { }
 
+        /**
+         * The row wrote nothing at the term's position, so this quantity has no value at this row.
+         *
+         * <p>Which settles the row rather than leaving it open, and settles it whatever else the
+         * quantity met. A number over a position a row put nothing at is a number the row does not
+         * have, and it does not have it any more once a wider run keeps what it shortened
+         * elsewhere — so a reading stopped at another term is not what a reader is told about this
+         * row.
+         */
+        record NothingWrittenThere() implements WhatATermRead { }
+
         /** No number, and this is what the reading met instead. */
         record CameToNothing(ReadingGap why) implements WhatATermRead { }
     }
@@ -902,11 +928,15 @@ public sealed interface BorderQuantity {
                     new WhatATermRead.CameToNothing(ReadingGap.COULD_NOT_WALK);
             case WalkResult.Reached(ObservationAtPoint standing) -> switch (standing) {
                 case ObservationAtPoint.Value(ObservedValue value) -> said(on.read(value));
-                // Both are the walk arriving and no value of the row standing here, which is what
-                // the reading has a word for. Which of the two it was is the measure's own business
-                // and nothing a number is read off.
-                case ObservationAtPoint.WroteNothing _, ObservationAtPoint.BelongsToAnotherReading _
-                        -> new WhatATermRead.CameToNothing(ReadingGap.NO_VALUE);
+                // A fact about the row, which answers for it. The row was read and put no element
+                // here, so this quantity has no value at it -- and reporting that as a reading that
+                // came to nothing leaves a point undecided over a row that plainly settles it.
+                case ObservationAtPoint.WroteNothing _ -> new WhatATermRead.NothingWrittenThere();
+                // The row's values here are under elements another reading chose. The walk arrived
+                // and none of this row's values stands here under this one, which is the reading
+                // coming to nothing and is what the word is for.
+                case ObservationAtPoint.BelongsToAnotherReading _ ->
+                        new WhatATermRead.CameToNothing(ReadingGap.NO_VALUE);
             };
         };
     }
