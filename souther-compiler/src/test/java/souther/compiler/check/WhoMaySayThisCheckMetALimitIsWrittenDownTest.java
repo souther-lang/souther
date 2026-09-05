@@ -42,11 +42,20 @@ class WhoMaySayThisCheckMetALimitIsWrittenDownTest {
 
     private static final String LIMIT = "souther/compiler/check/WhatTheCheckCannotRead";
 
-    /** What hands back a limit: the class it is declared on, and its name. */
-    private record Producer(String owner, String name) implements Comparable<Producer> {
+    /**
+     * What hands back a limit: the class it is declared on, its name, and what it takes.
+     *
+     * <p>The descriptor is part of it because it is part of what a method is. Told apart by name
+     * alone, a second way in written beside an existing one under that name is not a second row
+     * here — it collapses onto the first, and the counts below go on reading what they read while a
+     * new thing an analysis may stop on has been added. There are two overloads named alike as it
+     * is, so this is what the file is looking at rather than a case it might meet.
+     */
+    private record Producer(String owner, String name, String takes)
+            implements Comparable<Producer> {
 
         String shown() {
-            return owner.replace('/', '.').replace('$', '.') + "." + name;
+            return owner.replace('/', '.').replace('$', '.') + "." + name + takes;
         }
 
         @Override
@@ -65,11 +74,17 @@ class WhoMaySayThisCheckMetALimitIsWrittenDownTest {
      * first, and writing it down is saying what an analysis may now fall open on.
      */
     private static final List<Licence> WAYS_IN = List.of(
-            new Licence("souther.compiler.check.WhatTheCheckCannotRead.standingCallHasNoSignatureHere",
+            new Licence("souther.compiler.check.WhatTheCheckCannotRead"
+                    + ".standingCallHasNoSignatureHere(Ljava/lang/String;Lsouther/compiler/diag/SourcePos;)",
                     "a call the expansion left standing that this reading has no signature for"),
-            new Licence("souther.compiler.check.WhatTheCheckCannotRead.secondaryTypingDidNotFinish",
-                    "a clause the reading below the authoritative check could not type"),
-            new Licence("souther.compiler.check.WhatTheCheckCannotRead.theWalkLeftAnAnswerUnmade",
+            new Licence("souther.compiler.check.WhatTheCheckCannotRead"
+                    + ".secondaryTypingDidNotFinish(Lsouther/compiler/diag/CompileException;)",
+                    "a clause the reading below the authoritative check refused"),
+            new Licence("souther.compiler.check.WhatTheCheckCannotRead"
+                    + ".secondaryTypingDidNotFinish(Lsouther/compiler/check/Unanswerable;)",
+                    "the same, of a clause whose meaning rests on a name that denotes nothing"),
+            new Licence("souther.compiler.check.WhatTheCheckCannotRead"
+                    + ".theWalkLeftAnAnswerUnmade(Ljava/lang/String;)",
                     "a walk that ran to the end and made none of the answers it is written to"
                             + " produce"));
 
@@ -81,10 +96,13 @@ class WhoMaySayThisCheckMetALimitIsWrittenDownTest {
      * on, which is what the assertions below are watching for.
      */
     private static final List<Licence> HANDS_ON = List.of(
-            new Licence("souther.compiler.check.InvariantChecker.GaveUp.why",
+            new Licence("souther.compiler.check.InvariantChecker.GaveUp.why()",
                     "what a recorded stop was, read back by a test in this package"),
-            new Licence("souther.compiler.check.SecondaryClauseReading.standingCallNothingHereNames",
-                    "the first standing call in a tree that nothing here names, or none"));
+            new Licence("souther.compiler.check.SecondaryClauseReading"
+                    + ".standingCallNothingHereNames(Lsouther/compiler/check/ClauseAsExpanded;"
+                    + "Lsouther/compiler/check/Scope;)",
+                    "the limit a clause stops this reading on, where every call it cannot name was"
+                            + " left standing on purpose"));
 
     /**
      * Who may say one was met. Adding to this is deciding that something else may make an analysis
@@ -94,7 +112,8 @@ class WhoMaySayThisCheckMetALimitIsWrittenDownTest {
             new Licence("souther.compiler.check.SecondaryClauseReading.of",
                     "types a clause below the check that answers for the program"),
             new Licence("souther.compiler.check.SecondaryClauseReading.standingCallNothingHereNames",
-                    "asks the expansion and the reading's own scope about a standing call"),
+                    "asks the expansion and the reading's own scope about every call it cannot"
+                            + " name"),
             new Licence("souther.compiler.check.PathReachability.lambda$of$0",
                     "reads which of a plan's comparisons the walk settled nothing about"));
 
@@ -206,7 +225,8 @@ class WhoMaySayThisCheckMetALimitIsWrittenDownTest {
             for (MethodModel method : model.methods()) {
                 if (method.methodTypeSymbol().returnType().descriptorString()
                         .equals("L" + LIMIT + ";")) {
-                    out.add(new Producer(owner, method.methodName().stringValue()));
+                    out.add(new Producer(owner, method.methodName().stringValue(),
+                            takes(method)));
                 }
             }
         }
@@ -224,13 +244,25 @@ class WhoMaySayThisCheckMetALimitIsWrittenDownTest {
                 method.code().ifPresent(code -> code.forEach(element -> {
                     if (element instanceof InvokeInstruction call
                             && watched.contains(new Producer(call.owner().asInternalName(),
-                                    call.name().stringValue()))) {
+                                    call.name().stringValue(),
+                                    takesOf(call.typeSymbol().parameterList())))) {
                         calls.put(from + "." + method.methodName().stringValue(), "");
                     }
                 }));
             }
         }
         return calls;
+    }
+
+    /** What a method takes, written the way a reader of a licence above writes it. */
+    private static String takes(MethodModel method) {
+        return takesOf(method.methodTypeSymbol().parameterList());
+    }
+
+    private static String takesOf(List<? extends java.lang.constant.ClassDesc> parameters) {
+        StringBuilder out = new StringBuilder("(");
+        parameters.forEach(each -> out.append(each.descriptorString()));
+        return out.append(')').toString();
     }
 
     private static List<ClassModel> compiled() throws IOException {

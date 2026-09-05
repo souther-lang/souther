@@ -27,7 +27,7 @@ import java.util.Set;
  */
 final class CallsLeftStanding {
 
-    /** An expansion that left nothing standing, and the answer for a tree no expansion produced. */
+    /** An expansion that left nothing standing. */
     static final CallsLeftStanding NONE = new CallsLeftStanding(Set.of());
 
     private final Set<ReachName.Declaration> standing;

@@ -2,10 +2,11 @@ package souther.compiler.check;
 
 import souther.compiler.ast.Hir;
 import souther.compiler.diag.CompileException;
-import souther.compiler.types.ReachName;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.function.Supplier;
 
 /**
@@ -43,20 +44,22 @@ final class SecondaryClauseReading {
             Over read = over.get();
             WhatTheCheckCannotRead unreadable = standingCallNothingHereNames(clause, read.scope());
             if (unreadable != null) {
-                InvariantChecker.gaveUp(describing, unreadable);
-                return new TypedClause.Stopped();
+                return stoppedOn(describing, unreadable);
             }
             return new TypedClause.Typed(
                     Elaborator.elaborate(clause.read(), read.scope(), read.ctx(), Type.BOOL));
         } catch (CompileException why) {
-            InvariantChecker.gaveUp(describing,
-                    WhatTheCheckCannotRead.secondaryTypingDidNotFinish(why));
-            return new TypedClause.Stopped();
+            return stoppedOn(describing, WhatTheCheckCannotRead.secondaryTypingDidNotFinish(why));
         } catch (Unanswerable why) {
-            InvariantChecker.gaveUp(describing,
-                    WhatTheCheckCannotRead.secondaryTypingDidNotFinish(why));
-            return new TypedClause.Stopped();
+            return stoppedOn(describing, WhatTheCheckCannotRead.secondaryTypingDidNotFinish(why));
         }
+    }
+
+    /** Records the limit and answers with the stop it authorizes, which is one act and is written
+     *  as one. */
+    private static TypedClause stoppedOn(String describing, WhatTheCheckCannotRead met) {
+        InvariantChecker.gaveUp(describing, met);
+        return new TypedClause.Stopped(met);
     }
 
     /**
@@ -72,40 +75,51 @@ final class SecondaryClauseReading {
     record Over(Scope scope, CheckContext ctx) {}
 
     /**
-     * The first call in {@code read} that {@code standing} says was left there and {@code scope} has
-     * no signature for, and null where there is none.
+     * The limit this reading stops on, or null where it has none to stop on.
      *
-     * <p>Both halves. A call standing in a tree no expansion named is not answered here — it goes on
-     * to the elaborator, which says what it is. And a standing call this reading can name is read
-     * like any other, which is what a rule scope does with a recursive helper it reaches
-     * ({@link Scope#reaching}).
+     * <p><b>Asked of every call and not of one.</b> What makes a stop right here is that
+     * <em>everything</em> this reading cannot name was left standing on purpose. Answered with the
+     * first such call instead, a clause holding one call the expansion meant to leave and one it
+     * failed to remove stops on the first and never reaches the elaborator — so this compiler's own
+     * failure comes out as an ordinary limit, which is the whole of what this file exists to
+     * prevent, met one clause further in.
+     *
+     * <p><b>And the elaborator is the authority on the other side.</b> Where a call is unreadable
+     * here and no expansion named it, nothing is decided here: the clause goes on to be typed, and
+     * what that call is — a tree this compiler failed to expand, or one the typing can read by a
+     * route this does not model ({@link Elaborator}'s own reading of what a scope reaches) — is
+     * answered by the typing rather than guessed at here.
      */
     private static WhatTheCheckCannotRead standingCallNothingHereNames(ClauseAsExpanded clause,
                                                                        Scope scope) {
-        // Nothing was left standing, so no call in the tree is one of these and there is nothing to
-        // look for. Asked before the walk rather than found by it: this is the ordinary answer, and
-        // the walk is over a tree with every expandable helper already spliced into it.
-        return clause.standing().leftNothing() ? null
-                : standingCallNothingHereNames(clause.read(), clause.standing(), scope);
-    }
-
-    private static WhatTheCheckCannotRead standingCallNothingHereNames(
-            Hir.Expr read, CallsLeftStanding standing, Scope scope) {
-        if (read instanceof Hir.Apply call
-                && call.answered() instanceof Hir.Var.Denoting callee
-                && callee.denotes() instanceof ValueName.Helper) {
-            ReachName.Declaration reaches = callee.reachesADeclaration();
-            if (standing.names(reaches) && scope.of(callee.denotes(), callee.reaches()) == null) {
-                return WhatTheCheckCannotRead.standingCallHasNoSignatureHere(
-                        call.written(), call.pos());
+        // Nothing was left standing, so no unreadable call in this tree is one of these and the
+        // typing answers for all of them. The ordinary case, and asked before the walk.
+        if (clause.standing().leftNothing()) {
+            return null;
+        }
+        List<Hir.Apply> unreadable = new ArrayList<>();
+        callsNothingHereNames(clause.read(), scope, unreadable);
+        if (unreadable.isEmpty()) {
+            return null;
+        }
+        for (Hir.Apply call : unreadable) {
+            if (!clause.standing().names(call.answered().reachesADeclaration())) {
+                return null;
             }
         }
-        WhatTheCheckCannotRead[] found = {null};
-        Hir.forEachChild(read, child -> {
-            if (found[0] == null) {
-                found[0] = standingCallNothingHereNames(child, standing, scope);
-            }
-        });
-        return found[0];
+        Hir.Apply first = unreadable.get(0);
+        return WhatTheCheckCannotRead.standingCallHasNoSignatureHere(first.written(), first.pos());
+    }
+
+    /** Every helper applied in {@code read} that {@code scope} has no signature for, in the order
+     *  they are written. */
+    private static void callsNothingHereNames(Hir.Expr read, Scope scope, List<Hir.Apply> out) {
+        if (read instanceof Hir.Apply call
+                && call.answered() instanceof Hir.Var.Denoting callee
+                && callee.denotes() instanceof ValueName.Helper
+                && scope.of(callee.denotes(), callee.reaches()) == null) {
+            out.add(call);
+        }
+        Hir.forEachChild(read, child -> callsNothingHereNames(child, scope, out));
     }
 }

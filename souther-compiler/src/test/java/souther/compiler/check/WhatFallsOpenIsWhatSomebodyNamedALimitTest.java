@@ -22,6 +22,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Supplier;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -72,6 +73,44 @@ class WhatFallsOpenIsWhatSomebodyNamedALimitTest {
                 ensures deep = value.value == 深さ(t)
             let measure (t) = Depth { value = 深さ(t) }
             """;
+
+    /** Two recursive helpers, both left standing, both named in one clause. */
+    private static final String TWO_STANDING = """
+            module demo
+            data 木 = { 子: Option<木> }
+            let 深さ (t: 木): Int = match t.子 with
+                | Some c -> 深さ(c) + 1
+                | None -> 0
+            let 幅 (t: 木): Int = match t.子 with
+                | Some c -> 幅(c)
+                | None -> 1
+            data 制限木 = { root: 木 } invariant 深さ(root) >= 0 && 幅(root) >= 1
+            """;
+
+    /**
+     * An expansion's answer naming only the helpers {@code kept} spells — what an expansion that
+     * failed to remove the others would have left behind.
+     *
+     * <p>Read off the clause rather than off the answer, so that the test builds the state it is
+     * about from what is written there.
+     */
+    private static CallsLeftStanding only(Hir.Expr clause, String kept) {
+        java.util.SequencedSet<souther.compiler.types.ReachName.Declaration> named =
+                new java.util.LinkedHashSet<>();
+        helpersApplied(clause, kept, named);
+        assertFalse(named.isEmpty(), "`" + kept + "` is applied in the clause this reads");
+        return CallsLeftStanding.of(named);
+    }
+
+    private static void helpersApplied(Hir.Expr read, String kept,
+            java.util.SequencedSet<souther.compiler.types.ReachName.Declaration> out) {
+        if (read instanceof Hir.Apply call
+                && call.answered() instanceof Hir.Var.Denoting callee
+                && kept.equals(call.written())) {
+            out.add(callee.reachesADeclaration());
+        }
+        Hir.forEachChild(read, child -> helpersApplied(child, kept, out));
+    }
 
     /** The same shape with nothing standing: the clause reads a field and the language's own
      *  operations, which is what the analysis has rules about. */
@@ -210,6 +249,43 @@ class WhatFallsOpenIsWhatSomebodyNamedALimitTest {
     private static Scope heldTo(Type type) {
         BindingId id = new BindingId(new BindingOwner.OfValue("demo", "f"), 0);
         return Scope.of(Map.of(id, new Scope.Binding("v", type)));
+    }
+
+    /**
+     * And one call the expansion named does not cover another it did not.
+     *
+     * <p>The clause holds two standing calls this reading cannot name, and the expansion's answer
+     * names only one of them. Stopping on the one it named would report this compiler's own failure
+     * — a call left in a tree nothing meant to leave it in — as an ordinary limit, which is what
+     * every other test here is about, met one clause further in rather than at the boundary.
+     *
+     * <p>Reached by telling the reading that the expansion left only the second of the two, which
+     * is what an expansion that failed to remove the first would leave behind. Nothing an author
+     * can write makes this compiler fail to expand what it says it expands, which is what makes the
+     * reading the only place the answer can be held to.
+     */
+    @Test
+    void aCallNoExpansionNamedIsNotCoveredByOneItDid() {
+        Compilation c = answered(TWO_STANDING);
+        TypeSymbol.AtModule named = TypeSymbols.declared(new TypeKey("demo", "制限木"));
+        Hir.Data data = declarationOf(c, named);
+        TypeOps.Declared clause = expandedClauseOf(c, named, data);
+        Supplier<SecondaryClauseReading.Over> over =
+                () -> new SecondaryClauseReading.Over(
+                        DataChecker.fieldScope(named, data, symbolsOf(c)),
+                        CheckContext.of(symbolsOf(c)).forData(data).forDischarge());
+
+        assertInstanceOf(TypedClause.Stopped.class,
+                SecondaryClauseReading.of(clause.asExpanded(), over, "a test"),
+                "the control: the expansion named both, so both are limits and this reading stops");
+
+        assertThrows(IllegalStateException.class,
+                () -> SecondaryClauseReading.of(
+                        new ClauseAsExpanded(clause.clause().expr(),
+                                only(clause.clause().expr(), "幅")),
+                        over, "a test"),
+                "and where one of them is a call no expansion named, this reading does not stop on"
+                        + " the other: what the unnamed one is, the typing says");
     }
 
     /**
