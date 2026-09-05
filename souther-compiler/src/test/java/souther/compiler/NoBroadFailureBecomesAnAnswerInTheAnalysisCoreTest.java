@@ -28,6 +28,7 @@ import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeMap;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.stream.Stream;
@@ -37,7 +38,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * In the packages that read a program, no failure nobody named comes back as an answer.
+ * In the packages that read a program, going on from a failure of the platform is somebody's leave.
  *
  * <p>What an analysis may be quiet about is a limit it named, and a limit is a value something with
  * the standing to say so made. A failure with no such value behind it is this compiler contradicting
@@ -47,16 +48,25 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p><b>What is watched is the way out of a handler, not the catch.</b> Catching widely is ordinary
  * and sometimes the only thing on offer — a class file the JDK refuses to parse, a message the
- * formatter will not take — and the ones in these packages today all end by throwing: the emitter
- * says what it could not read back, the writer says which limit of the class file was reached, a
- * term says which of the values it holds did not answer. None of those turns a failure into an
- * answer. What does is a handler a caller can return through, so that is what this asks: from where
- * the handler begins, following only the edges an ordinary run takes, is there a {@code return} to
+ * formatter will not take — and most of the ones in these packages end by throwing: the emitter says
+ * what it could not read back, the writer says which limit of the class file was reached, a term
+ * says which of the values it holds did not answer. None of those turns a failure into an answer.
+ * What does is a handler a caller can return through, so that is what this asks: from where the
+ * handler begins, following only the edges an ordinary run takes, is there a {@code return} to
  * arrive at.
  *
- * <p>So it is not "a broad catch is refused", which would be false of every one of them, and it is
- * not a list of the places allowed to swallow, which would be a copy of the code kept somewhere
- * else. It is the three packages and the one question.
+ * <p><b>And the ones that can are written down one place at a time.</b> Not the wide types — a type
+ * is not what earns the right to go on. {@link StackOverflowError} out of a matcher handed a budget
+ * is the engine answering that it did not finish inside it, and the same error out of anywhere else
+ * is this compiler recursing without end; a licence written against the type would cover both, and
+ * the second would be quiet from the day somebody wrote it. So what is granted is a place, and what
+ * is written beside it is the question that place put and what an answer to it is
+ * ({@link #PLATFORM_QUESTIONS}).
+ *
+ * <p>That is a list, and it is not the list this was written to avoid. Nothing that throws is in it,
+ * however wide it catches, so it is not a copy of where the broad catches are. What it holds is the
+ * decisions — the places allowed to turn a host's failure into something this compiler says — and a
+ * new one lands here and is read before it is granted.
  *
  * <p>Read off the compiled classes, because what a handler does is a fact about the bytecode. A
  * {@code throw} of a value some other method computed is an {@code athrow} here like any other, and
@@ -86,39 +96,6 @@ class NoBroadFailureBecomesAnAnswerInTheAnalysisCoreTest {
             "souther/compiler/codegen/",
             "souther/compiler/query/");
 
-    /** A condition of the platform this compiler asks a question with, and what an answer to it is. */
-    private record Condition(String type, String answers) {}
-
-    /**
-     * The conditions, written down one at a time.
-     *
-     * <p>A platform type is not always a failure nobody named. Some of them are how the platform
-     * answers a question that was asked: {@code multiplyExact} says a product does not fit by
-     * throwing, and a fold that catches it and answers "more than can be counted" has read an
-     * answer rather than lost one. What makes those different from a wide catch is that something
-     * was asked — so which they are is a decision, and a decision is written down and read.
-     *
-     * <p><b>Written as what is asked, not as where it is caught.</b> A new method catching one of
-     * these needs no line here; a new kind of condition does, and that is the thing worth reading.
-     * And the default is the other way from the one this whole change is about: a platform type
-     * nobody wrote a line for is wide, so a handler for a condition nobody has named yet is loud
-     * rather than quiet.
-     */
-    private static final List<Condition> ASKED_WITH = List.of(
-            new Condition("java.lang.ArithmeticException",
-                    "the exact-arithmetic methods say a count does not fit, and what is answered is"
-                            + " that there are more than can be counted"),
-            new Condition("java.util.regex.PatternSyntaxException",
-                    "the platform will not compile a pattern an author wrote, and what is answered"
-                            + " is that this fold does not settle the match"),
-            new Condition("java.lang.StackOverflowError",
-                    "a pattern whose matching does not finish inside what it was given, answered"
-                            + " the same way as one the engine refused"),
-            new Condition("java.lang.LinkageError",
-                    "generated classes that will not link, so nothing can be built to find out what"
-                            + " a model admits — answered as nothing tried, which is not the same"
-                            + " as everything tried being refused"));
-
     /**
      * Whether catching {@code type} says nothing about what was met.
      *
@@ -128,19 +105,26 @@ class NoBroadFailureBecomesAnAnswerInTheAnalysisCoreTest {
      * is as wide as one catching {@link IllegalStateException}, and it is wide here without anybody
      * having said so first.
      *
-     * <p>Three things make it wide. It is the platform's, which is what says this compiler gave it
-     * no meaning of its own — a refusal declared in this build is a subclass of
+     * <p>Two things make it wide. Nothing in this build declares it, which is what says this
+     * compiler gave it no meaning of its own — a refusal declared here is a subclass of
      * {@link RuntimeException} like any other, and catching {@code NotOneClause} is catching one
-     * thing. It is an unchecked failure: a {@link RuntimeException} or an {@link Error}, or
-     * something above them that takes either in. A checked exception of the platform is not one of
-     * these — {@code IOException} is a condition a method declared. And it is not one of the
-     * conditions above.
+     * thing. Read off the name, because that is what ownership is: which loader a class arrived
+     * through says where it was found, and a library's own runtime exception arrives the same way
+     * this compiler's does.
+     *
+     * <p>And it is an unchecked failure: a {@link RuntimeException} or an {@link Error}, or
+     * something above them that takes either in. A checked exception is not one — {@code IOException}
+     * is a condition a method declared, and a handler naming it says what it met.
+     *
+     * <p>Nothing about which types are all right is decided here. A type is not what earns the right
+     * to turn a failure into an answer; a place that asked a question is, and that is
+     * {@link #PLATFORM_QUESTIONS}.
      */
     private static boolean isWide(String internalName) {
-        String binary = internalName.replace('/', '.');
-        if (ASKED_WITH.stream().anyMatch(condition -> condition.type().equals(binary))) {
-            return false;
+        if (internalName.startsWith("souther/")) {
+            return false;   // declared by this build, so it names what it catches
         }
+        String binary = internalName.replace('/', '.');
         Class<?> type;
         try {
             type = Class.forName(binary, false,
@@ -148,9 +132,6 @@ class NoBroadFailureBecomesAnAnswerInTheAnalysisCoreTest {
         } catch (ClassNotFoundException e) {
             throw new IllegalStateException("a handler catches " + binary
                     + ", which this cannot load — so whether it is wide was not decided", e);
-        }
-        if (type.getClassLoader() != null) {
-            return false;   // declared by this build, so it names what it catches
         }
         return RuntimeException.class.isAssignableFrom(type)
                 || Error.class.isAssignableFrom(type)
@@ -173,15 +154,96 @@ class NoBroadFailureBecomesAnAnswerInTheAnalysisCoreTest {
 
     private record Scan(Set<Handler> examined, Set<Handler> reachingAReturn) {}
 
-    @Test
-    void noWideHandlerInThemCanReturn() throws IOException {
-        Scan scan = scan();
+    /** A place that put a question to the platform, and what an answer to it is. */
+    private record Permission(String where, String catches, String asks) {
 
-        assertEquals(Set.of(), scan.reachingAReturn(),
-                "a run through one of these leaves a handler and goes on to answer, so a failure"
-                        + " nobody named a limit comes back as what this compiler has to say about"
-                        + " the program. What may be quiet is a limit something made, and there is"
-                        + " no value behind these");
+        Handler handler() {
+            return new Handler(where, catches);
+        }
+    }
+
+    /**
+     * Who may turn a failure of the platform into an answer of this compiler's, one place at a time.
+     *
+     * <p>Not a list of types. A type is not what earns this: {@link StackOverflowError} out of a
+     * matcher given a budget is the engine saying it did not finish inside it, and the same error
+     * out of anywhere else is this compiler recursing without end. Written against the type, one
+     * fold's licence would cover both, and the second would be quiet from the day it was written.
+     * So what is written down is the place, what it asked, and what an answer to it is — and it is
+     * read by a person, because that is a decision and not something a walk can settle.
+     *
+     * <p><b>Only the ones that return.</b> A handler that ends by throwing needs no line here
+     * however wide it is, and there are more of those than of these. What is being granted is
+     * exactly the thing this whole change is about — going on from a failure — so it is granted one
+     * place at a time and every grant is a sentence somebody wrote.
+     */
+    private static final List<Permission> PLATFORM_QUESTIONS = List.of(
+            new Permission("souther.compiler.check.Cardinality$Standing.times",
+                    "ArithmeticException",
+                    "whether the product of two counts fits, asked of multiplyExact — answered as a"
+                            + " count nothing here can name"),
+            new Permission("souther.compiler.check.Cardinality$Standing.choose",
+                    "ArithmeticException",
+                    "the same, of the ways of choosing from a count"),
+            new Permission("souther.compiler.check.Cardinality$Standing.toThe",
+                    "ArithmeticException",
+                    "the same, of the lists of one length over a count"),
+            new Permission("souther.compiler.check.OccurrenceValues.wholeValuesAt",
+                    "ArithmeticException",
+                    "whether the whole numbers between two ends fit in a count, asked of"
+                            + " longValueExact — answered as a count nothing here can name"),
+            new Permission("souther.compiler.check.ConstEval.arith",
+                    "ArithmeticException",
+                    "whether an addition, subtraction or multiplication of two written numbers is"
+                            + " one the run time computes, asked of the exact methods the operators"
+                            + " emit — answered as a fold that does not settle it, so the run time"
+                            + " is what refuses it"),
+            new Permission("souther.compiler.check.ScaleRange.receivedUnchanged",
+                    "ArithmeticException",
+                    "whether a scale is a number the run time can be handed as the number it is,"
+                            + " asked of intValueExact — answered as no place count"),
+            new Permission("souther.compiler.check.ConstEval.matches",
+                    "PatternSyntaxException",
+                    "whether the platform's engine will compile a pattern an author wrote —"
+                            + " answered as a fold that does not settle the match, which the"
+                            + " run-time check does"),
+            new Permission("souther.compiler.check.ConstEval.matches",
+                    "StackOverflowError",
+                    "whether the engine finishes matching inside the budget it was handed. The"
+                            + " budget is what makes this a question: a matcher given one answers"
+                            + " by not finishing, and the fold declines the same way it declines a"
+                            + " pattern the engine refused"),
+            new Permission("souther.compiler.query.Adequacy$BoundarySearch$1.built",
+                    "LinkageError",
+                    "whether the classes generated for this model link, asked by building a"
+                            + " boundary attempt out of them — answered as nothing tried, which is"
+                            + " not everything tried being refused"),
+            new Permission("souther.compiler.query.Adequacy$BoundarySearch$1.read",
+                    "LinkageError",
+                    "the same, asked by reading a row through them — answered as a row nothing"
+                            + " built, which is not a row seen to stand somewhere else"),
+            new Permission("souther.compiler.query.Adequacy$Generated.compute",
+                    "LinkageError",
+                    "the same, asked by assembling what a model admits — answered by reporting no"
+                            + " combination rather than reporting them impossible"));
+
+    @Test
+    void everyWideHandlerThatReturnsWasGivenLeaveToOnePlaceAtATime() throws IOException {
+        Set<Handler> allowed = new TreeSet<>();
+        PLATFORM_QUESTIONS.forEach(each -> allowed.add(each.handler()));
+
+        assertEquals(allowed, scan().reachingAReturn(),
+                "a run through one of these leaves a handler and goes on to answer. Where nobody"
+                        + " gave that place leave, a failure nobody named comes back as what this"
+                        + " compiler has to say about the program — and a subject it fell over on"
+                        + " reads as a subject that passed. What each of the places below asked: "
+                        + why());
+    }
+
+    private static Map<String, String> why() {
+        Map<String, String> out = new TreeMap<>();
+        PLATFORM_QUESTIONS.forEach(each -> out.put(each.handler().toString(), each.asks()));
+        return out;
     }
 
     /**
