@@ -1,5 +1,6 @@
 package souther.bench;
 
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
@@ -35,6 +36,19 @@ class CorpusTest {
 
     private static synchronized Compilation compiled(Corpus corpus) {
         return COMPILED.computeIfAbsent(corpus, Corpus::compile);
+    }
+
+    /**
+     * And given back when the class is done with them.
+     *
+     * <p>A fork runs its classes one after another and keeps the JVM, so what is held statically is
+     * held for every class after this one as well. What is kept here is two answered compilations of
+     * models the size somebody writes, with their classes materialised — a floor under the heap that
+     * the rest of this module's tests would be running above for a saving that is this class's.
+     */
+    @AfterAll
+    static void released() {
+        COMPILED.clear();
     }
 
     @Test

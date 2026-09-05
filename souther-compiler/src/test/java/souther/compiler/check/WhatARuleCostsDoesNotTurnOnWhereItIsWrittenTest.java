@@ -95,16 +95,19 @@ class WhatARuleCostsDoesNotTurnOnWhereItIsWrittenTest {
                 "and every one of them is read in full, since no product of patterns is built");
     }
 
-    /** What {@code rules} admit, which every order of them comes to. Each order is read once:
-     *  reading it is building two machines, and the first order read twice is one machine too many. */
+    /**
+     * What {@code rules} admit, which every order of them comes to.
+     *
+     * <p>The first order is what the rest are held against, so it is read before the loop and the
+     * loop is over the other five. Read inside it as well, the first comparison would be a value
+     * against itself, which asserts nothing and costs the two machines that reading an order is.
+     */
     private static AdmissibleSet sameInEveryOrder(List<String> rules) {
-        AdmissibleSet first = null;
-        for (List<Integer> order : ORDERS) {
-            AdmissibleSet each = admitted(rules, order);
-            if (first == null) {
-                first = each;
-            }
-            assertEquals(first, each, "the values and the account of them, written as " + order);
+        AdmissibleSet first = admitted(rules, ORDERS.getFirst());
+
+        for (List<Integer> order : ORDERS.subList(1, ORDERS.size())) {
+            assertEquals(first, admitted(rules, order),
+                    "the values and the account of them, written as " + order);
         }
         return first;
     }
