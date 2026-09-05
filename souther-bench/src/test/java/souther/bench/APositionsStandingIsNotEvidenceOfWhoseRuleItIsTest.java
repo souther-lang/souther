@@ -23,9 +23,10 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
  * is because a machine was refused, and a reader of the place is owed that. What is held here is the
  * direction: down to a place, never back up to a rule.
  *
- * <p>Read off the call sites, because that is what the rule is about. A type could carry the
- * occurrence — and does — but nothing in a type stops somebody reading the position's face and
- * filing what they find under a rule, which is what was being done.
+ * <p>Read off the call sites, because that is what the rule is about. A shortfall does carry what
+ * it is about — the pattern whose machine it is and the position it was being built for — but
+ * nothing in a type stops somebody reading the position's face and filing what they find under a
+ * rule, which is what was being done.
  */
 class APositionsStandingIsNotEvidenceOfWhoseRuleItIsTest {
 

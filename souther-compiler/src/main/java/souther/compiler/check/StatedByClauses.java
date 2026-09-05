@@ -801,11 +801,17 @@ sealed interface StatedByClauses {
          * What a rule of one part is answerable for: what its own reading wrote down, and what
          * working the answer out could not build at a position that part is about.
          *
-         * <p>The second half is a projection and is said as one. Which rule a machine that was too
-         * large belonged to is not something the working-out records — a position's answer is met
-         * out of every rule that reached it — so what is honest is that a part naming the position
-         * is a part the shortfall is about. A part naming no position it happened at is told
-         * nothing.
+         * <p>The second half comes from what the shortfall says and never from what the part
+         * happens to name. A machine that was too large is the pattern's, and the position it was
+         * being built for is what the spending was arranged by, so a shortfall says both — and a
+         * part is told it where it asked for that machine at that position. Answered by whether
+         * the part names the place, every rule that mentioned it was handed a limit its neighbour
+         * reached; answered by the pattern alone, a rule that wrote it about somewhere else was
+         * handed one that happened elsewhere.
+         *
+         * <p>The first half is the part's own record of its own reading, which is a different
+         * thing from a place's reasons and is why sifting it is right here and nowhere else
+         * ({@code WhatARuleIsAnswerableForIsNotSiftedOutOfAPlace}).
          */
         private Map<FactSubject, java.util.List<souther.compiler.values.UnreadReason>>
                 aRuleIsAnswerableFor(Part part, souther.compiler.values.Realized<FactSubject> made) {

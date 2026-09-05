@@ -24,8 +24,14 @@ import java.util.Set;
  * <p>Working the values out is also what settles which positions this compiler could not build, and
  * that is a second thing the resolved side owes: the account of what a clause adopted is written
  * before any machine is made, so a position whose answer was not built is one it still calls taken
- * in. What arrives here has been given up on at those positions, and {@link #aboutARule} is what a
- * rule may be filed under out of everything the reading wrote down.
+ * in. What arrives here has been given up on at those positions.
+ *
+ * <p><b>What a rule is answerable for is not read off that.</b> A position says what it was left
+ * holding and says it for every reason there is, so filtering its reasons for the ones a rule could
+ * be answerable for gives a list of reasons and no rule — every rule that named the place, taken
+ * for the one that asked. Which rule asked is carried from where the asking is
+ * ({@code OfAPart.aboutARule}, filled by routing a shortfall to the part that asked for the machine
+ * it names), and there is nothing here that turns a place's reasons back into an account of a rule.
  */
 record ReadByClauses(AdmissibleValues<FactSubject> values, OrderedIntervals<FactSubject> ordered,
                      Adoption<FactSubject> byValues, Adoption<FactSubject> byOrder,
@@ -141,35 +147,6 @@ record ReadByClauses(AdmissibleValues<FactSubject> values, OrderedIntervals<Fact
         those.forEach(each -> {
             if (!out.contains(each)) {
                 out.add(each);
-            }
-        });
-        return out;
-    }
-
-    /**
-     * Everything this reading wrote down that a rule is answerable for, per position.
-     *
-     * <p>The split is here because it is one rule about the vocabulary, and a store that filed it
-     * under a rule is where getting it wrong shows. A form nothing reads, a rule relating two
-     * positions, a pattern larger than any machine this holds — each of those is a rule somebody
-     * wrote and can write differently. An allowance run down by everything a position admits is not:
-     * the same rules in another order would have been built, and there is no rule to name. A
-     * position nobody reached is not either — there is no rule in hand to be about.
-     *
-     * <p>What is left out still reaches a reader. It is a fact about the position, and the position
-     * says it ({@link AdmissibleValues#whyUnread}); what it is not is a fact about a rule.
-     */
-    java.util.Map<FactSubject, java.util.List<souther.compiler.values.UnreadReason>> aboutARule() {
-        java.util.Map<FactSubject,
-                java.util.List<souther.compiler.values.UnreadReason>> out =
-                new java.util.LinkedHashMap<>();
-        values.standing().forEach((position, why) -> {
-            java.util.List<souther.compiler.values.UnreadReason> mine = why.stream()
-                    .filter(each -> each.about()
-                            == souther.compiler.values.UnreadReason.About.A_RULE)
-                    .toList();
-            if (!mine.isEmpty()) {
-                out.put(position, mine);
             }
         });
         return out;
