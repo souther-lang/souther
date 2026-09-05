@@ -152,6 +152,35 @@ class WhatIsRequiredOfAPositionIsAskedWithWhatItAdmitsTest {
                 """));
     }
 
+    /**
+     * A lack one reading shows on its own, beside a position placed from outside.
+     *
+     * <p>Two lacks in one declaration, and the author is told the one their own rules make. The
+     * positions {@code p} and {@code r} are held as one value the alternatives leave nothing at,
+     * and {@code x} is required to be where its own rules do not reach — the first is what they
+     * have to change.
+     *
+     * <p>What settles it is where each was found rather than the order two questions are put in:
+     * a lack the values leave is carried from the reading that left it, and reaches an author
+     * whatever is asked afterwards. The order the questions are put in is written where they are
+     * put ({@code Confinement}) and no model told the two apart.
+     */
+    @Test
+    void aLackOneReadingShowsOnItsOwnIsToldBeforeOneThatNeededThePlacing() {
+        assertEquals(new Emptiness.AtEqualPositions(
+                        List.of(new Emptiness.AtAField.Where.In("p"),
+                                new Emptiness.AtAField.Where.In("r")),
+                        new Emptiness.NoCommonValueForEqualPositions()), only("""
+                module demo
+
+                data Held = { p: Int, r: Int, x: Int, y: Int }
+                    invariant no = ((p == r && p == 1 && r == 2) || (p == r && p == 3 && r == 4))
+                                && (x == 1 || x == 2)
+                                && x == y + 1
+                                && y >= 2
+                """));
+    }
+
     /** And one alternative inside them is a rule somebody satisfies. */
     @Test
     void anAlternativeInsideThemIsARuleAValueSatisfies() {

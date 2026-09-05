@@ -15,6 +15,7 @@ import souther.compiler.values.Sameness;
 import souther.compiler.values.ValueSet;
 
 import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -244,36 +245,46 @@ sealed interface Confinement<A> {
             return Admission.at(Emptiness.EMPTY, EmptyBy.ORDER, ordered.holdingNothing(),
                     Shown.BY_THE_READINGS);
         }
-        // And a position with nowhere to be once everything placing it is met, which is a lack the
-        // alternatives never hear about: a position no alternative names is not one they are asked
-        // about, so where what is required of it does not reach where its own ends leave it,
-        // nothing else here will say so.
-        Set<A> nowhere = new LinkedHashSet<>();
-        carriers.keySet().forEach(position -> {
-            if (ordered.at(position).meet(outside.at(position).interval()).holdsNothing()) {
-                nowhere.add(position);
-            }
-        });
-        if (!nowhere.isEmpty()) {
-            return Admission.at(Emptiness.EMPTY, EmptyBy.ORDER, nowhere,
-                    Shown.ONCE_THE_POSITIONS_ARE_PLACED);
-        }
         // A meter of this asking, spent on every question asked in it. What may be built to decide
         // whether a declaration has a value cannot come out of a position's allowance: the same
         // rules would then be decided differently depending on what the readings before them had
-        // already built. And one for the asking rather than one per question, so that what an
-        // answer costs does not turn on how many ways it had to be asked to be written down.
+        // already built.
         Meter meter = PatternPlan.Budget.OF_WHAT_A_SET_AND_A_RANGE_SHARE.meter();
         AskedOfEachBlock<A> byTheReadings = asking(carriers, ordered::at, meter);
+        AskedOfEachBlock<A> narrowed = asking(carriers, position ->
+                ordered.at(position).meet(outside.at(position).interval()), meter);
+        // And a block nothing outside places is the question above and not another one, so it is
+        // answered once however many askings reach it. That is what lets the two share a meter: a
+        // machine a question builds is built for the block it is about, and asking about the same
+        // block again is reading what it came to. Spent per asking instead, what an answer costs
+        // would turn on how many ways it had to be asked to be written down — and worse, the
+        // second asking of one question would be answered out of what the first had left.
         AskedOfEachBlock<A> placed = outside.saysNothing() ? byTheReadings
-                : asking(carriers, position ->
-                        ordered.at(position).meet(outside.at(position).interval()), meter);
+                : (block, set) -> places(block, outside)
+                        ? narrowed.of(block, set) : byTheReadings.of(block, set);
         // One walk, and it is asked where the positions are: what a reading leaves is what it
         // leaves once everything that places its positions has been met with it, and a walk per
         // asking would be an alternative visited twice by two questions that have to agree.
         Emptiness said = admitting.apply(placed);
         if (said != Emptiness.EMPTY) {
-            return Admission.left(said);
+            // And a position with nowhere to be once everything placing it is met, which is a lack
+            // the alternatives never hear about: a position no alternative names is not one they
+            // are asked about, so where what is required of it does not reach where its own ends
+            // leave it, nothing else here will say so.
+            //
+            // Asked after them and not before. What one of these readings shows on its own is what
+            // an author is told, and a scan that ran first would answer for a declaration whose
+            // values already left nothing — sending them to a position placed from outside while
+            // the rules they wrote about another one are what cannot hold.
+            Set<A> nowhere = new LinkedHashSet<>();
+            carriers.keySet().forEach(position -> {
+                if (ordered.at(position).meet(outside.at(position).interval()).holdsNothing()) {
+                    nowhere.add(position);
+                }
+            });
+            return nowhere.isEmpty() ? Admission.left(said)
+                    : Admission.at(Emptiness.EMPTY, EmptyBy.ORDER, nowhere,
+                            Shown.ONCE_THE_POSITIONS_ARE_PLACED);
         }
         // What showed it, which is a second question and is asked where a proof is written rather
         // than where the answer is reached. These readings show it on their own or they do not, and
@@ -319,31 +330,50 @@ sealed interface Confinement<A> {
      */
     private static <A> AskedOfEachBlock<A> asking(Map<A, Carrier> carriers,
                                                  Function<A, OrderedInterval> sits, Meter meter) {
-        return (block, set) -> {
-            // What the block is ordered on, and where it stops. Positions an alternative holds as
-            // one value have one value between them, so the range that value is in is every one of
-            // their ranges at once — asked of one member, {@code p == r && p < d1 && r > d2} would
-            // be answered against half of what the rules say and the pair would come back holding
-            // something.
-            Carrier carrier = null;
-            OrderedInterval within = OrderedInterval.OPEN;
-            for (A position : block.members()) {
-                Carrier here = carriers.get(position);
-                // One carrier, and an assertion because it is about this compiler rather than
-                // about any model: a rule holding two positions as one value is one an equality
-                // between them typed, and an equality types only where the two are of one type. A
-                // block whose members disagreed would be answered by whichever of them the
-                // members happen to be read in the order of, which is a fact about how they are
-                // spelled.
-                assert carrier == null || here == null || carrier.equals(here)
-                        : "positions held as one value are ordered on " + carrier + " and " + here;
-                if (here != null) {
-                    carrier = here;
-                }
-                within = within.meet(sits.apply(position));
+        // What each block this is asked about came to, so that it is worked out once. A question
+        // put to a block is a machine built for it, and the walks that read an answer back ask
+        // about the very blocks the walk that reached it did — by the set in hand and not by what
+        // a set is equal to, since two sets that are equal are two answers only if somebody built
+        // them twice.
+        Map<Sameness.Block<A>, Map<ValueSet, Emptiness>> asked = new LinkedHashMap<>();
+        return (block, set) -> asked
+                .computeIfAbsent(block, _ -> new IdentityHashMap<>())
+                .computeIfAbsent(set, it -> answered(carriers, sits, meter, block, it));
+    }
+
+    /** Whether {@code block} admits anything where {@code sits} puts its positions. */
+    private static <A> Emptiness answered(Map<A, Carrier> carriers,
+                                          Function<A, OrderedInterval> sits, Meter meter,
+                                          Sameness.Block<A> block, ValueSet set) {
+        // What the block is ordered on, and where it stops. Positions an alternative holds as
+        // one value have one value between them, so the range that value is in is every one of
+        // their ranges at once — asked of one member, {@code p == r && p < d1 && r > d2} would
+        // be answered against half of what the rules say and the pair would come back holding
+        // something.
+        Carrier carrier = null;
+        OrderedInterval within = OrderedInterval.OPEN;
+        for (A position : block.members()) {
+            Carrier here = carriers.get(position);
+            // One carrier, and an assertion because it is about this compiler rather than
+            // about any model: a rule holding two positions as one value is one an equality
+            // between them typed, and an equality types only where the two are of one type. A
+            // block whose members disagreed would be answered by whichever of them the
+            // members happen to be read in the order of, which is a fact about how they are
+            // spelled.
+            assert carrier == null || here == null || carrier.equals(here)
+                    : "positions held as one value are ordered on " + carrier + " and " + here;
+            if (here != null) {
+                carrier = here;
             }
-            return carrier == null ? Emptiness.NONEMPTY : carrier.meets(set, within, meter);
-        };
+            within = within.meet(sits.apply(position));
+        }
+        return carrier == null ? Emptiness.NONEMPTY : carrier.meets(set, within, meter);
+    }
+
+    /** Whether anything outside these readings places a position of {@code block}. */
+    private static <A> boolean places(Sameness.Block<A> block,
+                                      PositionEnvelope.Restrictions<A> outside) {
+        return block.members().stream().anyMatch(each -> !outside.at(each).saysNothing());
     }
 
     /** What showed a conjunction of two readings empty, where either of them was. */
