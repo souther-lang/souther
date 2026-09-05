@@ -1,6 +1,6 @@
 package souther.compiler.query;
 
-import souther.compiler.types.CoverageOrigin;
+import souther.compiler.types.SourceConstructOrigin;
 
 /**
  * Why an arm is outside the count.
@@ -24,7 +24,7 @@ public sealed interface ArmExclusion {
      * <p>Of the fork and not of its arms. Both arms of one fork are out of the count together or
      * neither is, so a reader is told this once however many arms it holds.
      */
-    CoverageOrigin fork();
+    SourceConstructOrigin fork();
 
     /** How this reaches a measurement assembled over the account. */
     Weakening weakening();
@@ -38,7 +38,7 @@ public sealed interface ArmExclusion {
      * several. A row through either of them may or may not be a row through this one, so what its
      * arms come to is not a number over the arms an author wrote.
      */
-    record OccurrencesNotToldApart(CoverageOrigin fork) implements ArmExclusion {
+    record OccurrencesNotToldApart(SourceConstructOrigin fork) implements ArmExclusion {
 
         @Override
         public Weakening weakening() {

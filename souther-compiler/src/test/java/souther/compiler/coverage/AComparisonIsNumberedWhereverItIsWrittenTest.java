@@ -5,7 +5,7 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.core.Core;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
-import souther.compiler.types.CoverageOrigin;
+import souther.compiler.types.SourceConstructOrigin;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -53,7 +53,7 @@ class AComparisonIsNumberedWhereverItIsWrittenTest {
             """;
 
     /** Every comparison of {@code twice}, by the source construct that wrote it. */
-    private static Map<CoverageOrigin, ComparisonOccurrence> comparisonsOfTwice() {
+    private static Map<SourceConstructOrigin, ComparisonOccurrence> comparisonsOfTwice() {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
         compilation.answerEverything();
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(MODULE)).value();
@@ -61,7 +61,7 @@ class AComparisonIsNumberedWhereverItIsWrittenTest {
         Core body = checked.behaviorBodies().get("twice");
         assertNotNull(body, "twice has a body");
         CoverageSites.Plan plan = checked.plan();
-        Map<CoverageOrigin, ComparisonOccurrence> out = new LinkedHashMap<>();
+        Map<SourceConstructOrigin, ComparisonOccurrence> out = new LinkedHashMap<>();
         for (Core each : comparisonsIn(body)) {
             Core.Binary comparison = (Core.Binary) each;
             plan.comparisons().occurrenceAt(comparison).filter(plan::instruments)
@@ -86,7 +86,7 @@ class AComparisonIsNumberedWhereverItIsWrittenTest {
     /** Both of them, and one number each. */
     @Test
     void aComparisonInsideAClosureHandedToACombinatorIsNumbered() {
-        Map<CoverageOrigin, ComparisonOccurrence> numbered = comparisonsOfTwice();
+        Map<SourceConstructOrigin, ComparisonOccurrence> numbered = comparisonsOfTwice();
         assertEquals(2, numbered.size(),
                 () -> "each closure's comparison is numbered, and they are two: " + numbered);
         assertEquals(2, Set.copyOf(numbered.values()).size(),
@@ -96,8 +96,8 @@ class AComparisonIsNumberedWhereverItIsWrittenTest {
     /** The two are one fork of one declaration inlined twice, and are still two comparisons. */
     @Test
     void twoClosuresOfOneCombinatorAreTwoComparisons() {
-        Map<CoverageOrigin, ComparisonOccurrence> numbered = comparisonsOfTwice();
-        List<CoverageOrigin> written = numbered.keySet().stream()
+        Map<SourceConstructOrigin, ComparisonOccurrence> numbered = comparisonsOfTwice();
+        List<SourceConstructOrigin> written = numbered.keySet().stream()
                 .filter(origin -> origin.module().equals(MODULE)).toList();
         assertEquals(2, written.size(),
                 () -> "each is keyed by the construct the author's own module wrote, and not by the"

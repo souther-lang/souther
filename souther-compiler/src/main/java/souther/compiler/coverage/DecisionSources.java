@@ -2,7 +2,7 @@ package souther.compiler.coverage;
 
 import souther.compiler.ast.Hir;
 import souther.compiler.types.BindingId;
-import souther.compiler.types.CoverageOrigin;
+import souther.compiler.types.SourceConstructOrigin;
 import souther.compiler.types.ValueName;
 
 import java.util.LinkedHashMap;
@@ -28,7 +28,7 @@ import java.util.Set;
  * <p>So this is a fact about a declaration and not about a tree that ran. Worked out from the shape
  * of a condition after expansion instead, the two are not tellable apart at all: the argument has
  * been substituted in either case, and what is left is one expression that says nothing about who
- * decided. Keyed by {@link CoverageOrigin}, which the front end mints once per construct and every
+ * decided. Keyed by {@link SourceConstructOrigin}, which the front end mints once per construct and every
  * copy carries.
  *
  * <p><b>What a condition rests on, and not what it applies.</b> A fork depending on a rule it was
@@ -39,7 +39,7 @@ import java.util.Set;
  * question is asked of the whole condition and followed through the bindings it reads and the
  * helpers it calls. Helpers are not recursive, so following them ends.
  */
-public record DecisionSources(Map<CoverageOrigin, DecisionSource> byFork, boolean read) {
+public record DecisionSources(Map<SourceConstructOrigin, DecisionSource> byFork, boolean read) {
 
     /**
      * No reading was taken.
@@ -52,7 +52,7 @@ public record DecisionSources(Map<CoverageOrigin, DecisionSource> byFork, boolea
      */
     public static final DecisionSources NONE = new DecisionSources(Map.of(), false);
 
-    public DecisionSources(Map<CoverageOrigin, DecisionSource> byFork) {
+    public DecisionSources(Map<SourceConstructOrigin, DecisionSource> byFork) {
         this(byFork, true);
     }
 
@@ -70,7 +70,7 @@ public record DecisionSources(Map<CoverageOrigin, DecisionSource> byFork, boolea
      * lowering makes a fork out of something new, it would go on being counted that way with
      * nothing saying so.
      */
-    public DecisionSource at(CoverageOrigin fork) {
+    public DecisionSource at(SourceConstructOrigin fork) {
         DecisionSource said = byFork.get(fork);
         if (said == null && !read) {
             return DecisionSource.OWN;
@@ -105,14 +105,14 @@ public record DecisionSources(Map<CoverageOrigin, DecisionSource> byFork, boolea
                 declarations.put(reference, entry.definition()));
         declarations.putAll(own);
         AnswerDependencies answersOn = AnswerDependencies.of(declarations);
-        Map<CoverageOrigin, DecisionSource> byFork = new LinkedHashMap<>();
+        Map<SourceConstructOrigin, DecisionSource> byFork = new LinkedHashMap<>();
         declarations.forEach((declaration, fn) -> forks(declaration, fn, answersOn, byFork));
         return new DecisionSources(byFork);
     }
 
     private static void forks(souther.compiler.types.ReachName.Declaration declaration,
                               Hir.FnDef fn, AnswerDependencies answersOn,
-                              Map<CoverageOrigin, DecisionSource> out) {
+                              Map<SourceConstructOrigin, DecisionSource> out) {
         if (!(fn.body() instanceof Hir.FnBody.Written written)) {
             return;
         }
@@ -131,7 +131,7 @@ public record DecisionSources(Map<CoverageOrigin, DecisionSource> byFork, boolea
     private static void forks(Hir.Expr e,
                               souther.compiler.types.ReachName.Declaration declaration, Rules rules,
                               AnswerDependencies answersOn, Map<BindingId, Set<String>> bound,
-                              NamedCallables named, Map<CoverageOrigin, DecisionSource> out) {
+                              NamedCallables named, Map<SourceConstructOrigin, DecisionSource> out) {
         switch (e) {
             case Hir.If iff ->
                     said(iff.origin(), iff.cond(), declaration, rules, answersOn, bound, named, out);
@@ -170,11 +170,11 @@ public record DecisionSources(Map<CoverageOrigin, DecisionSource> byFork, boolea
                 child -> forks(child, declaration, rules, answersOn, bound, named, out));
     }
 
-    private static void said(CoverageOrigin fork, Hir.Expr cond,
+    private static void said(SourceConstructOrigin fork, Hir.Expr cond,
                              souther.compiler.types.ReachName.Declaration declaration, Rules rules,
                              AnswerDependencies answersOn,
                              Map<BindingId, Set<String>> bound, NamedCallables named,
-                             Map<CoverageOrigin, DecisionSource> out) {
+                             Map<SourceConstructOrigin, DecisionSource> out) {
         Set<String> on = new LinkedHashSet<>();
         rules.restsOn(cond, answersOn, bound, named, on);
         out.putIfAbsent(fork, on.isEmpty() ? DecisionSource.OWN

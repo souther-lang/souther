@@ -112,11 +112,13 @@ public final class TypeChecker {
     }
 
     /**
-     * One behavior's body against the behavior it implements (spec §fn-declaration), as the Core the backend
-     * emits. Its own question: what it reads is the behavior, its {@code let}, and what the module
-     * around it means — never another body.
+     * One behavior's body against the behavior it implements (spec §fn-declaration), in both the
+     * representation the backend emits and the one an analysis reads. Its own question: what it
+     * reads is the behavior, its {@code let}, and what the module around it means — never another
+     * body.
      */
-    public static Core checkBehavior(Hir.SpecBehavior spec, Hir.FnDef fn, Hir.Expr loweredBody,
+    public static SpecChecker.Checked checkBehavior(Hir.SpecBehavior spec, Hir.FnDef fn,
+                                     Hir.Expr loweredBody,
                                     ReadingPolicy policy,
                                      InvariantChecker.Source discharge,
                                      Symbols symbols, Map<ValueName.Behavior, ReqSig> calleeSigs,

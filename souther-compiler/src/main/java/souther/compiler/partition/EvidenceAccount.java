@@ -1,5 +1,7 @@
 package souther.compiler.partition;
 
+import souther.compiler.inputs.NumericTerm;
+
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -49,21 +51,64 @@ final class EvidenceAccount {
          */
         record ThePositionIsAlreadyMeasured(souther.compiler.inputs.TermPath at)
                 implements Disposition {}
+
+        /**
+         * The rules about this position are not all sayable as one list of classes, so it has none
+         * here and this rule divided nothing.
+         *
+         * <p>Its own answer beside {@link Measured}, and not a loss. The rule was read and what it
+         * states was worked out; what it did not do is go together with the rules beside it, and
+         * that is a fact about the position's rules taken together rather than about this one.
+         * Left out of the account, a position both kinds of rule reach would look like one whose
+         * evidence went missing.
+         */
+        record TheClassesWereNotComposed(NumericTerm.FromOnePosition at)
+                implements Disposition {}
+
+        /**
+         * The rule was read and tells none of this position's values from the others, so it made no
+         * class of it — and the rules beside it made theirs.
+         *
+         * <p>Its own answer beside {@link TheClassesWereNotComposed}, which says the position's
+         * rules are not all sayable as one list of classes. Here they were: what happened is that
+         * this one rule states no distinction of a position whose declarations rule out one of its
+         * sides, and the classes came out of the rest exactly as they would have without it.
+         *
+         * <p>Said as the other, the account would have a position with classes filed under a word
+         * for having none — which is the distinction the composing answer was split in two to keep,
+         * put back together one seam later.
+         */
+        record TheRuleDividedNothing(NumericTerm.FromOnePosition at) implements Disposition {}
     }
 
     /** One piece of evidence and what became of it, held together so that holding the stage to a
      *  {@link Disposition.Measured} can ask the evidence what it should have left behind. */
-    private record Answered(LineEvidence what, Disposition how) {}
+    private record Answered(PartitionEvidence what, Disposition how) {}
 
-    private final Map<LineEvidence.FiledEvidenceId, LineEvidence> owed = new LinkedHashMap<>();
-    private final Map<LineEvidence.FiledEvidenceId, Answered> answered = new LinkedHashMap<>();
+    /**
+     * The distinctions this stage was told it did not get, and whether each was acted on.
+     *
+     * <p>Beside the evidence and held the same way. A blocker exists to keep a position's classes
+     * from being composed out of the rules that worked, so one nobody read is a denominator built
+     * from the successes with nothing said — which is the thing a blocker is for, failing silently.
+     *
+     * <p>Which is not hypothetical. A position reached by a blocker and by no evidence was not
+     * among the numbers this stage measures at all, so the blocker was carried in, filed, and never
+     * asked; the classes the declarations had left stood, and the rule that could not be read was a
+     * finding beside a denominator it was supposed to close. Nothing failed, because nothing was
+     * counting.
+     */
+    private final Map<ClassingBlocker, Boolean> blockers = new LinkedHashMap<>();
+
+    private final Map<PartitionEvidence.FiledEvidenceId, PartitionEvidence> owed = new LinkedHashMap<>();
+    private final Map<PartitionEvidence.FiledEvidenceId, Answered> answered = new LinkedHashMap<>();
 
     /**
      * The evidence this stage was handed, and the one thing about it this has to establish rather
      * than assume.
      *
      * <p><b>That the identity tells the pieces apart.</b> Everything below counts by
-     * {@link LineEvidence#id}, so two pieces sharing one is one entry here — and then the piece that
+     * {@link PartitionEvidence#id}, so two pieces sharing one is one entry here — and then the piece that
      * went missing is the one the other answered for. An account whose denominator is short before
      * any work happens reports a complete measure over evidence it never held, which is the sentence
      * this whole type exists to refuse.
@@ -75,9 +120,10 @@ final class EvidenceAccount {
      * <p>The same piece handed over twice is one piece. What that would say about the stage is
      * nothing, and nothing here counts arrivals.
      */
-    EvidenceAccount(List<LineEvidence> evidence) {
-        for (LineEvidence each : evidence) {
-            LineEvidence already = owed.put(each.id(), each);
+    EvidenceAccount(List<PartitionEvidence> evidence, List<ClassingBlocker> blocked) {
+        blocked.forEach(each -> blockers.put(each, false));
+        for (PartitionEvidence each : evidence) {
+            PartitionEvidence already = owed.put(each.id(), each);
             if (already != null && !already.equals(each)) {
                 throw new IllegalStateException("two pieces of evidence are called " + each.id()
                         + ": " + already + " and " + each
@@ -86,11 +132,11 @@ final class EvidenceAccount {
         }
     }
 
-    void disposedOf(LineEvidence what, Disposition how) {
+    void disposedOf(PartitionEvidence what, Disposition how) {
         // Held against what was handed over rather than against whatever else was disposed of. The
         // identity is one to one over the input, so a piece arriving here under an id belonging to
         // another is a piece this stage was never given.
-        LineEvidence given = owed.get(what.id());
+        PartitionEvidence given = owed.get(what.id());
         if (given != null && !given.equals(what)) {
             throw new IllegalStateException("this stage disposed of " + what
                     + " under the name of " + given);
@@ -102,8 +148,13 @@ final class EvidenceAccount {
         }
     }
 
-    void measured(LineEvidence what, AxisId at) {
+    void measured(PartitionEvidence what, AxisId at) {
         disposedOf(what, new Disposition.Measured(at));
+    }
+
+    /** That the classes of {@code at} were held shut by every blocker filed there. */
+    void heldShut(List<ClassingBlocker> here) {
+        here.forEach(each -> blockers.put(each, true));
     }
 
     /**
@@ -137,29 +188,51 @@ final class EvidenceAccount {
             }
         }
         everyPieceWasDisposedOf();
+        List<ClassingBlocker> unread = blockers.entrySet().stream()
+                .filter(each -> !each.getValue()).map(Map.Entry::getKey).toList();
+        if (!unread.isEmpty()) {
+            throw new IllegalStateException(
+                    "this stage was told it did not get these distinctions and never asked: "
+                            + unread + " — a position whose classes one of them was to hold shut"
+                            + " was measured without it, which is a denominator built out of the"
+                            + " rules that worked");
+        }
     }
 
     /** Whether {@code axis} carries what {@code evidence} draws, asked in that evidence's own
      *  terms. */
-    private static boolean carries(Axis axis, LineEvidence evidence) {
-        OriginRef by = evidence.by();
+    private static boolean carries(Axis axis, PartitionEvidence evidence) {
         return switch (evidence) {
+            // A set told from the rest is carried by the classes and by nothing below them: there
+            // is no cut it is an origin of and no parting it is an alternative in. So what says the
+            // axis carries it is that the classes were composed out of it, which the axis records
+            // beside them — read off the classes instead, the question would be whether one set is
+            // inside another, and that is a machine nobody paid for.
+            case PartitionEvidence.BySet set -> axis.divides().contains(set.by());
             // A line the position has no value beside is not a cut of it. It parts the values all
             // the same, and where it parts them is what carries the rule — as the authored line,
             // which is the key that side keeps.
-            case LineEvidence.Divides(Threshold line) when line.value() == null ->
-                    axis.parted().stream()
-                            .anyMatch(each -> each.alternatives().contains(by.authoredLine()));
+            case PartitionEvidence.Divides(Threshold line) when line.value() == null ->
+                    axis.parted().stream().anyMatch(each ->
+                            each.alternatives().contains(line.origin().authoredLine()));
             // And one it has a value beside is a cut, as is a value singled out: a rule that
             // singles nothing out is not one of those, so there is always a value here.
-            case LineEvidence.Divides _, LineEvidence.Singles _ ->
-                    axis.cuts().stream().anyMatch(each -> each.origins().contains(by));
+            case PartitionEvidence.Divides it ->
+                    axis.cuts().stream().anyMatch(each -> each.origins().contains(it.by()));
+            // A cut where the classes are runs of values, and the classes themselves where they
+            // are sets: one value singled out of a string is a set of that value, so what carries
+            // it is whichever vocabulary the position's classes came out in. Asked of the cuts
+            // alone, a position whose classes composed it would be reported as having lost it.
+            case PartitionEvidence.Singles it ->
+                    axis.divides().contains(it.by())
+                            || axis.cuts().stream()
+                                    .anyMatch(each -> each.origins().contains(it.by()));
         };
     }
 
     /** That this stage said what became of everything it was handed. */
     private void everyPieceWasDisposedOf() {
-        List<LineEvidence.FiledEvidenceId> lost = owed.keySet().stream()
+        List<PartitionEvidence.FiledEvidenceId> lost = owed.keySet().stream()
                 .filter(each -> !answered.containsKey(each)).toList();
         if (!lost.isEmpty()) {
             throw new IllegalStateException(
@@ -167,7 +240,7 @@ final class EvidenceAccount {
                             + " — a measure reported as complete over evidence that went missing"
                             + " is what this account exists to refuse");
         }
-        List<LineEvidence.FiledEvidenceId> strangers = answered.keySet().stream()
+        List<PartitionEvidence.FiledEvidenceId> strangers = answered.keySet().stream()
                 .filter(each -> !owed.containsKey(each)).toList();
         if (!strangers.isEmpty()) {
             throw new IllegalStateException(

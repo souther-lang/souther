@@ -44,7 +44,8 @@ record ReadComparisons(List<ComparisonReadings.Reading> comparisons,
                         checked.elementBindings().get(behavior)),
                 // Nothing said about what arrives, so every line here is held to what the
                 // declarations leave — which is what a fixture about standing wants.
-                souther.compiler.check.PathReachability.Answers.NONE).all(), inputs, rules);
+                souther.compiler.check.PathReachability.Answers.NONE).comparisons(),
+                inputs, rules);
     }
 
     /** The one comparison the body writes. A body writing two would leave a caller picking one of

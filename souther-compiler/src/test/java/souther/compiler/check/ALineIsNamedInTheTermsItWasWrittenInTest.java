@@ -129,14 +129,14 @@ class ALineIsNamedInTheTermsItWasWrittenInTest {
 
     /** Every line the model draws, by what a report calls it. Read once: the whole point of the
      *  test is that both sides of the lookup come from the one compile. */
-    private static final Map<String, souther.compiler.partition.OriginRef> LINES = linesOf();
+    private static final Map<String, souther.compiler.partition.LineOrigin> LINES = linesOf();
 
-    private static Map<String, souther.compiler.partition.OriginRef> linesOf() {
+    private static Map<String, souther.compiler.partition.LineOrigin> linesOf() {
         Compilation compilation = compiled();
         Map<String, List<souther.compiler.query.BorderAssessment>> boundaries =
                 souther.compiler.query.Adequacy.boundariesOf(compilation.db(), "example.forms");
         assertNotNull(boundaries, "the model under test compiles");
-        Map<String, souther.compiler.partition.OriginRef> out = new java.util.LinkedHashMap<>();
+        Map<String, souther.compiler.partition.LineOrigin> out = new java.util.LinkedHashMap<>();
         boundaries.values().forEach(each ->
                 each.forEach(line -> out.put(line.label(), line.border().origin())));
         return out;
@@ -157,10 +157,10 @@ class ALineIsNamedInTheTermsItWasWrittenInTest {
      * key their answers differently and nothing would say so — which they did, over the name the
      * author gave the clause.
      */
-    private static souther.compiler.partition.OriginRef.InvariantOrigin lineAt(String label) {
-        souther.compiler.partition.OriginRef origin = LINES.get(label);
+    private static souther.compiler.partition.LineOrigin.InvariantOrigin lineAt(String label) {
+        souther.compiler.partition.LineOrigin origin = LINES.get(label);
         assertNotNull(origin, () -> label + " is not a line of the model: " + LINES.keySet());
-        return (souther.compiler.partition.OriginRef.InvariantOrigin) origin;
+        return (souther.compiler.partition.LineOrigin.InvariantOrigin) origin;
     }
 
     /** The lines {@code name} draws, in its own terms. */

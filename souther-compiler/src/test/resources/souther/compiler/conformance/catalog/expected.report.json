@@ -577,7 +577,7 @@
             "declaredIn" : "conformance.catalog",
             "definition" : "discount",
             "behavior" : "discount",
-            "ordinal" : 1,
+            "ordinal" : 3,
             "lowered" : 0
           },
           "question" : "notDetermined",
@@ -594,7 +594,7 @@
             "declaredIn" : "conformance.catalog",
             "definition" : "discount",
             "behavior" : "discount",
-            "ordinal" : 1,
+            "ordinal" : 3,
             "lowered" : 0
           },
           "question" : "notDetermined",
@@ -830,7 +830,7 @@
             "declaredIn" : "conformance.catalog",
             "definition" : "discount",
             "behavior" : "discount",
-            "ordinal" : 1,
+            "ordinal" : 3,
             "lowered" : 0
           }
         }, {
@@ -842,7 +842,7 @@
             "declaredIn" : "conformance.catalog",
             "definition" : "discount",
             "behavior" : "discount",
-            "ordinal" : 1,
+            "ordinal" : 3,
             "lowered" : 0
           }
         } ]
@@ -853,7 +853,7 @@
           "obligationId" : {
             "module" : "conformance.catalog",
             "definition" : "discount",
-            "construct" : 0,
+            "construct" : 2,
             "lowered" : 0,
             "part" : 0,
             "decidedBy" : "the_declaration"
@@ -874,7 +874,7 @@
           "obligationId" : {
             "module" : "conformance.catalog",
             "definition" : "discount",
-            "construct" : 0,
+            "construct" : 2,
             "lowered" : 0,
             "part" : 1,
             "decidedBy" : "the_declaration"
@@ -907,7 +907,7 @@
           "declaredIn" : "conformance.catalog",
           "definition" : "discount",
           "behavior" : "discount",
-          "ordinal" : 1,
+          "ordinal" : 3,
           "lowered" : 0
         },
         "reason" : "unsupported_syntax"
@@ -920,7 +920,7 @@
           "declaredIn" : "conformance.catalog",
           "definition" : "discount",
           "behavior" : "discount",
-          "ordinal" : 1,
+          "ordinal" : 3,
           "lowered" : 0
         },
         "reason" : "unsupported_syntax"
@@ -933,7 +933,7 @@
           "declaredIn" : "conformance.catalog",
           "definition" : "discount",
           "behavior" : "discount",
-          "ordinal" : 1,
+          "ordinal" : 3,
           "lowered" : 0
         }
       }, {
@@ -945,7 +945,7 @@
           "declaredIn" : "conformance.catalog",
           "definition" : "discount",
           "behavior" : "discount",
-          "ordinal" : 1,
+          "ordinal" : 3,
           "lowered" : 0
         }
       } ]
@@ -1473,7 +1473,7 @@
             "declaredIn" : "conformance.shipping",
             "definition" : "急ぎか",
             "behavior" : "出荷する",
-            "ordinal" : 1,
+            "ordinal" : 3,
             "lowered" : 0
           },
           "question" : "notDetermined",
@@ -1490,7 +1490,7 @@
             "declaredIn" : "conformance.shipping",
             "definition" : "急ぎか",
             "behavior" : "出荷する",
-            "ordinal" : 1,
+            "ordinal" : 3,
             "lowered" : 0
           },
           "question" : "notDetermined",
@@ -1790,7 +1790,7 @@
                   "declaredIn" : "conformance.shipping",
                   "definition" : "出荷する",
                   "behavior" : "出荷する",
-                  "ordinal" : 4,
+                  "ordinal" : 11,
                   "lowered" : 0
                 },
                 "conjunct" : 0,
@@ -1834,7 +1834,7 @@
                 "declaredIn" : "conformance.shipping",
                 "definition" : "出荷する",
                 "behavior" : "出荷する",
-                "ordinal" : 4,
+                "ordinal" : 11,
                 "lowered" : 0
               },
               "conjunct" : 0,
@@ -1863,7 +1863,7 @@
             "declaredIn" : "conformance.shipping",
             "definition" : "出荷する",
             "behavior" : "出荷する",
-            "ordinal" : 4,
+            "ordinal" : 11,
             "lowered" : 0
           },
           "relation" : "=",
@@ -1888,7 +1888,7 @@
                 "declaredIn" : "conformance.shipping",
                 "definition" : "出荷する",
                 "behavior" : "出荷する",
-                "ordinal" : 4,
+                "ordinal" : 11,
                 "lowered" : 0
               },
               "conjunct" : 0,
@@ -1918,7 +1918,7 @@
             "declaredIn" : "conformance.shipping",
             "definition" : "出荷する",
             "behavior" : "出荷する",
-            "ordinal" : 4,
+            "ordinal" : 11,
             "lowered" : 0
           },
           "relation" : "=",
@@ -1943,7 +1943,7 @@
                 "declaredIn" : "conformance.shipping",
                 "definition" : "出荷する",
                 "behavior" : "出荷する",
-                "ordinal" : 4,
+                "ordinal" : 11,
                 "lowered" : 0
               },
               "conjunct" : 0,
@@ -1985,7 +1985,7 @@
             "declaredIn" : "conformance.shipping",
             "definition" : "出荷する",
             "behavior" : "出荷する",
-            "ordinal" : 4,
+            "ordinal" : 11,
             "lowered" : 0
           },
           "relation" : "in",
@@ -2010,7 +2010,7 @@
                 "declaredIn" : "conformance.shipping",
                 "definition" : "出荷する",
                 "behavior" : "出荷する",
-                "ordinal" : 4,
+                "ordinal" : 11,
                 "lowered" : 0
               },
               "conjunct" : 0,
@@ -2044,7 +2044,7 @@
             "declaredIn" : "conformance.shipping",
             "definition" : "出荷する",
             "behavior" : "出荷する",
-            "ordinal" : 4,
+            "ordinal" : 11,
             "lowered" : 0
           },
           "relation" : "in",
@@ -2069,7 +2069,7 @@
                 "declaredIn" : "conformance.shipping",
                 "definition" : "午前の集荷か",
                 "behavior" : "出荷する",
-                "ordinal" : 0,
+                "ordinal" : 1,
                 "lowered" : 0
               },
               "conjunct" : 0,
@@ -2099,7 +2099,7 @@
             "declaredIn" : "conformance.shipping",
             "definition" : "午前の集荷か",
             "behavior" : "出荷する",
-            "ordinal" : 0,
+            "ordinal" : 1,
             "lowered" : 0
           },
           "relation" : "=",
@@ -2124,7 +2124,7 @@
                 "declaredIn" : "conformance.shipping",
                 "definition" : "午前の集荷か",
                 "behavior" : "出荷する",
-                "ordinal" : 0,
+                "ordinal" : 1,
                 "lowered" : 0
               },
               "conjunct" : 0,
@@ -2153,7 +2153,7 @@
             "declaredIn" : "conformance.shipping",
             "definition" : "午前の集荷か",
             "behavior" : "出荷する",
-            "ordinal" : 0,
+            "ordinal" : 1,
             "lowered" : 0
           },
           "relation" : "=",
@@ -2178,7 +2178,7 @@
                 "declaredIn" : "conformance.shipping",
                 "definition" : "午前の集荷か",
                 "behavior" : "出荷する",
-                "ordinal" : 0,
+                "ordinal" : 1,
                 "lowered" : 0
               },
               "conjunct" : 0,
@@ -2220,7 +2220,7 @@
             "declaredIn" : "conformance.shipping",
             "definition" : "午前の集荷か",
             "behavior" : "出荷する",
-            "ordinal" : 0,
+            "ordinal" : 1,
             "lowered" : 0
           },
           "relation" : "in",
@@ -2245,7 +2245,7 @@
                 "declaredIn" : "conformance.shipping",
                 "definition" : "午前の集荷か",
                 "behavior" : "出荷する",
-                "ordinal" : 0,
+                "ordinal" : 1,
                 "lowered" : 0
               },
               "conjunct" : 0,
@@ -2287,7 +2287,7 @@
             "declaredIn" : "conformance.shipping",
             "definition" : "午前の集荷か",
             "behavior" : "出荷する",
-            "ordinal" : 0,
+            "ordinal" : 1,
             "lowered" : 0
           },
           "relation" : "in",
@@ -2323,7 +2323,7 @@
             "declaredIn" : "conformance.shipping",
             "definition" : "急ぎか",
             "behavior" : "出荷する",
-            "ordinal" : 1,
+            "ordinal" : 3,
             "lowered" : 0
           }
         }, {
@@ -2335,7 +2335,7 @@
             "declaredIn" : "conformance.shipping",
             "definition" : "急ぎか",
             "behavior" : "出荷する",
-            "ordinal" : 1,
+            "ordinal" : 3,
             "lowered" : 0
           }
         }, {
@@ -2358,7 +2358,7 @@
           "obligationId" : {
             "module" : "conformance.shipping",
             "definition" : "出荷する",
-            "construct" : 3,
+            "construct" : 10,
             "lowered" : 0,
             "part" : 0,
             "decidedBy" : "the_declaration"
@@ -2465,7 +2465,7 @@
           "obligationId" : {
             "module" : "conformance.shipping",
             "definition" : "出荷する",
-            "construct" : 1,
+            "construct" : 5,
             "lowered" : 0,
             "part" : 0,
             "decidedBy" : "the_declaration"
@@ -2486,7 +2486,7 @@
           "obligationId" : {
             "module" : "conformance.shipping",
             "definition" : "出荷する",
-            "construct" : 0,
+            "construct" : 4,
             "lowered" : 0,
             "part" : 0,
             "decidedBy" : "the_declaration"
@@ -2507,7 +2507,7 @@
           "obligationId" : {
             "module" : "conformance.shipping",
             "definition" : "出荷する",
-            "construct" : 0,
+            "construct" : 4,
             "lowered" : 0,
             "part" : 1,
             "decidedBy" : "the_declaration"
@@ -2570,7 +2570,7 @@
           "obligationId" : {
             "module" : "conformance.shipping",
             "definition" : "出荷する",
-            "construct" : 1,
+            "construct" : 5,
             "lowered" : 0,
             "part" : 1,
             "decidedBy" : "the_declaration"
@@ -2591,7 +2591,7 @@
           "obligationId" : {
             "module" : "conformance.shipping",
             "definition" : "出荷する",
-            "construct" : 3,
+            "construct" : 10,
             "lowered" : 0,
             "part" : 1,
             "decidedBy" : "the_declaration"
@@ -2622,7 +2622,7 @@
               "declaredIn" : "conformance.shipping",
               "definition" : "出荷する",
               "behavior" : "出荷する",
-              "ordinal" : 4,
+              "ordinal" : 11,
               "lowered" : 0
             },
             "conjunct" : 0,
@@ -2661,7 +2661,7 @@
               "declaredIn" : "conformance.shipping",
               "definition" : "午前の集荷か",
               "behavior" : "出荷する",
-              "ordinal" : 0,
+              "ordinal" : 1,
               "lowered" : 0
             },
             "conjunct" : 0,
@@ -2696,7 +2696,7 @@
               "declaredIn" : "conformance.shipping",
               "definition" : "午前の集荷か",
               "behavior" : "出荷する",
-              "ordinal" : 0,
+              "ordinal" : 1,
               "lowered" : 0
             },
             "conjunct" : 0,
@@ -2732,7 +2732,7 @@
           "declaredIn" : "conformance.shipping",
           "definition" : "急ぎか",
           "behavior" : "出荷する",
-          "ordinal" : 1,
+          "ordinal" : 3,
           "lowered" : 0
         },
         "reason" : "rule_about_a_derived_value"
@@ -2745,7 +2745,7 @@
           "declaredIn" : "conformance.shipping",
           "definition" : "急ぎか",
           "behavior" : "出荷する",
-          "ordinal" : 1,
+          "ordinal" : 3,
           "lowered" : 0
         },
         "reason" : "rule_about_a_derived_value"
@@ -2771,7 +2771,7 @@
           "declaredIn" : "conformance.shipping",
           "definition" : "急ぎか",
           "behavior" : "出荷する",
-          "ordinal" : 1,
+          "ordinal" : 3,
           "lowered" : 0
         }
       }, {
@@ -2783,7 +2783,7 @@
           "declaredIn" : "conformance.shipping",
           "definition" : "急ぎか",
           "behavior" : "出荷する",
-          "ordinal" : 1,
+          "ordinal" : 3,
           "lowered" : 0
         }
       }, {

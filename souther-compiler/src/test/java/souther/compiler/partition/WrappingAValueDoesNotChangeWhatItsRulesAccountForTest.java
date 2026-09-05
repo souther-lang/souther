@@ -94,7 +94,7 @@ class WrappingAValueDoesNotChangeWhatItsRulesAccountForTest {
 
     /** One line, said without the declaration it happens to be written on. */
     private static String said(BorderAssessment border) {
-        if (!(border.origin() instanceof OriginRef.InvariantOrigin invariant)) {
+        if (!(border.origin() instanceof LineOrigin.InvariantOrigin invariant)) {
             throw new AssertionError("this line was not drawn by an invariant: " + border.origin());
         }
         return invariant.rule().clause().name().orElseThrow() + "#" + invariant.conjunct()

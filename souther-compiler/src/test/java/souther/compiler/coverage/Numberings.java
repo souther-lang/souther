@@ -1,7 +1,7 @@
 package souther.compiler.coverage;
 
 import souther.compiler.diag.Citation;
-import souther.compiler.types.CoverageOrigin;
+import souther.compiler.types.SourceConstructOrigin;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -55,7 +55,7 @@ public final class Numberings {
      * makes.
      */
     public static ControlPointId.ArmOccurrence armPlace(int controlId, ArmProbe probe,
-                                                        CoverageOrigin origin, Citation at) {
+                                                        SourceConstructOrigin origin, Citation at) {
         return new ControlPointId.ArmOccurrence(controlId, Optional.of(probe), at, origin);
     }
 

@@ -1,7 +1,7 @@
 package souther.compiler.coverage;
 
 import souther.compiler.diag.Citation;
-import souther.compiler.types.CoverageOrigin;
+import souther.compiler.types.SourceConstructOrigin;
 
 import java.util.Optional;
 
@@ -48,7 +48,7 @@ public sealed interface ControlPointId {
      *               wherever else the library is used
      */
     record ArmOccurrence(int controlId, Optional<ArmProbe> probe, Citation at,
-                         CoverageOrigin origin) implements ControlPointId {
+                         SourceConstructOrigin origin) implements ControlPointId {
 
         /**
          * Whether {@code module}'s own source wrote the fork this is an arm of.

@@ -45,13 +45,13 @@ class AWalkTellsAnUnansweredNameFromAnUnreadOneTest {
     private static Hir.Var bound() {
         ValueName.Local n = new ValueName.Local("n", BOUND);
         return new Hir.Var.Denoting(WrittenName.of("n", POS),
-                new ReachName.InScope(n), WrittenName.of("n", POS).region());
+                new ReachName.InScope(n), null, WrittenName.of("n", POS).region());
     }
 
     /** A name resolution read and found nothing for. */
     private static Hir.Var unanswered(String spelling) {
         WrittenName name = WrittenName.of(spelling, POS);
-        return new Hir.Var.Unanswered(name, name.region());
+        return new Hir.Var.Unanswered(name, null, name.region());
     }
 
     // --- the two answers, at the one place that tells them apart ---

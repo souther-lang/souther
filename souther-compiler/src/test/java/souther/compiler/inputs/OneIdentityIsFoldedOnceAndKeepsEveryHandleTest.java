@@ -8,8 +8,8 @@ import souther.compiler.check.RuleRef;
 import souther.compiler.diag.Citation;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.source.SourceId;
-import souther.compiler.types.CoverageConstruct;
-import souther.compiler.types.CoverageOrigin;
+import souther.compiler.types.SourceConstruct;
+import souther.compiler.types.SourceConstructOrigin;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -248,7 +248,7 @@ class OneIdentityIsFoldedOnceAndKeepsEveryHandleTest {
     }
 
     private static RuleRef comparison() {
-        return new RuleRef.Comparison("b", new CoverageOrigin(
-                new WrittenOwner.Body("m", "b"), 1, 1, CoverageConstruct.IF));
+        return new RuleRef.Comparison("b", new SourceConstructOrigin(
+                new WrittenOwner.Body("m", "b"), 1, 1, SourceConstruct.IF));
     }
 }

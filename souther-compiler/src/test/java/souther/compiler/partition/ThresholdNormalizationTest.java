@@ -65,7 +65,8 @@ class ThresholdNormalizationTest {
                 souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         souther.compiler.inputs.Quantities reading = domain.quantities(rules);
         Partitions.Partitioning base = Partitions.of(spec.name(), domain, rules, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
-        return new Read(Partitions.withThresholds(base, reading, thresholds, rules, souther.compiler.query.ReadAs.THE_COMPILATION_DOES), reading, thresholds, rules);
+        return new Read(Partitions.withThresholds(base, reading, thresholds, rules, souther.compiler.query.ReadAs.THE_COMPILATION_DOES,
+                souther.compiler.values.Allowance.of(souther.compiler.regex.PatternPlan.Budget.OF_BEHAVIOR_DISTINCTIONS)), reading, thresholds, rules);
     }
 
     private static Axis axis(Partitions.Partitioning partitioning, String path) {
@@ -350,9 +351,9 @@ class ThresholdNormalizationTest {
                 .orElseThrow();
 
         assertEquals(1, at10.origins().size(), "the declaration's own end");
-        assertTrue(at10.origins().stream().anyMatch(o -> o instanceof OriginRef.InvariantOrigin));
+        assertTrue(at10.origins().stream().anyMatch(o -> o instanceof LineOrigin.InvariantOrigin));
         assertEquals(1, at20.origins().size(), "and the body's, which divides what it leaves");
-        assertTrue(at20.origins().stream().anyMatch(o -> o instanceof OriginRef.ComparisonOrigin));
+        assertTrue(at20.origins().stream().anyMatch(o -> o instanceof LineOrigin.ComparisonOrigin));
     }
 
     /**
@@ -392,9 +393,9 @@ class ThresholdNormalizationTest {
 
         assertEquals(2, at10.origins().size(),
                 () -> "the declaration's end and the comparison, both at ten: " + at10.origins());
-        assertTrue(at10.origins().stream().anyMatch(o -> o instanceof OriginRef.InvariantOrigin),
+        assertTrue(at10.origins().stream().anyMatch(o -> o instanceof LineOrigin.InvariantOrigin),
                 () -> "the clause's own end: " + at10.origins());
-        assertTrue(at10.origins().stream().anyMatch(o -> o instanceof OriginRef.ComparisonOrigin),
+        assertTrue(at10.origins().stream().anyMatch(o -> o instanceof LineOrigin.ComparisonOrigin),
                 () -> "and the comparison, which no value satisfies and which divides them all the"
                         + " same: " + at10.origins());
     }

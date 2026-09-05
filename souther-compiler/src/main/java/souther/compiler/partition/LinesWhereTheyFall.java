@@ -56,38 +56,40 @@ public final class LinesWhereTheyFall {
      * place nobody meant and a reason nobody established. So it comes back as a finding naming the
      * rule, and a reader is told what actually happened to it.
      */
-    public record Filed(List<LineEvidence> evidence, List<LineDrawn> between,
+    public record Filed(List<PartitionEvidence> evidence, List<ClassingBlocker> blocked,
+                        List<LineDrawn> between,
                         RulesWithNoLine notPlaced) {
 
         public Filed {
             evidence = List.copyOf(evidence);
+            blocked = List.copyOf(blocked);
             between = List.copyOf(between);
         }
 
         /** The lines, for a reader that wants only those. Read off the one list and not kept
          *  beside it. */
         public List<Threshold> thresholds() {
-            return LineEvidence.linesIn(evidence);
+            return PartitionEvidence.linesIn(evidence);
         }
 
         /** The values singled out, likewise. */
         public List<GuardThresholds.Guards.Singled> singled() {
-            return LineEvidence.pointsIn(evidence);
+            return PartitionEvidence.pointsIn(evidence);
         }
     }
 
     /** Every measurement where its name was filed, and the lines this had nowhere to put. */
-    public static Filed of(InputReading read, List<LineEvidence> evidence,
-                           List<LineDrawn> between) {
+    public static Filed of(InputReading read, List<PartitionEvidence> evidence,
+                           List<ClassingBlocker> blocked, List<LineDrawn> between) {
         InputDomain inputs = read.domain();
         Symbols symbols = read.symbols();
-        List<LineEvidence> out = new ArrayList<>();
+        List<PartitionEvidence> out = new ArrayList<>();
         List<LineDrawn> outBetween = new ArrayList<>();
         RulesWithNoLine.Gathered notPlaced = new RulesWithNoLine.Gathered();
         // One pass in the order the rules were read, so what comes out is in that order too. A pass
         // per kind of thing a rule can say puts every range before every equality, whatever order a
         // body wrote them in, and every reader downstream takes the numbers in that order.
-        for (LineEvidence each : evidence) {
+        for (PartitionEvidence each : evidence) {
             // Every number the name stands at, filed together. Filing is one rule to as many
             // positions as its name reaches, so a piece put out one part at a time can leave the
             // others behind — and the account that runs after this begins with what comes out of
@@ -97,10 +99,30 @@ public final class LinesWhereTheyFall {
                     standingOf(inputs, each.at(), symbols, each.by()).all();
             destinations.forEach(at -> out.add(measuredAt(each, at)));
         }
+        // And the rules that would have divided a position and did not, through the same authority
+        // and in the same act. What a name reaches is one answer, and a blocker filed by anything
+        // else would be at the position the rule was written about while the evidence beside it had
+        // moved — so a position would be composed out of rules one of these was meant to stop.
+        List<ClassingBlocker> outBlocked = new ArrayList<>();
+        for (ClassingBlocker each : blocked) {
+            standingOf(inputs, each.at(), symbols, each.by()).all().forEach(at -> {
+                NumericTerm.FromOnePosition here = at.atOnePosition();
+                // Held to what the evidence beside it is held to. A destination no single position
+                // answers is this compiler contradicting the reading that produced the blocker, and
+                // dropped quietly it would take a position's denominator back to the rules that
+                // worked — which is the whole of what a blocker is for.
+                if (here == null) {
+                    throw new IllegalStateException(
+                            "`" + each.at() + "` is a distinction of a position and was filed at `"
+                                    + at + "`, which no single position answers");
+                }
+                outBlocked.add(each.measuredAt(here));
+            });
+        }
         for (LineDrawn each : between) {
             place(read, each, outBetween, notPlaced);
         }
-        return new Filed(out, outBetween, notPlaced.found());
+        return new Filed(out, outBlocked, outBetween, notPlaced.found());
     }
 
 
@@ -112,7 +134,7 @@ public final class LinesWhereTheyFall {
      * so a move that left the number answered by no single place would be this compiler
      * contradicting the reading that produced the evidence.
      */
-    private static LineEvidence measuredAt(LineEvidence evidence, NumericTerm at) {
+    private static PartitionEvidence measuredAt(PartitionEvidence evidence, NumericTerm at) {
         NumericTerm.FromOnePosition here = at.atOnePosition();
         if (here == null) {
             throw new IllegalStateException(
@@ -120,10 +142,16 @@ public final class LinesWhereTheyFall {
                             + "`, which no single position answers");
         }
         return switch (evidence) {
-            case LineEvidence.Divides(Threshold line) ->
-                    new LineEvidence.Divides(thresholdAt(line, here));
-            case LineEvidence.Singles(GuardThresholds.Guards.Singled point) ->
-                    new LineEvidence.Singles(singledAt(point, here));
+            case PartitionEvidence.Divides(Threshold line) ->
+                    new PartitionEvidence.Divides(thresholdAt(line, here));
+            case PartitionEvidence.Singles(GuardThresholds.Guards.Singled point) ->
+                    new PartitionEvidence.Singles(singledAt(point, here));
+            // The values are the position's own, so moving the division moves where it is measured
+            // and nothing else. What each side holds was worked out where the rule was read, and a
+            // filing that worked them out again would be a second answer about one rule.
+            case PartitionEvidence.BySet(SetStatement division) ->
+                    new PartitionEvidence.BySet(new SetStatement(here, division.whenTrue(),
+                            division.whenFalse(), division.statement(), division.origin()));
         };
     }
 
@@ -222,7 +250,8 @@ public final class LinesWhereTheyFall {
      * so a fourth outcome is a question asked of this method and not an answer it already gives.
      */
     private static WhereTheNameStands standingOf(InputDomain inputs, NumericTerm term,
-                                                 Symbols symbols, OriginRef origin) {
+                                                 Symbols symbols,
+                                                 PartitionEvidenceOrigin origin) {
         TermPath path = term.subjectPath();
         if (inputs.at(path) != null) {
             return new WhereTheNameStands.AsWritten(term);

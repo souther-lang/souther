@@ -6,8 +6,8 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.RuleCitation;
 import souther.compiler.check.RuleRef;
-import souther.compiler.types.CoverageConstruct;
-import souther.compiler.types.CoverageOrigin;
+import souther.compiler.types.SourceConstruct;
+import souther.compiler.types.SourceConstructOrigin;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -30,8 +30,8 @@ class OneRuleIsCalledOneThingOnBothSurfacesTest {
     @Test
     void aDocumentCallsAComparisonWhatAReaderIsShown() {
         RuleRef.Comparison rule = new RuleRef.Comparison("f",
-                new CoverageOrigin(new WrittenOwner.Body("m", "b"), 0, 0,
-                        CoverageConstruct.IF));
+                new SourceConstructOrigin(new WrittenOwner.Body("m", "b"), 0, 0,
+                        SourceConstruct.IF));
 
         assertEquals(RuleCitation.WHAT_IT_IS, AdequacyReport.schemaRuleKind(rule));
     }

@@ -5,7 +5,7 @@ import souther.compiler.partition.Border;
 import souther.compiler.partition.Demand;
 import souther.compiler.partition.BoundaryTarget;
 import souther.compiler.partition.DomainPoint;
-import souther.compiler.partition.OriginRef;
+import souther.compiler.partition.LineOrigin;
 import souther.compiler.partition.PointRole;
 import souther.compiler.source.SourceId;
 
@@ -131,14 +131,14 @@ public record BorderAssessment(Border border, Map<DomainPoint, ItemAssessment> i
      * The rule as this reading met it, for a reader that renders it rather than printing what
      * {@link #describe} would.
      *
-     * <p>An {@link OriginRef} and not a {@link souther.compiler.check.RuleRef}, which is why it is
+     * <p>An {@link LineOrigin} and not a {@link souther.compiler.check.RuleRef}, which is why it is
      * not called the rule. Which rule of the model this came from is
      * {@link souther.compiler.partition.BorderObligationId#provenance()}, the same value however
      * many lines the rule drew; what a row is owed for is
      * {@link souther.compiler.partition.Border#obligation()}. Named the rule, the first two were one
      * word, and a caller wanting either reached for whichever this happened to be.
      */
-    public OriginRef origin() {
+    public LineOrigin origin() {
         return border.origin();
     }
 

@@ -1,7 +1,7 @@
 package souther.architecture;
 
-import souther.compiler.types.CoverageConstruct;
-import souther.compiler.types.CoverageOrigin;
+import souther.compiler.types.SourceConstruct;
+import souther.compiler.types.SourceConstructOrigin;
 import souther.compiler.types.WrittenOwner;
 import souther.test.RepositoryLayout;
 
@@ -40,7 +40,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * classes here: every class naming a member that makes an origin, with the member it names.
  *
  * <p>What is read is the constant pool and not the instructions. A name reached through a method
- * reference is a constant and no call instruction — {@code CoverageOrigin::unwritten} handed to
+ * reference is a constant and no call instruction — {@code SourceConstructOrigin::unwritten} handed to
  * something that will call it makes an origin as surely as calling it here does, and a walk over
  * instructions passes over it.
  *
@@ -55,15 +55,15 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * what it can answer with is a fork of its own comprehension and nothing else — which is that
  * method's to refuse and is refused there, rather than a thing this could tell by reading a call.
  */
-class WhoMaySettleACoverageOriginTest {
+class WhoMaySettleASourceConstructOriginTest {
 
     /** Read off the type, so that renaming it stops the build rather than leaving this walk with
      *  nothing to find and nothing to say. */
-    private static final String OWNER = internalNameOf(CoverageOrigin.class);
+    private static final String OWNER = internalNameOf(SourceConstructOrigin.class);
 
     private static final String AN_ORIGIN = "L" + OWNER + ";";
 
-    private static final String A_CONSTRUCT = "L" + internalNameOf(CoverageConstruct.class) + ";";
+    private static final String A_CONSTRUCT = "L" + internalNameOf(SourceConstruct.class) + ";";
 
     /** What a construct's number is counted within, which every way of making one takes. Read off
      *  the type for the reason the owner is: a rename stops the build rather than emptying the walk. */
@@ -90,7 +90,13 @@ class WhoMaySettleACoverageOriginTest {
      * comprehension's guard is derived where the comprehension is, so that the lowering and the
      * reading that runs before it cannot number the guards differently.
      *
-     * <p>The constructor is named only from inside {@code CoverageOrigin}. A row naming it elsewhere
+     * <p>{@code Hir.Apply} and {@code Elaborator} are the two places an application stands where no
+     * source wrote one. A pass composing an application is writing one into a body, and a name read
+     * where a value goes is built as a call of no arguments — an author wrote a name there, not an
+     * application. Each says so rather than taking the number of a construct somebody wrote, which
+     * after an expansion is this compiler's own work standing among the model's.
+     *
+     * <p>The constructor is named only from inside {@code SourceConstructOrigin}. A row naming it elsewhere
      * is a pass making an origin of its own, which after an expansion is two obligations where the
      * author wrote one.
      *
@@ -100,9 +106,11 @@ class WhoMaySettleACoverageOriginTest {
      * number to give. A row here naming the builder would be a count over everything a file wrote.
      */
     private static final List<String> NAMING_A_MAKER = List.of(
+            "souther/compiler/ast/Hir$Apply -> " + OWNER + "#unwritten()" + AN_ORIGIN,
             "souther/compiler/ast/Hir$ListComp -> " + OWNER + "#lowered(I)" + AN_ORIGIN,
             "souther/compiler/check/Conditions -> " + OWNER + "#unwritten()" + AN_ORIGIN,
             "souther/compiler/check/Conditions$AsPolar -> " + OWNER + "#unwritten()" + AN_ORIGIN,
+            "souther/compiler/check/Elaborator -> " + OWNER + "#unwritten()" + AN_ORIGIN,
             "souther/compiler/check/Terms -> " + OWNER + "#unwritten()" + AN_ORIGIN,
             "souther/compiler/check/TheOtherCase -> " + OWNER + "#unwritten()" + AN_ORIGIN,
             "souther/compiler/frontend/AstBuilder$Reading -> " + OWNER
@@ -148,18 +156,18 @@ class WhoMaySettleACoverageOriginTest {
                 "the classes this reads are in more than the one module that declares an origin");
     }
 
-    /** Every member of {@code CoverageOrigin} that answers with one, and the constructor they all go
+    /** Every member of {@code SourceConstructOrigin} that answers with one, and the constructor they all go
      *  through — read off the type rather than written out, so a member added beside them is one of
      *  these by being one. */
     private static Set<String> makers() {
         Set<String> members = new TreeSet<>();
-        for (Method each : CoverageOrigin.class.getDeclaredMethods()) {
-            if (each.getReturnType() == CoverageOrigin.class) {
+        for (Method each : SourceConstructOrigin.class.getDeclaredMethods()) {
+            if (each.getReturnType() == SourceConstructOrigin.class) {
                 members.add(OWNER + "#" + each.getName()
                         + descriptorOf(each.getParameterTypes(), each.getReturnType()));
             }
         }
-        for (Constructor<?> each : CoverageOrigin.class.getDeclaredConstructors()) {
+        for (Constructor<?> each : SourceConstructOrigin.class.getDeclaredConstructors()) {
             members.add(OWNER + "#<init>" + descriptorOf(each.getParameterTypes(), void.class));
         }
         return members;

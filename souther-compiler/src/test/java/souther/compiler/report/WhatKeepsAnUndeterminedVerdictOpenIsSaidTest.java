@@ -18,8 +18,8 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Weakening;
 import souther.compiler.query.WeakeningSet;
-import souther.compiler.types.CoverageConstruct;
-import souther.compiler.types.CoverageOrigin;
+import souther.compiler.types.SourceConstruct;
+import souther.compiler.types.SourceConstructOrigin;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -372,9 +372,9 @@ class WhatKeepsAnUndeterminedVerdictOpenIsSaidTest {
         return new Weakening.ModelReadingIncomplete(ClosureGap.QuestionUnanswered.of(
                 StandingQuestion.NothingClassifiesIt.of(
                         new RuleRef.Comparison("go",
-                                new CoverageOrigin(
+                                new SourceConstructOrigin(
                                         new WrittenOwner.Body("m", "b"), 0, 0,
-                                        CoverageConstruct.IF)),
+                                        SourceConstruct.IF)),
                         new RuleCitation.Named(term),
                         new FilingCoordinate.AtPosition(TermPath.of(term)), why)));
     }

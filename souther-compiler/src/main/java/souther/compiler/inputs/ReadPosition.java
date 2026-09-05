@@ -35,7 +35,7 @@ record ReadPosition(TermPath path, TypeView view, NumericTerm.FromOnePosition te
                     NarrowedBounds narrowedEnds, NumericDomain.Bounds rangeLeft,
                     boolean nothingExists,
                     ProjectionEvidence projection, List<Case> declared, ReadingResult reading,
-                    ObligationDomain obligations, AdmissibleSet.Completeness completeness,
+                    ObligationDomain obligations, AdmissibleSet admitted,
                     List<RuleWithoutALine> rulesWithoutALine,
                     List<StandingQuestion> unansweredQuestions,
                     Set<RulesLeftUnread> rulesLeftUnread,

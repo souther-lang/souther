@@ -84,20 +84,41 @@ public sealed interface BindingOwner {
     }
 
     /**
-     * A copy of {@code expanded}'s body, placed inside {@code within}.
+     * A copy of {@code expanded}'s body, placed inside {@code within}: the bindings one expansion of
+     * one call writes.
      *
      * <p>Expanding a helper puts a second copy of its bindings into one body, so the copy owns them
-     * rather than the definition they were written in — otherwise two copies of one {@code let} would
-     * answer as one binding. {@code ordinal} tells apart two copies of the same body in one place, so
-     * expanding something elsewhere moves nothing here, and a copy inside a copy is told apart by
-     * {@code within} without anything counting across the two.
+     * rather than the definition they were written in — otherwise two copies of one {@code let}
+     * would answer as one binding.
+     *
+     * <p>Named by what it is an expansion of and not by how many were met before it. Which calls a
+     * pass expands is what the policy it runs under decides — the tree a backend emits has the
+     * language's own operations expanded into what they do, and the tree an analysis reads has them
+     * standing — so a counter over the expansions of one body runs differently in the two, and a
+     * module helper expanded in both would own different bindings in each. What is here comes from
+     * the source instead ({@link ExpansionSite}), which is settled before either tree exists.
+     *
+     * <p>{@code expanded} beside the site, because a call site may come to apply something else: the
+     * same characters calling another helper are the same reference and another expansion, and what
+     * a binding belongs to has moved.
+     *
+     * <p>And {@code within}, which is what tells copies apart. One call written inside a helper
+     * that is itself expanded twice is one site and two expansions, and the two are inside different
+     * owners.
      */
-    record Expansion(BindingOwner within, ValueName expanded, int ordinal) implements BindingOwner {
+    record Expansion(BindingOwner within, ValueName expanded, ExpansionSite at)
+            implements BindingOwner {
 
+        public Expansion {
+            if (within == null || expanded == null || at == null) {
+                throw new IllegalArgumentException(
+                        "an expansion is of something, somewhere, at some call");
+            }
+        }
 
         @Override
         public String toString() {
-            return within + "/" + expanded + "#" + ordinal;
+            return within + "/" + expanded + "@" + at;
         }
     }
 

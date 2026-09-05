@@ -208,6 +208,22 @@ public final class ReportedReason {
             // class about two positions, and the other has nothing to wait for.
             case BlockReason.ComparisonCuttingNothing _ ->
                     UndividedPosition.Reason.RULE_CUTS_NOTHING;
+            // Its own word beside that one, because what a reader looks at differs. There the rule
+            // is about a quantity this position is not in, and an author looks at what it compares;
+            // here it is about this position and everything the position holds comes out one side
+            // of it, and an author looks at the rule.
+            case BlockReason.PredicateTellingNothingApart _ ->
+                    UndividedPosition.Reason.RULE_TELLS_NOTHING_APART;
+            // Its own word again, and the one that says nothing fell short. Every rule was read and
+            // every set was worked out; what will not go together is the classes, so a reader sent
+            // after what the rules cost would be looking at something that was never the trouble.
+            case BlockReason.ClassesNotComposed _ ->
+                    UndividedPosition.Reason.CLASSES_NOT_COMPOSED;
+            // And its own word beside the four collapsed above. Those are what a position admits
+            // coming out wider than its rules leave it, which is about the declarations; this is
+            // about a body, and a position whose declaration was answered exactly still lands here.
+            case BlockReason.BehaviorDistinctionsTooCostly _ ->
+                    UndividedPosition.Reason.BEHAVIOR_DISTINCTIONS_TOO_COSTLY;
             // And its own word beside that one. A rule with no quantity to cut states nothing about
             // the position; a rule whose line falls outside where its quantity runs states
             // something no row satisfies, and an author reading the first would take the second for

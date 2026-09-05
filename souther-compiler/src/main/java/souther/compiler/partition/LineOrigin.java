@@ -12,7 +12,16 @@ import souther.compiler.types.TypeSymbol;
 import java.util.List;
 
 /**
- * A rule of the model, as a boundary reader met it.
+ * A rule that drew a line, as a boundary reader met it.
+ *
+ * <p><b>A line, and that is what the name says.</b> Everything below the identity is about one: what
+ * the rule placed on the values either side of what it wrote, which of its lines this is, which
+ * point a row against it stands at, what a declaration is owed for it. So a rule that divides a
+ * position without drawing a line is not one of these — it is the other kind of reading a piece of
+ * partition evidence carries ({@link PredicateOrigin}), and what the two share is identity alone
+ * ({@link PartitionEvidenceOrigin}). Named for neither, this type was one a predicate looked as
+ * though it belonged in, and putting one here would have made the line's answers total over a
+ * reading that has no line.
  *
  * <p>{@link RuleRef} and what is true of it here. Which rule it is is the same value however many
  * times the rule is read, and everything beside it on these records is an answer about this reading
@@ -31,7 +40,7 @@ import java.util.List;
  * they merge into one partition while staying separate obligations. Reaching the boundary through one
  * guard says nothing about the other.
  */
-public sealed interface OriginRef {
+public sealed interface LineOrigin extends PartitionEvidenceOrigin {
 
     /**
      * A clause of a {@code data}'s invariant, as the clause it is.
@@ -74,7 +83,7 @@ public sealed interface OriginRef {
      */
     record InvariantOrigin(RuleRef.Invariant rule, int conjunct,
                            souther.compiler.numeric.EndSide keeps, boolean holdsAtTheValue)
-            implements OriginRef {
+            implements LineOrigin {
 
         public InvariantOrigin {
             if (rule == null) {
@@ -110,7 +119,7 @@ public sealed interface OriginRef {
      *              {@code <= 3000} leaves 3001 over there, {@code < 3000} leaves 2999
      */
     record ComparisonOrigin(RuleRef.Comparison rule, Read read, LineFacts facts)
-            implements OriginRef {
+            implements LineOrigin {
 
         public ComparisonOrigin {
             if (facts == null) {
@@ -204,7 +213,7 @@ public sealed interface OriginRef {
      *                          since there is no class either side to read instead
      */
     record EnsuresOrigin(RuleRef.Ensures rule, int conjunct, LineFacts facts)
-            implements OriginRef {
+            implements LineOrigin {
 
         public EnsuresOrigin {
             if (facts == null) {
@@ -241,7 +250,7 @@ public sealed interface OriginRef {
      * written in two modules where an inner record's clause and an outer record's reach one
      * coordinate at one value, so this is not a set with a module of its own.
      */
-    final class NarrowedOrigin implements OriginRef {
+    final class NarrowedOrigin implements LineOrigin {
 
         private final InvariantOrigin bound;
         private final List<TypeSymbol.AtModule> within;
@@ -271,7 +280,7 @@ public sealed interface OriginRef {
          *
          * @param at where the cut this bound drew falls, which is the end the names have to be about
          */
-        static OriginRef of(InvariantOrigin bound, Endpoint at,
+        static LineOrigin of(InvariantOrigin bound, Endpoint at,
                             souther.compiler.check.MatchedEndAttribution took) {
             if (took == null) {
                 return bound;
@@ -322,6 +331,7 @@ public sealed interface OriginRef {
      * rule whether or not {@code WorkInterval} moved where it lands, so it comes back the same here
      * and is kept beside it by whoever is measuring the line.
      */
+    @Override
     default RuleRef rule() {
         return switch (this) {
             case InvariantOrigin i -> i.rule();
@@ -343,6 +353,7 @@ public sealed interface OriginRef {
      * same rule would be cited one way by a reader that had the place to hand and another by one
      * that did not.
      */
+    @Override
     default souther.compiler.check.RuleCitation cited() {
         return switch (this) {
             case InvariantOrigin i -> souther.compiler.check.RuleCitation.named(i.rule());

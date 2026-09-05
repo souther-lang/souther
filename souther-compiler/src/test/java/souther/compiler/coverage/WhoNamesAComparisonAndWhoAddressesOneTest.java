@@ -59,7 +59,7 @@ class WhoNamesAComparisonAndWhoAddressesOneTest {
 
     private static final String CATALOGUED = "souther/compiler/coverage/ComparisonCatalog$Catalogued";
 
-    private static final String READ = "souther/compiler/partition/OriginRef$ComparisonOrigin$Read";
+    private static final String READ = "souther/compiler/partition/LineOrigin$ComparisonOrigin$Read";
 
     /** A method that may make one, how many times it does, and why it is the one that does. */
     private record Licence(String who, int calls, String why) { }

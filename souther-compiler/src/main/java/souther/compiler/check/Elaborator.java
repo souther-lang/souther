@@ -17,6 +17,7 @@ import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
+import souther.compiler.types.SourceConstructOrigin;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
@@ -455,8 +456,11 @@ public final class Elaborator {
     private static Hir.Expr empty(String collection, Hir.RowCollection row) {
         souther.compiler.types.ValueName.Stdlib.Operation empty =
                 souther.compiler.types.ValueName.Stdlib.operation(collection, "empty");
+        // No source wrote this reference: the author wrote an empty collection, and the operation
+        // it stands for is this pass's.
         return Hir.Var.respelled(collection + ".empty",
-                new souther.compiler.types.ReachName.OfLibrary(empty), row.pos(), row.region());
+                new souther.compiler.types.ReachName.OfLibrary(empty), null, row.pos(),
+                row.region());
     }
 
     /** Elaborates {@code e} and checks it against {@code expected}, returning its Core. The check is
@@ -1496,7 +1500,11 @@ public final class Elaborator {
      * from a call, because nothing downstream asks.
      */
     private static Core keptValue(CompleteSignature settled, SourcePos pos) {
-        return new Core.PreservedCall(settled.declaring(), List.of(), settled.result(), pos);
+        // A name read where a value goes, and no application was written over it. What it is built
+        // as is a call; what an author wrote there is a name, so there is no application of this
+        // source for it to be.
+        return new Core.PreservedCall(settled.declaring(), List.of(),
+                SourceConstructOrigin.unwritten(), settled.result(), pos);
     }
 
     /**

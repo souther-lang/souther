@@ -75,8 +75,8 @@ class ABoundSaysWhichSideItKeepsTest {
      */
     @Test
     void theTwoEndsOfOneConjunctAreToldApartByTheSideTheyKeep() {
-        OriginRef least = new OriginRef.InvariantOrigin(aClause(), 0, EndSide.LOWER, true);
-        OriginRef most = new OriginRef.InvariantOrigin(aClause(), 0, EndSide.UPPER, true);
+        LineOrigin least = new LineOrigin.InvariantOrigin(aClause(), 0, EndSide.LOWER, true);
+        LineOrigin most = new LineOrigin.InvariantOrigin(aClause(), 0, EndSide.UPPER, true);
 
         assertNotEquals(least.lineFacts(), most.lineFacts(),
                 "which side of the line the value it stops at is on is what the two disagree about");
@@ -114,7 +114,7 @@ class ABoundSaysWhichSideItKeepsTest {
     void aBoundThatDoesNotStopWhereItsRangeStopsIsRefused() {
         IllegalStateException refused = assertThrows(IllegalStateException.class,
                 () -> Border.at(aLineAt(100),
-                        new OriginRef.InvariantOrigin(aClause(), 0, EndSide.LOWER, true),
+                        new LineOrigin.InvariantOrigin(aClause(), 0, EndSide.LOWER, true),
                         new NumericDomain.Bounds(Endpoint.inclusive(Count.of(1)),
                                 Endpoint.inclusive(Count.of(1000)))));
         assertTrue(refused.getMessage()
@@ -134,12 +134,12 @@ class ABoundSaysWhichSideItKeepsTest {
     void aMaximumIsHeldAgainstTheUpperEndAndNotTheLowerOne() {
         assertThrows(IllegalStateException.class,
                 () -> Border.at(aLineAt(5),
-                        new OriginRef.InvariantOrigin(aClause(), 0, EndSide.UPPER, true),
+                        new LineOrigin.InvariantOrigin(aClause(), 0, EndSide.UPPER, true),
                         new NumericDomain.Bounds(Endpoint.inclusive(Count.of(5)), null)),
                 "the line is the low end of what the rules leave, and this bound placed the high"
                         + " one");
         assertEquals("= 5", Border.at(aLineAt(5),
-                        new OriginRef.InvariantOrigin(aClause(), 0, EndSide.LOWER, true),
+                        new LineOrigin.InvariantOrigin(aClause(), 0, EndSide.LOWER, true),
                         new NumericDomain.Bounds(Endpoint.inclusive(Count.of(5)), null))
                 .demand(PointRole.ON).criterion().asked(aLineAt(5).of()),
                 "and the minimum that did place it is the border this range draws");

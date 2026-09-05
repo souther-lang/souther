@@ -4,8 +4,8 @@ import souther.compiler.core.Core;
 import souther.compiler.diag.Citation;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingOwner;
-import souther.compiler.types.CoverageConstruct;
-import souther.compiler.types.CoverageOrigin;
+import souther.compiler.types.SourceConstruct;
+import souther.compiler.types.SourceConstructOrigin;
 import souther.compiler.types.WrittenOwner;
 
 import java.util.ArrayList;
@@ -37,7 +37,7 @@ import java.util.Map;
  * <p>A {@code guard … else} and a comprehension's condition are both an {@code if} by the time they
  * get here, so the walk has one case for the three of them — and what they are is not read off that
  * case. Which construct the author wrote is carried from where the source was read
- * ({@link souther.compiler.types.CoverageConstruct}), and what one way through it means is a
+ * ({@link souther.compiler.types.SourceConstruct}), and what one way through it means is a
  * {@link SourceOutcome} beside it. Deciding either from the shape of the lowered node is answering a
  * question about the source out of the tree that runs, which is how a comprehension came to be
  * reported as a {@code guard} with a {@code then} arm.
@@ -63,7 +63,7 @@ public final class CoverageSites {
      * that came out alike were counted as one obligation, and a rule nothing exercised was reported
      * as covered.
      */
-    private static DecidedBy decidedAt(CoverageOrigin fork, List<BindingOwner> within,
+    private static DecidedBy decidedAt(SourceConstructOrigin fork, List<BindingOwner> within,
                                        DecisionSources decisions, SuppliedRules supplied) {
         if (!(decisions.at(fork) instanceof DecisionSource.Supplied by)) {
             return DecidedBy.THE_DECLARATION;
@@ -131,7 +131,7 @@ public final class CoverageSites {
      *             comparison, whose origin is its own rather than the fork's: a comparison is one
      *             construct, and what a fork holds several of is arms
      */
-    public record Obligation(String behavior, CoverageOrigin origin, int part,
+    public record Obligation(String behavior, SourceConstructOrigin origin, int part,
                              DecidedBy decided) {
 
         /**
@@ -190,7 +190,7 @@ public final class CoverageSites {
         Obligation obligation();
 
         /** What the author wrote this an outcome of. */
-        default CoverageConstruct construct() {
+        default SourceConstruct construct() {
             return obligation().origin().kind();
         }
 
@@ -282,7 +282,7 @@ public final class CoverageSites {
      *           the pair, and a value that can hold two answers about one place is one a reader
      *           can pick the wrong half of.
      */
-    public record GuardRef(String behavior, CoverageOrigin origin, DecidedBy decided,
+    public record GuardRef(String behavior, SourceConstructOrigin origin, DecidedBy decided,
                            java.util.Optional<ArmProbe> whereThen,
                            java.util.Optional<ArmProbe> whereElse, SourcePos at) {
 
@@ -668,7 +668,7 @@ public final class CoverageSites {
     /** One arm as the walk has it: the control point it is, and the number its place was given
      *  where the emitter records one. */
     private record DraftArm(int controlId, java.util.OptionalInt raw, Citation at,
-                            CoverageOrigin origin) {
+                            SourceConstructOrigin origin) {
 
         boolean isMeasured() {
             return raw.isPresent();
@@ -676,7 +676,7 @@ public final class CoverageSites {
     }
 
     /** The two arms of one {@code if} as the walk has them. */
-    private record DraftGuard(String behavior, CoverageOrigin origin, DecidedBy decided,
+    private record DraftGuard(String behavior, SourceConstructOrigin origin, DecidedBy decided,
                               java.util.OptionalInt whereThen, java.util.OptionalInt whereElse,
                               SourcePos at) {}
 
@@ -756,7 +756,7 @@ public final class CoverageSites {
         // The `unreachable` above is the language's own word, not this method's `reachable`.
         @SuppressWarnings("InvalidParam")
         private DraftArm armOf(SourceOutcome.Arm outcome, Core owner,
-                               CoverageOrigin origin, int part, Core arm,
+                               SourceConstructOrigin origin, int part, Core arm,
                                boolean reachable,
                                DecidedBy decided) {
             // The arm is made either way. Whether a run through it can be recorded is the second
@@ -821,7 +821,7 @@ public final class CoverageSites {
         }
 
         private int comparisonSite(SourceOutcome.Compared outcome, Core owner,
-                                   CoverageOrigin origin, DecidedBy decided) {
+                                   SourceConstructOrigin origin, DecidedBy decided) {
             written(origin, owner);
             int raw = numbering.number(new SiteAddress.Comparison(places.of(owner)));
             sites.add(new DraftComparisonSite(behavior, outcome, Citation.of(owner.pos()), raw,
@@ -829,7 +829,7 @@ public final class CoverageSites {
             return raw;
         }
 
-        private void written(CoverageOrigin origin, Core owner) {
+        private void written(SourceConstructOrigin origin, Core owner) {
             // Said here because this is where anything is numbered, and the rule is about numbering
             // rather than about comparisons: an arm of a fork nothing wrote is as much a row nobody
             // can be owed as a comparison of one. Stated for the comparisons alone, it left the arms

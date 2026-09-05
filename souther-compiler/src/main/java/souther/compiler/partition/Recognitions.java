@@ -59,6 +59,13 @@ public final class Recognitions {
             });
             case Recognition.AtAValue one -> byShape(value, seen -> holds(seen, one.value()));
             case Recognition.OfACount count -> counted(count, value);
+            // Asked of the set, which is where the shapes a set comes in are told apart. Walked
+            // here instead, this would be a second place they are enumerated, and the day a third
+            // shape arrived is exactly where it would not be.
+            case Recognition.OfASet set -> byShape(value, seen -> {
+                Value written = writtenValueOf(seen);
+                return written != null && set.values().has(written);
+            });
             case Recognition.Nothing _ -> Membership.NO_MATCH;
         };
     }
@@ -96,6 +103,10 @@ public final class Recognitions {
             case Recognition.AtAValue one -> one.at() != null && one.at().sameAs(place);
             case Recognition.Truth ignored -> false;
             case Recognition.Held ignored -> false;
+            // A set of the position's values is no run of them, so nothing here is either side of
+            // a line. An axis carrying lines refuses such a class before this is ever asked
+            // ({@link Recognition#answersAboutAPlace}).
+            case Recognition.OfASet ignored -> false;
             // A case of an ordered enumeration sits at a place on that order, written down when the
             // class was built; a case of a sum with no order sits nowhere and is asked nothing.
             case Recognition.OfCase one -> one.at() != null && one.at().sameAs(place);
@@ -143,25 +154,39 @@ public final class Recognitions {
      * same way a row is.
      */
     private static boolean holds(ObservedValue seen, Value value) {
-        return switch (value) {
-            case Value.Text text ->
-                    seen instanceof ObservedValue.Text it && it.value().equals(text.value());
-            case Value.Truth truth ->
-                    seen instanceof ObservedValue.Bool it && it.value() == truth.value();
-            // Compared as numbers and not as writings of them. `1.0m` and `1.00m` are one value
-            // where they are written, and the reading that named this class already holds them as
-            // one (`Value.Number`).
-            case Value.Number number -> switch (seen) {
-                case ObservedValue.Integer it ->
-                        BigDecimal.valueOf(it.value()).compareTo(number.value()) == 0;
-                case ObservedValue.Decimal it -> it.value().compareTo(number.value()) == 0;
-                default -> false;
-            };
-            case Value.Case one -> switch (seen) {
-                case ObservedValue.Unit it -> one.data().equals(it.type());
-                case ObservedValue.Constructed it -> one.data().equals(it.type());
-                default -> false;
-            };
+        return value.equals(writtenValueOf(seen));
+    }
+
+    /**
+     * The value a model would have written for what was observed, or null where nothing writes one.
+     *
+     * <p>The one crossing between what a run left and what a rule names, and the reason it is one:
+     * a class is told from a value here and a class is told from a set of values beside it, and the
+     * two asked separately are two answers to which observations count as which written value. So
+     * both go through this, and the set is then asked the way any reader asks a set.
+     *
+     * <p>Null is "no value is written for this" and not "it is unlike everything". A moment, a
+     * sequence and a mapping are observations of positions whose values are told apart another way
+     * — a moment by the count that stands for it, the others by what they hold — and none of them
+     * is a value a rule names ({@link Value}). A value nothing writes is in no set a rule stated,
+     * which is what a class of such a set says about it.
+     *
+     * <p>A constructed value comes back as the case it is. What tells one case from another is
+     * which declaration it is, so what it carries is no part of the value here — and a class of a
+     * case is a class of every row that built one.
+     */
+    private static Value writtenValueOf(ObservedValue seen) {
+        return switch (seen) {
+            case ObservedValue.Text it -> Value.text(it.value());
+            case ObservedValue.Bool it -> Value.truth(it.value());
+            // Held as the number and not as the writing of it. `1.0m` and `1.00m` are one value
+            // where they are written, and `Value.Number` is what holds them as one — so an
+            // observation that reads as either comes back as that one value.
+            case ObservedValue.Integer it -> Value.number(BigDecimal.valueOf(it.value()));
+            case ObservedValue.Decimal it -> Value.number(it.value());
+            case ObservedValue.Unit it -> Value.of(it.type());
+            case ObservedValue.Constructed it -> Value.of(it.type());
+            default -> null;
         };
     }
 }

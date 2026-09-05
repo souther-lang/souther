@@ -188,7 +188,7 @@ class ABorderDebtIsTheLineTheAuthorWroteTest {
     void aComparisonAndABoundAtOneValueAreTwoDebts() {
         Border guard = Border.at(aLineAt(100), readAt(1), ANYWHERE);
         Border bound = Border.at(aLineAt(100),
-                new OriginRef.InvariantOrigin(aClause(), 0,
+                new LineOrigin.InvariantOrigin(aClause(), 0,
                         souther.compiler.numeric.EndSide.LOWER, true),
                 new souther.compiler.numeric.NumericDomain.Bounds(
                         souther.compiler.numeric.Endpoint.inclusive(
@@ -224,14 +224,14 @@ class ABorderDebtIsTheLineTheAuthorWroteTest {
      * One reading of one comparison: the same rule and the same place it is written, at the
      * occurrence the call it was spliced into was numbered.
      */
-    private static OriginRef readAt(int occurrence) {
+    private static LineOrigin readAt(int occurrence) {
         souther.compiler.check.RuleRef.Comparison rule =
                 new souther.compiler.check.RuleRef.Comparison("twice",
-                        new souther.compiler.types.CoverageOrigin(
+                        new souther.compiler.types.SourceConstructOrigin(
                                 new WrittenOwner.Body("example.banding", "twice"), 2, 0,
-                                souther.compiler.types.CoverageConstruct.BINARY));
-        return new OriginRef.ComparisonOrigin(rule,
-                new OriginRef.ComparisonOrigin.Read(
+                                souther.compiler.types.SourceConstruct.BINARY));
+        return new LineOrigin.ComparisonOrigin(rule,
+                new LineOrigin.ComparisonOrigin.Read(
                         new souther.compiler.coverage.ComparisonOccurrence(
                                 "example.banding", "twice", occurrence),
                         new souther.compiler.check.RuleCitation.WrittenAt(

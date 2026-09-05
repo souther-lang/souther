@@ -1460,7 +1460,15 @@ public final class Adequacy {
                                     souther.compiler.check.ElementBindings.NONE),
                     plan,
                     arrivalsOf(db.ask(new PathReached(name)).value(), spec),
-                    statedOf(db.ask(new Bodies.StatedContracts(name)).value(), spec)).geometry());
+                    statedOf(db.ask(new Bodies.StatedContracts(name)).value(), spec),
+                    // The other reading of the same body, which is where a rule about the strings
+                    // at a position still stands as the operation the author wrote.
+                    checked == null ? null : checked.analysisBodies().get(behavior),
+                    // One allowance for this measure, made here and handed on. Asked for again
+                    // further in, a position would be allowed its machines once per caller and what
+                    // the two came to would be bought by nobody.
+                    db.ask(new Front.Adequacy()).value().measures()
+                            .allowanceForBehaviorDistinctions()).geometry());
         }
     }
 

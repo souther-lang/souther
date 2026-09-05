@@ -82,7 +82,7 @@ class AnAbsenceIsWhatCompletingAPositionProducesTest {
      *  answered for it, so there is no fallback for it to be waiting on. */
     private static PositionMeasurements at(Axis axis) {
         return new PositionMeasurements(
-                new PositionAccount("run", AT, Type.BOOL, ReadingResidue.NOTHING, null, List.of()),
+                new PositionAccount("run", AT, Type.BOOL, ReadingResidue.NOTHING, souther.compiler.values.ValueSet.ANY, null, List.of()),
                 List.of(axis), READ_TO_THE_END);
     }
 
@@ -100,7 +100,7 @@ class AnAbsenceIsWhatCompletingAPositionProducesTest {
     private static PositionMeasurements pending(StructuralInspection.Continuation found,
                                                 List<StandingQuestion> standing) {
         return new PositionMeasurements(
-                new PositionAccount("run", AT, Type.BOOL, ReadingResidue.NOTHING, found, standing),
+                new PositionAccount("run", AT, Type.BOOL, ReadingResidue.NOTHING, souther.compiler.values.ValueSet.ANY, found, standing),
                 List.of(), READ_TO_THE_END);
     }
 
@@ -189,7 +189,7 @@ class AnAbsenceIsWhatCompletingAPositionProducesTest {
     @Test
     void aPositionNothingReadIsNotAnsweredFor() {
         assertThrows(IllegalStateException.class, () -> of(new PositionMeasurements(
-                new PositionAccount("run", AT, Type.BOOL, ReadingResidue.NOTHING, null, List.of()),
+                new PositionAccount("run", AT, Type.BOOL, ReadingResidue.NOTHING, souther.compiler.values.ValueSet.ANY, null, List.of()),
                 List.of(), READ_TO_THE_END)));
     }
 

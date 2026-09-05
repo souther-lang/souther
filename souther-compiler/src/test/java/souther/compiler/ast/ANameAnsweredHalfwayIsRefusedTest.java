@@ -2,6 +2,7 @@ package souther.compiler.ast;
 
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.ReachName;
+import souther.compiler.types.SourceReferenceOrigin;
 import souther.compiler.types.ValueName;
 
 import org.junit.jupiter.api.Test;
@@ -36,7 +37,8 @@ class ANameAnsweredHalfwayIsRefusedTest {
      */
     @Test
     void aNameTheParserReadSaysOnlyWhatItIsWrittenAs() {
-        Ast.Var written = Ast.Var.written("spin", POS);
+        Ast.Var written = Ast.Var.written("spin", POS,
+                new SourceReferenceOrigin(new souther.compiler.types.WrittenOwner.Body("m", "b"), 0));
 
         assertEquals("spin", written.name());
         assertEquals(Ast.Var.class, written.getClass(),
@@ -50,7 +52,7 @@ class ANameAnsweredHalfwayIsRefusedTest {
     @Test
     void aNameAnsweredOnOneCountOnlyCannotBeBuilt() {
         IllegalArgumentException noReference = assertThrows(IllegalArgumentException.class,
-                () -> new Hir.Var.Denoting(WrittenName.of("spin", POS), null, null));
+                () -> new Hir.Var.Denoting(WrittenName.of("spin", POS), null, null, null));
 
         assertEquals(true, noReference.getMessage().contains("spin"), noReference.getMessage());
     }
@@ -92,7 +94,7 @@ class ANameAnsweredHalfwayIsRefusedTest {
     void aResolvedNameSaysWhatItDenotesAndHowItIsReached() {
         WrittenName spin = WrittenName.of("spin", POS);
         Hir.Var resolved = new Hir.Var.Denoting(spin,
-                new ReachName.OfModule(DECLARED), spin.region());
+                new ReachName.OfModule(DECLARED), null, spin.region());
 
         assertEquals("spin", resolved.answered().denotes().name());
         assertEquals("demo.spin", resolved.answered().reaches());

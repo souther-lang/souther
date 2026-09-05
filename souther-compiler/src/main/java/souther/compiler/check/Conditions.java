@@ -9,7 +9,7 @@ import souther.compiler.semantics.ConditionJoin;
 import souther.compiler.semantics.ConstantArguments;
 import souther.compiler.semantics.ResultRange;
 import souther.compiler.types.BinOp;
-import souther.compiler.types.CoverageOrigin;
+import souther.compiler.types.SourceConstructOrigin;
 import souther.compiler.types.Type;
 
 import java.util.ArrayList;
@@ -310,9 +310,13 @@ final class Conditions {
         if (e instanceof Core.PreservedCall call
                 && DischargeRules.sizeMeantBy(call.operation())
                         instanceof BoundOperationFact.MeansTheSameAsASizeOfNought means) {
-            Core size = new Core.PreservedCall(means.size(), call.args(), Type.INT, call.pos());
+            // No source wrote this call. It is the size the written one means, composed so that the
+            // rule can be read as the comparison it states — and giving it the written call's own
+            // construct would put two applications under one identity.
+            Core size = new Core.PreservedCall(means.size(), call.args(),
+                    SourceConstructOrigin.unwritten(), Type.INT, call.pos());
             return new Core.Binary(BinOp.EQ, size, new Core.Int(0, Type.INT, call.pos()),
-                    CoverageOrigin.unwritten(), Type.BOOL, call.pos());
+                    SourceConstructOrigin.unwritten(), Type.BOOL, call.pos());
         }
         return e;
     }
@@ -371,7 +375,7 @@ final class Conditions {
          *  unwritten, so no coverage site is named by it, the type a comparison answers, and a
          *  position taken from a side because the constructor takes one. */
         private static Core.Binary canonical(BinOp op, Core left, Core right) {
-            return new Core.Binary(op, left, right, CoverageOrigin.unwritten(), Type.BOOL,
+            return new Core.Binary(op, left, right, SourceConstructOrigin.unwritten(), Type.BOOL,
                     left.pos());
         }
 

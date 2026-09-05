@@ -12,7 +12,7 @@ import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
-import souther.compiler.types.CoverageOrigin;
+import souther.compiler.types.SourceConstructOrigin;
 import souther.compiler.types.Type;
 
 import org.junit.jupiter.api.Test;
@@ -53,7 +53,7 @@ class AProductIsHeldToWhatThePathKnowsOfItsFactorsTest {
     }
 
     private static Core.Binary arithmetic(BinOp op, Core left, Core right) {
-        return new Core.Binary(op, left, right, CoverageOrigin.unwritten(), Type.INT, POS);
+        return new Core.Binary(op, left, right, SourceConstructOrigin.unwritten(), Type.INT, POS);
     }
 
     private static LinearForm<FactSubject> num(long n) {

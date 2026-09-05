@@ -10,7 +10,7 @@ import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.reach.Reachability;
 import souther.compiler.report.AdequacyReport;
-import souther.compiler.types.CoverageConstruct;
+import souther.compiler.types.SourceConstruct;
 import souther.compiler.types.TypeSymbol;
 
 import java.util.IdentityHashMap;
@@ -93,7 +93,7 @@ class AProofAboutAMatchArmSaysNothingAboutWhatIsAnsweredWithTest {
     @Test
     void aRefusedMatchArmLeavesTheCaseItAnswersWithOwed() {
         assertEquals(Reachability.Unreachable.class,
-                armThatIsRefused(REFUSED_CASE, CoverageConstruct.MATCH).getClass(),
+                armThatIsRefused(REFUSED_CASE, SourceConstruct.MATCH).getClass(),
                 "the arm for the case the rules refuse is proven unreachable");
         assertEquals(Set.of("example.refused.Yes", "example.refused.No"),
                 declaredOutputCasesOf(REFUSED_CASE).stream().map(TypeSymbol::toString)
@@ -104,7 +104,7 @@ class AProofAboutAMatchArmSaysNothingAboutWhatIsAnsweredWithTest {
     @Test
     void anArmNothingReachesTakesTheCaseOnlyItAnswersWith() {
         assertEquals(Reachability.Unreachable.class,
-                armThatIsRefused(REFUSED_CONDITION, CoverageConstruct.IF).getClass(),
+                armThatIsRefused(REFUSED_CONDITION, SourceConstruct.IF).getClass(),
                 "the arm the condition cannot come out into is proven unreachable");
         assertEquals(List.of("example.capped.Yes"), declaredOutputCasesOf(REFUSED_CONDITION).stream()
                         .map(TypeSymbol::toString).toList(),
@@ -218,7 +218,7 @@ class AProofAboutAMatchArmSaysNothingAboutWhatIsAnsweredWithTest {
     }
 
     /** What the reading says about the one arm of {@code kind} it proves nothing arrives at. */
-    private static Reachability armThatIsRefused(String model, CoverageConstruct kind) {
+    private static Reachability armThatIsRefused(String model, SourceConstruct kind) {
         Compilation compilation = compiled(model);
         Map<String, PathReachability.Answers> answers = compilation.db()
                 .ask(new Adequacy.PathReached(compilation.modules().get(0))).value();

@@ -4,7 +4,7 @@ import souther.compiler.semantics.Accumulation;
 import souther.compiler.semantics.NumericResult;
 import souther.compiler.types.BinOp;
 import souther.compiler.ast.Hir;
-import souther.compiler.types.CoverageOrigin;
+import souther.compiler.types.SourceConstructOrigin;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.NumericDomain;
@@ -373,7 +373,7 @@ final class Terms {
         BinOp op = DischargeRules.operator(operation);
         // Not a comparison any source wrote: a call read as the operator it stands for.
         return op == null ? e : new Core.Binary(op, args.get(0), args.get(1),
-                CoverageOrigin.unwritten(), e.type(), e.pos());
+                SourceConstructOrigin.unwritten(), e.type(), e.pos());
     }
 
     /**
@@ -2724,7 +2724,9 @@ final class Terms {
             // A case of an enumeration is written by naming it, so the value is the name.
             case Core.UnitValue unit -> {
                 ValueName.OfType named = new ValueName.OfType(unit.data().name(), unit.data());
-                yield Hir.Var.respelled(unit.data().name(), new ReachName.InScope(named),
+                // Read back out of a checked tree, where no reference of the source is left to
+                // carry: what this stands for is the case the value is.
+                yield Hir.Var.respelled(unit.data().name(), new ReachName.InScope(named), null,
                         unit.pos(), null);
             }
             case null, default -> null;

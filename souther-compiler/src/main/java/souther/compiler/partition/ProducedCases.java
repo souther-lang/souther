@@ -5,7 +5,7 @@ import souther.compiler.check.PathReachability;
 import souther.compiler.coverage.ControlPointId;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.reach.Reachability;
-import souther.compiler.types.CoverageOrigin;
+import souther.compiler.types.SourceConstructOrigin;
 import souther.compiler.types.TypeSymbol;
 
 import java.util.ArrayList;
@@ -170,7 +170,7 @@ public final class ProducedCases {
      * Whether a proof about this arm says anything about what the body can answer with.
      *
      * <p>Asked of the construct the author wrote and not of the shape it was lowered to, which is
-     * what {@link CoverageOrigin} carries the construct for. A {@code match} arm is not one of
+     * what {@link SourceConstructOrigin} carries the construct for. A {@code match} arm is not one of
      * these: which cases of a sum can arrive is asked of the reading of the input, and an arm of
      * one taken to refuse a producer would take a case away for a fact about the scrutinee.
      *
@@ -181,7 +181,7 @@ public final class ProducedCases {
      * it has one, and a reader wanting a construct is a reader that can be told there is none.
      */
     private static boolean takesAProducerAway(ControlPointId.ArmOccurrence arm) {
-        CoverageOrigin origin = arm.origin();
+        SourceConstructOrigin origin = arm.origin();
         if (origin == null) {
             return false;   // nothing here says what wrote it, which is not a construct either
         }
@@ -189,10 +189,10 @@ public final class ProducedCases {
             case IF, GUARD, COMPREHENSION -> true;
             case MATCH, NOT_WRITTEN -> false;
             // Not an arm of anything. Every arm is one of a fork, and no fork is written as a
-            // comparison — so a value arriving here as one was built by nothing that makes arms,
-            // and either answer about it would be an answer about the author's body made out of
-            // that.
-            case BINARY -> throw new IllegalStateException(
+            // comparison or as an application — so a value arriving here as one was built by
+            // nothing that makes arms, and either answer about it would be an answer about the
+            // author's body made out of that.
+            case BINARY, CALL -> throw new IllegalStateException(
                     "an arm of " + origin.kind() + " at " + arm.at()
                             + "; an arm is one of a fork the author wrote");
         };

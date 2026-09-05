@@ -1677,6 +1677,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             // reader to change something that may not be why.
             case EXACT_VALUES_TOO_COSTLY -> "read to the end, and the values the rules about this"
                     + " position leave between them are more than this compiler will work out";
+            case BEHAVIOR_DISTINCTIONS_TOO_COSTLY -> "read to the end, and what the behavior's rules"
+                    + " about this position tell apart is more than this compiler will work out";
             case PATTERN_TOO_DEEPLY_NESTED ->
                     "written more deeply nested than this compiler reads";
             case UNSUPPORTED_DOMAIN -> "compared against values no line can be drawn on here";
@@ -1702,6 +1704,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                             + " is not worked out";
             case RULE_CUTS_NOTHING ->
                     "it was read to the end and cuts nothing this position appears in";
+            case RULE_TELLS_NOTHING_APART ->
+                    "it was read to the end and every value this position holds comes out one side"
+                            + " of it";
+            case CLASSES_NOT_COMPOSED ->
+                    "it was read to the end, and what it says and what the rules beside it say are"
+                            + " not one list of classes";
             case RULE_CUTS_OUTSIDE_WHAT_THE_QUANTITY_HOLDS ->
                     "it was read to the end and draws its line outside what the quantity it cuts"
                             + " ever holds";
@@ -2665,7 +2673,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * <p>Not a name and never shown to a reader. `rule` beside it is what an author is given, and
      * the two are different questions: a handle finds a rule and an identity distinguishes one.
      */
-    private static void ruleId(ObjectNode into, RuleRef rule) {
+    static void ruleId(ObjectNode into, RuleRef rule) {
         into.put("kind", schemaRuleKind(rule));
         // Every part of the identity and not the parts that read well. A declaration is its module
         // and its name — two modules may each declare an `Amount` and they are two types — and a
@@ -2699,6 +2707,30 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 into.put("ordinal", it.origin().ordinal());
                 into.put("lowered", it.origin().lowered());
             }
+            // An application the author wrote, told from the others by which application it is —
+            // which takes what it was counted within, the way a comparison's does. What differs
+            // from a comparison is that a behavior writes one of these in two places: a definition
+            // wrote it, or the behavior's own statement of itself did, and both count from zero. So
+            // which of the two is written, and the definition with it where a definition wrote it.
+            // Told apart by whether `definition` is there, the two would rest on an absence that
+            // already says something else in this document.
+            case RuleRef.Predicate it -> {
+                into.put("declaredIn", it.writtenIn().module());
+                switch (it.writtenIn()) {
+                    case WrittenOwner.Body body -> {
+                        into.put("writtenIn", "body");
+                        into.put("definition", body.definition());
+                    }
+                    // The behavior's own clauses, whose name is `behavior` below — one name and not
+                    // two that happen to agree, which is what the rule refuses to be built
+                    // otherwise ({@link RuleRef.Predicate}). Written twice it would be one fact in
+                    // two fields, and a reader would have to say which of them it grouped by.
+                    default -> into.put("writtenIn", "stated");
+                }
+                into.put("behavior", it.behavior());
+                into.put("ordinal", it.origin().ordinal());
+                into.put("lowered", it.origin().lowered());
+            }
         }
     }
 
@@ -2725,6 +2757,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             // version 3 carry `guard` here; the word moved with the version rather than under one,
             // because a document already written groups by what it was told.
             case RuleRef.Comparison _ -> "comparison";
+            // Its own word beside that one, and not the same word. Both are rules a body writes,
+            // and what a reader does about them differs: a comparison puts a line on the order the
+            // values are counted on, and this tells a set of them from the rest.
+            case RuleRef.Predicate _ -> "predicate";
         };
     }
 

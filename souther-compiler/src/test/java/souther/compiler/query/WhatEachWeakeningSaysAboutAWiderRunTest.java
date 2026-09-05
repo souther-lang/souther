@@ -25,10 +25,10 @@ import souther.compiler.partition.BoundaryTarget;
 import souther.compiler.partition.ClosureGap;
 import souther.compiler.partition.Level;
 import souther.compiler.partition.LineFacts;
-import souther.compiler.partition.OriginRef;
+import souther.compiler.partition.LineOrigin;
 import souther.compiler.partition.ReadingGap;
-import souther.compiler.types.CoverageConstruct;
-import souther.compiler.types.CoverageOrigin;
+import souther.compiler.types.SourceConstruct;
+import souther.compiler.types.SourceConstructOrigin;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -219,8 +219,8 @@ class WhatEachWeakeningSaysAboutAWiderRunTest {
         out.add(new Weakening.InputNotRead("b"));
         out.add(new Weakening.ProofContradicted("b", Numberings.arm(2, 1)));
         out.add(new Weakening.ArmsUnsettled(
-                new CoverageOrigin(new WrittenOwner.Body("m", "b"), 1, 0,
-                        CoverageConstruct.IF)));
+                new SourceConstructOrigin(new WrittenOwner.Body("m", "b"), 1, 0,
+                        SourceConstruct.IF)));
         out.add(new Weakening.PairSpaceTruncated("b", 9, 4));
         return out;
     }
@@ -233,7 +233,7 @@ class WhatEachWeakeningSaysAboutAWiderRunTest {
                 new BorderQuantity.OfACoordinate("cap", value,
                         TermOrdersFixtures.itself(value, carrier)),
                 new Level.OnACarrier(carrier, Count.of(100)));
-        OriginRef origin = new OriginRef.EnsuresOrigin(
+        LineOrigin origin = new LineOrigin.EnsuresOrigin(
                 new RuleRef.Ensures(new BehaviorContract.RuleId(null, 0, 0, null), "cap"),
                 0, new LineFacts(new ComparisonClaim.Cut(Towards.BELOW, true)));
         return Border.at(target, origin, new NumericDomain.Bounds(null, null));

@@ -18,7 +18,7 @@ import java.util.Map;
  * not two views of one measurement.
  *
  * <p><b>What is taken out, and why each.</b> A position is where the source put a term and not what
- * the term says. A {@link souther.compiler.types.CoverageOrigin} counts the constructs of a source
+ * the term says. A {@link souther.compiler.types.SourceConstructOrigin} counts the constructs of a source
  * from one end, so a clause gaining a line moves every ordinal below it. Which copy of a body a fork
  * stands in is where the fork is. And a binding is an owner and a count over that owner, both minted
  * as an expansion makes copies — so a name is written here as the place it is bound at

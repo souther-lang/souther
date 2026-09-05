@@ -3,7 +3,8 @@ package souther.compiler.ast;
 import souther.compiler.diag.Region;
 import souther.compiler.observe.RowIdentity;
 import souther.compiler.diag.SourcePos;
-import souther.compiler.types.CoverageOrigin;
+import souther.compiler.types.SourceConstructOrigin;
+import souther.compiler.types.SourceReferenceOrigin;
 import souther.compiler.types.TypeKey;
 
 import java.util.ArrayList;
@@ -945,9 +946,9 @@ public interface Ast {
      * every guard holds, giving a 0-or-1 element list (spec §stdlib-list, conditional accumulation).
      *
      * <p>{@code origin} names the comprehension, and the fork each guard lowers to is derived from it
-     * ({@link CoverageOrigin#lowered}) rather than minted where the lowering runs — so a comprehension
+     * ({@link SourceConstructOrigin#lowered}) rather than minted where the lowering runs — so a comprehension
      * inside a helper answers the same whichever call site expanded it. */
-    record ListComp(Expr element, List<Expr> guards, CoverageOrigin origin, SourcePos pos,
+    record ListComp(Expr element, List<Expr> guards, SourceConstructOrigin origin, SourcePos pos,
                     Region region) implements Expr {}
 
     /** A tuple {@code (e1, e2, ...)} of two or more values (ADR-0036), an expression-level value
@@ -963,8 +964,8 @@ public interface Ast {
      *
      * <p>{@code origin} is the fork the author wrote, kept through every rewrite and every copy an
      * expansion makes, so the arms of one {@code if} are one obligation however many times a helper
-     * holding it is called ({@link CoverageOrigin}). */
-    record If(Expr cond, Expr then, Expr els, CoverageOrigin origin, SourcePos pos, Region region)
+     * holding it is called ({@link SourceConstructOrigin}). */
+    record If(Expr cond, Expr then, Expr els, SourceConstructOrigin origin, SourcePos pos, Region region)
             implements Expr {}
 
     /**
@@ -986,11 +987,11 @@ public interface Ast {
      * are resolved.
      */
     record IfConstructed(Expr construct, Binder binder, Expr then, List<ElseArm> els,
-                         CoverageOrigin origin, SourcePos pos, Region region) implements Expr {
+                         SourceConstructOrigin origin, SourcePos pos, Region region) implements Expr {
 
         /** The attempt whose failure is not told apart: one arm, naming no clause. */
         public IfConstructed(Expr construct, Binder binder, Expr then, Expr els,
-                             CoverageOrigin origin, SourcePos pos, Region region) {
+                             SourceConstructOrigin origin, SourcePos pos, Region region) {
             this(construct, binder, then, List.of(ElseArm.any(els)), origin, pos, region);
         }
 
@@ -1025,7 +1026,7 @@ public interface Ast {
 
     /** {@code match scrutinee { case Case as x -> body ... }} over a sum type. {@code origin} is the
      * fork the author wrote; see {@link If}. */
-    record Match(Expr scrutinee, List<Case> cases, CoverageOrigin origin, SourcePos pos,
+    record Match(Expr scrutinee, List<Case> cases, SourceConstructOrigin origin, SourcePos pos,
                  Region region) implements Expr {}
 
     /**
@@ -1092,7 +1093,13 @@ public interface Ast {
      *       which copies the fields of what the name stands for and so has nothing to evaluate.</li>
      * </ul>
      */
-    record Var(WrittenName written, Region region) implements Expr {
+    record Var(WrittenName written, SourceReferenceOrigin origin, Region region) implements Expr {
+
+        // `origin` is which reference of this source it is, and it is here rather than read off the
+        // name or the place: two occurrences of one name reach the same declaration and are two
+        // references, a pass may respell one, and where a name is written is where a complaint
+        // about it belongs. So which occurrence this is is minted where the source is read and
+        // carried from there, the way the constructs a source writes already are.
 
         public Var {
             if (written.region() != null && region == null) {
@@ -1110,19 +1117,19 @@ public interface Ast {
         }
 
         /** A name as the parser read it. */
-        public static Var written(String spelling, SourcePos pos) {
-            return written(WrittenName.of(spelling, pos));
+        public static Var written(String spelling, SourcePos pos, SourceReferenceOrigin origin) {
+            return written(WrittenName.of(spelling, pos), origin);
         }
 
         /** The same, off an occurrence the parser has already read. */
-        public static Var written(WrittenName written) {
-            return new Var(written, written.region());
+        public static Var written(WrittenName written, SourceReferenceOrigin origin) {
+            return new Var(written, origin, written.region());
         }
 
         /** A read of a name a desugaring minted, at the form it is rewriting. Written nowhere: the
          * characters at {@code anchor} spell whatever the author put there, which is not this. */
-        public static Var desugared(String name, SourcePos anchor) {
-            return written(WrittenName.synthetic(name, anchor));
+        public static Var desugared(String name, SourcePos anchor, SourceReferenceOrigin origin) {
+            return written(WrittenName.synthetic(name, anchor), origin);
         }
 
         /** The bare name this reaches its declaration by, whatever the source spelled. */
@@ -1136,9 +1143,9 @@ public interface Ast {
             return written.pos();
         }
 
-        /** The same name, over {@code region}. */
+        /** The same name, over {@code region}. The same reference, so it keeps its own origin. */
         public Var over(Region region) {
-            return new Var(written, region);
+            return new Var(written, origin, region);
         }
 
         @Override
@@ -1189,21 +1196,29 @@ public interface Ast {
      * <p>Applying a name is the common case and has its own constructors and readers below. A name
      * carries what it denotes — a helper, a library function, an injected behavior, a function-typed
      * binding, or the type a newtype construction wraps — answered once during resolution.
+     *
+     * <p>{@code origin} is which application of this source it is, carried for the reason a
+     * comparison's is: a non-recursive helper is expanded at each call, so one application the
+     * author wrote becomes several in the tree that runs, and a rule read off one of them is the
+     * same rule wherever it is met. What the name turns out to denote is not known here and is no
+     * part of it — every application the source writes takes one, and which of them state a rule is
+     * settled where names are resolved.
      */
-    record Apply(Expr function, List<Expr> args, SourcePos pos, Region region) implements Expr {
+    record Apply(Expr function, List<Expr> args, SourceConstructOrigin origin, SourcePos pos,
+                 Region region) implements Expr {
 
         /** The same application over rewritten arguments — a pass that touches only the arguments
          *  says so here rather than listing the slots it is not changing. */
         public Apply withArgs(List<Expr> args) {
-            return new Apply(function, args, pos, region);
+            return new Apply(function, args, origin, pos, region);
         }
     }
 
     /** {@code origin} is where the comparison was written, which is not always where the fork
      * testing it was: a condition can be an application of a function parameter, and the predicate
      * handed to it is the caller's. Carried so that two predicates written separately stay two lines
-     * and one predicate applied twice stays one ({@link CoverageOrigin}). */
-    record Binary(BinOp op, Expr left, Expr right, CoverageOrigin origin, SourcePos pos,
+     * and one predicate applied twice stays one ({@link SourceConstructOrigin}). */
+    record Binary(BinOp op, Expr left, Expr right, SourceConstructOrigin origin, SourcePos pos,
                   Region region) implements Expr {}
 
 
@@ -1232,7 +1247,7 @@ public interface Ast {
             case Neg x -> new Neg(x.operand(), x.pos(), region);
             case FieldAccess x -> new FieldAccess(x.target(), x.name(), x.pos(), region);
             case Binary x -> new Binary(x.op(), x.left(), x.right(), x.origin(), x.pos(), region);
-            case Apply x -> new Apply(x.function(), x.args(), x.pos(), region);
+            case Apply x -> new Apply(x.function(), x.args(), x.origin(), x.pos(), region);
             case If x -> new If(x.cond(), x.then(), x.els(), x.origin(), x.pos(), region);
             case IfConstructed x ->
                     new IfConstructed(x.construct(), x.binder(), x.then(), x.els(), x.origin(), x.pos(),

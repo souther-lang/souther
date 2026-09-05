@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.Comparison;
+import souther.compiler.check.PathReachability;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
@@ -18,6 +19,13 @@ import java.util.List;
  * One reading of a body's comparisons: where each stands, what its names point at, what a row had
  * already satisfied to get there, whether a line may be drawn on it, and what it came to where one
  * may.
+ *
+ * <p><b>Of the body the backend emits, which is the tree the comparisons of a module are numbered
+ * in.</b> A rule stated as one of the language's own operations is not in this tree at all — it has
+ * been expanded into what it does — and is read where such operations still stand
+ * ({@link souther.compiler.check.AnalysisBody}) by a reading of its own. Two trees and two readings,
+ * which is not the same thing as one tree read twice: what each of them carries is where a rule
+ * stands in the tree it is in.
  *
  * <p><b>Each comparison is read once, here, and what it came to travels with it.</b> A reader that
  * reports why a comparison bears no line reads the answer off the standing and never reads the
@@ -47,7 +55,11 @@ import java.util.List;
  * out its way established — which is the whole of what makes this per comparison rather than per
  * fork. Everything else evaluates its parts under what stood at it.
  */
-final class ComparisonReadings {
+record ComparisonReadings(List<Reading> comparisons) {
+
+    ComparisonReadings {
+        comparisons = List.copyOf(comparisons);
+    }
 
     /**
      * One comparison of the body, read where it is written.
@@ -75,21 +87,10 @@ final class ComparisonReadings {
         }
     }
 
-    private final List<Reading> readings;
-
-    private ComparisonReadings(List<Reading> readings) {
-        this.readings = List.copyOf(readings);
-    }
-
-    /** Every comparison of {@code body}, in the order the source wrote them. */
-    List<Reading> all() {
-        return readings;
-    }
-
     /** What each comparison stands under, filed under the site a run through it is recorded at. */
     ReachingCuts reaching(CoverageSites.Plan plan) {
         ReachingCuts.Collected cuts = new ReachingCuts.Collected();
-        for (Reading each : readings) {
+        for (Reading each : comparisons) {
             // Only where a run through it is written down. What stands on the way to a comparison
             // nothing records is a fact about the body all the same, and there is no run for a
             // reader of this to hold it against.
@@ -112,7 +113,7 @@ final class ComparisonReadings {
      */
     private record Body(CoverageSites.Plan plan,
                         InputReading read,
-                        souther.compiler.check.PathReachability.Answers arrives) {
+                        PathReachability.Answers arrives) {
 
         Symbols symbols() {
             return read.symbols();
@@ -137,7 +138,7 @@ final class ComparisonReadings {
     static ComparisonReadings of(Core body, CoverageSites.Plan plan,
                                  InputReading read,
                                  InputReads reads,
-                                 souther.compiler.check.PathReachability.Answers arrives) {
+                                 PathReachability.Answers arrives) {
         List<Reading> readings = new ArrayList<>();
         walk(body, new Body(plan, read, arrives), reads,
                 LiveFlow.of(body), List.of(), true, readings);

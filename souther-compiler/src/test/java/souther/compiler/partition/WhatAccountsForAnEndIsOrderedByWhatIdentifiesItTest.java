@@ -86,8 +86,8 @@ class WhatAccountsForAnEndIsOrderedByWhatIdentifiesItTest {
     }
 
     /** Which declaration drew the line, taken out of what the origin holds. */
-    private static String declarationOf(OriginRef origin) {
-        if (!(origin instanceof OriginRef.InvariantOrigin invariant)) {
+    private static String declarationOf(LineOrigin origin) {
+        if (!(origin instanceof LineOrigin.InvariantOrigin invariant)) {
             throw new AssertionError("this line was not drawn by an invariant: " + origin);
         }
         souther.compiler.types.TypeSymbol.AtModule on = invariant.rule().clause().id().declaredOn();

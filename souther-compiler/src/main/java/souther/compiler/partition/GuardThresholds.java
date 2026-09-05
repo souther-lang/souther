@@ -70,7 +70,7 @@ public final class GuardThresholds {
      * {@code c} on the low side and are two different rules about it — so it is read where the
      * operator is still in hand, and which values arrive is asked of the reading of the whole body.
      */
-    public record Guards(List<LineEvidence> evidence,
+    public record Guards(List<PartitionEvidence> evidence,
                          RulesWithNoLine noLine,
                          List<LineDrawn> between,
                          ReachingCuts reaching) {
@@ -86,12 +86,12 @@ public final class GuardThresholds {
         /** The lines, read off what the walk said. Not a list of their own: the walk met these and
          *  the values it singled out in one order, and holding two lists loses it. */
         public List<Threshold> thresholds() {
-            return LineEvidence.linesIn(evidence);
+            return PartitionEvidence.linesIn(evidence);
         }
 
         /** The values singled out, likewise. */
         public List<Singled> singled() {
-            return LineEvidence.pointsIn(evidence);
+            return PartitionEvidence.pointsIn(evidence);
         }
 
         /**
@@ -109,7 +109,7 @@ public final class GuardThresholds {
          * of these — asked for the value beside the line instead, a rule that names no whole number
          * would have put the number beside it in a class it does not satisfy.
          */
-        public record Singled(NumericTerm.FromOnePosition term, Place value, OriginRef origin) {
+        public record Singled(NumericTerm.FromOnePosition term, Place value, LineOrigin origin) {
             public Singled {
                 if (value == null) {
                     throw new IllegalArgumentException(
@@ -147,7 +147,7 @@ public final class GuardThresholds {
                             souther.compiler.check.ElementBindings elements,
                             souther.compiler.check.PathReachability.Answers arrives) {
         InputDomain inputs = read.domain();
-        List<LineEvidence> found = new ArrayList<>();
+        List<PartitionEvidence> found = new ArrayList<>();
         RulesWithNoLine.Gathered withoutALine = new RulesWithNoLine.Gathered();
         List<LineDrawn> between = new ArrayList<>();
         // One reading of the body, and everything below is that reading asked something. Where a
@@ -156,7 +156,7 @@ public final class GuardThresholds {
         // position, and one walk answers them about one position.
         ComparisonReadings comparisons = ComparisonReadings.of(body, plan, read,
                 InputReads.ofParameters(inputs.parameterReads(), elements), arrives);
-        for (ComparisonReadings.Reading each : comparisons.all()) {
+        for (ComparisonReadings.Reading each : comparisons.comparisons()) {
             switch (each.standing()) {
                 case BoundaryPolicy.Standing.Admitted admitted ->
                         lineAt(each.catalogued(), plan,
@@ -422,13 +422,13 @@ public final class GuardThresholds {
     private static void lineAt(ComparisonCatalog.Catalogued each,
                                CoverageSites.Plan plan,
                                ComparisonAssessment read,
-                               List<LineEvidence> out,
+                               List<PartitionEvidence> out,
                                List<LineDrawn> between,
                                RulesWithNoLine.Gathered withoutALine) {
         publish(each, read, withoutALine);
         switch (read) {
             case ComparisonAssessment.AtAPosition at -> {
-                OriginRef.ComparisonOrigin origin = originOf(each, plan, at.cutting());
+                LineOrigin.ComparisonOrigin origin = originOf(each, plan, at.cutting());
                 // The value a row is owed against this line, which the reading of the comparison
                 // already answered. Taken off the level the rule was written with, a rule that wrote
                 // a multiple of the position named a class at a number the position never holds.
@@ -442,11 +442,11 @@ public final class GuardThresholds {
                     // here — the position is divided all the same, and what divides it is the line.
                     case ComparisonClaim.Singled _ -> {
                         if (at.value() != null) {
-                            out.add(new LineEvidence.Singles(
+                            out.add(new PartitionEvidence.Singles(
                                     new Guards.Singled(at.position(), at.value(), origin)));
                         }
                     }
-                    case ComparisonClaim.Cut order -> out.add(new LineEvidence.Divides(
+                    case ComparisonClaim.Cut order -> out.add(new PartitionEvidence.Divides(
                             new Threshold(at.position(), at.cutting().seam(),
                                     order.valueBelongs(), origin)));
                 }
@@ -532,15 +532,15 @@ public final class GuardThresholds {
 
     /** How a row meets a line a body's condition drew, which is a guard's own answer: what it takes
      *  is getting the comparison to answer, because what it is about is a place in a body. */
-    private static OriginRef.ComparisonOrigin originOf(ComparisonCatalog.Catalogued each,
+    private static LineOrigin.ComparisonOrigin originOf(ComparisonCatalog.Catalogued each,
                                                        CoverageSites.Plan plan, Cutting cutting) {
         // The two together, from the plan that numbered this comparison. Which comparison the rule
         // is about is the catalog's answer; where a run through it is written down is the plan's,
         // and it is required rather than looked up leniently because only an admitted reading
         // reaches here and the policy admits nothing the plan does not number.
-        return new OriginRef.ComparisonOrigin(
+        return new LineOrigin.ComparisonOrigin(
                 new RuleRef.Comparison(each.which().behavior(), each.origin()),
-                new OriginRef.ComparisonOrigin.Read(each.which(),
+                new LineOrigin.ComparisonOrigin.Read(each.which(),
                         new souther.compiler.check.RuleCitation.WrittenAt(each.at()),
                         plan.requireEmissionSiteOf(each.which())),
                 new LineFacts(cutting.claim()));

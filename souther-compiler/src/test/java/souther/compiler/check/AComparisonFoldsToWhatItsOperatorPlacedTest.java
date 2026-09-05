@@ -4,7 +4,7 @@ import souther.compiler.DefaultStdlib;
 import souther.compiler.ast.Hir;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BinOp;
-import souther.compiler.types.CoverageOrigin;
+import souther.compiler.types.SourceConstructOrigin;
 
 import org.junit.jupiter.api.Test;
 
@@ -107,7 +107,7 @@ class AComparisonFoldsToWhatItsOperatorPlacedTest {
      *  is asked of, though a comparison of two literals names none of it. */
     private static String fold(BinOp op, Hir.Expr left, Hir.Expr right) {
         return ConstEval.against(Symbols.none(DefaultStdlib.get()))
-                .eval(new Hir.Binary(op, left, right, CoverageOrigin.unwritten(), POS, null))
+                .eval(new Hir.Binary(op, left, right, SourceConstructOrigin.unwritten(), POS, null))
                 .map(String::valueOf)
                 .orElse(NOT_A_CONSTANT);
     }

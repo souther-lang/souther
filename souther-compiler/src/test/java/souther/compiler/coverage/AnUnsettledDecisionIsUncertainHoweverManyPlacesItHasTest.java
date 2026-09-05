@@ -7,8 +7,8 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.ArmExclusion;
 import souther.compiler.query.ArmSummary;
-import souther.compiler.types.CoverageConstruct;
-import souther.compiler.types.CoverageOrigin;
+import souther.compiler.types.SourceConstruct;
+import souther.compiler.types.SourceConstructOrigin;
 
 import java.util.List;
 import java.util.Set;
@@ -33,9 +33,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  */
 class AnUnsettledDecisionIsUncertainHoweverManyPlacesItHasTest {
 
-    private static final CoverageOrigin FORK =
-            CoverageOrigin.written(new WrittenOwner.Body("m", "b"), 0,
-                    CoverageConstruct.IF);
+    private static final SourceConstructOrigin FORK =
+            SourceConstructOrigin.written(new WrittenOwner.Body("m", "b"), 0,
+                    SourceConstruct.IF);
 
     /** Three places of one numbering, so that arms put in one list are addresses of one. */
     private static final java.util.Map<Integer, ArmProbe> PLACES = Numberings.arms(3);
@@ -44,7 +44,7 @@ class AnUnsettledDecisionIsUncertainHoweverManyPlacesItHasTest {
         return arm(index, FORK, index, decided);
     }
 
-    private static CoverageSites.ArmSite arm(int index, CoverageOrigin fork, int part,
+    private static CoverageSites.ArmSite arm(int index, SourceConstructOrigin fork, int part,
                                              DecidedBy decided) {
         return new CoverageSites.ArmSite("b",
                 new SourceOutcome.Held(new SourceOutcome.HeldBy.Condition()),
@@ -108,8 +108,8 @@ class AnUnsettledDecisionIsUncertainHoweverManyPlacesItHasTest {
      */
     @Test
     void anArmOfASettledForkBesideAnUnsettledOneIsStillAGap() {
-        CoverageOrigin beside = CoverageOrigin.written(
-                new WrittenOwner.Body("m", "b"), 1, CoverageConstruct.IF);
+        SourceConstructOrigin beside = SourceConstructOrigin.written(
+                new WrittenOwner.Body("m", "b"), 1, SourceConstruct.IF);
         Adequacy.BranchEvidence measured = Adequacy.BranchEvidence.measured("b",
                 List.of(arm(0, DecidedBy.NOT_SAID), arm(1, DecidedBy.NOT_SAID),
                         arm(2, beside, 0, DecidedBy.THE_DECLARATION)),

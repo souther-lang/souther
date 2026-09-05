@@ -823,7 +823,7 @@ public final class Resolve {
     private Hir.Var behaviorReached(Ast.Var ref, ValueName.Behavior name) {
         answered(ref.written(), name);
         return new Hir.Var.Denoting(ref.written(),
-                ReachName.of(name, ref.name(), reachable.module()), ref.region());
+                ReachName.of(name, ref.name(), reachable.module()), ref.origin(), ref.region());
     }
 
     /** What to say about a name no behavior answers to, given the names that were reachable. */
@@ -848,7 +848,7 @@ public final class Resolve {
 
     /** A reference resolution read and found nothing for, keeping where it was written. */
     private static Hir.Var unanswered(Ast.Var ref) {
-        return new Hir.Var.Unanswered(ref.written(), ref.region());
+        return new Hir.Var.Unanswered(ref.written(), ref.origin(), ref.region());
     }
 
     private Hir.FnDef fn(Ast.FnDef f) {
@@ -1223,12 +1223,12 @@ public final class Resolve {
         ValueName denotes = calledName(written, bound);
         Hir.Var name;
         if (denotes == null) {
-            name = new Hir.Var.Unanswered(written, callee.region());
+            name = new Hir.Var.Unanswered(written, callee.origin(), callee.region());
         } else {
             answered(written, denotes);
             name = new Hir.Var.Denoting(written,
                     ReachName.of(denotes, written.canonical(), reachable.module()),
-                    callee.region());
+                    callee.origin(), callee.region());
         }
         return Hir.Apply.read(call, appliedCallee(call), name,
                 exprs(call.args(), bound));
@@ -1271,11 +1271,11 @@ public final class Resolve {
     private Hir.Var reached(Ast.Var v, InForce bound) {
         ValueName denotes = valueName(v.written(), bound);
         if (denotes == null) {
-            return new Hir.Var.Unanswered(v.written(), v.region());
+            return new Hir.Var.Unanswered(v.written(), v.origin(), v.region());
         }
         answered(v.written(), denotes);
         return new Hir.Var.Denoting(v.written(),
-                ReachName.of(denotes, v.name(), reachable.module()), v.region());
+                ReachName.of(denotes, v.name(), reachable.module()), v.origin(), v.region());
     }
 
     private List<Hir.ElseArm> arms(List<Ast.ElseArm> arms, InForce bound) {
@@ -1456,15 +1456,17 @@ public final class Resolve {
         switch (lookup(written, bound)) {
             case Reach.Reaches(ValueName denotes) -> {
                 ValueName resolved = answered(written, denotes);
+                // The chain is one reference of the source and the root is where it starts, so
+                // which reference it is is the root's answer.
                 return new Hir.Var.Denoting(written,
                         ReachName.of(resolved, written.canonical(), reachable.module()),
-                        written.region());
+                        root.origin(), written.region());
             }
             // A qualified spelling an import line was to bring in and could not. Said on that line
             // already, so the chain is answered here rather than taken apart and reported again.
             case Reach.StandsForNothing _ -> {
                 unanswered();
-                return new Hir.Var.Unanswered(written, written.region());
+                return new Hir.Var.Unanswered(written, root.origin(), written.region());
             }
             case Reach.NotInScope _ -> {
                 return unknownMember(fa, written, bound);
@@ -1489,7 +1491,9 @@ public final class Resolve {
             return null;
         }
         nothing(unknownIdentifier(written, bound));
-        return new Hir.Var.Unanswered(written, written.region());
+        Ast.Var root = rootName(fa);
+        return new Hir.Var.Unanswered(written, root == null ? null : root.origin(),
+                written.region());
     }
 
     /** Whether {@code qualifier} names a namespace a member may be reached through: a

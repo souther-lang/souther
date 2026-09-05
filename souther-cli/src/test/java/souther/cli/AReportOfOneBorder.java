@@ -25,7 +25,7 @@ import souther.compiler.partition.BoundaryTarget;
 import souther.compiler.check.ComparisonClaim;
 import souther.compiler.partition.Demand;
 import souther.compiler.partition.DomainPoint;
-import souther.compiler.partition.OriginRef;
+import souther.compiler.partition.LineOrigin;
 import souther.compiler.partition.PointRole;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderAssessment;
@@ -87,7 +87,7 @@ final class AReportOfOneBorder {
      * refuses.
      */
     static Border aBoundedBorder() {
-        OriginRef origin = new OriginRef.InvariantOrigin(new RuleRef.Invariant(new Clause.Ref(
+        LineOrigin origin = new LineOrigin.InvariantOrigin(new RuleRef.Invariant(new Clause.Ref(
                 new Clause.Id(TypeSymbols.declared(new TypeKey("example.rate", "Amount")), 0),
                 java.util.Optional.of(new ClauseName("cap")))), 0,
                 souther.compiler.numeric.EndSide.LOWER, true);
@@ -111,11 +111,11 @@ final class AReportOfOneBorder {
      * module; a run beside a comparison exists in the body that wrote it and is that behavior's.
      */
     static Border aBorderABodyDrew() {
-        OriginRef origin = new OriginRef.ComparisonOrigin(
-                new RuleRef.Comparison("weigh", new souther.compiler.types.CoverageOrigin(
+        LineOrigin origin = new LineOrigin.ComparisonOrigin(
+                new RuleRef.Comparison("weigh", new souther.compiler.types.SourceConstructOrigin(
                         new WrittenOwner.Body("example.rate", "weigh"), 2, 0,
-                        souther.compiler.types.CoverageConstruct.BINARY)),
-                new OriginRef.ComparisonOrigin.Read(
+                        souther.compiler.types.SourceConstruct.BINARY)),
+                new LineOrigin.ComparisonOrigin.Read(
                         new souther.compiler.coverage.ComparisonOccurrence(
                                 "example.rate", "weigh", 0),
                         new souther.compiler.check.RuleCitation.WrittenAt(
@@ -138,7 +138,7 @@ final class AReportOfOneBorder {
 
     /** The same border a rule leaves at 100 and up, where the ON point is the whole of what it owes. */
     static Border aBorderAtTheEdgeOfItsDomain() {
-        OriginRef origin = new OriginRef.InvariantOrigin(new RuleRef.Invariant(new Clause.Ref(
+        LineOrigin origin = new LineOrigin.InvariantOrigin(new RuleRef.Invariant(new Clause.Ref(
                 new Clause.Id(TypeSymbols.declared(new TypeKey("example.rate", "Amount")), 0),
                 java.util.Optional.of(new ClauseName("cap")))), 0,
                 souther.compiler.numeric.EndSide.LOWER, true);

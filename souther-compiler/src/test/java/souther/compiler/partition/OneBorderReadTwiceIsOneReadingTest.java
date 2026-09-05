@@ -209,8 +209,8 @@ class OneBorderReadTwiceIsOneReadingTest {
     }
 
     /** The clause the bound is written in, which is only an identity here. */
-    private static OriginRef aBound() {
-        return new OriginRef.InvariantOrigin(new RuleRef.Invariant(new Clause.Ref(
+    private static LineOrigin aBound() {
+        return new LineOrigin.InvariantOrigin(new RuleRef.Invariant(new Clause.Ref(
                 new Clause.Id(TypeSymbols.declared(new TypeKey("example.weigh", "Amount")), 0),
                 Optional.of(new ClauseName("cap")))), 0, EndSide.LOWER, true);
     }
@@ -218,9 +218,9 @@ class OneBorderReadTwiceIsOneReadingTest {
     /** A line of a body, for a place to be parted by something other than the bound. */
     private static AuthoredLine aComparison() {
         return new AuthoredLine(new RuleRef.Comparison("weigh",
-                new souther.compiler.types.CoverageOrigin(
+                new souther.compiler.types.SourceConstructOrigin(
                         new WrittenOwner.Body("example.weigh", "weigh"), 2, 0,
-                        souther.compiler.types.CoverageConstruct.BINARY)),
+                        souther.compiler.types.SourceConstruct.BINARY)),
                 0, new LineFacts(new ComparisonClaim.Cut(Towards.BELOW, true)), List.of());
     }
 }

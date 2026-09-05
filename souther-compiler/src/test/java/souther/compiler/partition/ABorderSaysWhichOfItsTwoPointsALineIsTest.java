@@ -206,7 +206,7 @@ class ABorderSaysWhichOfItsTwoPointsALineIsTest {
      * that stops short of its own line on a carrier that steps is refused rather than stepped here.
      *
      * <p>A continuous carrier has no step to take, so {@code value > 5.0m} on a {@code Decimal}
-     * reaches {@link OriginRef.InvariantOrigin} as an exclusive 5 — measured at the construction
+     * reaches {@link LineOrigin.InvariantOrigin} as an exclusive 5 — measured at the construction
      * site, where both kinds arrive. Where the rule stops is the line either way, and which value
      * the point against it stands at is the order's answer.
      *
@@ -223,13 +223,13 @@ class ABorderSaysWhichOfItsTwoPointsALineIsTest {
     @Test
     void aBoundThatStopsShortOfItsLineWhereTheOrderStepsIsRefused() {
         Border kept = borderOf(
-                new OriginRef.InvariantOrigin(invariant(), THE_ONLY_CONJUNCT,
+                new LineOrigin.InvariantOrigin(invariant(), THE_ONLY_CONJUNCT,
                         souther.compiler.numeric.EndSide.LOWER, true));
         assertEquals("= 5", kept.demand(PointRole.ON).criterion().asked(kept.cut().of()),
                 "a bound that admits its own end is at that end's ON point");
 
         IllegalStateException refused = assertThrows(IllegalStateException.class,
-                () -> borderOf(new OriginRef.InvariantOrigin(invariant(), THE_ONLY_CONJUNCT,
+                () -> borderOf(new LineOrigin.InvariantOrigin(invariant(), THE_ONLY_CONJUNCT,
                         souther.compiler.numeric.EndSide.LOWER, false)),
                 "a rule parting the values at 6 over a range that stops at 5 is two readings of one"
                         + " model that disagree");
@@ -239,9 +239,9 @@ class ABorderSaysWhichOfItsTwoPointsALineIsTest {
     }
 
     /** The border a bound draws at 5 on an `Int` whose rules leave 5 and up. */
-    private static Border borderOf(OriginRef origin) {
+    private static Border borderOf(LineOrigin origin) {
         Carrier carrier = new Carrier.Whole();
-        boolean admits = origin instanceof OriginRef.InvariantOrigin bound && bound.holdsAtTheValue();
+        boolean admits = origin instanceof LineOrigin.InvariantOrigin bound && bound.holdsAtTheValue();
         return Border.at(lineAt(new AxisId("take", "h.a"), carrier, Count.of(5)), origin,
                 new NumericDomain.Bounds(new Endpoint(Count.of(5), admits), null));
     }
@@ -263,7 +263,7 @@ class ABorderSaysWhichOfItsTwoPointsALineIsTest {
         // the value below the cut is 99 — inside the partition and away from its border, which is
         // the IN point and neither of the two words against the line.
         Carrier carrier = new Carrier.Whole();
-        OriginRef closed = new OriginRef.EnsuresOrigin(
+        LineOrigin closed = new LineOrigin.EnsuresOrigin(
                 new RuleRef.Ensures(new BehaviorContract.RuleId(null, 0, 0, null), "cap"),
                 THE_ONLY_CONJUNCT,
                 new LineFacts(new souther.compiler.check.ComparisonClaim.Cut(Towards.BELOW, true)));
@@ -279,7 +279,7 @@ class ABorderSaysWhichOfItsTwoPointsALineIsTest {
                 border.demand(PointRole.OUT).criterion().asked(border.cut().of()));
 
         // A bound owes nothing outside itself, and says which of the three answers settled it.
-        Border bound = borderOf(new OriginRef.InvariantOrigin(invariant(), THE_ONLY_CONJUNCT,
+        Border bound = borderOf(new LineOrigin.InvariantOrigin(invariant(), THE_ONLY_CONJUNCT,
                         souther.compiler.numeric.EndSide.LOWER, true));
         assertEquals(new Demand.NotOwed(NotOwedReason.THE_RULES_REFUSE_IT),
                 bound.demand(PointRole.OFF));

@@ -230,7 +230,7 @@ public record BorderObligationPointAssessment(BorderObligationPoint point,
      * inside a helper carries the call it was read through — and a point read at two positions has
      * as many of those as it has readings, so a point that held one would name whichever the walk
      * met first. How the rule is found is what the origin already projects to
-     * ({@link souther.compiler.partition.OriginRef#cited}): the name where the author gave the rule
+     * ({@link souther.compiler.partition.LineOrigin#cited}): the name where the author gave the rule
      * one, and the place where the rule is a comparison. That is the same at all of them.
      *
      * <p><b>And it is not what the line is on.</b> That is the reading's word — {@code n} here and

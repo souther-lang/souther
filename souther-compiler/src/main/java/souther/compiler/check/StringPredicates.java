@@ -187,17 +187,53 @@ public enum StringPredicates {
     }
 
     /**
-     * A checked clause's predicate: the argument the rule is about, and what reading it came to.
+     * How the text an author wrote in a predicate is reached, where the predicate stands.
      *
-     * @param subject the argument the rule is about, for a caller that resolves it to a position
-     * @param reading what this compiler made of the strings the predicate states there
+     * <p>The one thing that differs between the trees a rule is read off, and the reason it is a
+     * capability rather than an entry point per tree. What a predicate means once the text is in
+     * hand is one answer ({@link #readingOf}); how the text is reached is a question about names,
+     * and which names are in force is the reading of the place the rule stands in. A declaration's
+     * clauses are read against what that declaration binds, and a body's rules against what the
+     * walk of the body has bound where it stands — and neither of those is something this table
+     * knows or should learn.
+     *
+     * <p><b>Which is what keeps a reader from being weaker than the tree it reads.</b> Written as
+     * an entry that folds only what it can see for itself, a rule under {@code let prefix = "JP"}
+     * would come back as one whose argument nothing worked out, while the walk that handed it over
+     * had the answer. That is a reader declining to take what it was already told, said in the
+     * words this compiler uses for a rule it cannot read.
      */
-    public record Stated(Core subject, Reading reading) {
+    @FunctionalInterface
+    public interface WrittenText {
+
+        /** The string {@code expression} stands for, or null where nothing works one out there. */
+        String of(Core expression);
+    }
+
+    /**
+     * A checked clause's predicate: the argument the rule is about, what reading it came to, and
+     * what it states in the words the model states it in.
+     *
+     * <p>{@code statement} is there exactly where the text an author wrote was worked out, which is
+     * every reading but {@link Reading.WrittenArgumentNotKnown} — a rule whose text nothing settled
+     * has nothing to be called. Checked here rather than left to a reader, so that a caller holding
+     * a reading knows without asking whether there is a statement beside it.
+     *
+     * @param subject   the argument the rule is about, for a caller that resolves it to a position
+     * @param reading   what this compiler made of the strings the predicate states there
+     * @param statement what the rule states, for a reader that names what it divides a position
+     *                  into. Absent only where the text was not worked out
+     */
+    public record Stated(Core subject, Reading reading, PredicateStatement statement) {
 
         public Stated {
             if (subject == null || reading == null) {
                 throw new IllegalArgumentException(
                         "a predicate that was stated is about something and was read");
+            }
+            if ((statement == null) != (reading instanceof Reading.WrittenArgumentNotKnown)) {
+                throw new IllegalArgumentException(
+                        "a rule states something exactly where its text was worked out: " + reading);
             }
         }
     }
@@ -262,11 +298,13 @@ public enum StringPredicates {
      * position admits holds nothing else. Two entry points and one table, so a predicate learned is
      * learned by both.
      *
-     * <p><b>Two folds, and that is the whole of the difference.</b> What the author wrote is reached
-     * through the folder each tree has, and they are not the same code — so a written argument one of
-     * them folds and the other does not is a rule one reader takes in and the other passes over,
-     * which is the shape this arrangement exists to stop. They are adjacent here so that the next
-     * person to change one sees the other. Everything past the text they hand over is
+     * <p><b>Reaching the text is the whole of the difference, and it is handed in.</b> What the
+     * author wrote is reached through whatever knows the names in force where the rule stands —
+     * a declaration's own bindings on one side, the walk of a body on the other — and that is a
+     * {@link WrittenText} the caller supplies rather than a fold written here per tree. Written as
+     * one entry point per tree, a reader whose fold was the weaker of them would report a rule as
+     * one whose argument nothing worked out while holding the answer, and the same rule would mean
+     * two things depending on which tree it was read off. Everything past the text is
      * {@link #readingOf} and is one.
      *
      * <p>The positions below are read off the call without being checked against it, and two things
@@ -279,6 +317,25 @@ public enum StringPredicates {
      */
     public static Stated statedByChecked(Core clause, Symbols symbols, Terms terms,
                                          Denotations at) {
+        return statedBy(clause, symbols,
+                e -> Terms.folded(e, symbols, at) instanceof String written ? written : null);
+    }
+
+    /**
+     * The same off a checked tree, with the text reached however the place the rule stands in
+     * reaches it.
+     *
+     * <p>What {@link #statedByChecked} is, with the one thing that differs handed in. A body's walk
+     * knows what its names stand for where the rule is written and a declaration's reading knows
+     * what its clauses bound, and neither of those belongs here — what belongs here is that the
+     * predicate, the argument it is about and what it means are the same however the text arrived.
+     *
+     * <p>{@link Reading.WrittenArgumentNotKnown} keeps its meaning through this. It says the
+     * predicate was read and the text the author wrote was not worked out, which is a fact about
+     * the rule; a caller resolving the argument with less than it holds would be putting a fact
+     * about itself under that word.
+     */
+    public static Stated statedBy(Core clause, Symbols symbols, WrittenText text) {
         if (!(clause instanceof Core.PreservedCall call)
                 || !(call.operation() instanceof ValueName.Stdlib.Operation operation)) {
             return null;
@@ -288,9 +345,15 @@ public enum StringPredicates {
             return null;
         }
         Core subject = call.args().get(predicate.subject());
-        return Terms.folded(call.args().get(predicate.written()), symbols, at) instanceof String written
-                ? new Stated(subject, predicate.readingOf(written))
-                : new Stated(subject, new Reading.WrittenArgumentNotKnown());
+        String written = text.of(call.args().get(predicate.written()));
+        // What the model calls the operation, taken off the name the call resolved to rather than
+        // from the table. The table is keyed by what an operation means, and what a document calls
+        // it is what an author writes — read off a key, a class would be named after this
+        // compiler's word for the meaning.
+        return written == null
+                ? new Stated(subject, new Reading.WrittenArgumentNotKnown(), null)
+                : new Stated(subject, predicate.readingOf(written),
+                        new PredicateStatement.Applying(operation.qualified(), written));
     }
 
 }

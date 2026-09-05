@@ -27,7 +27,7 @@ import java.util.Objects;
  *                is what meeting the line takes, and that is the origin's to answer
  */
 public record Threshold(NumericTerm.FromOnePosition term, Seam parts, Towards valueBelongs,
-                        OriginRef origin) {
+                        LineOrigin origin) {
 
     /** A side and not the absence of one, for the reason a cut's own is
      *  ({@link souther.compiler.check.ComparisonClaim.Cut}): a line with no side reads as one

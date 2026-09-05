@@ -10,7 +10,7 @@ import souther.compiler.diag.Region;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
 import souther.compiler.ast.ConstructionOrigin;
-import souther.compiler.types.CoverageOrigin;
+import souther.compiler.types.SourceConstructOrigin;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.WrittenOwner;
 import souther.compiler.types.ValueName;
@@ -630,7 +630,7 @@ public final class DeclarationAgreement {
      */
     private static final Set<Class<?>> ERASED = Set.of(
             SourcePos.class, Region.class,
-            ConstructionOrigin.class, CoverageOrigin.class,
+            ConstructionOrigin.class, SourceConstructOrigin.class,
             // What a definition was made as, and what an example row's position contributes to
             // reading what is written at it. Both are this compile's record of how it built its own
             // tree: a module publishes its declarations and the helpers they are read through, and

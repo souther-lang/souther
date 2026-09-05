@@ -124,6 +124,36 @@ public final class PatternPlan {
          * <p>The same numbers as the rest, and a coincidence rather than a fact.
          */
         public static final Budget OF_WHAT_A_SET_AND_A_RANGE_SHARE = new Budget(50_000, 200_000);
+
+        /**
+         * What working out the classes a behavior's rules about the strings at one position divide
+         * it into is allowed to cost.
+         *
+         * <p>Its own and not {@link #OF_WHAT_A_RULE_LEAVES}, and the two are told apart by what
+         * moving one would do to the other's answer. That one bounds how exactly a declaration's
+         * rules are handed on, and this one bounds which classes a behavior draws; a model whose
+         * type states a plain rule and whose body states an expensive one must not have the second
+         * become answerable because the first was allowed more, and a model the other way round
+         * must not have what its declaration is read to admit turn on how much its body was allowed
+         * to distinguish. Held as one figure, each of those is what raising it does.
+         *
+         * <p>Per position and spent on the whole of it. A rule about the strings there divides them
+         * from the rest, so what is built is the set it admits and the set it leaves, and the
+         * classes are the cells every such rule together leaves — which is one answer, made or not
+         * made. An allowance per rule would let the rule read first take what the rule beside it
+         * needed, and the position would come back divided one way or the other by the order the
+         * body happened to be walked in.
+         *
+         * <p>A machine that already exists is not made again out of this. What the values a
+         * position admits were answered with is read where it was built, and only what that answer
+         * had no use for is charged here — which is what borrowing is, and it is not the two
+         * questions sharing an allowance: a position whose own answer stopped short still has its
+         * body's distinctions read, because what a behavior tells apart is not a projection of what
+         * the position admits.
+         *
+         * <p>The same numbers as the others today, and a coincidence rather than a fact.
+         */
+        public static final Budget OF_BEHAVIOR_DISTINCTIONS = new Budget(50_000, 200_000);
     }
 
     /** What one step of a plan does. */

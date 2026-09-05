@@ -24,11 +24,15 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * Re-issuing the numbers the compiler minted for a body's names leaves what the body does alone.
  *
  * <p>The one thing {@link ExecutableIdentity} exists to be. A {@code BindingId} is an owner and a
- * count over that owner's bindings, and both are minted while the body is being built: an expansion
- * owns each copy it makes and numbers copies in the order it makes them. So a reading that carried
- * them would say two builds of one source built different things as soon as the inliner allocated
- * differently — which is the dependency the whole of this is moving off, not a dependency to move
- * one level down.
+ * count over that owner's bindings, and the count is minted while the body is being built. So a
+ * reading that carried it would say two builds of one source built different things as soon as the
+ * inliner allocated differently — which is the dependency the whole of this is moving off, not a
+ * dependency to move one level down.
+ *
+ * <p>The owner is a different matter and is held to more. An expansion is named by the call it
+ * expands and by what it is inside, both of which the source settles, so it does not move with the
+ * order the copies were made in at all — and a pass's own bindings are numbered per pass and per
+ * owner, which this moves.
  *
  * <p>So the numbers are re-issued here and the answer must not move. Done to the bindings a body
  * binds, which are the ones minted: a parameter is bound by the signature, in the order it was
@@ -156,11 +160,16 @@ class WhatABodyDoesDoesNotMoveWithTheNumbersMintedForItsNamesTest {
         return out;
     }
 
-    /** The same owner, minted at another point in a run that made the copies in another order. */
+    /**
+     * The same owner, minted at another point in a run that made the copies in another order.
+     *
+     * <p>An expansion comes back as itself, and that is not this fixture declining to move it.
+     * There is no number a run mints for it: it is named by the call it expands, which the source
+     * settled, and by what it is inside. A run that made the copies in another order names them the
+     * same way.
+     */
     private static BindingOwner elsewhere(BindingOwner owner) {
         return switch (owner) {
-            case BindingOwner.Expansion it ->
-                    new BindingOwner.Expansion(it.within(), it.expanded(), it.ordinal() + 500);
             case BindingOwner.Synthesized it ->
                     new BindingOwner.Synthesized(it.within(), it.pass(), it.ordinal() + 500);
             default -> owner;

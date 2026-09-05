@@ -13,7 +13,7 @@ import java.util.Set;
  *
  * <p>What the author wrote, with nothing about the reading that reached it. A rule is read once per
  * position of every behavior carrying it and once per call of every helper holding it; which
- * position, and which call of which helper, are {@link OriginRef}'s, and this is what several
+ * position, and which call of which helper, are {@link LineOrigin}'s, and this is what several
  * readings of one line share.
  *
  * <p><b>How far that reaches is the rule's own answer and is not restated here.</b> {@link RuleRef}
@@ -91,7 +91,7 @@ public record AuthoredLine(RuleRef rule, int conjunct, LineFacts facts,
      * <p>A name and not a place, because a debt is not at one: a line an {@code invariant} drew is
      * met wherever the type is carried, so any place to print would be the position of whichever
      * behavior a walk reached first. Where a reading of it is being named rather than the line, the
-     * place is said by {@link OriginRef#describe}.
+     * place is said by {@link LineOrigin#describe}.
      */
     public String named() {
         return said(rule.named());
@@ -101,7 +101,7 @@ public record AuthoredLine(RuleRef rule, int conjunct, LineFacts facts,
      * The same about a rule a reader is calling something else.
      *
      * <p>A comparison has no name, so a reading of one is said by where it is written
-     * ({@link OriginRef#describe}) — and what the narrowing adds is the same words either way. Said
+     * ({@link LineOrigin#describe}) — and what the narrowing adds is the same words either way. Said
      * in both places, the two spellings of one narrowing read as two.
      */
     public String said(String rule) {

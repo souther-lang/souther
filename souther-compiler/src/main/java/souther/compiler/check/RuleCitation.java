@@ -17,7 +17,7 @@ import souther.compiler.source.SourceId;
  * single string over both would have to spell a place as a name, and {@link RuleRef#named} says why
  * that is wrong for the one that has none: a comparison is written rather than named.
  *
- * <p><b>Not {@link souther.compiler.partition.OriginRef}.</b> That says where a rule was read, and
+ * <p><b>Not {@link souther.compiler.partition.LineOrigin}.</b> That says where a rule was read, and
  * one rule read in two calls of a helper has two of them — so putting it here would make a document
  * choose which reading to show for a question the model raised once. This says where the rule was
  * written, which is the rule's own and is one however often it is read.
@@ -75,7 +75,7 @@ public sealed interface RuleCitation {
      * <p>The one formatter, shared with the borders a comparison draws — a rule and a line the same
      * rule drew are found the same way, and two spellings of one place would read as two places.
      * What is not shared is an identity: where a rule was read is
-     * {@link souther.compiler.partition.OriginRef}'s and one rule has as many of those as it has
+     * {@link souther.compiler.partition.LineOrigin}'s and one rule has as many of those as it has
      * readings.
      */
     default String said(SourceNameResolver names, SourceId sectionSource) {

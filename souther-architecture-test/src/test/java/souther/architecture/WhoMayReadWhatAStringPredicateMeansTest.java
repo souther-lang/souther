@@ -63,7 +63,7 @@ class WhoMayReadWhatAStringPredicateMeansTest {
     /**
      * Every class that reads one, and what it reads it for.
      *
-     * <p>Two, and each asks a different question of the same table.
+     * <p>Four, and each asks a different question of the same table.
      *
      * <p>{@code AdmissibleReading} turns the clause into the strings it admits, which is the one
      * place what a rule means about a position is worked out. Everything a later reader says about
@@ -79,14 +79,80 @@ class WhoMayReadWhatAStringPredicateMeansTest {
      * row saying {@code Partitions} names it would be a second reader of what a rule means about a
      * position.
      *
-     * <p>A row for a class in {@code inputs}, {@code partition} or {@code report} is the edge this
-     * exists to refuse: those name what a position came to, and a rule's meaning reaching them
-     * except through the values it left is a second answer to a question that has an owner. So is a
-     * row for {@code InvariantChecker}, which is where the edge was.
+     * <p>A row for a class in {@code inputs} or {@code report} is the edge this exists to refuse:
+     * those name what a position came to, and a rule's meaning reaching them except through the
+     * values it left is a second answer to a question that has an owner. So is a row for
+     * {@code InvariantChecker}, which is where the edge was.
+     *
+     * <p>The rows in {@code partition} are the walk that finds a rule in a body, what that walk
+     * hands on, the crossing that turns it into sets, and the reading that offers a value. None of
+     * them says what a rule means about a position. What each takes is written beside it, and a row
+     * for anything in that package that draws lines, counts classes or writes a report is the same
+     * edge one package over.
      */
     private static final String READS = "souther/compiler/check/AdmissibleReading -> " + OWNER;
 
     private static final String WITNESS = "souther/compiler/partition/Partitions -> " + OWNER;
+
+    /**
+     * The walk of a body reads one, because a rule about the strings at a position can be written
+     * there and something has to recognise it.
+     *
+     * <p>Not a second answer to what such a rule means about a position, which is what the rows
+     * above exist to keep to one. This reads which predicate was applied and which strings it
+     * states, and stops — where the rule stands settles whether that restricts the position or
+     * divides it, and the walk is what knows where it stands. So the two answers are still apart:
+     * the table says what the rule accepts, and where it is written says what that does to the
+     * position.
+     *
+     * <p>Its own entry point, and the difference between the three is how each reaches the text an
+     * author wrote. A declaration's clauses are read against what that declaration binds and a
+     * body's rules against what the walk has bound where it stands, so what is handed in is the
+     * resolution and never a second reading of what a predicate means.
+     */
+    private static final String A_BODYS_RULES =
+            "souther/compiler/partition/PredicateReadings -> " + OWNER;
+
+    /** And what the walk hands on, which names the answer it carries. */
+    private static final String A_BODYS_RULE =
+            "souther/compiler/partition/PredicateReadings$Reading -> " + OWNER;
+
+    /**
+     * And what does something with that answer, which is the one thing left to do with it.
+     *
+     * <p>Not a fourth reader of what a rule means. Every outcome of the reading was settled by the
+     * table before this holds one, and what happens here is the decision the outcomes were kept
+     * apart for: a rule read as the strings it accepts becomes the two plans for either side of it,
+     * and a rule read no further becomes what a reader is told instead. Handed only the strings, a
+     * reader would have to work out for itself which rules it had not been given, under a word for
+     * a limit nothing reached.
+     *
+     * <p>Which is why the outcomes reach here and the text does not. The strings a rule states are
+     * taken as they came; what an author wrote them in, and how it was reached, are the walk's and
+     * are gone by this point.
+     */
+    private static final String WHAT_A_RULE_STATES =
+            "souther/compiler/partition/BehaviorSetStatements -> " + OWNER;
+
+    /**
+     * And the reading of what a behavior's own clauses state, which is the other place such a rule
+     * is written.
+     *
+     * <p>A third entry point and not a third answer, for the reason the two above are two: what
+     * reaches the text an author wrote differs. A clause is read against what the declaration binds
+     * and under the statements the clause makes outright, which is that reader's own walk.
+     *
+     * <p>Here rather than in the walk that publishes it, because which reader a statement belongs to
+     * is settled where the statements are. Asked later, the reader of comparisons and the reader of
+     * predicates would each be deciding whether a statement is theirs, and a rule read as a set of
+     * strings was also reported as a comparison whose form could not be read.
+     */
+    private static final String WHAT_A_CLAUSE_STATES =
+            "souther/compiler/partition/ClauseStatements -> " + OWNER;
+
+    /** And what that reading hands on, which names the answer it carries. */
+    private static final String A_CLAUSES_RULE =
+            "souther/compiler/partition/ClauseStatements$Statement$TellsStringsApart -> " + OWNER;
 
     private static final String IN_A_DESCRIPTOR = " (in a descriptor)";
 
@@ -105,13 +171,50 @@ class WhoMayReadWhatAStringPredicateMeansTest {
             READS + "$Stated",
             READS + "$Stated#reading()L" + OWNER + "$Reading;",
             READS + "$Stated#subject()Lsouther/compiler/core/Core;",
+            WHAT_A_RULE_STATES,
+            WHAT_A_RULE_STATES + IN_A_DESCRIPTOR,
+            WHAT_A_RULE_STATES + "$Reading",
+            WHAT_A_RULE_STATES + "$Reading$Accepting",
+            WHAT_A_RULE_STATES
+                    + "$Reading$Accepting#accepts()Lsouther/compiler/regex/PatternSyntax;",
+            WHAT_A_RULE_STATES + "$Reading$PatternNotRead",
+            WHAT_A_RULE_STATES
+                    + "$Reading$PatternNotRead#why()Lsouther/compiler/regex/PatternRead$Unsupported;",
+            WHAT_A_RULE_STATES + "$Reading$WrittenArgumentNotKnown",
+            WHAT_A_CLAUSE_STATES,
+            WHAT_A_CLAUSE_STATES + IN_A_DESCRIPTOR,
+            WHAT_A_CLAUSE_STATES + "#statedBy(Lsouther/compiler/core/Core;"
+                    + "Lsouther/compiler/check/Symbols;L" + OWNER + "$WrittenText;)L"
+                    + OWNER + "$Stated;",
+            WHAT_A_CLAUSE_STATES + "$Stated",
+            WHAT_A_CLAUSE_STATES + "$WrittenText",
+            A_CLAUSES_RULE,
+            A_CLAUSES_RULE + IN_A_DESCRIPTOR,
+            A_CLAUSES_RULE + "$Stated",
             WITNESS,
             WITNESS + IN_A_DESCRIPTOR,
             WITNESS + "#statedByWritten(Lsouther/compiler/ast/Hir$Expr;"
                     + "Lsouther/compiler/check/Symbols;)L" + OWNER + "$Reading;",
             WITNESS + "$Reading",
             WITNESS + "$Reading$Accepting",
-            WITNESS + "$Reading$Accepting#accepts()Lsouther/compiler/regex/PatternSyntax;");
+            WITNESS + "$Reading$Accepting#accepts()Lsouther/compiler/regex/PatternSyntax;",
+            A_BODYS_RULES,
+            A_BODYS_RULES + IN_A_DESCRIPTOR,
+            A_BODYS_RULES + "#statedBy(Lsouther/compiler/core/Core;"
+                    + "Lsouther/compiler/check/Symbols;L" + OWNER + "$WrittenText;)L"
+                    + OWNER + "$Stated;",
+            A_BODYS_RULES + "$Stated",
+            A_BODYS_RULES + "$WrittenText",
+            A_BODYS_RULE,
+            A_BODYS_RULE + IN_A_DESCRIPTOR,
+            A_BODYS_RULE + "$Reading",
+            A_BODYS_RULE + "$Stated",
+            A_BODYS_RULE + "$Stated#reading()L" + OWNER + "$Reading;",
+            // What the rule states, which is what a class it makes is called. Read off the same
+            // value the reading came in and never worked out again: a name for a class derived a
+            // second time would be one that agrees with the rule until one of the two changes.
+            A_BODYS_RULE + "$Stated#statement()Lsouther/compiler/check/PredicateStatement;",
+            A_BODYS_RULE + "$Stated#subject()Lsouther/compiler/core/Core;");
 
     @Test
     void everyClassThatReadsOneIsWrittenDownWithWhatItReadsItFor() {

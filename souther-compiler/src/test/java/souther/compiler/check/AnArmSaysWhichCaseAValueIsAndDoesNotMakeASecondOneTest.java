@@ -211,7 +211,7 @@ class AnArmSaysWhichCaseAValueIsAndDoesNotMakeASecondOneTest {
                 .binder("v", POS).binding();
         Core states = new Core.Binary(BinOp.GT,
                 new Core.Read("v", value, Type.INT, POS), new Core.Int(0, Type.INT, POS),
-                souther.compiler.types.CoverageOrigin.unwritten(), Type.BOOL, POS);
+                souther.compiler.types.SourceConstructOrigin.unwritten(), Type.BOOL, POS);
         return new StatedContract(FIND, List.of(), Type.INT,
                 List.of(new StatedContract.StatedRule(new RuleId(FIND, 0, 0, AN_INT),
                         new Guard.Case(CaseSpace.resolve(CaseSelector.direct(AN_INT),

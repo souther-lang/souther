@@ -8,8 +8,8 @@ import souther.compiler.check.Lower;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
-import souther.compiler.types.CoverageConstruct;
-import souther.compiler.types.CoverageOrigin;
+import souther.compiler.types.SourceConstruct;
+import souther.compiler.types.SourceConstructOrigin;
 import souther.compiler.types.ReachName;
 import souther.compiler.types.ValueName;
 
@@ -51,12 +51,12 @@ class WhatTheReadingNamesIsTheForkTheLoweringBuildsTest {
         Hir.FnDef fn = aHelperGuardedByEachOf(rules);
         Hir.ListComp comp = comprehensionOf(fn);
 
-        Map<CoverageOrigin, DecisionSource> read =
+        Map<SourceConstructOrigin, DecisionSource> read =
                 DecisionSources.of(Map.of(), Map.of(DECLARATION, fn)).byFork();
-        List<CoverageOrigin> built = forksBuiltFor(comp);
+        List<SourceConstructOrigin> built = forksBuiltFor(comp);
 
         List<String> namedByTheReading = new ArrayList<>();
-        for (CoverageOrigin fork : built) {
+        for (SourceConstructOrigin fork : built) {
             namedByTheReading.add(ruleOf(read.get(fork)));
         }
         assertEquals(rules, namedByTheReading,
@@ -75,8 +75,8 @@ class WhatTheReadingNamesIsTheForkTheLoweringBuildsTest {
 
     /** The origins the lowering put on the {@code if} it built for each guard, outermost first —
      *  which is the first guard, an earlier guard standing over a later one. */
-    private static List<CoverageOrigin> forksBuiltFor(Hir.ListComp comp) {
-        List<CoverageOrigin> out = new ArrayList<>();
+    private static List<SourceConstructOrigin> forksBuiltFor(Hir.ListComp comp) {
+        List<SourceConstructOrigin> out = new ArrayList<>();
         Hir.Expr lowered = Lower.desugarExpr(comp);
         while (lowered instanceof Hir.If branch) {
             out.add(branch.origin());
@@ -96,8 +96,8 @@ class WhatTheReadingNamesIsTheForkTheLoweringBuildsTest {
             guards.add(Hir.Var.local(binder, AT));
         }
         Hir.ListComp comp = new Hir.ListComp(new Hir.IntLit(1, AT, null), guards,
-                CoverageOrigin.written(new WrittenOwner.Body(MODULE, "b"), 0,
-                        CoverageConstruct.COMPREHENSION), AT, null);
+                SourceConstructOrigin.written(new WrittenOwner.Body(MODULE, "b"), 0,
+                        SourceConstruct.COMPREHENSION), AT, null);
         return new Hir.FnDef(WrittenName.synthetic("f", AT), MODULE, params, null,
                 new Hir.FnBody.Written(comp), new Hir.Modifiers(false, false),
                 DefinitionRole.Ordinary.INSTANCE, AT);

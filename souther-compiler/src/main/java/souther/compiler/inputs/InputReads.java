@@ -85,6 +85,26 @@ public final class InputReads {
     }
 
     /**
+     * The same, at the top of the body the analysis reads.
+     *
+     * <p>Beside {@link #ofParameters} because the two are readings of two trees. That one is of the
+     * body a backend emits, where an operation of the language has been expanded into what it does,
+     * so one standing there says the walk was handed the wrong tree. Here they stand — that is what
+     * the analysis reads the tree for — and a value one of them made names no position, which is an
+     * answer rather than a fault.
+     *
+     * <p>Its own entry point and not a flag on the one above, so that which tree a reading is of is
+     * settled where the walk that reads it is written. Asked for afterwards, a walk of one tree
+     * could be handed the other's reading and the first rule about a value an operation made would
+     * be reported as this compiler failing to expand something.
+     */
+    public static InputReads ofParametersWhereCallsStand(
+            Map<BindingId, String> parameters, souther.compiler.check.ElementBindings elements) {
+        return new InputReads(new BindingEnvironment(BindingEnvironment.rooted(parameters),
+                Map.of(), elements, true), Map.of());
+    }
+
+    /**
      * At the top of a rule the behavior itself declares, which meets the parameters under the
      * bindings the declaration gave them rather than the ones an implementation did.
      *
@@ -443,6 +463,27 @@ public final class InputReads {
                 }
             }
         }
+    }
+
+    /**
+     * The string {@code e} stands for here, or null where nothing here says it is one.
+     *
+     * <p>What a name stands for is this reading's question and is answered here rather than by
+     * whoever wants the string. A rule written {@code String.startsWith(prefix, code)} under
+     * {@code let prefix = "JP"} states the same thing as one written with the string in it, and a
+     * reader that took the argument as it was written would have the two mean different things —
+     * not because the compiler cannot work the second out, but because the reader did not take the
+     * answer this already has.
+     *
+     * <p>Through the names and no further ({@link #standing}). What comes back is the value the
+     * expression stands for once the names have been followed, and a string is what it is where
+     * that value is one written down. An expression that stands for something computed is a string
+     * nothing here works out, and it is null the way anything else this cannot answer is —
+     * arithmetic over the values is not a question a naming answers.
+     */
+    public String writtenStringOf(Core e, Symbols symbols) {
+        return standing(new Denotation(e, this), symbols, new java.util.HashSet<>())
+                .value() instanceof Core.Str written ? written.value() : null;
     }
 
     /** Where an element handed to {@code binding} stands ({@link InputPath#elementAt}). */

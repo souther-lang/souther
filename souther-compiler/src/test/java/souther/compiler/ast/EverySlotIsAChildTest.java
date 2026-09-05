@@ -1,6 +1,7 @@
 package souther.compiler.ast;
 
 import souther.compiler.diag.SourcePos;
+import souther.compiler.types.SourceReferenceOrigin;
 
 import org.junit.jupiter.api.Test;
 
@@ -24,7 +25,8 @@ class EverySlotIsAChildTest {
     private static final SourcePos POS = new SourcePos(1, 1);
 
     private static Ast.Var name(String written) {
-        return Ast.Var.written(written, POS);
+        return Ast.Var.written(written, POS,
+                new SourceReferenceOrigin(new souther.compiler.types.WrittenOwner.Body("m", "b"), 0));
     }
 
     /** {@code Person { ..base, age: n }} — one name slot, one expression slot. */

@@ -187,10 +187,10 @@ class PartitionsTest {
         assertEquals(List.of(Count.of(0L), Count.of(10L)),
                 o.cuts().stream().map(Cut::at).toList());
         assertEquals(List.of("invariant Outer (outerMin)", "invariant Inner (innerMin)"),
-                o.cuts().get(0).origins().stream().map(OriginRef::named).toList(),
+                o.cuts().get(0).origins().stream().map(LineOrigin::named).toList(),
                 "one value, two rules, and a row is owed to each");
         assertEquals(List.of("invariant Outer (outerMax)"),
-                o.cuts().get(1).origins().stream().map(OriginRef::named).toList());
+                o.cuts().get(1).origins().stream().map(LineOrigin::named).toList());
     }
 
     /** A `Decimal` under two names reads the same way. */
@@ -234,9 +234,9 @@ class PartitionsTest {
     void aCutRemembersTheRuleThatDrewIt() {
         Axis cost = axis(partitioningOf(KINDS, "submit"), "request.cost");
 
-        OriginRef origin = cost.cuts().get(0).origins().get(0);
-        OriginRef.InvariantOrigin invariant =
-                org.junit.jupiter.api.Assertions.assertInstanceOf(OriginRef.InvariantOrigin.class,
+        LineOrigin origin = cost.cuts().get(0).origins().get(0);
+        LineOrigin.InvariantOrigin invariant =
+                org.junit.jupiter.api.Assertions.assertInstanceOf(LineOrigin.InvariantOrigin.class,
                         origin);
         assertEquals("Amount", invariant.rule().clause().id().declaredOn().name());
     }

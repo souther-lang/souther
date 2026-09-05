@@ -37,7 +37,7 @@ public final class CallArguments {
                                                 Core.PreservedCall call, Core value) {
         List<Core> args = new ArrayList<>(call.args());
         args.set(positionOf(argument, call), value);
-        return new Core.PreservedCall(call.declared(), args, call.type(), call.pos());
+        return new Core.PreservedCall(call.declared(), args, call.origin(), call.type(), call.pos());
     }
 
     /**

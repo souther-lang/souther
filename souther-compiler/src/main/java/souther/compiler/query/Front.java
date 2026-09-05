@@ -5,6 +5,7 @@ import souther.compiler.source.SourceId;
 
 import souther.compiler.ast.Ast;
 import souther.compiler.ast.WrittenName;
+import souther.compiler.regex.PatternPlan;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.Primary;
@@ -178,7 +179,7 @@ public final class Front {
             implements Input<souther.compiler.partition.AdequacyPolicy> {
 
         /**
-         * What a compilation sets, and the one place the three numbers are written.
+         * What a compilation sets, and the one place these figures are written.
          *
          * <p>Guardrails and not precision settings, each set with room over anything observed. The
          * pair space is twenty thousand: a behavior of a dozen positions of a handful of classes
@@ -187,13 +188,21 @@ public final class Front {
          * person reads and pastes. A group's choices are capped at four thousand and ninety-six,
          * which a body reaches only by settling thirteen decisions on one value.
          *
+         * <p>What a body's rules about the strings at a position may build is the figure a reading
+         * spends on the same kind of work, and the same size for the same reason — the formats a
+         * model writes are a few hundred states, and past this one the pattern is one nobody meant
+         * to write. Its own figure all the same: a measurement is what it leaves partial, and a
+         * compilation that wanted a behavior told apart more finely than its declarations are read
+         * exactly is one this lets say so.
+         *
          * <p>Held here rather than beside the policy it makes, so that measuring a behavior cannot
          * reach it: what governs a measurement is handed to it, and a default it could pick up is a
          * default two measurements of one behavior can differ by.
          */
         static final souther.compiler.partition.AdequacyPolicy STANDARD =
                 new souther.compiler.partition.AdequacyPolicy(
-                        new souther.compiler.partition.AdequacyPolicy.OfTheMeasures(20_000),
+                        new souther.compiler.partition.AdequacyPolicy.OfTheMeasures(20_000,
+                                PatternPlan.Budget.OF_BEHAVIOR_DISTINCTIONS),
                         new souther.compiler.partition.AdequacyPolicy.OfTheGeneration(200, 4096));
     }
 

@@ -42,11 +42,11 @@ class ANameUsedAsAValueHasTwoAnswersTest {
     private static final ReachName REACHED = new ReachName.OfModule(DECLARED);
 
     private static Hir.Var.Denoting denoting(WrittenName name) {
-        return new Hir.Var.Denoting(name, REACHED, name.region());
+        return new Hir.Var.Denoting(name, REACHED, null, name.region());
     }
 
     private static Hir.Var unanswered(WrittenName name) {
-        return new Hir.Var.Unanswered(name, name.region());
+        return new Hir.Var.Unanswered(name, null, name.region());
     }
 
     /** Read and found nothing, a name has neither answer to give, and says so by being the form
@@ -87,7 +87,7 @@ class ANameUsedAsAValueHasTwoAnswersTest {
     @Test
     void aReaderThatWasNotToMeetOneSaysWhichNameItMet() {
         WrittenName spin = WrittenName.of("spin", POS);
-        Hir.Var.Unanswered nothing = new Hir.Var.Unanswered(spin, spin.region());
+        Hir.Var.Unanswered nothing = new Hir.Var.Unanswered(spin, null, spin.region());
 
         assertTrue(nothing.unexpectedHere().getMessage().contains("`spin`"));
         assertTrue(nothing.unexpectedHere().getMessage().contains("denotes nothing"));
@@ -107,7 +107,7 @@ class ANameUsedAsAValueHasTwoAnswersTest {
         assertFalse(answered.unresolved());
 
         assertThrows(IllegalArgumentException.class,
-                () -> new Hir.Var.Denoting(WrittenName.of("spin", POS), null, null));
+                () -> new Hir.Var.Denoting(WrittenName.of("spin", POS), null, null, null));
     }
 
     /**

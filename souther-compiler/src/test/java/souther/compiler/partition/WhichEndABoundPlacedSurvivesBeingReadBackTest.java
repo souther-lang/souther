@@ -82,7 +82,7 @@ class WhichEndABoundPlacedSurvivesBeingReadBackTest {
     @Test
     void aBoundBuiltFromThatEndReadsBackAsThePairItCameFrom() {
         for (Row row : THE_LAW) {
-            OriginRef.InvariantOrigin origin = new OriginRef.InvariantOrigin(aClause(), 0,
+            LineOrigin.InvariantOrigin origin = new LineOrigin.InvariantOrigin(aClause(), 0,
                     DeclaredThresholds.endKept(row.cut()), row.holdsAtTheValue());
 
             assertEquals(row.cut(), origin.lineFacts().claim(),

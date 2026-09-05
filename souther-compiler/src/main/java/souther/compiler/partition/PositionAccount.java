@@ -37,6 +37,7 @@ import java.util.List;
  *                 of a rule another one read leaves nothing standing here
  */
 public record PositionAccount(String behavior, TermPath path, Type type, ReadingResidue residue,
+                              souther.compiler.values.ValueSet admits,
                               StructuralInspection.Continuation pending,
                               List<StandingQuestion> standing) {
 
@@ -102,12 +103,17 @@ public record PositionAccount(String behavior, TermPath path, Type type, Reading
     /** What one position's reading came to, as the reading itself answered it. */
     public static PositionAccount of(String behavior, Position position,
                                      StructuralInspection.Continuation pending) {
+        // What the declarations left this position, which is what a behavior's rules divide. An
+        // invariant restricts and a behavior divides what is left, so the measure that composes
+        // classes out of a body's rules has to be told what there is to divide.
         return new PositionAccount(behavior, position.path(), position.type(),
-                ReadingResidue.of(position), pending, position.unansweredQuestions());
+                ReadingResidue.of(position), position.admitted().approximation(), pending,
+                position.unansweredQuestions());
     }
 
     /** A position outside a reading of the declarations, which is where a test writes one. */
     static PositionAccount at(String behavior, TermPath path, Type type) {
-        return new PositionAccount(behavior, path, type, ReadingResidue.NOTHING, null, List.of());
+        return new PositionAccount(behavior, path, type, ReadingResidue.NOTHING,
+                souther.compiler.values.ValueSet.ANY, null, List.of());
     }
 }

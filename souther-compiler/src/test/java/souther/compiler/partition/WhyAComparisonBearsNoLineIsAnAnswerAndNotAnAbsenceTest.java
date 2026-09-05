@@ -80,7 +80,7 @@ class WhyAComparisonBearsNoLineIsAnAnswerAndNotAnAbsenceTest {
                                 checked.elementBindings().get("read")),
                         // What arrives is not what this is about: read with nothing said about it,
                         // every line is held to the declarations alone.
-                        souther.compiler.check.PathReachability.Answers.NONE).all()) {
+                        souther.compiler.check.PathReachability.Answers.NONE).comparisons()) {
             souther.compiler.diag.Citation.Written at = assertInstanceOf(
                     souther.compiler.diag.Citation.Written.class, each.catalogued().at(),
                     "the model under test is written in this compile's own source");
