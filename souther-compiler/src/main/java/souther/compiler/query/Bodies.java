@@ -2483,6 +2483,13 @@ public final class Bodies {
             // the module this check holds, so this is where there is a module to decide it from;
             // and the claims below name arms of it, so they are addresses of the numbering this
             // answer goes on to carry rather than of one more that agrees with it.
+            //
+            // Owed by the answer rather than by what is done with it, so nothing conditions it.
+            // The judging below stops where the signatures or the reading of the inputs are not in
+            // hand, which is a condition on judging a claim and never was one on the bodies having
+            // a numbering: a module whose bodies came out has arms whatever else did not come out,
+            // and an answer carrying no numbering is one every reader of it would decide a
+            // numbering of its own for.
             souther.compiler.coverage.CoverageSites.Plan plan =
                     souther.compiler.coverage.CoverageSites.of(of, read, handed);
             Map<String, souther.compiler.claims.Claims> claims =

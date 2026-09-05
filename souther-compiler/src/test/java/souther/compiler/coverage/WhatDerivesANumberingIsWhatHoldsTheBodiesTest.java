@@ -87,19 +87,26 @@ class WhatDerivesANumberingIsWhatHoldsTheBodiesTest {
     }
 
     /**
-     * And nothing outside the numbering's own package makes one.
+     * And nothing else in the compiler makes one.
      *
      * <p>Beside the walk, because the two are told apart by nothing afterwards. A numbering put
      * together from parts a caller had to hand is a numbering, and an address of it is an address —
      * so a reader handed one would be reading a run against places by whatever the caller believed
-     * the numbers meant. The walk is the only thing that knows, and the constructor is public
-     * because a fixture stating a numbering outright is how the readings below it are tested.
+     * the numbers meant. The walk is the only thing that knows.
+     *
+     * <p><b>The compiler, and not everywhere.</b> The constructor is public, because a fixture
+     * stating a numbering outright is how the readings below it are tested, and a fixture of the
+     * CLI's is not in this package. So what stops a caller elsewhere is not the type, and this walk
+     * is not it either: it reads this module's classes, for the reason the derivation walk above
+     * does — the other modules are built after this one, so a walk over their output would read
+     * whatever the last build left and would say nothing at all on a clean one. A numbering made in
+     * {@code souther-cli} or {@code souther-lsp} is outside what this can answer for.
      */
     @Test
     void nothingElseInTheCompilerMakesANumbering() throws IOException {
         assertEquals(declared(MAY_CONSTRUCT), constructions(),
-                "a numbering made anywhere else says what numbers mean without having handed any"
-                        + " out. What may make one, and why: " + why(MAY_CONSTRUCT));
+                "a numbering made elsewhere in this module says what numbers mean without having"
+                        + " handed any out. What may make one, and why: " + why(MAY_CONSTRUCT));
     }
 
     private static Map<String, Integer> declared(List<Licence> licences) {
