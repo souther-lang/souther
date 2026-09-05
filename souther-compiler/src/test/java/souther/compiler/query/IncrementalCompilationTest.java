@@ -174,6 +174,58 @@ class IncrementalCompilationTest {
         return c.db().ask(new Output.Classes("shop.prices")).value();
     }
 
+    /** A module that writes definitions of its own before the declaration an importer names — one
+     *  the importer reads through and one nothing at all reads. */
+    private static final String PRICES_WITH_HELPERS = """
+            module shop.prices exposing ( Amount )
+
+            let floor = 0
+
+            let describe (n: Int): Int = n
+
+            data Amount = Int
+                invariant value >= floor
+            """;
+
+    /** Names `Amount` and nothing else of it. */
+    private static final String CART_OF_AMOUNT = """
+            module shop.cart exposing ( Total )
+
+            import shop.prices ( Amount )
+
+            data Total = { paid: Amount }
+
+            let ten = Amount(10)
+            """;
+
+    /**
+     * And an edit to a body written <em>before</em> the declaration leaves the importer alone as
+     * well. What a construct was numbered as is part of the declaration the importer builds
+     * against, so a count over the file put every definition of a module into every importer's
+     * dependency: editing a helper no importer can name renumbered the comparison in `Amount`'s
+     * invariant, `Amount` came out different, and every module that imported it was compiled again
+     * to the same class files.
+     */
+    @Test
+    void editingABodyWrittenBeforeADeclarationDoesNotReachAnImporterEither() {
+        Map<String, String> byId = new LinkedHashMap<>();
+        byId.put("prices.sou", PRICES_WITH_HELPERS);
+        byId.put("cart.sou", CART_OF_AMOUNT);
+        Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
+        c.answerEverything();
+        assertTrue(c.db().allReports().isEmpty(), "the workspace compiles to begin with");
+        Answer<?> cart = c.db().ask(new Output.Classes("shop.cart"));
+
+        Map<String, String> edited = new LinkedHashMap<>();
+        edited.put("prices.sou", PRICES_WITH_HELPERS.replace("Int = n\n", "Int = n + 1\n"));
+        edited.put("cart.sou", CART_OF_AMOUNT);
+        c.update(edited, Set.of());
+        c.answerEverything();
+
+        assertSame(cart, c.db().ask(new Output.Classes("shop.cart")),
+                "`describe` is written before `Amount` and is none of shop.cart's business");
+    }
+
     /** Two behaviors and a helper both of them call, in one module. */
     private static final String ORDERS = """
             module shop.orders exposing ( Amount )
@@ -215,10 +267,19 @@ class IncrementalCompilationTest {
         return c;
     }
 
-    /** The same workspace with {@code thrice}'s body changed — an edit inside one definition, made
-     * at the end of the file so nothing before it moves. */
-    private static Map<String, String> thriceTimes(String factor) {
-        return Map.of("orders.sou", ORDERS.replace("n.value * 3)", "n.value * " + factor + ")"));
+    /**
+     * The same workspace with {@code twice}'s body changed — an edit inside one definition, written
+     * where it moves no line of the definitions after it.
+     *
+     * <p>{@code twice} and not {@code thrice}, and an operation more rather than a different number
+     * written in one. What the two tests below hold is that a body is none of the business of the
+     * one beside it, and the way that used to fail was a count over the whole file: an edit that
+     * wrote one construct more renumbered every construct after it. Both halves are needed to reach
+     * it — an edit to the last definition has nothing after it to renumber, and an edit that leaves
+     * the count where it was renumbers nothing.
+     */
+    private static Map<String, String> twiceOver(String written) {
+        return Map.of("orders.sou", ORDERS.replace("doubled(n.value)", written));
     }
 
     /**
@@ -232,13 +293,13 @@ class IncrementalCompilationTest {
         Answer<?> twice = c.db().ask(new Bodies.LoweredBody("shop.orders", new souther.compiler.ast.DefinitionName("twice")));
         Answer<?> thrice = c.db().ask(new Bodies.LoweredBody("shop.orders", new souther.compiler.ast.DefinitionName("thrice")));
 
-        c.update(thriceTimes("30"), Set.of());
+        c.update(twiceOver("doubled(n.value + 0)"), Set.of());
         c.answerEverything();
 
-        assertNotSame(thrice, c.db().ask(new Bodies.LoweredBody("shop.orders", new souther.compiler.ast.DefinitionName("thrice"))),
-                "the edit is `thrice`'s, so it is expanded again");
-        assertSame(twice, c.db().ask(new Bodies.LoweredBody("shop.orders", new souther.compiler.ast.DefinitionName("twice"))),
-                "`twice` says what it said, and `thrice` is not part of it");
+        assertNotSame(twice, c.db().ask(new Bodies.LoweredBody("shop.orders", new souther.compiler.ast.DefinitionName("twice"))),
+                "the edit is `twice`'s, so it is expanded again");
+        assertSame(thrice, c.db().ask(new Bodies.LoweredBody("shop.orders", new souther.compiler.ast.DefinitionName("thrice"))),
+                "`thrice` says what it said, and `twice` is not part of it");
     }
 
     /**
@@ -251,13 +312,13 @@ class IncrementalCompilationTest {
         Answer<?> twice = c.db().ask(new Bodies.CheckedBehavior("shop.orders", "twice"));
         Answer<?> thrice = c.db().ask(new Bodies.CheckedBehavior("shop.orders", "thrice"));
 
-        c.update(thriceTimes("30"), Set.of());
+        c.update(twiceOver("doubled(n.value + 0)"), Set.of());
         c.answerEverything();
 
-        assertNotSame(thrice, c.db().ask(new Bodies.CheckedBehavior("shop.orders", "thrice")),
-                "the edit is `thrice`'s, so it is checked again");
-        assertSame(twice, c.db().ask(new Bodies.CheckedBehavior("shop.orders", "twice")),
-                "`twice` is checked against `behavior twice`, which says what it said");
+        assertNotSame(twice, c.db().ask(new Bodies.CheckedBehavior("shop.orders", "twice")),
+                "the edit is `twice`'s, so it is checked again");
+        assertSame(thrice, c.db().ask(new Bodies.CheckedBehavior("shop.orders", "thrice")),
+                "`thrice` is checked against `behavior thrice`, which says what it said");
     }
 
     /**

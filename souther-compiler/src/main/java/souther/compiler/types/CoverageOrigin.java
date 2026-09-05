@@ -18,39 +18,59 @@ package souther.compiler.types;
  * calls it.
  *
  * <p>Not a name anything outside one compilation can be matched by. {@code ordinal} is the builder's
- * own count over the source it is reading, and the builder does not take the numbers in the order the
- * constructs are written: a statement guard folds the rest of its block before numbering itself, and
- * a comprehension is numbered after its parts. What identity needs is that the numbering be a
- * function of the source and that two constructs never share one, which it is and they do not.
- * Matching one compilation's obligations against another's is a different question and not one this
- * answers.
+ * own count over what {@link #owner} names, and the builder does not take the numbers in the order
+ * the constructs are written: a statement guard folds the rest of its block before numbering itself,
+ * and a comprehension is numbered after its parts. What identity needs is that the numbering be a
+ * function of the owner's syntax and that no two constructs of one owner share an ordinal, which it
+ * is and they do not — the two together are what tell one construct from every other, and two
+ * definitions' first constructs are two constructs. Matching one compilation's obligations against
+ * another's is a different question and not one this answers.
  *
- * @param module  the module whose source wrote the construct — what keeps a prelude helper's forks
- *                apart from those of the module expanding it, since each source numbers from zero
- * @param ordinal which construct of that source, by the builder's own count over it
+ * <p>Counted within the owner and not over the file. A count over the file makes the number a
+ * function of everything written before it there, so editing one definition renumbers the
+ * constructs of every one after it — and an identity that moves for an edit nothing about it can
+ * see is not one.
+ *
+ * @param owner   what wrote the construct: the declaration, the stated behavior, the body, or a
+ *                source's rows for a behavior or its stand-in. Null exactly for {@link #unwritten}
+ * @param ordinal which construct of that owner, by the builder's own count over it
  * @param lowered which fork of that construct, where a lowering makes more than one out of it. Zero
  *                is the construct's own fork, which is every fork an author writes as one
  * @param kind    what the author wrote there. Not part of what tells one construct from another —
- *                the builder takes a fresh ordinal for every construct it reads, so no two origins
- *                share one and nothing here can disagree about a construct two values name. It is
- *                the answer a report needs and the tree that runs no longer holds
+ *                the builder takes a fresh ordinal for every construct it reads of one owner, so no
+ *                two origins of that owner share one and nothing here can disagree about a construct
+ *                two values name. It is the answer a report needs and the tree that runs no longer
+ *                holds
  */
-public record CoverageOrigin(String module, int ordinal, int lowered, CoverageConstruct kind) {
+public record CoverageOrigin(WrittenOwner owner, int ordinal, int lowered, CoverageConstruct kind) {
 
     public CoverageOrigin {
-        // Two spellings of one fact, held together rather than left to agree. `isWritten` is asked
+        // Three spellings of one fact, held together rather than left to agree. `isWritten` is asked
         // by readers that have no use for the kind, and a value answering it one way and carrying a
-        // construct the other way is one either reader can be right about.
+        // construct the other way is one either reader can be right about. The owner goes with them:
+        // a number counted within nothing addresses nothing.
         if ((ordinal < 0) != (kind == CoverageConstruct.NOT_WRITTEN)) {
             throw new IllegalArgumentException(
                     "an origin says both whether a source wrote it and what was written: "
                             + ordinal + " with " + kind);
         }
+        if ((owner == null) != (ordinal < 0)) {
+            throw new IllegalArgumentException(
+                    "an origin a source wrote says what it was counted within: "
+                            + owner + " with " + ordinal);
+        }
     }
 
-    /** The construct a source wrote, said as {@code kind}. */
-    public static CoverageOrigin written(String module, int ordinal, CoverageConstruct kind) {
-        return new CoverageOrigin(module, ordinal, 0, kind);
+    /** The construct {@code owner} wrote, counted as {@code ordinal} among the ones written there,
+     *  and said as {@code kind}. */
+    public static CoverageOrigin written(WrittenOwner owner, int ordinal, CoverageConstruct kind) {
+        return new CoverageOrigin(owner, ordinal, 0, kind);
+    }
+
+    /** The module whose source wrote the construct, or null where nobody wrote it. Asked of the
+     *  owner, which is what knows. */
+    public String module() {
+        return owner == null ? null : owner.module();
     }
 
     /**
@@ -66,7 +86,7 @@ public record CoverageOrigin(String module, int ordinal, int lowered, CoverageCo
     }
 
     private static final CoverageOrigin UNWRITTEN =
-            new CoverageOrigin("", -1, 0, CoverageConstruct.NOT_WRITTEN);
+            new CoverageOrigin(null, -1, 0, CoverageConstruct.NOT_WRITTEN);
 
     /** Whether a source wrote the construct this names. False only for {@link #unwritten}. */
     public boolean isWritten() {
@@ -92,6 +112,6 @@ public record CoverageOrigin(String module, int ordinal, int lowered, CoverageCo
         // The kind comes along. A guard of a comprehension is a fork of that comprehension, and a
         // fork that arrived saying it was written as something else would be the construct this
         // whole value exists to keep hold of, lost one lowering in.
-        return new CoverageOrigin(module, ordinal, part + 1, kind);
+        return new CoverageOrigin(owner, ordinal, part + 1, kind);
     }
 }

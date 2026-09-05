@@ -2,6 +2,7 @@ package souther.architecture;
 
 import souther.compiler.types.CoverageConstruct;
 import souther.compiler.types.CoverageOrigin;
+import souther.compiler.types.WrittenOwner;
 import souther.test.RepositoryLayout;
 
 import org.junit.jupiter.api.Test;
@@ -64,6 +65,10 @@ class WhoMaySettleACoverageOriginTest {
 
     private static final String A_CONSTRUCT = "L" + internalNameOf(CoverageConstruct.class) + ";";
 
+    /** What a construct's number is counted within, which every way of making one takes. Read off
+     *  the type for the reason the owner is: a rename stops the build rather than emptying the walk. */
+    private static final String AN_OWNER = "L" + internalNameOf(WrittenOwner.class) + ";";
+
     private static final RepositoryLayout REPOSITORY = RepositoryLayout.ofWorkingDirectory();
 
     /**
@@ -71,10 +76,10 @@ class WhoMaySettleACoverageOriginTest {
      * before anyone names it, and not a silence until someone does.
      */
     private static final List<String> MAKERS = List.of(
-            OWNER + "#<init>(Ljava/lang/String;II" + A_CONSTRUCT + ")V",
+            OWNER + "#<init>(" + AN_OWNER + "II" + A_CONSTRUCT + ")V",
             OWNER + "#lowered(I)" + AN_ORIGIN,
             OWNER + "#unwritten()" + AN_ORIGIN,
-            OWNER + "#written(Ljava/lang/String;I" + A_CONSTRUCT + ")" + AN_ORIGIN);
+            OWNER + "#written(" + AN_OWNER + "I" + A_CONSTRUCT + ")" + AN_ORIGIN);
 
     /**
      * Every class that names one of the makers, with the maker it names.
@@ -88,6 +93,11 @@ class WhoMaySettleACoverageOriginTest {
      * <p>The constructor is named only from inside {@code CoverageOrigin}. A row naming it elsewhere
      * is a pass making an origin of its own, which after an expansion is two obligations where the
      * author wrote one.
+     *
+     * <p>What reads a source is a reading of one owner, not the builder around it. A number means
+     * which construct only under what it was counted within, so the two are made together: the
+     * builder finds the owner and hands its syntax to a reading, and the reading is what has a
+     * number to give. A row here naming the builder would be a count over everything a file wrote.
      */
     private static final List<String> NAMING_A_MAKER = List.of(
             "souther/compiler/ast/Hir$ListComp -> " + OWNER + "#lowered(I)" + AN_ORIGIN,
@@ -95,9 +105,9 @@ class WhoMaySettleACoverageOriginTest {
             "souther/compiler/check/Conditions$AsPolar -> " + OWNER + "#unwritten()" + AN_ORIGIN,
             "souther/compiler/check/Terms -> " + OWNER + "#unwritten()" + AN_ORIGIN,
             "souther/compiler/check/TheOtherCase -> " + OWNER + "#unwritten()" + AN_ORIGIN,
-            "souther/compiler/frontend/AstBuilder -> " + OWNER
-                    + "#written(Ljava/lang/String;I" + A_CONSTRUCT + ")" + AN_ORIGIN,
-            OWNER + " -> " + OWNER + "#<init>(Ljava/lang/String;II" + A_CONSTRUCT + ")V");
+            "souther/compiler/frontend/AstBuilder$Reading -> " + OWNER
+                    + "#written(" + AN_OWNER + "I" + A_CONSTRUCT + ")" + AN_ORIGIN,
+            OWNER + " -> " + OWNER + "#<init>(" + AN_OWNER + "II" + A_CONSTRUCT + ")V");
 
     @Test
     void everyWayOfMakingOneIsWrittenDown() {

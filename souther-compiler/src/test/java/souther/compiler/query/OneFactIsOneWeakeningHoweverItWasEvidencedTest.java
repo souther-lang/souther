@@ -3,6 +3,7 @@ package souther.compiler.query;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.RuleCitation;
+import souther.compiler.types.WrittenOwner;
 import souther.compiler.check.RuleRef;
 import souther.compiler.diag.Citation;
 import souther.compiler.diag.SourcePos;
@@ -244,7 +245,8 @@ class OneFactIsOneWeakeningHoweverItWasEvidencedTest {
     }
 
     private static RuleRef comparison() {
-        return new RuleRef.Comparison("b", new CoverageOrigin("m", 1, 1, CoverageConstruct.IF));
+        return new RuleRef.Comparison("b", new CoverageOrigin(
+                new WrittenOwner.Body("m", "b"), 1, 1, CoverageConstruct.IF));
     }
 
     private static WeakeningSet of(Weakening one) {

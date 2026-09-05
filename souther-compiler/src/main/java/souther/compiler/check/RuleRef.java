@@ -1,5 +1,7 @@
 package souther.compiler.check;
 
+import souther.compiler.types.WrittenOwner;
+
 /**
  * Which rule of the model, and nothing about how anybody came to be holding it.
  *
@@ -39,7 +41,7 @@ public sealed interface RuleRef {
     }
 
     /**
-     * A comparison written in a behavior's body.
+     * A comparison a definition wrote, read for the answer of some behavior.
      *
      * <p>The comparison and not the fork testing it. A condition can be an application of a
      * function parameter, so one predicate handed to two calls is one rule and two predicates
@@ -65,6 +67,20 @@ public sealed interface RuleRef {
             if (behavior == null || origin == null) {
                 throw new IllegalArgumentException("a comparison of a body is one of some behavior's");
             }
+            // Which definition wrote it is half of what tells this comparison from every other, and
+            // it is held where the value is made rather than where one is published. A comparison of
+            // a type's clause or of a behavior's `ensures` is answered for by the clause and the arm
+            // it is in and never reaches here; one an analysis rebuilt was written by nobody.
+            if (!(origin.owner() instanceof WrittenOwner.Body)) {
+                throw new IllegalStateException("a comparison of a body was written by a"
+                        + " definition, and this was written by " + origin.owner());
+            }
+        }
+
+        /** The definition whose body wrote the comparison — not the behavior reading it, which a
+         *  helper's comparison has one of per caller. */
+        public WrittenOwner.Body writtenIn() {
+            return (WrittenOwner.Body) origin.owner();
         }
     }
 

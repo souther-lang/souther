@@ -6,6 +6,7 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 import souther.compiler.check.RuleCitation;
+import souther.compiler.types.WrittenOwner;
 import souther.compiler.check.RuleRef;
 import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.inputs.BlockReason;
@@ -371,7 +372,9 @@ class WhatKeepsAnUndeterminedVerdictOpenIsSaidTest {
         return new Weakening.ModelReadingIncomplete(ClosureGap.QuestionUnanswered.of(
                 StandingQuestion.NothingClassifiesIt.of(
                         new RuleRef.Comparison("go",
-                                new CoverageOrigin("m", 0, 0, CoverageConstruct.IF)),
+                                new CoverageOrigin(
+                                        new WrittenOwner.Body("m", "b"), 0, 0,
+                                        CoverageConstruct.IF)),
                         new RuleCitation.Named(term),
                         new FilingCoordinate.AtPosition(TermPath.of(term)), why)));
     }

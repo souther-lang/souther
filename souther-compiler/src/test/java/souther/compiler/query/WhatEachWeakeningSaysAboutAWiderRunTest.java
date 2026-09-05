@@ -3,6 +3,7 @@ package souther.compiler.query;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.BehaviorContract;
+import souther.compiler.types.WrittenOwner;
 import souther.compiler.coverage.Numberings;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.ComparisonClaim;
@@ -218,7 +219,8 @@ class WhatEachWeakeningSaysAboutAWiderRunTest {
         out.add(new Weakening.InputNotRead("b"));
         out.add(new Weakening.ProofContradicted("b", Numberings.arm(2, 1)));
         out.add(new Weakening.ArmsUnsettled(
-                new CoverageOrigin("m", 1, 0, CoverageConstruct.IF)));
+                new CoverageOrigin(new WrittenOwner.Body("m", "b"), 1, 0,
+                        CoverageConstruct.IF)));
         out.add(new Weakening.PairSpaceTruncated("b", 9, 4));
         return out;
     }

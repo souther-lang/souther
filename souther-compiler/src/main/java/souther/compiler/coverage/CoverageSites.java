@@ -6,6 +6,7 @@ import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingOwner;
 import souther.compiler.types.CoverageConstruct;
 import souther.compiler.types.CoverageOrigin;
+import souther.compiler.types.WrittenOwner;
 
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
@@ -131,7 +132,26 @@ public final class CoverageSites {
      *             construct, and what a fork holds several of is arms
      */
     public record Obligation(String behavior, CoverageOrigin origin, int part,
-                             DecidedBy decided) {}
+                             DecidedBy decided) {
+
+        /**
+         * A row is owed for what a definition's body wrote, which is asked where the value is made
+         * rather than where one is published.
+         *
+         * <p>Here rather than at the numbering, which is where it stood: the numbering refused an
+         * origin no source wrote as it handed out a number, and a fork read back through
+         * {@link GuardRef} is made without going that way, so the refusal covered one of the two
+         * places an obligation comes from. Stated of the value, there is no such place.
+         */
+        public Obligation {
+            WrittenOwner.theBodyThatWrote(origin.owner());
+        }
+
+        /** The definition whose body wrote the construct. */
+        public WrittenOwner.Body writtenIn() {
+            return WrittenOwner.theBodyThatWrote(origin.owner());
+        }
+    }
 
     /**
      * One outcome of one construct, as it stands in the tree that runs.

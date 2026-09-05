@@ -1,6 +1,7 @@
 package souther.compiler.coverage;
 
 import souther.compiler.ast.DefinitionRole;
+import souther.compiler.types.WrittenOwner;
 import souther.compiler.ast.Hir;
 import souther.compiler.ast.WrittenName;
 import souther.compiler.check.Lower;
@@ -95,7 +96,8 @@ class WhatTheReadingNamesIsTheForkTheLoweringBuildsTest {
             guards.add(Hir.Var.local(binder, AT));
         }
         Hir.ListComp comp = new Hir.ListComp(new Hir.IntLit(1, AT, null), guards,
-                CoverageOrigin.written(MODULE, 0, CoverageConstruct.COMPREHENSION), AT, null);
+                CoverageOrigin.written(new WrittenOwner.Body(MODULE, "b"), 0,
+                        CoverageConstruct.COMPREHENSION), AT, null);
         return new Hir.FnDef(WrittenName.synthetic("f", AT), MODULE, params, null,
                 new Hir.FnBody.Written(comp), new Hir.Modifiers(false, false),
                 DefinitionRole.Ordinary.INSTANCE, AT);

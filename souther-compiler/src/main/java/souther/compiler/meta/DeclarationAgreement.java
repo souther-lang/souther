@@ -12,6 +12,7 @@ import souther.compiler.types.BindingId;
 import souther.compiler.ast.ConstructionOrigin;
 import souther.compiler.types.CoverageOrigin;
 import souther.compiler.types.TypeSymbol;
+import souther.compiler.types.WrittenOwner;
 import souther.compiler.types.ValueName;
 
 import java.lang.reflect.RecordComponent;
@@ -651,7 +652,13 @@ public final class DeclarationAgreement {
             // The spelling, where nothing beside it says what it means — which is the rule this
             // class states about names, and this is the form that carries one on its own. Compared
             // as the word it is, because that is what it means there.
-            WrittenName.class);
+            WrittenName.class,
+            // Who wrote a construct, which is half of what tells one rule from another — the other
+            // half being the number counted within it. Compared whole: two rules are one when one
+            // owner counted them the same, and an owner read component by component would put the
+            // text an owner of rows carries in front of a comparison that has no question about it.
+            WrittenOwner.Declaration.class, WrittenOwner.Stated.class, WrittenOwner.Body.class,
+            WrittenOwner.Examples.class, WrittenOwner.Fake.class);
 
     /** Whether the comparison passes over it: a part of a settled declaration a crossing cannot
      *  see. */
