@@ -190,12 +190,8 @@ public final class Prepared {
     }
 
     /** The fake tables it writes, each read the way this module reaches its names. */
-    List<FakeTable> fakes() {
-        List<FakeTable> tables = new ArrayList<>();
-        for (Hir.Fake table : surface.fakes()) {
-            tables.add(new FakeTable(table));
-        }
-        return List.copyOf(tables);
+    FakeTables fakes() {
+        return surface.fakes();
     }
 
     /** Which module each imported name came from. */
@@ -298,36 +294,37 @@ public final class Prepared {
      */
     public static final class FakeTable {
 
-        private final Hir.Fake table;
+        private final FakeTables.Occurrence.Resolved declared;
 
-        private FakeTable(Hir.Fake table) {
-            this.table = table;
+        private FakeTable(FakeTables.Occurrence.Resolved declared) {
+            this.declared = declared;
         }
 
         /**
-         * The injected behavior this table stands in for, or null where the name denoted none.
+         * The injected behavior this table stands in for.
          *
-         * <p>The behavior and not the spelling. A table is written where the rows are and the
-         * behavior may be declared in another module, so which one it stands in for is what
-         * resolution answered and is never worked out again from the characters.
+         * <p>The behavior and not the spelling, and the one the classification answered rather than
+         * one read off the block here: a table is written where the rows are and the behavior may
+         * be declared in another module, so which one it stands in for was settled where the names
+         * were read and is carried from there.
          */
         public ValueName.Behavior standsInFor() {
-            return table.standsInFor();
+            return declared.behavior();
         }
 
         /** The table, for a reader that holds this state. */
         public Hir.Fake read() {
-            return table;
+            return declared.read();
         }
 
         @Override
         public boolean equals(Object o) {
-            return o instanceof FakeTable other && table.equals(other.table);
+            return o instanceof FakeTable other && declared.equals(other.declared);
         }
 
         @Override
         public int hashCode() {
-            return table.hashCode();
+            return declared.hashCode();
         }
     }
 
@@ -393,10 +390,9 @@ public final class Prepared {
             return examples;
         }
 
-        /** The fake tables its rows run against, which are the module's whole and not one file's:
-         * a module's own fakes are what its attached files' rows run against, and the other way
-         * round. */
-        public List<FakeTable> fakes() {
+        /** What its rows run against, which is the module's whole and not one file's: a module's
+         * own fakes are what its attached files' rows run against, and the other way round. */
+        public FakeTables fakes() {
             return module.fakes();
         }
 
@@ -413,38 +409,58 @@ public final class Prepared {
         }
 
         /**
-         * The table that stands in for {@code dependency}, or null where none does.
+         * How many blocks of this module name {@code dependency}, which is what says whether
+         * anything stands in for it (spec §example-fakes).
          *
-         * <p>The first one written for it, which is the rule the whole module is read under: a
-         * second table for one dependency is never reached, so it stands in for nothing, is
-         * compared against nothing, and is not built (spec §example-fakes, §example-pending). A
-         * table whose target denotes no behavior stands in for nothing either, and is refused where
-         * its name is read.
-         *
-         * <p>One place, because a run picking a table, a reading comparing one against the recorded
-         * rows, and a build of the tables that answer would otherwise be three walks agreeing by
-         * hand — and the day they stopped agreeing, a row would run against a table nothing was
-         * holding to anything.
+         * <p>Three answers and not two. Nothing written is a dependency a row cannot be run
+         * against; one block written is the table that answers for it; more than one is a refusal,
+         * and none of those blocks establishes what stands in for the behavior. A reader given
+         * "found" or "not found" would have the first and the last under one answer and would have
+         * to work out which it was — which is what a diagnostic saying a stand-in is missing where
+         * two are written comes of.
          */
-        public FakeTable standingInFor(ValueName.Behavior dependency) {
-            for (FakeTable table : module.fakes()) {
-                if (dependency.equals(table.standsInFor())) {
-                    return table;
-                }
-            }
-            return null;
+        public FakeTables.Declaration declaredFor(ValueName.Behavior dependency) {
+            return module.fakes().declaredFor(dependency);
         }
 
-        /** Every dependency a table here stands in for, each under the table that answers for it,
-         *  in the order the tables are written. */
+        /** Every dependency one block here stands in for, each under that block, in the order the
+         *  blocks are written. */
         public SequencedMap<ValueName.Behavior, FakeTable> tablesThatAnswer() {
             LinkedHashMap<ValueName.Behavior, FakeTable> answering = new LinkedHashMap<>();
-            for (FakeTable table : module.fakes()) {
-                if (table.standsInFor() != null) {
-                    answering.putIfAbsent(table.standsInFor(), table);
+            module.fakes().unique().forEach((behavior, table) ->
+                    answering.put(behavior, new FakeTable(table)));
+            return answering;
+        }
+
+        /** Every block this module writes, in the order they were read, whether or not its target
+         *  reached a behavior. */
+        public List<FakeTables.Occurrence> written() {
+            return module.fakes().written();
+        }
+
+        /**
+         * Every block whose target reached a behavior, in the order they were read.
+         *
+         * <p>What is built and held to what it states, whether or not it is the block that answers
+         * for its behavior: a table is built because it is written (spec §example-fakes), and a
+         * block that stands in for nothing because another names the same behavior is still a block
+         * whose own rows say something. A block whose target reached nothing is not here — there is
+         * no signature to build it against, and what is wrong with it is said where the name is
+         * read.
+         */
+        public List<FakeTable> tablesWritten() {
+            List<FakeTable> tables = new ArrayList<>();
+            for (FakeTables.Occurrence occurrence : module.fakes().written()) {
+                if (occurrence instanceof FakeTables.Occurrence.Resolved resolved) {
+                    tables.add(new FakeTable(resolved));
                 }
             }
-            return answering;
+            return List.copyOf(tables);
+        }
+
+        /** The behaviors more than one block here names, none of which stands in for anything. */
+        public List<FakeTables.Declaration.Conflict> conflicts() {
+            return module.fakes().conflicts();
         }
 
         /**

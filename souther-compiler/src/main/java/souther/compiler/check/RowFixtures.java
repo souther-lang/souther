@@ -7,6 +7,7 @@ import souther.compiler.ast.WrittenName;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -72,7 +73,7 @@ public final class RowFixtures {
      * so nothing downstream counts the rows a second time. Two counts would be two orders, and a row
      * would run the value beside the one it wrote.
      */
-    public static List<Placed> placed(Hir.Module module,
+    public static List<Placed> placed(Hir.Module module, FakeTables fakes,
                                       Map<ValueName.Behavior, Sig> signatures) {
         List<Placed> out = new java.util.ArrayList<>();
         for (Hir.Example ex : module.examples()) {
@@ -92,9 +93,13 @@ public final class RowFixtures {
                 out.add(new Placed(row.expected(), new RowPosition.Asserts(answersWith(sig))));
             }
         }
-        for (Hir.Fake fake : module.fakes()) {
-            Sig sig = sigOf(signatures, fake.standsInFor());
-            for (Hir.FakeRow row : fake.rows()) {
+        // Every block written, whether or not its target reached a behavior: an operand stands
+        // where it is written, and a block nothing resolved still writes values. What it stands in
+        // for is what the classification answered, never read off the block again.
+        for (FakeTables.Occurrence occurrence : fakes.written()) {
+            Sig sig = occurrence instanceof FakeTables.Occurrence.Resolved resolved
+                    ? sigOf(signatures, resolved.behavior()) : null;
+            for (Hir.FakeRow row : occurrence.read().rows()) {
                 if (row.inputs() != null) {
                     for (int i = 0; i < row.inputs().size(); i++) {
                         out.add(new Placed(row.inputs().get(i), supplies(sig, i)));
@@ -143,11 +148,11 @@ public final class RowFixtures {
      * <p>An expectation written as a bare case name has none: it asserts which arm the behavior
      * answered with and nothing under it, so there is no value to compute and nothing to emit.
      */
-    public static Emitted emitted(Hir.Module module, Symbols symbols,
+    public static Emitted emitted(Hir.Module module, FakeTables fakes, Symbols symbols,
                                   Map<ValueName.Behavior, Sig> signatures) {
         Map<String, Hir.FnDef> out = new LinkedHashMap<>();
-        Map<Hir.Expr, String> methods = new java.util.IdentityHashMap<>();
-        List<Placed> placed = placed(module, signatures);
+        Map<Hir.Expr, String> methods = new IdentityHashMap<>();
+        List<Placed> placed = placed(module, fakes, signatures);
         for (int i = 0; i < placed.size(); i++) {
             Hir.Expr operand = placed.get(i).operand();
             RowPosition position = placed.get(i).position();

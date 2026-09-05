@@ -1069,6 +1069,33 @@ public final class Names {
     }
 
     /**
+     * What this module's {@code fake} blocks declare: which behavior each names, and how many name
+     * one.
+     *
+     * <p>Asked of the resolved module, which is as early as it can be asked and as late as it needs
+     * to be. What it takes is that the module has every block — its own source's and every attached
+     * {@code examples for} file's, which are joined before resolution — and that each block's
+     * target has been read against the names in scope. Nothing else about the module bears on it: a
+     * block naming a behavior twice is written twice whether or not a representation was derived
+     * for a declaration elsewhere, or a body desugared. Asked further down, that is what would
+     * decide whether the refusal is said at all.
+     */
+    public record FakeTables(String name) implements Key<souther.compiler.check.FakeTables> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<souther.compiler.check.FakeTables> compute(Db db) {
+            Answer<Hir.Module> resolved = db.ask(new Resolved(name));
+            return resolved.present()
+                    ? Answer.of(souther.compiler.check.FakeTables.classify(resolved.value()))
+                    : Answer.absent();
+        }
+    }
+
+    /**
      * The module a question about a place is a question about, or null when this compilation does
      * not have the file — including a question that names no file at all, which names no place and
      * so has no module to be asked of.
