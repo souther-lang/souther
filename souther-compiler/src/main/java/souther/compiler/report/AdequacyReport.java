@@ -1,6 +1,7 @@
 package souther.compiler.report;
 
 import souther.compiler.query.ClaimAnnotations;
+import souther.compiler.diag.QuotedFrom;
 import souther.compiler.source.SourceId;
 
 import souther.compiler.ast.Hir;
@@ -2493,10 +2494,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * at one place and they are two lines. Which declarations took an end in is
      * {@code narrowedWithin}: a bound another type narrowed is not the bound it narrows.
      */
-    private static void obligationId(ObjectNode into, About.ObligationIdentity identity) {
+    private static void obligationId(ObjectNode into, About.ObligationIdentity identity,
+                                     DocumentSources sources) {
         switch (identity) {
             case About.ObligationIdentity.OfALine(var point) -> obligationId(into, point);
-            case About.ObligationIdentity.OfAnArm(var arm) -> armId(into, arm);
+            case About.ObligationIdentity.OfAnArm(var arm) -> armId(into, arm, sources);
         }
     }
 
@@ -2691,32 +2693,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             // read by every behavior that calls it, and the numbering starts at zero in each
             // definition, so without the definition two helpers' first comparisons are one rule.
             case RuleRef.Comparison it -> {
-                into.put("declaredIn", it.origin().module());
-                into.put("definition", definitionThatWrote(it.origin().owner()));
+                into.put("declaredIn", it.writtenIn().module());
+                into.put("definition", it.writtenIn().definition());
                 into.put("behavior", it.behavior());
                 into.put("ordinal", it.origin().ordinal());
                 into.put("lowered", it.origin().lowered());
             }
         }
-    }
-
-    /**
-     * The definition {@code owner} names — what a number counted within it is counted within, and so
-     * what a projection writing that number has to write beside it.
-     *
-     * <p>Raises for any other owner. What is published here is a rule of a body and a fork of one,
-     * and a construct written in a type's clauses or in a behavior's statement of itself reaches a
-     * reader by the clause and the arm it is in rather than by a number. So an owner of another kind
-     * arriving is this compiler disagreeing with itself about which projection a construct is
-     * published through, and answering with the module alone would put two definitions' first
-     * constructs under one identity.
-     */
-    private static String definitionThatWrote(WrittenOwner owner) {
-        if (owner instanceof WrittenOwner.Body body) {
-            return body.definition();
-        }
-        throw new IllegalStateException("a rule published here is a definition's, and this one is "
-                + owner + "'s");
     }
 
     /**
@@ -3256,7 +3239,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             ArrayNode all = node.putArray("obligations");
             for (ArmObligation arm : arms.all()) {
                 ObjectNode a = all.addObject();
-                armId(a.putObject("obligationId"), arm.id());
+                armId(a.putObject("obligationId"), arm.id(), sources);
                 a.put("label", ArmVocabulary.label(arm.display()));
                 a.put("kind", word(arm.display().name()));
                 // What the arm is an outcome of. Two fields because the meaning is the pair: an
@@ -3289,6 +3272,57 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
     }
 
     /**
+     * Which of a module's writings wrote a block, said as this document says such things.
+     *
+     * <p>Beside the number, which is counted within it: two writings' first blocks are one rule
+     * without this. The word differs with what wrote it, as it does wherever this document names a
+     * rule — and the two a module may write more than one of for a behavior say which source as
+     * well, an attached file's rows being counted apart from the model file's.
+     */
+    private static void writtenBy(ObjectNode into, WrittenOwner owner, DocumentSources sources) {
+        switch (owner) {
+            case WrittenOwner.Declaration it -> {
+                into.put("kind", "declaration");
+                into.put("declaredOn", it.declaration().name());
+            }
+            case WrittenOwner.Stated it -> {
+                into.put("kind", "stated");
+                into.put("behavior", it.behavior());
+            }
+            case WrittenOwner.Body it -> {
+                into.put("kind", "body");
+                into.put("definition", it.definition());
+            }
+            case WrittenOwner.Examples it -> {
+                into.put("kind", "example_rows");
+                into.put("behavior", it.behavior());
+                into.put("sourceId", sourceOf(it.text(), sources));
+            }
+            case WrittenOwner.Fake it -> {
+                into.put("kind", "stand_in");
+                into.put("behavior", it.target());
+                into.put("sourceId", sourceOf(it.text(), sources));
+            }
+        }
+    }
+
+    /**
+     * The source a text is, as this document names one.
+     *
+     * <p>Raises for a text this compile has no source for. What is published here is a rule of a
+     * module this compile read, and a document about this compile names the sources it read; a text
+     * it cannot show is one a reader could not be sent to, and answering with nothing would put two
+     * sources' rows for one behavior under one identity.
+     */
+    private static String sourceOf(QuotedFrom text, DocumentSources sources) {
+        if (text instanceof QuotedFrom.ASourceThisCompileHolds(SourceId source)) {
+            return sources.written(source);
+        }
+        throw new IllegalStateException("a rule written in rows this compile has no source for is"
+                + " being published: " + text);
+    }
+
+    /**
      * What tells one arm of a behavior from every other, which is not what a reader is shown.
      *
      * <p>A key within this document: a consumer joins the entries of one behavior's {@code branch}
@@ -3301,9 +3335,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * however many bodies it was spliced into; one whose caller decides is one per rule a caller
      * handed in, and two of those are the same construct at the same place.
      */
-    private static void armId(ObjectNode into, CoverageSites.Obligation arm) {
-        into.put("module", arm.origin().module());
-        into.put("definition", definitionThatWrote(arm.origin().owner()));
+    private static void armId(ObjectNode into, CoverageSites.Obligation arm,
+                              DocumentSources sources) {
+        into.put("module", arm.writtenIn().module());
+        into.put("definition", arm.writtenIn().definition());
         into.put("construct", arm.origin().ordinal());
         into.put("lowered", arm.origin().lowered());
         into.put("part", arm.part());
@@ -3317,7 +3352,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                             one.put("declaration", it.declaration().toString());
                     case SuppliedRules.RuleIdentity.Written it -> {
                         one.put("module", it.rule().module());
-                        one.put("definition", definitionThatWrote(it.rule().owner()));
+                        writtenBy(one.putObject("writtenBy"), it.writtenBy(), sources);
                         one.put("block", it.rule().ordinal());
                     }
                 }
@@ -3508,7 +3543,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             // things are not a list this holds, and one written here would leave a finding about
             // the next of them named by words that tell two of its obligations apart nowhere.
             if (finding.about() instanceof About.OfAnObligation owed) {
-                obligationId(f.putObject("obligationId"), owed.obligationIdentity());
+                obligationId(f.putObject("obligationId"), owed.obligationIdentity(), sources);
             }
             // And which limit stopped it, where the finding is about one being in the way. Two
             // conjuncts of one clause about one position can stop for two different limits, so

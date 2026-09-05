@@ -80,7 +80,10 @@ public final class AstBuilder {
 
     private AstBuilder(String source, Placement read) {
         this.lines = new LineIndex(source, read);
-        this.text = read.quotedFrom();
+        // Asked of a position, which is the one way there is to ask which text something is in.
+        // The placement holds the answer and does not publish it: a caller reading it off the
+        // placement would be a second way to reach a classification that is made once.
+        this.text = lines.posOf(0).quotedFrom();
     }
 
     /** What reads {@code owner}'s syntax, made once and handed back after that. */
@@ -508,6 +511,18 @@ public final class AstBuilder {
          */
         private int rowCounter;
 
+        /**
+         * The names a lowering mints for the binders it needs, kept apart from each other within
+         * the owner being read.
+         *
+         * <p>Within the owner and not within the file, and nothing turns on the difference. What a
+         * spelling has to do is not be captured by, or capture, a name written beside it in one
+         * scope — and two owners' forms are never in one scope by being written in one file. What
+         * does put one definition's code inside another's scope is a helper spliced into a call,
+         * and the inliner α-renames what it splices, because a helper written in another module was
+         * already numbered from zero in its own file. So file-wide uniqueness was never what kept
+         * these apart, and narrowing it to the owner takes nothing away.
+         */
         private int matchWholeCounter;
         private int tupleCounter;
         private int getterCounter;

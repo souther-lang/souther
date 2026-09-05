@@ -39,8 +39,10 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -166,6 +168,30 @@ class EverySchemaWordIsAccountedForTest {
         return out;
     }
 
+    /**
+     * The word each thing that may write a block is published as.
+     *
+     * <p>The set is the owners themselves, so one added to the language leaves this without a word
+     * for it and fails here. What is written down is the spelling, which a document carries and a
+     * Java name is not.
+     */
+    private static Set<String> ownerWords() {
+        Map<String, String> spelling = new LinkedHashMap<>();
+        spelling.put("Declaration", "declaration");
+        spelling.put("Stated", "stated");
+        spelling.put("Body", "body");
+        spelling.put("Examples", "example_rows");
+        spelling.put("Fake", "stand_in");
+        Set<String> words = new LinkedHashSet<>();
+        for (Class<?> owner : armsOf(souther.compiler.types.WrittenOwner.class)) {
+            String word = spelling.get(owner.getSimpleName());
+            assertNotNull(word, owner.getSimpleName() + " may write a block and this document has"
+                    + " no word for it");
+            words.add(word);
+        }
+        return words;
+    }
+
     /** The names a branch measure can give an arm, spelled by the writer's own encoder. */
     private static Set<String> armWords() {
         return Arrays.stream(souther.compiler.coverage.OutcomeName.values())
@@ -252,6 +278,14 @@ class EverySchemaWordIsAccountedForTest {
             new Vocabulary("findings[].kind",
                     List.of("$defs", "findings", "items", "properties", "kind"),
                     Adequacy.Kind.class),
+            // What wrote a block a caller handed in. The set comes from the owners a source can
+            // write, so a sixth of them has to teach this its word before the schema will pass;
+            // only the spelling is written down here, the report's own switch being exhaustive over
+            // the same sealed type.
+            new Vocabulary("branch.obligations[].rules[].writtenBy.kind",
+                    List.of("$defs", "armObligationId", "properties", "rules", "items",
+                            "properties", "writtenBy", "properties", "kind"),
+                    List.of(souther.compiler.types.WrittenOwner.class), ownerWords(), Set.of()),
             new Vocabulary("findings[].disposition",
                     List.of("$defs", "findings", "items", "properties", "disposition"),
                     Adequacy.Finding.Disposition.class),

@@ -46,6 +46,29 @@ public sealed interface WrittenOwner {
      *  those of the module expanding it. */
     String module();
 
+    /**
+     * The definition whose body wrote this, for a reader that answers only for those.
+     *
+     * <p>Said here, once, because it is one rule however many values rest on it. A row is owed for
+     * a fork or a comparison of the tree that runs, and what runs is a body: a construct written in
+     * a type's clauses or in a behavior's statement of itself is answered for by the clause and the
+     * arm it is in, and one in a source's rows is answered for by the row. A value that carries a
+     * number counted within a body and is published under an identity a body's number belongs to
+     * asks for this where it is made, so what it holds is a body's from then on.
+     *
+     * <p>Stated as a refusal rather than as an absent answer. A reader given nothing here would
+     * publish the module alone, and two definitions' first constructs are one identity under that.
+     *
+     * @throws IllegalStateException where something other than a definition's body wrote it
+     */
+    static Body theBodyThatWrote(WrittenOwner owner) {
+        if (owner instanceof Body body) {
+            return body;
+        }
+        throw new IllegalStateException("this is answered for by the definition whose body wrote"
+                + " it, and it was written by " + owner);
+    }
+
     /** A type declaration, and everything written inside it: the clauses of its invariant. */
     record Declaration(TypeKey declaration) implements WrittenOwner {
 
