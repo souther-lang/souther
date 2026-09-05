@@ -138,27 +138,48 @@ class NoBroadFailureBecomesAnAnswerInTheAnalysisCoreTest {
                 || type.isAssignableFrom(RuntimeException.class);
     }
 
-    /** A handler, where it is, and what it catches. */
-    private record Handler(String where, String catches) implements Comparable<Handler> {
+    /**
+     * A method, told apart the way a method is, and one of the types it catches.
+     *
+     * <p>The descriptor is part of it because it is part of what a method is: two overloads under
+     * one name are two places, and a licence given to the first would cover the second the day
+     * somebody wrote it. The caught type is held whole for the same reason — two libraries may
+     * spell an exception alike, and the one this compiler decided about is the one it decided
+     * about. Both are shortened when they are shown and never when they are compared.
+     */
+    private record Site(String owner, String method, String descriptor, String caught)
+            implements Comparable<Site> {
 
         @Override
         public String toString() {
-            return where + " catches " + catches;
+            String simple = caught.substring(caught.lastIndexOf('.') + 1);
+            return owner + "." + method + descriptor + " catches " + simple;
         }
 
         @Override
-        public int compareTo(Handler other) {
+        public int compareTo(Site other) {
             return toString().compareTo(other.toString());
         }
     }
 
-    private record Scan(Set<Handler> examined, Set<Handler> reachingAReturn) {}
+    /**
+     * What the walk found: every wide handler, and how many of the ones at each site a run can
+     * return through.
+     *
+     * <p>A count and not a set. Two handlers written in one method for one type are two places, and
+     * a set of what they are called keeps one of them — so a second catch added beside a licensed
+     * one would be licensed by the first without anybody saying so. What is counted is the distinct
+     * places a handler begins at, because one {@code catch} can be entered from several stretches of
+     * a method and is still the one place a person wrote.
+     */
+    private record Scan(Set<Site> examined, Map<Site, Integer> returning) {}
 
     /** A place that put a question to the platform, and what an answer to it is. */
-    private record Permission(String where, String catches, String asks) {
+    private record Permission(String owner, String method, String descriptor, String caught,
+                              String asks) {
 
-        Handler handler() {
-            return new Handler(where, catches);
+        Site site() {
+            return new Site(owner, method, descriptor, caught);
         }
     }
 
@@ -178,71 +199,86 @@ class NoBroadFailureBecomesAnAnswerInTheAnalysisCoreTest {
      * place at a time and every grant is a sentence somebody wrote.
      */
     private static final List<Permission> PLATFORM_QUESTIONS = List.of(
-            new Permission("souther.compiler.check.Cardinality$Standing.times",
-                    "ArithmeticException",
+            new Permission("souther.compiler.check.Cardinality$Standing", "times",
+                    "(Lsouther/compiler/check/Cardinality$Standing;)"
+                            + "Lsouther/compiler/check/Cardinality$Standing;",
+                    "java.lang.ArithmeticException",
                     "whether the product of two counts fits, asked of multiplyExact — answered as a"
                             + " count nothing here can name"),
-            new Permission("souther.compiler.check.Cardinality$Standing.choose",
-                    "ArithmeticException",
+            new Permission("souther.compiler.check.Cardinality$Standing", "choose",
+                    "(J)Lsouther/compiler/check/Cardinality$Standing;",
+                    "java.lang.ArithmeticException",
                     "the same, of the ways of choosing from a count"),
-            new Permission("souther.compiler.check.Cardinality$Standing.toThe",
-                    "ArithmeticException",
+            new Permission("souther.compiler.check.Cardinality$Standing", "toThe",
+                    "(J)Lsouther/compiler/check/Cardinality$Standing;",
+                    "java.lang.ArithmeticException",
                     "the same, of the lists of one length over a count"),
-            new Permission("souther.compiler.check.OccurrenceValues.wholeValuesAt",
-                    "ArithmeticException",
+            new Permission("souther.compiler.check.OccurrenceValues", "wholeValuesAt",
+                    "(Lsouther/compiler/check/RuleKey;)Lsouther/compiler/check/Cardinality;",
+                    "java.lang.ArithmeticException",
                     "whether the whole numbers between two ends fit in a count, asked of"
                             + " longValueExact — answered as a count nothing here can name"),
-            new Permission("souther.compiler.check.ConstEval.arith",
-                    "ArithmeticException",
+            new Permission("souther.compiler.check.ConstEval", "arith",
+                    "(Lsouther/compiler/types/BinOp;Ljava/lang/Object;Ljava/lang/Object;)"
+                            + "Ljava/util/Optional;",
+                    "java.lang.ArithmeticException",
                     "whether an addition, subtraction or multiplication of two written numbers is"
                             + " one the run time computes, asked of the exact methods the operators"
                             + " emit — answered as a fold that does not settle it, so the run time"
                             + " is what refuses it"),
-            new Permission("souther.compiler.check.ScaleRange.receivedUnchanged",
-                    "ArithmeticException",
+            new Permission("souther.compiler.check.ScaleRange", "receivedUnchanged",
+                    "(Ljava/math/BigDecimal;)Ljava/lang/Integer;",
+                    "java.lang.ArithmeticException",
                     "whether a scale is a number the run time can be handed as the number it is,"
                             + " asked of intValueExact — answered as no place count"),
-            new Permission("souther.compiler.check.ConstEval.matches",
-                    "PatternSyntaxException",
+            new Permission("souther.compiler.check.ConstEval", "matches",
+                    "(Ljava/lang/String;Ljava/lang/String;)Ljava/util/Optional;",
+                    "java.util.regex.PatternSyntaxException",
                     "whether the platform's engine will compile a pattern an author wrote —"
                             + " answered as a fold that does not settle the match, which the"
                             + " run-time check does"),
-            new Permission("souther.compiler.check.ConstEval.matches",
-                    "StackOverflowError",
+            new Permission("souther.compiler.check.ConstEval", "matches",
+                    "(Ljava/lang/String;Ljava/lang/String;)Ljava/util/Optional;",
+                    "java.lang.StackOverflowError",
                     "whether the engine finishes matching inside the budget it was handed. The"
                             + " budget is what makes this a question: a matcher given one answers"
                             + " by not finishing, and the fold declines the same way it declines a"
                             + " pattern the engine refused"),
-            new Permission("souther.compiler.query.Adequacy$BoundarySearch$1.built",
-                    "LinkageError",
+            new Permission("souther.compiler.query.Adequacy$BoundarySearch$1", "built",
+                    "(Ljava/util/function/Supplier;)"
+                            + "Lsouther/compiler/partition/Generator$BoundaryAttempt;",
+                    "java.lang.LinkageError",
                     "whether the classes generated for this model link, asked by building a"
                             + " boundary attempt out of them — answered as nothing tried, which is"
                             + " not everything tried being refused"),
-            new Permission("souther.compiler.query.Adequacy$BoundarySearch$1.read",
-                    "LinkageError",
+            new Permission("souther.compiler.query.Adequacy$BoundarySearch$1", "read",
+                    "(Ljava/util/List;)Lsouther/compiler/query/RowAsRead;",
+                    "java.lang.LinkageError",
                     "the same, asked by reading a row through them — answered as a row nothing"
                             + " built, which is not a row seen to stand somewhere else"),
-            new Permission("souther.compiler.query.Adequacy$Generated.compute",
-                    "LinkageError",
+            new Permission("souther.compiler.query.Adequacy$Generated", "compute",
+                    "(Lsouther/compiler/query/Db;)Lsouther/compiler/query/Answer;",
+                    "java.lang.LinkageError",
                     "the same, asked by assembling what a model admits — answered by reporting no"
                             + " combination rather than reporting them impossible"));
 
     @Test
     void everyWideHandlerThatReturnsWasGivenLeaveToOnePlaceAtATime() throws IOException {
-        Set<Handler> allowed = new TreeSet<>();
-        PLATFORM_QUESTIONS.forEach(each -> allowed.add(each.handler()));
+        Map<Site, Integer> allowed = new TreeMap<>();
+        PLATFORM_QUESTIONS.forEach(each -> allowed.merge(each.site(), 1, Integer::sum));
 
-        assertEquals(allowed, scan().reachingAReturn(),
+        assertEquals(allowed, scan().returning(),
                 "a run through one of these leaves a handler and goes on to answer. Where nobody"
                         + " gave that place leave, a failure nobody named comes back as what this"
                         + " compiler has to say about the program — and a subject it fell over on"
-                        + " reads as a subject that passed. What each of the places below asked: "
-                        + why());
+                        + " reads as a subject that passed. A count on each side, so a second catch"
+                        + " written beside a licensed one is not covered by it. What each of the"
+                        + " places below asked: " + why());
     }
 
     private static Map<String, String> why() {
         Map<String, String> out = new TreeMap<>();
-        PLATFORM_QUESTIONS.forEach(each -> out.put(each.handler().toString(), each.asks()));
+        PLATFORM_QUESTIONS.forEach(each -> out.put(each.site().toString(), each.asks()));
         return out;
     }
 
@@ -258,15 +294,18 @@ class NoBroadFailureBecomesAnAnswerInTheAnalysisCoreTest {
     @Test
     void theHandlersSomebodyWroteAreAmongThem() throws IOException {
         assertTrue(scan().examined().stream()
-                        .anyMatch(handler -> !handler.catches().equals("Throwable")),
+                        .anyMatch(site -> !site.caught().equals("java.lang.Throwable")),
                 "every wide handler found names Throwable, which is what a pattern switch compiles"
                         + " to — so this walk reached the desugaring and not the code, and the"
                         + " check above passed over nothing anybody wrote");
     }
 
     private static Scan scan() throws IOException {
-        Set<Handler> examined = new TreeSet<>();
-        Set<Handler> returning = new TreeSet<>();
+        Set<Site> examined = new TreeSet<>();
+        // Where each site's returning handlers begin. A set of the places rather than a count of
+        // the table rows: one `catch` can be entered from several stretches of a method and is one
+        // place a person wrote, while two written beside each other are two.
+        Map<Site, Set<Integer>> beginningAt = new TreeMap<>();
         for (Path each : classes()) {
             ClassModel model = ClassFile.of().parse(Files.readAllBytes(each));
             String owner = model.thisClass().asInternalName();
@@ -289,17 +328,20 @@ class NoBroadFailureBecomesAnAnswerInTheAnalysisCoreTest {
                         if (type == null || !isWide(type)) {
                             continue;
                         }
-                        Handler handler = new Handler(
-                                owner.replace('/', '.') + "." + method.methodName().stringValue(),
-                                type.substring(type.lastIndexOf('/') + 1));
-                        examined.add(handler);
-                        if (walk.canReturnFrom(caught.handler())) {
-                            returning.add(handler);
+                        Site site = new Site(owner.replace('/', '.'),
+                                method.methodName().stringValue(),
+                                method.methodType().stringValue(), type.replace('/', '.'));
+                        examined.add(site);
+                        Integer begins = walk.beginsAt(caught.handler());
+                        if (begins != null && walk.canReturnFrom(caught.handler())) {
+                            beginningAt.computeIfAbsent(site, _ -> new TreeSet<>()).add(begins);
                         }
                     }
                 });
             }
         }
+        Map<Site, Integer> returning = new TreeMap<>();
+        beginningAt.forEach((site, places) -> returning.put(site, places.size()));
         return new Scan(examined, returning);
     }
 
@@ -323,6 +365,11 @@ class NoBroadFailureBecomesAnAnswerInTheAnalysisCoreTest {
                 }
             }
             return new Walk(instructions, at);
+        }
+
+        /** Which instruction {@code handler} begins at, or null where nothing binds it. */
+        Integer beginsAt(Label handler) {
+            return at.get(handler);
         }
 
         boolean canReturnFrom(Label handler) {
