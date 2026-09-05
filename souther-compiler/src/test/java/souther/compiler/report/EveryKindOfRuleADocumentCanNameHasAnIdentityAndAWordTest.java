@@ -24,6 +24,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -118,6 +119,10 @@ class EveryKindOfRuleADocumentCanNameHasAnIdentityAndAWordTest {
      * the rule the identity already names — so no two rules of a model differ there and nowhere
      * else. Nothing in the types says so, which is a question about those two kinds rather than
      * about this projection.
+     *
+     * <p>Nor is the behavior a predicate's own clauses were written by. That is the same name as
+     * the rule's behavior and is refused where they differ, so there is no pair to tell apart —
+     * which is checked as a pair that cannot be built rather than as two identities.
      */
     @Test
     void twoRulesThatAreNotOneAreWrittenDownAsTwo() {
@@ -233,6 +238,30 @@ class EveryKindOfRuleADocumentCanNameHasAnIdentityAndAWordTest {
         assertEquals(List.of("Declaration", "Examples", "Fake"), refused,
                 "and the owners that write no such rule are refused where one is made, which is"
                         + " what keeps the list above from being every owner there is");
+    }
+
+    /**
+     * A rule a behavior's own clauses state is that behavior's, and cannot be built otherwise.
+     *
+     * <p>The one coordinate the document does not write, because it is not a coordinate: the owner
+     * of such a rule is the behavior stating it, and {@code behavior} beside it is whose rule it is.
+     * They are one name written once.
+     *
+     * <p>Held where the value is made rather than by writing the name twice. Left to agree, the
+     * two could differ and the document would put both under one identity — which is the collision
+     * the owner was published to end, arriving by the other door.
+     */
+    @Test
+    void aRuleStatedInABehaviorsOwnClausesCannotBeAnothersRule() {
+        assertEquals("b", new RuleRef.Predicate("b", new SourceConstructOrigin(
+                        new WrittenOwner.Stated("m", "b"), 0, 0, SourceConstruct.CALL)).behavior(),
+                "the behavior stating the rule is whose rule it is");
+
+        IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
+                () -> new RuleRef.Predicate("b", new SourceConstructOrigin(
+                        new WrittenOwner.Stated("m", "other"), 0, 0, SourceConstruct.CALL)),
+                "and a rule of one behavior's clauses cannot be another behavior's");
+        assertTrue(refused.getMessage().contains("written by other"), refused.getMessage());
     }
 
     /** Every owner the seal has, one of each. */

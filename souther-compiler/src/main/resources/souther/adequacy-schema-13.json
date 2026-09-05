@@ -1101,7 +1101,7 @@
     },
     "ruleId": {
       "type": "object",
-      "description": "What tells one rule of the model from every other, which is not what a reader is shown. The coordinates differ by kind because rules are told apart by different things, and every part of an identity is written: a declaration is its module and its name — two modules may each declare an `Amount`, and they are two types — and a comparison is the construct a definition wrote, numbered from zero within that definition, so which definition is part of which construct. A document written before the numbering was counted within a definition carries no `definition` and numbers over the whole source instead, which is what its absence says; the other kinds never carry one. A key within this document rather than a name; a consumer groups by it and shows `rule`. It names the rule and not the question — one rule raises more than one, and `question` and `subject` beside it are what tell those apart.",
+      "description": "What tells one rule of the model from every other, which is not what a reader is shown. The coordinates differ by kind because rules are told apart by different things, and every part of an identity is written: a declaration is its module and its name — two modules may each declare an `Amount`, and they are two types — and a comparison is the construct a definition wrote, numbered from zero within that definition, so which definition is part of which construct. A document written before the numbering was counted within a definition carries no `definition` and numbers over the whole source instead, which is what its absence says. A predicate carries one where a definition's body wrote it and says so in `writtenIn`, since a behavior writes such a rule in its body and in its own clauses alike; the remaining kinds never carry one. A key within this document rather than a name; a consumer groups by it and shows `rule`. It names the rule and not the question — one rule raises more than one, and `question` and `subject` beside it are what tell those apart.",
       "required": [
         "kind",
         "declaredIn"
@@ -1250,6 +1250,28 @@
                 ]
               }
             ]
+          },
+          "if": {
+            "properties": {
+              "writtenIn": {
+                "const": "body"
+              }
+            },
+            "required": [
+              "writtenIn"
+            ]
+          },
+          "then": {
+            "required": [
+              "definition"
+            ]
+          },
+          "else": {
+            "not": {
+              "required": [
+                "definition"
+              ]
+            }
           }
         }
       ],
@@ -1273,7 +1295,7 @@
         },
         "behavior": {
           "type": "string",
-          "description": "The behavior an `ensures` clause reads, or the one whose answer a body's comparison is read for. For a comparison this is not where it is written: a helper's comparison is read by every behavior that calls it, and `definition` says which definition wrote it."
+          "description": "The behavior an `ensures` clause reads, or the one whose answer a body's comparison or predicate is read for. For a comparison this is not where it is written: a helper's comparison is read by every behavior that calls it, and `definition` says which definition wrote it. The same holds for a predicate `writtenIn` says a body wrote; for one its own clauses wrote, this is the behavior that wrote it as well, which is why the name is written once."
         },
         "definition": {
           "type": "string",
@@ -1296,7 +1318,7 @@
         },
         "ordinal": {
           "type": "integer",
-          "description": "The construct the comparison was written as, counted from zero among the constructs written by whatever `definition` names. Where `definition` is absent the document is an earlier one and this counts the constructs of the whole source."
+          "description": "The construct the rule was written as, counted from zero among the constructs written by whatever counted it. For a comparison that is `definition`, and where `definition` is absent the document is an earlier one and this counts the constructs of the whole source. For a predicate it is what `writtenIn` names: the definition `definition` names, or the behavior's own statement of itself, whose name is `behavior`."
         },
         "lowered": {
           "type": "integer",

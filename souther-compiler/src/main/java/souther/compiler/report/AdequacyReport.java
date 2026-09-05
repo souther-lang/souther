@@ -2721,9 +2721,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                         into.put("writtenIn", "body");
                         into.put("definition", body.definition());
                     }
-                    // The behavior's own clauses. Which behavior that is is `behavior` below: a
-                    // clause is read for the behavior that states it, so the two are one name and
-                    // writing it twice would be one fact in two fields.
+                    // The behavior's own clauses, whose name is `behavior` below — one name and not
+                    // two that happen to agree, which is what the rule refuses to be built
+                    // otherwise ({@link RuleRef.Predicate}). Written twice it would be one fact in
+                    // two fields, and a reader would have to say which of them it grouped by.
                     default -> into.put("writtenIn", "stated");
                 }
                 into.put("behavior", it.behavior());

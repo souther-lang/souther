@@ -87,6 +87,14 @@ class EveryObjectThisWritesIsShapedTheWayTheSchemaSaysTest {
             behavior named : (r: R) -> Found | Missing
             let named (r) = if r.a == 7 then Found else Missing
 
+            // Rules about the strings at a position, which a document names the way it names a
+            // comparison. Both places a behavior states one, because the identity a document
+            // carries says which of the two wrote it — and each tells nothing apart, which is what
+            // gets the rule named in the report rather than only measured.
+            behavior sorting : (code: String) -> Found | Missing
+                ensures Found -> String.startsWith("", code)
+            let sorting (code) = if String.startsWith("", code) then Found else Missing
+
             example f
                 | "one" : (R { a = 1 }) -> Missing
 

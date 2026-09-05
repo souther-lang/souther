@@ -136,6 +136,17 @@ public sealed interface RuleRef {
                         + " its body or in its own clauses, and this was written by "
                         + origin.owner());
             }
+            // And a rule the behavior's own clauses state is that behavior's. The two are one fact
+            // written twice — the owner is the behavior stating it, and `behavior` is whose rule it
+            // is — so they are held together here rather than left to agree. A document publishes
+            // the name once because they are one name; two that disagreed would be two rules under
+            // one identity, and nothing downstream could tell which of them it had.
+            if (origin.owner() instanceof WrittenOwner.Stated stated
+                    && !stated.behavior().equals(behavior)) {
+                throw new IllegalArgumentException("a rule stated in a behavior's own clauses is"
+                        + " that behavior's, and this is " + behavior + "'s written by "
+                        + stated.behavior());
+            }
         }
 
         /**
