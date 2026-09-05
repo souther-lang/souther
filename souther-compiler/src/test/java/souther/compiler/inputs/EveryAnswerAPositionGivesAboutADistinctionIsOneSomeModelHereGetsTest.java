@@ -85,12 +85,21 @@ class EveryAnswerAPositionGivesAboutADistinctionIsOneSomeModelHereGetsTest {
                 "and the case they do leave is one a row may be written at");
     }
 
-    /** And a reading that cannot hold what the two clauses leave settles neither, which is the
-     *  answer that is not about the model. */
+    /**
+     * And a reading that cannot hold what the two clauses leave settles neither, which is the
+     * answer that is not about the model.
+     *
+     * <p>Neither: what such a reading reports a position as holding is an upper bound, a case it had
+     * no reason to remove, and that is not an admission. It answers the same for the case the rules
+     * refuse and for the one they leave, because it cannot tell them apart.
+     */
     @Test
     void andAReadingThatCannotHoldThemSettlesNeither() {
         assertEquals(new Admits.Unsettled(new Unsettlement.AlternativesNotSeparated()),
                 admissionOf("B", ReadAs.MERGING_WHAT_A_CHOICE_LEAVES));
+        assertEquals(new Admits.Unsettled(new Unsettlement.AlternativesNotSeparated()),
+                admissionOf("A", ReadAs.MERGING_WHAT_A_CHOICE_LEAVES),
+                "one reading answers for the position, and it answers the same for both cases");
     }
 
     /**

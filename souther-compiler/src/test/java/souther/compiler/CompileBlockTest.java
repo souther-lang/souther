@@ -15,7 +15,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>A block's requirements float out to the behavior that passes it, so nothing about them is written down
  * (spec §requirement-propagation), and the backend inlines the block instead of building a closure. A block
- * may also be bound to a {@code let} and applied — see {@link CompileLambdaLetTest}; only a block that
+ * may also be bound to a {@code let} and applied — see {@link CompileFunctionBindingTest}; only a block that
  * escapes (is used as a value, not just applied) is rejected, for want of a runtime closure.
  */
 class CompileBlockTest {
