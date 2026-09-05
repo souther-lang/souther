@@ -510,10 +510,12 @@ sealed interface Confinement<A> {
          * asked through the entry for a choice that stands it would answer for that branch with the
          * ends it read.
          *
-         * <p>The values are taken as leaving nothing before they are asked and the ranges are not,
-         * so the two answer differently about which position a dead choice is empty at: the ranges
-         * name the positions every alternative emptied, and the values, having been emptied whole,
-         * name none.
+         * <p>The values are taken as leaving nothing before they are asked and the ranges are not.
+         * A reading that already admits nothing is left as it is, so that is not the difference it
+         * looks like: what a branch another language killed leaves the values is a reading that
+         * holds nothing and names no position, and what a branch the values killed leaves them is
+         * the positions they emptied. Either language names a position only where every alternative
+         * of that language left it empty.
          */
         Planned<A> bothDead(Planned<A> other, Admission<A> shown) {
             return new Planned<>(values.leavingNothing().bothDead(other.values.leavingNothing()),
