@@ -225,10 +225,8 @@ sealed interface StatedByClauses {
             // would agree only until somebody changed one.
             Set<RuleShortfall> shortfalls = new LinkedHashSet<>(ruleShortfalls);
             shortfalls.addAll(other.ruleShortfalls());
-            leftOpenBy(choice, opening.byTheRightGoingUnread(), other.ruleShortfalls(),
-                    ruleShortfalls, shortfalls);
-            leftOpenBy(choice, opening.byTheLeftGoingUnread(), ruleShortfalls,
-                    other.ruleShortfalls(), shortfalls);
+            leftOpenBy(choice, opening.byTheRightGoingUnread(), other.ruleShortfalls(), shortfalls);
+            leftOpenBy(choice, opening.byTheLeftGoingUnread(), ruleShortfalls, shortfalls);
             return new Part(byValues.either(other.byValues()), byOrder.either(other.byOrder()),
                     StringRestriction.over(aboutStrings, other.aboutStrings(), false),
                     askedIn(asked, other.asked()), held(shortfalls));
@@ -248,16 +246,15 @@ sealed interface StatedByClauses {
          *
          * <p><b>Asked of what that branch is answerable for and never of what the position holds.</b>
          * The place holds the reasons of every rule that reached it, so suppressing by it would
-         * make a fact about a rule turn on what a neighbour wrote. The two come to the same answer
-         * today and are two rules; the position's own is {@code UnreadReason.leftOpen}'s.
+         * make a fact about a rule turn on what a neighbour wrote. The position's own account comes
+         * to the same answer by a rule of its own ({@code Standing.across}), and the two are two
+         * rules over two things.
          *
-         * <p>And what accounts for the position is what turns on this choice: a shortfall the other
-         * branch holds as well stands whichever way the choice goes, so the branch being unread is
-         * not what left the position open by it. A conjunction distributing over a choice copies
-         * shortfalls made outside it into both branches, and one of those read as this branch's own
-         * would have the choice say nothing where its alternative is the only account there is —
-         * two choices each offering an alternative nothing read are two things to answer, and the
-         * second would arrive only once the first was answered.
+         * <p>What the alternative beside it is answerable for is not asked. It cannot be answerable
+         * for the same thing: a written place is under one alternative or the other, and this tree
+         * is the one the author wrote — so a shortfall of the branch that stands is a shortfall of
+         * a clause the unread branch does not contain, and says nothing about whether the unread
+         * one left the position open.
          *
          * <p>Whole shortfalls, so what an author wrote is part of the comparison and a copy of one
          * fact is told from two facts of the same shape. Never their reasons: a rule about which
@@ -265,19 +262,16 @@ sealed interface StatedByClauses {
          * reason added to it would quietly change what a choice says.
          */
         private static void leftOpenBy(RuleShortfall.Site.AtAChoice choice, Set<FactSubject> these,
-                                       Set<RuleShortfall> unread, Set<RuleShortfall> beside,
-                                       Set<RuleShortfall> out) {
+                                       Set<RuleShortfall> unread, Set<RuleShortfall> out) {
             these.stream()
-                    .filter(each -> !accountedFor(each, unread, beside))
+                    .filter(each -> !accountedFor(each, unread))
                     .forEach(each -> out.add(new RuleShortfall(each,
                             UnreadReason.ALTERNATIVE_NOT_READ, choice)));
         }
 
-        /** Whether {@code unread} holds an account of {@code at} that {@code beside} does not. */
-        private static boolean accountedFor(FactSubject at, Set<RuleShortfall> unread,
-                                            Set<RuleShortfall> beside) {
-            return unread.stream()
-                    .anyMatch(one -> one.position().equals(at) && !beside.contains(one));
+        /** Whether {@code unread} holds an account of {@code at}. */
+        private static boolean accountedFor(FactSubject at, Set<RuleShortfall> unread) {
+            return unread.stream().anyMatch(one -> one.position().equals(at));
         }
 
     }
@@ -331,11 +325,16 @@ sealed interface StatedByClauses {
     }
 
     /**
-     * The tree that derives values, beside what the clauses under it took in.
+     * The tree that derives values, beside where the reading of values took its clauses in.
      *
      * <p>Both from one walk, because a choice needs them together: which branches anybody can be in
      * is decided out of the first, and what a choice left open is asked of the second under that
      * decision.
+     *
+     * @param took the reading of values alone, which is the one a choice is asked of. Where a
+     *             position's order stops is not what an alternative takes back — a range says
+     *             nothing about which values stand anywhere, so a branch nothing read leaves the
+     *             ranges beside it saying what they said
      */
     record Projected(StatedTogether derived, Adoption<FactSubject> took) {}
 

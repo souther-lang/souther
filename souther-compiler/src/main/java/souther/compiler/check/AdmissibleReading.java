@@ -29,6 +29,12 @@ import java.util.Set;
  * two readings cannot come to disagree about what they were given; what each of them makes of a
  * clause is its own.
  *
+ * <p><b>Leaves, and not the connectives over them.</b> What a conjunction or a choice of these
+ * comes to is asked where both languages are held together and where the choices of a declaration
+ * are decided ({@code StatedByClauses}), because a branch nobody can be in is settled by things
+ * neither language holds alone. Answered here as well, that would be a second place deciding what
+ * a choice does to the values, and the two would agree until one of them learned something.
+ *
  * <p>Apart from what a construction owes ({@link Predicates}), which is a different question and
  * has a different answer for the same clause. A clause stated as one of two alternatives owes a
  * construction nothing that a guard could discharge, and it says something here — so reading it

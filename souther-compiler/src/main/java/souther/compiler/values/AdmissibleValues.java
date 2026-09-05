@@ -851,6 +851,11 @@ public record AdmissibleValues<A>(Held<A> held, Map<A, ValueSet> perPosition,
      * take in is not an account of the part written beside it, so a caller choosing among them is
      * choosing which of an author's rules to tell them about — and the choice would be made here,
      * where the only thing to choose by is which came first.
+     *
+     * <p>Which is why a choice that left the position open is what a position with no rule of its
+     * own is told about, and nothing a position does have a rule of its own hears
+     * ({@link Standing#across}): that is a choice between two kinds of thing rather than among an
+     * author's rules, and it is made on what is held rather than on what arrived first.
      */
     public List<UnreadReason> whyUnread(A atom) {
         return unreadAffecting(atom);
@@ -1278,6 +1283,12 @@ public record AdmissibleValues<A>(Held<A> held, Map<A, ValueSet> perPosition,
      * worked out here — which positions those are is a fact about the alternatives an author wrote
      * and about which branches anybody can be in, and the two readings met here are branches every
      * conjunction beside the choice was already distributed into.
+     *
+     * <p>It travels exactly as the reasons beside it do, which is what settles the branches where
+     * one side admits nothing. There the choice is the other reading and what comes back is that
+     * reading: its own account and nothing added, because a branch nobody can be in offered nobody
+     * an alternative. Where neither side admits anything the answer is built from both, and this
+     * comes with them — the one place a position could be named here and nowhere else.
      */
     public AdmissibleValues<A> join(AdmissibleValues<A> other, Allowance<A> sets, Set<A> opened) {
         return joining(other, false, sets, opened);

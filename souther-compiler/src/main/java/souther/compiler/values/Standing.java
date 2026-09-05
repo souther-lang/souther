@@ -138,7 +138,7 @@ public final class Standing<A> {
      * author wrote and about which branches anybody can be in, decided where both are known
      * ({@code StatedByClauses.AlternativeOpening}) and handed here.
      */
-    public Standing<A> alsoOpenedAt(Set<A> these) {
+    Standing<A> alsoOpenedAt(Set<A> these) {
         return these.isEmpty() ? this
                 : new Standing<>(entries, both(openedByAlternative, these));
     }

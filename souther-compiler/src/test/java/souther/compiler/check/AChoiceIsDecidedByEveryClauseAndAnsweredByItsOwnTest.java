@@ -191,32 +191,7 @@ class AChoiceIsDecidedByEveryClauseAndAnsweredByItsOwnTest {
                         + " about the position the branch settled");
     }
 
-    /**
-     * A shortfall the other branch holds as well is not what this choice left open.
-     *
-     * <p>A conjunction distributing over a choice puts what a rule was short of outside it into
-     * both branches, where it stands whichever way this choice goes. Read as the unread branch's
-     * own account, the alternative an author still has to answer would say nothing — and would say
-     * it once the shortfall standing beside it was answered, which is one round later.
-     */
-    @Test
-    void aShortfallBothBranchesHoldIsNotWhatTheChoiceLeftOpen() {
-        RuleShortfall brought = new RuleShortfall(CONSTRAINED, UnreadReason.ALTERNATIVE_NOT_READ,
-                aChoice());
-        RuleShortfall.Site.AtAChoice choice = aChoice();
-
-        assertEquals(java.util.Set.of(brought, new RuleShortfall(CONSTRAINED,
-                        UnreadReason.ALTERNATIVE_NOT_READ,
-                        choice)),
-                theBranchRead(java.util.Set.of(brought))
-                        .either(choice, opened(choice),
-                                theBranchNothingRead(java.util.Set.of(brought)))
-                        .ruleShortfalls(),
-                "what stands whichever way the choice goes does not account for its alternative"
-                        + " going unread");
-    }
-
-    /** And one only the unread branch holds does account for it. */
+    /** And one the unread branch holds does account for it. */
     @Test
     void aShortfallOnlyTheUnreadBranchHoldsAnswersForThePosition() {
         RuleShortfall inside = new RuleShortfall(CONSTRAINED, UnreadReason.ALTERNATIVE_NOT_READ,
@@ -243,22 +218,14 @@ class AChoiceIsDecidedByEveryClauseAndAnsweredByItsOwnTest {
     void andWhichOfTheTwoIsNotAskedOfWhereItWasWritten() {
         RuleShortfall form = new RuleShortfall(CONSTRAINED, UnreadReason.FORM_NOT_READ,
                 new RuleShortfall.Site.AtALeaf(new Core.Bool(true, Type.BOOL, new SourcePos(1, 1))));
+        RuleShortfall.Site.AtAChoice choice = aChoice();
 
-        RuleShortfall.Site.AtAChoice first = aChoice();
         assertEquals(java.util.Set.of(form),
                 theBranchRead(java.util.Set.of())
-                        .either(first, opened(first), theBranchNothingRead(java.util.Set.of(form)))
+                        .either(choice, opened(choice), theBranchNothingRead(java.util.Set.of(form)))
                         .ruleShortfalls(),
-                "a form only the unread branch holds accounts for the position");
-        RuleShortfall.Site.AtAChoice choice = aChoice();
-        assertEquals(java.util.Set.of(form, new RuleShortfall(CONSTRAINED,
-                        UnreadReason.ALTERNATIVE_NOT_READ,
-                        choice)),
-                theBranchRead(java.util.Set.of(form))
-                        .either(choice, opened(choice),
-                                theBranchNothingRead(java.util.Set.of(form)))
-                        .ruleShortfalls(),
-                "and the same form standing in both branches does not");
+                "a form the unread branch holds accounts for the position, exactly as a choice"
+                        + " under it would");
     }
 
     /**
