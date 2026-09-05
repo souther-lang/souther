@@ -245,9 +245,10 @@ class AnOutcomeIsNamedByWhatWasWrittenTest {
     /** And a site cannot be made holding one, which is where the two halves are first put together. */
     @Test
     void aSiteCannotHoldAPairTheLanguageDoesNotHave() {
+        SourceConstructOrigin fork = SourceConstructOrigin.written("m", 0, SourceConstruct.COMPREHENSION);
         assertThrows(IllegalArgumentException.class, () -> new CoverageSites.ArmSite("b", built(),
-                null, Numberings.arm(1, 0), 0, new CoverageSites.Obligation("b",
-                        SourceConstructOrigin.written("m", 0, SourceConstruct.COMPREHENSION), 0,
+                Numberings.armPlace(0, Numberings.arm(1, 0), fork, null), 0,
+                new CoverageSites.Obligation("b", fork, 0,
                         souther.compiler.coverage.DecidedBy.THE_DECLARATION)));
     }
 

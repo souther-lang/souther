@@ -4,8 +4,6 @@ import souther.compiler.report.AdequacyReport;
 import souther.compiler.query.WeakeningSet;
 import souther.cli.Main;
 import org.junit.jupiter.api.Test;
-import souther.compiler.types.SourceConstructOrigin;
-
 import souther.compiler.coverage.ArmProbe;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.observe.MeasurementStatus;
@@ -15,6 +13,7 @@ import souther.compiler.query.ArmCensus;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Weakening;
+import souther.compiler.reach.Reachability;
 
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
@@ -310,38 +309,32 @@ class AnArmNothingReachesIsNotOwedARowTest {
     // --- what happens if the proof is wrong -------------------------------------------------------
 
     /**
-     * The probe numbers of the fork's two arms, read off the plan.
+     * The fork's two arms, read off the plan.
      *
-     * <p>Written down rather than read, these were the first two numbers the walk handed out —
-     * which they were only while nothing else in the body was numbered before them. A probe number
-     * is what the emitter and a measurement agree on and it moves whenever the numbering does, so a
-     * test that names one is naming the walk's order and not the arm.
+     * <p>The plan's own sites and not sites built here to stand for them. A site says where a run
+     * through the arm is recorded and which place that is, and the two are one answer the numbering
+     * gave; assembled in a test, the pair would be whatever this test put together and the measures
+     * below would agree with it by construction.
      */
-    private static List<ArmProbe> armProbes() {
+    private static List<CoverageSites.ArmSite> armSites() {
         Compilation compilation = Compilation.ofSource(CAPPED, "Main");
         compilation.answerEverything();
         Bodies.Elaborated checked = compilation.db()
                 .ask(new Bodies.Checked(compilation.modules().get(0))).value();
-        return checked.plan().arms("classify").stream()
-                .map(CoverageSites.ArmSite::index).toList();
+        return checked.plan().arms("classify");
     }
+
+    private static final List<CoverageSites.ArmSite> ARMS = armSites();
 
     /** The arm nothing reaches — the {@code then} of a guard at 50 no pair can be above. */
-    private static final ArmProbe UNREACHED = armProbes().get(0);
+    private static final CoverageSites.ArmSite UNREACHED_ARM = ARMS.get(0);
 
     /** The arm every run takes. */
-    private static final ArmProbe TAKEN = armProbes().get(1);
+    private static final CoverageSites.ArmSite TAKEN_ARM = ARMS.get(1);
 
-    private static CoverageSites.ArmSite arm(ArmProbe probe) {
-        return new CoverageSites.ArmSite("classify",
-                new souther.compiler.coverage.SourceOutcome.Held(
-                        new souther.compiler.coverage.SourceOutcome.HeldBy.Condition()),
-                null, probe, probe.raw(),
-                new CoverageSites.Obligation("classify",
-                        SourceConstructOrigin.written("t", probe.raw(),
-                                souther.compiler.types.SourceConstruct.IF), 0,
-                        souther.compiler.coverage.DecidedBy.THE_DECLARATION));
-    }
+    private static final ArmProbe UNREACHED = UNREACHED_ARM.index();
+
+    private static final ArmProbe TAKEN = TAKEN_ARM.index();
 
     /**
      * The model's own reachability, which proves arm 0 unreachable: nothing at or above 50 is a
@@ -362,7 +355,7 @@ class AnArmNothingReachesIsNotOwedARowTest {
     @Test
     void aProvenArmLeavesTheDenominator() {
         Adequacy.BranchEvidence measured = Adequacy.BranchEvidence.measured("b",
-                List.of(arm(UNREACHED), arm(TAKEN)), Set.of(TAKEN),
+                List.of(UNREACHED_ARM, TAKEN_ARM), Set.of(TAKEN),
                 proving().asRunWith(Set.of(TAKEN)), WeakeningSet.none());
 
         assertEquals(List.of(TAKEN), probesOf(measured));
@@ -392,7 +385,7 @@ class AnArmNothingReachesIsNotOwedARowTest {
         // fold the measures read, so what a run does to a proof is decided in one place.
         PathReachability.Answers.AsRun asRun = proving().asRunWith(Set.of(UNREACHED, TAKEN));
         Adequacy.BranchEvidence measured = Adequacy.BranchEvidence.measured("b",
-                List.of(arm(UNREACHED), arm(TAKEN)), Set.of(UNREACHED, TAKEN), asRun,
+                List.of(UNREACHED_ARM, TAKEN_ARM), Set.of(UNREACHED, TAKEN), asRun,
                 WeakeningSet.none());
 
         // What a disproved proof bears on is the set of arms and not any one of them. Which arms
@@ -426,7 +419,7 @@ class AnArmNothingReachesIsNotOwedARowTest {
     void andAnArmIsStillAnsweredForBesideADisprovedProof() {
         PathReachability.Answers.AsRun asRun = proving().asRunWith(Set.of(UNREACHED));
         Adequacy.BranchEvidence measured = Adequacy.BranchEvidence.measured("b",
-                List.of(arm(UNREACHED), arm(TAKEN)), Set.of(UNREACHED), asRun,
+                List.of(UNREACHED_ARM, TAKEN_ARM), Set.of(UNREACHED), asRun,
                 WeakeningSet.none());
 
         assertEquals(1, measured.arms().covered(), "the row went through the arm it went through");
@@ -445,7 +438,8 @@ class AnArmNothingReachesIsNotOwedARowTest {
 
         assertEquals(Set.of(UNREACHED), asRun.provedWrong(),
                 "a row went through an arm this reading had proven nothing reaches");
-        assertFalse(asRun.answers().nothingArrivesAt(UNREACHED),
+        assertFalse(asRun.answers().at(UNREACHED_ARM.occurrence())
+                        instanceof Reachability.Unreachable,
                 "so nothing about it is proven any more");
         // Both measures read this one object, so what is back for one is back for the other. Said
         // of the arms: what a comparison's outcome was proven to be is not something a row through

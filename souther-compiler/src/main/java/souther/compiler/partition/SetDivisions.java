@@ -10,6 +10,7 @@ import souther.compiler.regex.PatternPlan;
 import souther.compiler.values.AdmittedPlan;
 import souther.compiler.values.Allowance;
 import souther.compiler.values.Realizations;
+import souther.compiler.values.Sameness;
 import souther.compiler.values.ValueSet;
 
 import java.util.ArrayList;
@@ -145,6 +146,24 @@ final class SetDivisions {
         }
     }
 
+    /**
+     * The purse {@code term}'s machines are bought from, which is the position on its own.
+     *
+     * <p>An allowance is per block of positions the model holds one value across, because two
+     * positions an equality ties together have one set to build and one purse to build it from. A
+     * rule about the strings at a position ties it to nothing — what it states is true of the values
+     * standing here and says no word about any other position — so each term is its own block, and
+     * two positions that happen to be written with the same predicate pay for their machines apart.
+     *
+     * <p>Said here once, so that a reader is not left working out from two call sites whether the
+     * grouping this stage does is the same grouping the allowance does. It is not: the group here
+     * is every rule about one position, and the block is every position that holds one value.
+     */
+    private static Sameness.Block<NumericTerm.FromOnePosition> purseOf(
+            NumericTerm.FromOnePosition term) {
+        return Sameness.Block.of(term);
+    }
+
     /** One rule read as far as the plans for its two sides, waiting on its position's group. */
     private record Asked(PredicateOrigin by, PredicateStatement states,
                          NumericTerm.FromOnePosition term,
@@ -174,7 +193,8 @@ final class SetDivisions {
             plans.add(each.whenFalse());
         }
         Map<NumericTerm.FromOnePosition, Realizations> answers = new LinkedHashMap<>();
-        byTerm.forEach((term, plans) -> answers.put(term, allowance.realizeAll(term, plans)));
+        byTerm.forEach((term, plans) ->
+                answers.put(term, allowance.realizeAll(purseOf(term), plans)));
         List<PartitionEvidence> divided = new ArrayList<>();
         for (Asked each : asked) {
             divide(each, answers.get(each.term()), divided, undivided);
@@ -230,7 +250,8 @@ final class SetDivisions {
             for (Cell cell : cells) {
                 for (boolean holding : new boolean[] {true, false}) {
                     ValueSet side = holding ? each.whenTrue() : each.whenFalse();
-                    Allowance.Composed met = allowance.meet(term, cell.values(), side);
+                    Allowance.Composed met =
+                            allowance.meet(purseOf(term), cell.values(), side);
                     if (met.gaveUp()) {
                         return null;
                     }

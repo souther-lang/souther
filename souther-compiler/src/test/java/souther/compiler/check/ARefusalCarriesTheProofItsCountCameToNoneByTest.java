@@ -67,6 +67,10 @@ class ARefusalCarriesTheProofItsCountCameToNoneByTest {
                 case Emptiness.AtAField.Where.TheValueItself _ -> "value";
                 case Emptiness.AtAField.Where.In(String spelled) -> spelled;
             } + " " + shape(it.under());
+            case Emptiness.AtEqualPositions it -> it.where().stream().map(each -> switch (each) {
+                case Emptiness.AtAField.Where.TheValueItself _ -> "value";
+                case Emptiness.AtAField.Where.In(String spelled) -> spelled;
+            }).toList() + " " + shape(it.under());
             case Emptiness.TheNameHasNone it -> "which is " + it.name().name();
             case Emptiness.NonEmptyCollectionWithNoElement it -> "cannot be empty, " + shape(it.element());
             case Emptiness.AcrossEveryCase it ->
@@ -75,6 +79,7 @@ class ARefusalCarriesTheProofItsCountCameToNoneByTest {
             case Emptiness.EmptyNumericInterval _ -> "an empty range";
             case Emptiness.EmptyOrderedInterval _ -> "ends with nothing between them";
             case Emptiness.NoAllowedValueInRange _ -> "no allowed value in the range";
+            case Emptiness.NoCommonValueForEqualPositions _ -> "no value they can all hold";
             case Emptiness.SetRequiresTooManyDistinctValues it -> "a set over at most " + it.available();
             case Emptiness.NoAllowedCollectionSize _ -> "no size";
         };

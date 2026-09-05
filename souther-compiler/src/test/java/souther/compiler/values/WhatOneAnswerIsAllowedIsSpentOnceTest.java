@@ -32,8 +32,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class WhatOneAnswerIsAllowedIsSpentOnceTest {
 
-    private static final String HERE = "here";
-    private static final String THERE = "there";
+    private static final Sameness.Block<String> HERE = Sameness.Block.of("here");
+    private static final Sameness.Block<String> THERE = Sameness.Block.of("there");
 
     private static Language language(String regex) {
         PatternRead read = PatternParser.read(regex);

@@ -24,6 +24,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.SequencedSet;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * The declaration-level checks: a {@code data}'s fields and invariant, a sum's cases, the decoder
@@ -519,10 +520,41 @@ public final class DataChecker {
                                            Emptiness why, boolean alone) {
         return switch (why) {
             case Emptiness.AtAField it -> told(at, data, it.where(), true, it.under(), alone);
+            // The places together, which is what the proof names. Read one at a time, an author
+            // would be sent to a position whose own rules leave it something.
+            //
+            // And what was shown of them, which is the same question as at one place: the values
+            // and the range sharing nothing is not the values leaving nothing, and a sentence for
+            // both would send an author to read a half that is fine on its own.
+            case Emptiness.AtEqualPositions it -> switch (it.under()) {
+                case Emptiness.NoAllowedValueInRange _ ->
+                        at.say(new DataMessage.NoValueTheseAllowIsInTheRangeTheyShare(
+                                data, written(it.where())));
+                case Emptiness.NoCommonValueForEqualPositions _ ->
+                        at.say(new DataMessage.NoValueTheseCanAllHold(data, written(it.where())));
+                // Every other proof, named rather than gathered under a default: a proof added
+                // later is one somebody has to say what several places make of, and a default
+                // would hand it whichever of these two was written first. None of them reaches
+                // here today — a range is one position's own answer and the rest are about a
+                // declaration rather than a place — so what is said is the general form.
+                case Emptiness.ConflictingRules _, Emptiness.EmptyNumericInterval _,
+                     Emptiness.EmptyOrderedInterval _, Emptiness.NoAllowedCollectionSize _,
+                     Emptiness.SetRequiresTooManyDistinctValues _,
+                     Emptiness.NonEmptyCollectionWithNoElement _, Emptiness.AcrossEveryCase _,
+                     Emptiness.TheNameHasNone _, Emptiness.NoBaseInComponent _,
+                     Emptiness.AtAField _, Emptiness.AtEqualPositions _ ->
+                        at.say(new DataMessage.ItsRulesCannotAllHold(data));
+            };
             case Emptiness.NoBaseInComponent it -> {
                 Diagnostic.Builder said = at.say(new DataMessage.DataCannotBeConstructed(data));
                 yield alone ? suggested(said, data, it.through()) : said;
             }
+            // Not reachable, and written for the reason the three arms below it are: this proof is
+            // made only inside the one that says which positions it is about, and where there is no
+            // block to name, what is carried is the general form instead. Being exhaustive over the
+            // proofs is what makes the next one a build that stops here.
+            case Emptiness.NoCommonValueForEqualPositions _ ->
+                    at.say(new DataMessage.ItsRulesCannotAllHold(data));
             case Emptiness.ConflictingRules _, Emptiness.EmptyNumericInterval _ ->
                     at.say(new DataMessage.ItsRulesCannotAllHold(data));
             case Emptiness.EmptyOrderedInterval _ ->
@@ -585,6 +617,19 @@ public final class DataChecker {
             case Emptiness.AtAField.Where.TheValueItself _ -> "value";
             case Emptiness.AtAField.Where.In(String spelled) -> spelled;
         };
+    }
+
+    /**
+     * Several places, in the order the value declares them.
+     *
+     * <p>The order is the proof's and not this reader's. Which places a lack is at is settled where
+     * the proof is made, off the map the declaration's own positions are read from — sorted here,
+     * a sentence would list them by a rule of this compiler's and the same model would read two
+     * ways under two spellings.
+     */
+    private static String written(List<Emptiness.AtAField.Where> where) {
+        return where.stream().map(each -> "`" + written(each) + "`")
+                .collect(Collectors.joining(", "));
     }
 
     /**

@@ -49,8 +49,9 @@ class AGapIsRefusedOverByWhatSettledItTest {
     private static CoverageSites.ArmSite arm(SourceConstructOrigin fork, int index, DecidedBy decided) {
         return new CoverageSites.ArmSite("b",
                 new SourceOutcome.Held(new SourceOutcome.HeldBy.Condition()),
-                Citation.of(new SourcePos(1, 1, new SourceId("0"))),
-                PLACES.get(index), index,
+                Numberings.armPlace(index, PLACES.get(index), fork,
+                        Citation.of(new SourcePos(1, 1, new SourceId("0")))),
+                index,
                 new CoverageSites.Obligation("b", fork, index, decided));
     }
 

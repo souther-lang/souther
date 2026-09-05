@@ -45,8 +45,8 @@ class AnUnsettledDecisionIsUncertainHoweverManyPlacesItHasTest {
     private static CoverageSites.ArmSite arm(int index, SourceConstructOrigin fork, int part,
                                              DecidedBy decided) {
         return new CoverageSites.ArmSite("b",
-                new SourceOutcome.Held(new SourceOutcome.HeldBy.Condition()), null,
-                PLACES.get(index), index,
+                new SourceOutcome.Held(new SourceOutcome.HeldBy.Condition()),
+                Numberings.armPlace(index, PLACES.get(index), fork, null), index,
                 new CoverageSites.Obligation("b", fork, part, decided));
     }
 

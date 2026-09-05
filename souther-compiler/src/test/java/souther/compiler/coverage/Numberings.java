@@ -1,7 +1,11 @@
 package souther.compiler.coverage;
 
+import souther.compiler.diag.Citation;
+import souther.compiler.types.SourceConstructOrigin;
+
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * A numbering for a fixture that has places in mind and no bodies to walk.
@@ -35,6 +39,24 @@ public final class Numberings {
     /** The arm {@code raw} of a numbering of {@code many} arms. */
     public static ArmProbe arm(int many, int raw) {
         return ofArms(many).arm(raw);
+    }
+
+    /**
+     * The place {@code probe} addresses, as a fixture with no body to walk has it.
+     *
+     * <p>A site of an arm holds the place and takes its address off it, which is the walk's doing
+     * and cannot be had without one. So a fixture writing "the arm numbered 3" says here what that
+     * arm is — the same stand-in the numbers themselves are, and said in one place rather than in
+     * each fixture that needs a site.
+     *
+     * <p>Which place it is comes in rather than being read off the number. A walk hands out control
+     * points and probe numbers from counters of their own and a place is not its address, so a
+     * fixture that let one stand for the other would be writing down a correspondence no numbering
+     * makes.
+     */
+    public static ControlPointId.ArmOccurrence armPlace(int controlId, ArmProbe probe,
+                                                        SourceConstructOrigin origin, Citation at) {
+        return new ControlPointId.ArmOccurrence(controlId, Optional.of(probe), at, origin);
     }
 
     /** The arms of one numbering, by their numbers, so a fixture holds addresses of one. */

@@ -761,8 +761,10 @@ sealed interface StatedByClauses {
                 souther.compiler.values.PlannedValues<FactSubject> mine,
                 souther.compiler.values.Allowance<FactSubject> by) {
             Set<FactSubject> out = new java.util.LinkedHashSet<>();
+            souther.compiler.values.Sameness<FactSubject> heldAsOne = mine.sameness();
             for (FactSubject each : mine.adoptedAt()) {
-                souther.compiler.values.ValueSet known = by.known(each, mine.at(each));
+                souther.compiler.values.ValueSet known =
+                        by.known(heldAsOne.blockOf(each), mine.at(each));
                 if (known != null && !known.isAny() && !known.isEmpty()) {
                     out.add(each);
                 }
@@ -1107,7 +1109,7 @@ sealed interface StatedByClauses {
             // Here rather than around the whole of this: the answer above is what the allowance is
             // for and spends it by design, so a check that started before it would be about
             // something else and would never fail.
-            Map<FactSubject, Integer> unspent = leftOf(by, made.made().values().subjects());
+            int unspent = spentBy(by);
             for (Map.Entry<K, StatedByClauses> each : trees.entrySet()) {
                 // The rule on its own as well as in the declaration, because what it did to a
                 // position and what the position came to are two questions. Its own choices are
@@ -1123,7 +1125,7 @@ sealed interface StatedByClauses {
             }
             // An assertion because it is about this compiler and not about any model, and here
             // rather than in one test because every declaration a corpus holds goes through it.
-            assert unspent.equals(leftOf(by, made.made().values().subjects()))
+            assert unspent == spentBy(by)
                     : "making the accounts of a declaration spent its allowance";
             // And here the reading stops being one and becomes an answer. What each rule about the
             // strings at a position leaves is worked out now, once, and a reader downstream is
@@ -1141,7 +1143,7 @@ sealed interface StatedByClauses {
             // declaration can be told exactly is the same whether or not anybody is ever handed
             // anything — which is the whole of why the sets handed on have an allowance of their
             // own.
-            assert unspent.equals(leftOf(by, made.made().values().subjects()))
+            assert unspent == spentBy(by)
                     : "handing the rules of " + made.made().values().subjects()
                             + " on spent the allowance for what they admit";
             Map<K, ReadByClauses.OfARule> clauses = new LinkedHashMap<>();
@@ -1212,8 +1214,11 @@ sealed interface StatedByClauses {
                 }
             }));
             Map<FactSubject, Realizations> answers = new LinkedHashMap<>();
+            // Built for the block the position is on, which is what the machine is being made for:
+            // positions the rules hold as one value have one answer between them, and one purse.
             asked.forEach((position, plans) -> answers.put(position,
-                    answered.speaksFor(position) ? handingOn.realizeAll(position, plans)
+                    answered.speaksFor(position)
+                            ? handingOn.realizeAll(answered.blockOf(position), plans)
                             : new Realizations.NotBuilt()));
             Map<Core, ReadByClauses.OfAPart> out = new IdentityHashMap<>();
             said.forEach((each, part) -> out.put(each, new ReadByClauses.OfAPart(
@@ -1282,12 +1287,9 @@ sealed interface StatedByClauses {
                        Set<RuleShortfall> aboutARule,
                        Map<FactSubject, StringRestriction> aboutStrings) {}
 
-    /** What the allowance has left at each of {@code positions}, for holding an account to
-     *  spending nothing. */
-    private static Map<FactSubject, Integer> leftOf(
-            souther.compiler.values.Allowance<FactSubject> by, Set<FactSubject> positions) {
-        Map<FactSubject, Integer> out = new java.util.LinkedHashMap<>();
-        positions.forEach(each -> out.put(each, by.left(each)));
-        return out;
+    /** How much the allowance has spent in all, for holding an account to spending nothing — see
+     *  {@code InvariantChecker.spentBy}. */
+    private static int spentBy(souther.compiler.values.Allowance<FactSubject> by) {
+        return by.spentSoFar();
     }
 }
