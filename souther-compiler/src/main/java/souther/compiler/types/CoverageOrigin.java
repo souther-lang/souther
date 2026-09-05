@@ -21,24 +21,26 @@ package souther.compiler.types;
  * own count over what {@link #owner} names, and the builder does not take the numbers in the order
  * the constructs are written: a statement guard folds the rest of its block before numbering itself,
  * and a comprehension is numbered after its parts. What identity needs is that the numbering be a
- * function of the source and that two constructs never share one, which it is and they do not.
- * Matching one compilation's obligations against another's is a different question and not one this
- * answers.
+ * function of the owner's syntax and that no two constructs of one owner share an ordinal, which it
+ * is and they do not — the two together are what tell one construct from every other, and two
+ * definitions' first constructs are two constructs. Matching one compilation's obligations against
+ * another's is a different question and not one this answers.
  *
  * <p>Counted within the owner and not over the file. A count over the file makes the number a
  * function of everything written before it there, so editing one definition renumbers the
  * constructs of every one after it — and an identity that moves for an edit nothing about it can
  * see is not one.
  *
- * @param owner   what wrote the construct: the declaration, the stated behavior, the body, or the
- *                source's rows for a behavior. Null exactly for {@link #unwritten}
+ * @param owner   what wrote the construct: the declaration, the stated behavior, the body, or a
+ *                source's rows for a behavior or its stand-in. Null exactly for {@link #unwritten}
  * @param ordinal which construct of that owner, by the builder's own count over it
  * @param lowered which fork of that construct, where a lowering makes more than one out of it. Zero
  *                is the construct's own fork, which is every fork an author writes as one
  * @param kind    what the author wrote there. Not part of what tells one construct from another —
- *                the builder takes a fresh ordinal for every construct it reads, so no two origins
- *                share one and nothing here can disagree about a construct two values name. It is
- *                the answer a report needs and the tree that runs no longer holds
+ *                the builder takes a fresh ordinal for every construct it reads of one owner, so no
+ *                two origins of that owner share one and nothing here can disagree about a construct
+ *                two values name. It is the answer a report needs and the tree that runs no longer
+ *                holds
  */
 public record CoverageOrigin(WrittenOwner owner, int ordinal, int lowered, CoverageConstruct kind) {
 

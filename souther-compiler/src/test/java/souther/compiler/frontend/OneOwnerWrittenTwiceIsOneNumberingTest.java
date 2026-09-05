@@ -141,9 +141,14 @@ class OneOwnerWrittenTwiceIsOneNumberingTest {
      */
     @Test
     void andWhatIsWrittenInARowDoesNotNumberTheStandInBesideIt() {
-        // The rows are written ahead of the stand-in. Under a count the two shared, what is written
-        // first is what moves what comes after it — so a row added below the stand-in could not
-        // reach it however the counting went, and the test would hold for the wrong reason.
+        // Rows of the behavior the stand-in stands in for, so that what separates the two is which
+        // kind of writing each is and nothing else. Written for another behavior, the two owners
+        // would differ by the name they carry as well, and a reading made per target rather than
+        // per writing would pass.
+        //
+        // And written ahead of the stand-in: under a count the two shared, what is written first is
+        // what moves what comes after it, so rows written below could not reach it however the
+        // counting went and the test would hold for the wrong reason.
         String noRow = WITH_A_DEPENDENCY + """
 
                 fake rateFor
@@ -151,7 +156,7 @@ class OneOwnerWrittenTwiceIsOneNumberingTest {
                 """;
         String aRowAhead = WITH_A_DEPENDENCY + """
 
-                example priced
+                example rateFor
                   | (Amount(1)) -> Amount(1 + 0)
 
                 fake rateFor
