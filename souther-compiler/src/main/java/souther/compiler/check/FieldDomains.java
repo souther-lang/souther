@@ -1054,7 +1054,10 @@ public final class FieldDomains {
      * name would stand in for an account that is not there.
      */
     private RuleAccounting.Why stoppedBy(RuleRef rule, RuleKey at, List<FactSubject> named) {
-        List<UnreadReason> why = took.stoppedBy(rule, named);
+        // What a rule is answerable for, as the facts it is answerable for. Asked for the reasons
+        // alone here, the written places they were decided at would be gone one call before the
+        // account that names the rule, and two facts about two clauses would arrive as one.
+        Set<RuleShortfall> why = took.stoppedBy(rule, named);
         if (!why.isEmpty()) {
             return new RuleAccounting.Why.TheValueReadingSays(why);
         }
