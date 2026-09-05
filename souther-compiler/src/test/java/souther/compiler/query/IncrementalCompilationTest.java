@@ -267,10 +267,19 @@ class IncrementalCompilationTest {
         return c;
     }
 
-    /** The same workspace with {@code thrice}'s body changed — an edit inside one definition, made
-     * at the end of the file so nothing before it moves. */
-    private static Map<String, String> thriceTimes(String factor) {
-        return Map.of("orders.sou", ORDERS.replace("n.value * 3)", "n.value * " + factor + ")"));
+    /**
+     * The same workspace with {@code twice}'s body changed — an edit inside one definition, written
+     * where it moves no line of the definitions after it.
+     *
+     * <p>{@code twice} and not {@code thrice}, and an operation more rather than a different number
+     * written in one. What the two tests below hold is that a body is none of the business of the
+     * one beside it, and the way that used to fail was a count over the whole file: an edit that
+     * wrote one construct more renumbered every construct after it. Both halves are needed to reach
+     * it — an edit to the last definition has nothing after it to renumber, and an edit that leaves
+     * the count where it was renumbers nothing.
+     */
+    private static Map<String, String> twiceOver(String written) {
+        return Map.of("orders.sou", ORDERS.replace("doubled(n.value)", written));
     }
 
     /**
@@ -284,13 +293,13 @@ class IncrementalCompilationTest {
         Answer<?> twice = c.db().ask(new Bodies.LoweredBody("shop.orders", new souther.compiler.ast.DefinitionName("twice")));
         Answer<?> thrice = c.db().ask(new Bodies.LoweredBody("shop.orders", new souther.compiler.ast.DefinitionName("thrice")));
 
-        c.update(thriceTimes("30"), Set.of());
+        c.update(twiceOver("doubled(n.value + 0)"), Set.of());
         c.answerEverything();
 
-        assertNotSame(thrice, c.db().ask(new Bodies.LoweredBody("shop.orders", new souther.compiler.ast.DefinitionName("thrice"))),
-                "the edit is `thrice`'s, so it is expanded again");
-        assertSame(twice, c.db().ask(new Bodies.LoweredBody("shop.orders", new souther.compiler.ast.DefinitionName("twice"))),
-                "`twice` says what it said, and `thrice` is not part of it");
+        assertNotSame(twice, c.db().ask(new Bodies.LoweredBody("shop.orders", new souther.compiler.ast.DefinitionName("twice"))),
+                "the edit is `twice`'s, so it is expanded again");
+        assertSame(thrice, c.db().ask(new Bodies.LoweredBody("shop.orders", new souther.compiler.ast.DefinitionName("thrice"))),
+                "`thrice` says what it said, and `twice` is not part of it");
     }
 
     /**
@@ -303,13 +312,13 @@ class IncrementalCompilationTest {
         Answer<?> twice = c.db().ask(new Bodies.CheckedBehavior("shop.orders", "twice"));
         Answer<?> thrice = c.db().ask(new Bodies.CheckedBehavior("shop.orders", "thrice"));
 
-        c.update(thriceTimes("30"), Set.of());
+        c.update(twiceOver("doubled(n.value + 0)"), Set.of());
         c.answerEverything();
 
-        assertNotSame(thrice, c.db().ask(new Bodies.CheckedBehavior("shop.orders", "thrice")),
-                "the edit is `thrice`'s, so it is checked again");
-        assertSame(twice, c.db().ask(new Bodies.CheckedBehavior("shop.orders", "twice")),
-                "`twice` is checked against `behavior twice`, which says what it said");
+        assertNotSame(twice, c.db().ask(new Bodies.CheckedBehavior("shop.orders", "twice")),
+                "the edit is `twice`'s, so it is checked again");
+        assertSame(thrice, c.db().ask(new Bodies.CheckedBehavior("shop.orders", "thrice")),
+                "`thrice` is checked against `behavior thrice`, which says what it said");
     }
 
     /**

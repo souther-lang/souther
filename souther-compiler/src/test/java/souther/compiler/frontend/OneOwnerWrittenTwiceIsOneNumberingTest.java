@@ -92,6 +92,89 @@ class OneOwnerWrittenTwiceIsOneNumberingTest {
                 "`thrice`'s rows are `thrice`'s, whatever was exampled before them");
     }
 
+    /** A behavior of its own to stand in for, so the module can write a {@code fake} beside the
+     *  rows of the behavior that depends on it. */
+    private static final String WITH_A_DEPENDENCY = """
+            module shop.orders exposing ( Amount )
+
+            data Amount = Int
+                invariant value >= 0
+
+            behavior rateFor : (n: Amount) -> Amount
+
+            behavior priced : (n: Amount) -> Amount
+                depends on rateFor
+            let priced (n, rateFor) = rateFor(n)
+            """;
+
+    private static final String STOOD_IN_FOR_IN_TWO_BLOCKS = WITH_A_DEPENDENCY + """
+
+            fake rateFor
+              | (Amount(1)) -> Amount(1 + 0)
+
+            fake rateFor
+              | (Amount(2)) -> Amount(2 + 0)
+            """;
+
+    private static final String STOOD_IN_FOR_IN_ONE_BLOCK = WITH_A_DEPENDENCY + """
+
+            fake rateFor
+              | (Amount(1)) -> Amount(1 + 0)
+              | (Amount(2)) -> Amount(2 + 0)
+            """;
+
+    /** And a stand-in written in two blocks is numbered as one, the owner being the behavior stood
+     *  in for rather than the block. */
+    @Test
+    void aSecondStandInBlockForOneBehaviorCarriesOnItsNumbering() {
+        assertEquals(numbersTakenByStandIns(STOOD_IN_FOR_IN_ONE_BLOCK),
+                numbersTakenByStandIns(STOOD_IN_FOR_IN_TWO_BLOCKS),
+                "the rows stand in for one behavior either way, so they are numbered the same way");
+    }
+
+    /**
+     * And what a behavior's rows are numbered as is none of its stand-in's business.
+     *
+     * <p>The two are written for one behavior and are two owners, which is what this asks. Under one
+     * owner the numbering would carry from the rows into the stand-in, and adding a row would move
+     * what the stand-in was numbered as — the count over the file again, narrowed to a behavior.
+     */
+    @Test
+    void andWhatIsWrittenInARowDoesNotNumberTheStandInBesideIt() {
+        // The rows are written ahead of the stand-in. Under a count the two shared, what is written
+        // first is what moves what comes after it — so a row added below the stand-in could not
+        // reach it however the counting went, and the test would hold for the wrong reason.
+        String noRow = WITH_A_DEPENDENCY + """
+
+                fake rateFor
+                  | (Amount(1)) -> Amount(1 + 0)
+                """;
+        String aRowAhead = WITH_A_DEPENDENCY + """
+
+                example priced
+                  | (Amount(1)) -> Amount(1 + 0)
+
+                fake rateFor
+                  | (Amount(1)) -> Amount(1 + 0)
+                """;
+
+        assertEquals(numbersTakenByStandIns(noRow), numbersTakenByStandIns(aRowAhead),
+                "the stand-in says what it said, and a row written before it is not part of it");
+    }
+
+    /** Every number the builder handed out while reading the module's stand-ins. */
+    private static List<String> numbersTakenByStandIns(String source) {
+        List<String> taken = new ArrayList<>();
+        for (Ast.Fake table : CstFrontend.parse(source, null).fakes()) {
+            java.util.regex.Matcher origins = java.util.regex.Pattern
+                    .compile("ordinal=\\d+, lowered=\\d+").matcher(String.valueOf(table));
+            while (origins.find()) {
+                taken.add(origins.group());
+            }
+        }
+        return taken;
+    }
+
     private static List<RowIdentity> rowsOf(String source) {
         List<RowIdentity> identities = new ArrayList<>();
         for (Ast.Example block : CstFrontend.parse(source, null).examples()) {

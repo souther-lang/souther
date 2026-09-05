@@ -1,6 +1,7 @@
 package souther.compiler.frontend;
 
 import souther.compiler.ast.Ast;
+import souther.compiler.diag.CompileException;
 import souther.compiler.diag.SourcePos;
 import souther.test.RepositoryLayout;
 
@@ -44,11 +45,33 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class WhatIsWrittenBesideADefinitionDoesNotNumberItTest {
 
-    /** A definition that numbers nothing beyond itself. */
-    private static final String NUMBERS_NOTHING = "let aProbeThatNumbersNothing = 0";
+    /**
+     * The probes, by what the file they go into may hold.
+     *
+     * <p>Two pairs and not one, because what a definition may be depends on which kind of file it is
+     * written in: an {@code examples for} file holds the values its rows name, which are {@code let}s
+     * with no parameters, and a definition with one is refused there. A probe that a file refuses is
+     * a source the property cannot be asked of, which is the thing this test says out loud rather
+     * than passes over.
+     *
+     * <p>What each pair moves is what a {@code let} of that shape can move. In a model file the
+     * pattern parameter takes a name the lowering mints, the lambda is a block and takes a rule
+     * number, and the operation takes a construct number; in an attached file, where the lambda
+     * would be lifted into a parameter the file refuses, the operation alone. The counters a
+     * {@code match}, a tuple pattern, a field getter and a spread move are not written by either,
+     * and the count a row is given belongs to an owner no {@code let} is one of —
+     * {@code OneOwnerWrittenTwiceIsOneNumberingTest} is where that one is read.
+     */
+    private record Probes(String numbersNothing, String numbersOneMore) {
 
-    /** The same definition with one construct more in it — a comparison, which takes a number. */
-    private static final String NUMBERS_ONE_MORE = "let aProbeThatNumbersNothing = 0 + 0";
+        static Probes forA(Ast.Module module) {
+            return module.exampleFileTarget() == null
+                    ? new Probes("let aProbeThatNumbersNothing (p) = p",
+                            "let aProbeThatNumbersNothing ((a, b)) = ((x) -> x + 0)")
+                    : new Probes("let aProbeThatNumbersNothing = 0",
+                            "let aProbeThatNumbersNothing = 0 + 0");
+        }
+    }
 
     /** What the probe is filed under among what a module declares. */
     private static final String THE_PROBE = "let aProbeThatNumbersNothing";
@@ -75,22 +98,26 @@ class WhatIsWrittenBesideADefinitionDoesNotNumberItTest {
         int compared = 0;
         for (Map.Entry<String, String> each : corpus.entrySet()) {
             String source = each.getValue();
-            Ast.Module written = parsed(source);
-            if (written == null || whereItsDefinitionsBegin(written).isEmpty()) {
-                // A source that declares nothing has nothing for a definition written ahead of it
-                // to number, and one the parser refuses as it stands is not this property's to ask
-                // about. Both are said below rather than passed over here.
-                declaringNothing.add(each.getKey());
-                continue;
-            }
-            Ast.Module numbersNothing = parsed(withAProbe(written, source, NUMBERS_NOTHING));
-            Ast.Module numbersOneMore = parsed(withAProbe(written, source, NUMBERS_ONE_MORE));
-            if (numbersNothing == null || numbersOneMore == null) {
-                // Said rather than passed over. A source dropped here leaves the property holding
-                // over whatever was left, and nothing would say which sources that was.
+            Ast.Module written = readable(source);
+            if (written == null) {
+                // The language refusing a source as it stands is about the source, and this asks
+                // nothing of it. Said rather than passed over.
                 refused.add(each.getKey());
                 continue;
             }
+            if (whereItsDefinitionsBegin(written).isEmpty()) {
+                declaringNothing.add(each.getKey());
+                continue;
+            }
+            Probes probes = Probes.forA(written);
+            // Not caught. A source the language accepts is one the probe for its kind of file can be
+            // written into, so anything thrown from here is this compiler failing — and it is this
+            // compiler the property is about. Swallowed, a fault put into what is being tested would
+            // take the source out of the population and leave the property green.
+            Ast.Module numbersNothing = probed(each.getKey(),
+                    withAProbe(written, source, probes.numbersNothing()));
+            Ast.Module numbersOneMore = probed(each.getKey(),
+                    withAProbe(written, source, probes.numbersOneMore()));
             Map<String, Object> before = whatItDeclares(numbersNothing);
             Map<String, Object> after = whatItDeclares(numbersOneMore);
             for (Map.Entry<String, Object> declared : before.entrySet()) {
@@ -123,23 +150,56 @@ class WhatIsWrittenBesideADefinitionDoesNotNumberItTest {
     }
 
     /**
-     * The control: the two probes really do differ by a number the builder hands out.
+     * The control: the probes really do differ by numbers the builder hands out, and not merely by
+     * being different definitions.
      *
-     * <p>Without it the property above would hold for a pair of sources that were the same source,
-     * and would go on holding after the counters went back to counting the file.
+     * <p>Asked of what they were numbered, not of what they are. Two definitions written differently
+     * differ whatever the counters do, so a control comparing them would go on passing after the
+     * counters went back to counting the file — which is the regression the property exists to
+     * catch. What is asked here is that one probe took numbers and the other took none.
      */
     @Test
-    void andTheTwoProbesAreToldApartByWhatTheyNumber() {
+    void andTheProbesAreToldApartByWhatTheyWereNumbered() {
         String declaringOne = "module probe exposing ( )\n\nlet beside = 1\n";
         Ast.Module written = parsed(declaringOne);
-        Ast.Module numbersNothing =
-                parsed(withAProbe(written, declaringOne, NUMBERS_NOTHING));
-        Ast.Module numbersOneMore =
-                parsed(withAProbe(written, declaringOne, NUMBERS_ONE_MORE));
+        Probes probes = Probes.forA(written);
+        Ast.FnDef numbersNothing =
+                theProbeOf(parsed(withAProbe(written, declaringOne, probes.numbersNothing())));
+        Ast.FnDef numbersOneMore =
+                theProbeOf(parsed(withAProbe(written, declaringOne, probes.numbersOneMore())));
 
-        assertNotEquals(whatItDeclares(numbersNothing).get(THE_PROBE),
-                whatItDeclares(numbersOneMore).get(THE_PROBE),
-                "the probe that numbers one more is the same definition either way");
+        assertEquals(List.of(), numbersTaken(numbersNothing),
+                "the probe that numbers nothing takes no number, so writing it ahead of a"
+                        + " definition moves nothing under any numbering");
+        assertNotEquals(List.of(), numbersTaken(numbersOneMore),
+                "and the probe beside it takes some, which is what the property is written over");
+    }
+
+    /** The probe among what a module declares. */
+    private static Ast.FnDef theProbeOf(Ast.Module module) {
+        for (Ast.FnDef fn : module.fns()) {
+            if (("let " + fn.written().canonical()).equals(THE_PROBE)) {
+                return fn;
+            }
+        }
+        throw new IllegalStateException("the probe was not written into the source");
+    }
+
+    /** Every number the builder handed out while reading {@code definition}: the origins its forms
+     *  carry, and the names its lowering minted. */
+    private static List<String> numbersTaken(Ast.FnDef definition) {
+        List<String> taken = new ArrayList<>();
+        java.util.regex.Matcher minted =
+                java.util.regex.Pattern.compile("\\$[a-z]\\d+").matcher(String.valueOf(definition));
+        while (minted.find()) {
+            taken.add(minted.group());
+        }
+        for (String said : String.valueOf(definition).split("CoverageOrigin\\[|RuleOrigin\\[")) {
+            if (said.startsWith("owner=")) {
+                taken.add(said.substring(0, said.indexOf(']') + 1));
+            }
+        }
+        return taken;
     }
 
     /**
@@ -178,13 +238,36 @@ class WhatIsWrittenBesideADefinitionDoesNotNumberItTest {
         return begins;
     }
 
-    /** The module, or null where the parser refused the source. */
-    private static Ast.Module parsed(String source) {
+    /**
+     * The module, or null where the language refuses the source as it stands.
+     *
+     * <p>That one exception and no other. A refusal is what the language says about a source and is
+     * a reason to ask this property nothing of it; anything else thrown here is this compiler
+     * failing, and catching it would answer "not one of ours" about a fault in the very thing the
+     * property is written over.
+     */
+    private static Ast.Module readable(String source) {
         try {
             return CstFrontend.parse(source, null);
-        } catch (RuntimeException refused) {
+        } catch (CompileException refused) {
             return null;
         }
+    }
+
+    /** The module a probe was written into, which the language accepting the source without it
+     *  says it can read. */
+    private static Ast.Module probed(String source, String withAProbe) {
+        try {
+            return CstFrontend.parse(withAProbe, null);
+        } catch (RuntimeException thrown) {
+            throw new AssertionError("the probe could not be written into " + source
+                    + ", which the language reads without it", thrown);
+        }
+    }
+
+    /** The module, for a source written here. */
+    private static Ast.Module parsed(String source) {
+        return CstFrontend.parse(source, null);
     }
 
     /** What the module declares, by what it is written as and called — everything but the probe. */
@@ -199,11 +282,17 @@ class WhatIsWrittenBesideADefinitionDoesNotNumberItTest {
         for (Ast.FnDef fn : module.fns()) {
             declared.put("let " + fn.written().canonical(), fn);
         }
-        for (Ast.Example example : module.examples()) {
-            declared.put("example " + example.target(), example);
+        // A behavior may be exampled by more than one block and stood in for by more than one, and
+        // the blocks after the first are where a numbering carried across them is read. Keyed by the
+        // target alone, the later blocks would replace the earlier and the property would be blind
+        // to exactly the carrying-on the reading is made per owner to do.
+        for (int i = 0; i < module.examples().size(); i++) {
+            Ast.Example example = module.examples().get(i);
+            declared.put("example " + example.target() + " " + i, example);
         }
-        for (Ast.Fake fake : module.fakes()) {
-            declared.put("fake " + fake.target().name(), fake);
+        for (int i = 0; i < module.fakes().size(); i++) {
+            Ast.Fake fake = module.fakes().get(i);
+            declared.put("fake " + fake.target().name() + " " + i, fake);
         }
         return declared;
     }
