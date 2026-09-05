@@ -38,6 +38,7 @@ class AlternativesHeldApartAnswerThePositionExactlyTest {
      *  built and no allowance is spent. */
     private final Allowance<String> sets = AsACompilationAllows.forAdmittedValues();
 
+
     private static AdmissibleValues<String> says(String atom, Value value) {
         return AdmissibleValues.at(atom, ValueSet.just(value));
     }
@@ -82,11 +83,13 @@ class AlternativesHeldApartAnswerThePositionExactlyTest {
         AdmissibleValues<String> b = pair(SIX, ONE);
         AdmissibleValues<String> c = pair(SIX, ZERO);
 
-        assertEquals(a.joinApart(b, sets).held(), b.joinApart(a, sets).held(),
+        assertEquals(a.joinApart(b, sets).held(),
+                b.joinApart(a, sets).held(),
                 "either order, one union");
         assertEquals(a.held(), a.joinApart(a, sets).held(),
                 "and the same alternative twice is one");
-        assertEquals(a.joinApart(b, sets).joinApart(c, sets).held(),
+        assertEquals(a.joinApart(b, sets)
+                        .joinApart(c, sets).held(),
                 a.joinApart(b.joinApart(c, sets), sets).held(),
                 "and three of them are the same three, bracketed either way");
     }
@@ -151,13 +154,15 @@ class AlternativesHeldApartAnswerThePositionExactlyTest {
                 List.of(pair(FIVE, ZERO), pair(SIX, ONE)),
                 List.of(says(A, FIVE), AdmissibleValues.<String>unreadable(Set.of(B),
                         UnreadReason.FORM_NOT_READ)))) {
-            AdmissibleValues<String> merged = each.get(0).join(each.get(1), sets);
-            AdmissibleValues<String> apart = each.get(0).joinApart(each.get(1), sets);
+            AdmissibleValues<String> merged =
+                    each.get(0).join(each.get(1), sets);
+            AdmissibleValues<String> apart =
+                    each.get(0).joinApart(each.get(1), sets);
 
             assertEquals(merged.guaranteedAt(A), apart.guaranteedAt(A), each + " at a");
             assertEquals(merged.guaranteedAt(B), apart.guaranteedAt(B), each + " at b");
             assertEquals(merged.guaranteedTogether(), apart.guaranteedTogether(), each.toString());
-            assertEquals(merged.dropped(), apart.dropped(), each.toString());
+            assertEquals(merged.standing(), apart.standing(), each.toString());
         }
     }
 }

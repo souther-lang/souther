@@ -2,6 +2,8 @@ package souther.compiler.values;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.Set;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -65,7 +67,7 @@ class WhatAReadingCanPromiseAboutItsProjectionsTest {
     void aChoiceAtOnePositionPromisesItsRelation() {
         AdmissibleValues<String> either = says(A, FIVE).join(says(A, SIX), SETS);
 
-        assertEquals(ValueSet.oneOf(java.util.Set.of(FIVE, SIX)), either.at(A));
+        assertEquals(ValueSet.oneOf(Set.of(FIVE, SIX)), either.at(A));
         assertTrue(either.relationExact(), "two values of one position are a product");
         assertTrue(either.projectionExactAt(A));
     }
@@ -81,8 +83,8 @@ class WhatAReadingCanPromiseAboutItsProjectionsTest {
     void aChoiceAcrossTwoPositionsKeepsItsProjectionsAndLosesItsRelation() {
         AdmissibleValues<String> one = pair(FIVE, ZERO).join(pair(SIX, ONE), SETS);
 
-        assertEquals(ValueSet.oneOf(java.util.Set.of(FIVE, SIX)), one.at(A));
-        assertEquals(ValueSet.oneOf(java.util.Set.of(ZERO, ONE)), one.at(B));
+        assertEquals(ValueSet.oneOf(Set.of(FIVE, SIX)), one.at(A));
+        assertEquals(ValueSet.oneOf(Set.of(ZERO, ONE)), one.at(B));
         assertTrue(one.projectionExactAt(A), "the projection of a union is the union of projections");
         assertFalse(one.relationExact(), "which b went with which a is what the product cannot say");
     }
@@ -102,7 +104,7 @@ class WhatAReadingCanPromiseAboutItsProjectionsTest {
 
         AdmissibleValues<String> both = one.meet(two, SETS);
 
-        assertEquals(ValueSet.oneOf(java.util.Set.of(FIVE, SIX)), both.at(A), "which is wider than the rules leave it");
+        assertEquals(ValueSet.oneOf(Set.of(FIVE, SIX)), both.at(A), "which is wider than the rules leave it");
         assertFalse(both.projectionExactAt(A), "so the reading may not say this is what a holds");
         assertFalse(both.relationExact());
     }

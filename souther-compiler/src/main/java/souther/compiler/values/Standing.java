@@ -8,7 +8,19 @@ import java.util.Set;
 import java.util.function.Function;
 
 /**
- * What a reading could not take in, and which places each of those rules was written at.
+ * Why a reading cannot speak for what stands at a position, and what to tell a reader about it.
+ *
+ * <p><b>Two kinds of thing, and they are not the same kind.</b> A rule the reading gave up on is
+ * one an author wrote and can lift. A position an alternative nothing could read left open is a
+ * consequence of one: the choice binds nothing there because a value satisfying the branch nobody
+ * read owes the branch that was read nothing, and what an author would go and look at is the clause
+ * inside that branch rather than anything written at the position. Both say this reading cannot
+ * promise what stands there, so both are weighed when that is asked; only the first is what a
+ * reader is told, where there is one.
+ *
+ * <p>Held apart rather than appended under a rule. Said as one list, which of them a reader is
+ * shown is decided by which arrived first — and a walk reaching them the other way round tells an
+ * author about the choice above a form they could have lifted.
  *
  * <p>One entry per rule the reading gave up on, holding every position that rule named. Which is
  * what the reading was handed: a rule about two positions is one rule, and a rule about one is one
@@ -51,32 +63,43 @@ public final class Standing<A> {
 
     /** In the order the reading met them, which is the order the rules were written. */
     private final List<Entry<A>> entries;
+    /**
+     * The positions a choice's unread alternative left open, in no order anybody may read.
+     *
+     * <p>A set and not entries, because there is no rule here to be one of: what an author would
+     * look at is the clause inside the branch, and where the choice is is a fact about a rule
+     * ({@code StatedByClauses.RuleShortfall}) rather than about this place.
+     */
+    private final Set<A> openedByAlternative;
 
-    private Standing(List<Entry<A>> entries) {
+    private Standing(List<Entry<A>> entries, Set<A> openedByAlternative) {
         this.entries = List.copyOf(entries);
+        this.openedByAlternative =
+                Collections.unmodifiableSet(new LinkedHashSet<>(openedByAlternative));
     }
 
     /** Nothing was left standing, which is what a reading that read everything holds. */
     public static <A> Standing<A> nothing() {
-        return new Standing<>(List.of());
+        return new Standing<>(List.of(), Set.of());
     }
 
     /**
      * One rule that went unread, and the positions it named.
      *
      * <p>Nothing where it named none. A rule reaching no position this reading can name is still a
-     * rule it did not read, and what that costs is carried by the reading having dropped one
-     * ({@code AdmissibleValues.dropped}) rather than here: nothing can be asked of an entry that
-     * names nowhere, so holding one would make {@link #isEmpty} mean "holds an entry" where every
-     * reader of it means "has something to say".
+     * rule it did not read, and what that costs is a fact about the clause somebody wrote rather
+     * than about any place here ({@code Adoption}): nothing can be asked of an entry that names
+     * nowhere, so holding one would make {@link #isEmpty} mean "holds an entry" where every reader
+     * of it means "has something to say".
      */
     public static <A> Standing<A> of(Set<A> named, UnreadReason why) {
-        return named.isEmpty() ? nothing() : new Standing<>(List.of(new Entry<>(named, why)));
+        return named.isEmpty() ? nothing()
+                : new Standing<>(List.of(new Entry<>(named, why)), Set.of());
     }
 
-    /** Whether every rule the reading was handed was taken in. */
+    /** Whether this reading can promise what stands everywhere, by either kind of evidence. */
     public boolean isEmpty() {
-        return entries.isEmpty();
+        return entries.isEmpty() && openedByAlternative.isEmpty();
     }
 
     /**
@@ -93,7 +116,8 @@ public final class Standing<A> {
         if (isEmpty()) {
             return other;
         }
-        return new Standing<>(joined(entries, other.entries));
+        return new Standing<>(joined(entries, other.entries),
+                both(openedByAlternative, other.openedByAlternative));
     }
 
     /** This, with one more rule that went unread at {@code positions}. */
@@ -102,26 +126,21 @@ public final class Standing<A> {
     }
 
     /**
-     * This, with {@code these} left open by an alternative nothing could read — where nothing has
-     * spoiled them already.
+     * This, with {@code these} left open by an alternative nothing could read.
      *
-     * <p>The one rule for what an unread alternative does to the account beside it. A value
-     * satisfying the branch nothing read is under no obligation from the branch that was read, so
-     * the positions that branch reached are left open. The one place a reason is not added beside
-     * the reasons already there: what this says is that the choice offered an alternative nothing
-     * could read, which is one fact about the choice however many positions it reaches, and a
-     * position whose own rules already stopped a reading is not stopped a second time by it. A
-     * reason recorded there is a rule that named the position, which is nearer than a branch that
-     * widened it from outside.
+     * <p>Recorded and not weighed against what is already here. Which of the two a reader is told
+     * about is settled where the question is asked ({@link #across}), so it turns on what this
+     * holds rather than on the order the two arrived in — appended under a rule instead, a walk
+     * that met the choice first told an author about it and left the form they could have lifted
+     * unmentioned.
+     *
+     * <p>Which positions those are is not worked out here. It is a fact about the alternatives an
+     * author wrote and about which branches anybody can be in, decided where both are known
+     * ({@code StatedByClauses.AlternativeOpening}) and handed here.
      */
-    Standing<A> leftOpenAt(Set<A> these) {
-        Set<A> open = new LinkedHashSet<>();
-        these.forEach(position -> {
-            if (at(position).isEmpty()) {
-                open.add(position);
-            }
-        });
-        return open.isEmpty() ? this : and(Standing.of(open, UnreadReason.ALTERNATIVE_NOT_READ));
+    Standing<A> alsoOpenedAt(Set<A> these) {
+        return these.isEmpty() ? this
+                : new Standing<>(entries, both(openedByAlternative, these));
     }
 
     /**
@@ -142,6 +161,13 @@ public final class Standing<A> {
      * is every reason once, in the order the rules were written. Which is why the entries are kept
      * whole: read out of a map filed by position, an order over two places would be one this
      * compiler invented.
+     *
+     * <p><b>A rule of the positions themselves outranks the choice above them.</b> {@code n /= 5 ||
+     * f(n)} leaves {@code n} open because of the form nothing reads, and the choice carried that
+     * outward rather than introducing anything: a reader told both would lift the form and find the
+     * question still there. Asked of the block and not of one position, for the reason the whole of
+     * this is — a rule about the value two positions share is a rule about each of them, so a
+     * direct rule at either is nearer than a choice that opened the other.
      */
     List<UnreadReason> across(Set<A> positions) {
         List<UnreadReason> out = new ArrayList<>();
@@ -150,13 +176,17 @@ public final class Standing<A> {
                 out.add(each.why());
             }
         }
+        if (out.isEmpty() && !Collections.disjoint(openedByAlternative, positions)) {
+            return List.of(UnreadReason.ALTERNATIVE_NOT_READ);
+        }
         return Collections.unmodifiableList(out);
     }
 
-    /** Every position a rule was left standing at. */
+    /** Every position this reading is short of something at, by either kind of evidence. */
     Set<A> positions() {
         Set<A> out = new LinkedHashSet<>();
         entries.forEach(each -> out.addAll(each.positions()));
+        out.addAll(openedByAlternative);
         return Collections.unmodifiableSet(out);
     }
 
@@ -168,7 +198,9 @@ public final class Standing<A> {
             each.positions().forEach(position -> positions.add(naming.apply(position)));
             out.add(new Entry<>(positions, each.why()));
         });
-        return new Standing<>(out);
+        Set<B> opened = new LinkedHashSet<>();
+        openedByAlternative.forEach(position -> opened.add(naming.apply(position)));
+        return new Standing<>(out, opened);
     }
 
     /**
@@ -182,7 +214,9 @@ public final class Standing<A> {
     Standing<A> inTheOrderOf(List<Standing<A>> read) {
         List<Entry<A>> out = new ArrayList<>();
         read.forEach(each -> out.addAll(each.entries));
-        return new Standing<>(joined(out, entries));
+        // The positions a choice opened are not put in an order, having none: what a reader is told
+        // about one of them is a fact about a choice and is written where the choice is.
+        return new Standing<>(joined(out, entries), openedByAlternative);
     }
 
     private static <A> List<Entry<A>> joined(List<Entry<A>> these, List<Entry<A>> those) {
@@ -195,18 +229,29 @@ public final class Standing<A> {
         return out;
     }
 
+    private static <A> Set<A> both(Set<A> these, Set<A> those) {
+        if (those.isEmpty()) {
+            return these;
+        }
+        Set<A> out = new LinkedHashSet<>(these);
+        out.addAll(those);
+        return out;
+    }
+
     @Override
     public boolean equals(Object other) {
-        return other instanceof Standing<?> it && entries.equals(it.entries);
+        return other instanceof Standing<?> it && entries.equals(it.entries)
+                && openedByAlternative.equals(it.openedByAlternative);
     }
 
     @Override
     public int hashCode() {
-        return entries.hashCode();
+        return entries.hashCode() * 31 + openedByAlternative.hashCode();
     }
 
     @Override
     public String toString() {
-        return entries.toString();
+        return openedByAlternative.isEmpty() ? entries.toString()
+                : entries + " opened at " + openedByAlternative;
     }
 }

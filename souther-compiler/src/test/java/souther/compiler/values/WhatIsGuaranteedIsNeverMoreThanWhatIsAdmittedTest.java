@@ -65,7 +65,8 @@ class WhatIsGuaranteedIsNeverMoreThanWhatIsAdmittedTest {
                 made("meet with an unread", says(VALUE, A).meet(unreadable(Set.of(OTHER)), SETS)),
                 made("meet leaving nothing", says(VALUE, A).meet(says(VALUE, B), SETS)),
                 made("join of two read", says(VALUE, A).join(says(VALUE, B), SETS)),
-                made("join with an unread", says(VALUE, A).join(unreadable(Set.of(VALUE)), SETS)),
+                made("join with an unread", says(VALUE, A).join(unreadable(Set.of(VALUE)), SETS)
+                        .alsoOpenedAt(Set.of(VALUE))),
                 made("join covering the position",
                         AdmissibleValues.at(VALUE, ValueSet.just(A))
                                 .join(AdmissibleValues.at(VALUE, ValueSet.allBut(A)), SETS)),
@@ -74,7 +75,7 @@ class WhatIsGuaranteedIsNeverMoreThanWhatIsAdmittedTest {
                                 .join(says(OTHER, A).meet(says(OTHER, B), SETS), SETS)),
                 made("join of a meet and an unread",
                         says(VALUE, A).meet(unreadable(Set.of()), SETS)
-                                .join(says(VALUE, B), SETS)),
+                                .join(says(VALUE, B), SETS).alsoOpenedAt(Set.of(VALUE))),
                 made("choice over two positions",
                         says(VALUE, A).meet(says(OTHER, A), SETS)
                                 .join(says(VALUE, B).meet(says(OTHER, B), SETS), SETS)),
@@ -83,8 +84,9 @@ class WhatIsGuaranteedIsNeverMoreThanWhatIsAdmittedTest {
                                 .join(says(VALUE, B).meet(says(OTHER, B), SETS), SETS)
                                 .meet(says(VALUE, A), SETS)),
                 made("join nested under a join",
-                        says(VALUE, A).join(
-                                says(VALUE, B).join(unreadable(Set.of(VALUE)), SETS), SETS)));
+                        says(VALUE, A).join(says(VALUE, B)
+                                .join(unreadable(Set.of(VALUE)), SETS).alsoOpenedAt(Set.of(VALUE)),
+                                SETS).alsoOpenedAt(Set.of(VALUE))));
     }
 
     /**

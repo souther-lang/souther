@@ -96,7 +96,7 @@ class WhatIsUnreadAtOnePositionIsUnreadAtTheOnesItIsOneValueWithTest {
         Sameness.Block<String> block = reading.blockOf("p");
 
         AdmissibleValues<String> wide = new AdmissibleValues<>(reading.held(),
-                reading.perPosition(), reading.standing(), reading.dropped(),
+                reading.perPosition(), reading.standing(),
                 reading.guaranteed(), reading.defaultGuaranteed(), reading.guaranteedTogether(),
                 reading.tangled(), Set.of(block));
 
