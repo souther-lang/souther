@@ -450,6 +450,15 @@ sealed interface StatedByClauses {
      * comes back unread: {@code value == 5 || value /= 5} is read at both leaves and joins to every
      * value there is. That is the same reconstruction {@code Predicates.Assumed} keeps a field of
      * its own to avoid, and the one this accounting was written against.
+     *
+     * <p><b>What a branch's fate is decided by is these two readings and nothing else.</b> A
+     * conjunct of the clause reaches a branch by being met into it, and the choices are settled
+     * while some of that is still to come — so a branch is refused here on less than the whole
+     * declaration says about it, and every reading that could refuse it later will. What another
+     * component of the state requires of a position is therefore not asked here: asked, a branch
+     * would be refused by a bound its own clause was about to place, and the proof carried out of
+     * the fold would say the readings needed something outside them when they did not.
+     * ({@link ConstraintState#positionEnvelope} is asked where the readings have finished.)
      */
     record Reading(AdmissibleReading values, OrderedReading ordered, Terms terms,
                    Map<FactSubject, Type> byName, Alternatives alternatives)

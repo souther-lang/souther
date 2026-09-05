@@ -131,6 +131,31 @@ public sealed interface DataMessage extends Message {
     record NoValueTheseAllowIsInTheRangeTheyShare(String data, String at)
             implements DataMessage, Reported {}
 
+    /**
+     * The values one position is allowed and the bounds the rules require it to be within share
+     * none.
+     *
+     * <p>Beside {@link NoValueItsRulesAllowIsInThatRange} and a different sentence. There, both
+     * halves are rules written about the position, and an author reads them at the place. Here the
+     * bounds follow from rules written about the position and its neighbours together — a position
+     * one past another that is at least two is three or more, however few of those words are at the
+     * place — so the sentence says the position is required to be within them and leaves where they
+     * came from to the rules.
+     */
+    @Code(DiagnosticCode.E1013)
+    record NoValueItsRulesAllowIsWithinTheBoundsTheyRequire(String data, String at)
+            implements DataMessage, Reported {}
+
+    /**
+     * The same, of positions the rules hold as one value.
+     *
+     * <p>The places together and not one of them, for the reason
+     * {@link NoValueTheseAllowIsInTheRangeTheyShare} says it of them.
+     */
+    @Code(DiagnosticCode.E1013)
+    record NoValueTheseAllowIsWithinTheBoundsTheyRequire(String data, String at)
+            implements DataMessage, Reported {}
+
     /** A set is asked to hold more values that differ than there are of what it holds. */
     @Code(DiagnosticCode.E1013)
     record ASetCannotBeFilledFromItsElement(String data, String at, long available)

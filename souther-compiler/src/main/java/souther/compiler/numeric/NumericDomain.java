@@ -593,6 +593,44 @@ public final class NumericDomain<A> {
     }
 
     /**
+     * What this domain says about where one atom's values lie, for a reader meeting it with an
+     * answer of its own.
+     *
+     * <p>Three answers, because {@link Bounds} alone cannot tell them apart. A rule naming an atom
+     * and narrowing neither end leaves the same pair of nulls as an atom no rule ever mentioned, and
+     * the two say opposite things to whoever is meeting them: the first is this domain speaking and
+     * placing no edge, the second is this domain having nothing to say at all. Which of them it is
+     * is {@link #atomsSpokenOf}'s answer and is not readable off the ends.
+     *
+     * <p>And the rules holding nothing is neither. An atom of a domain that admits no assignment is
+     * not at every value, which is what a pair of nulls would say; there is no value for it to be
+     * at. Said as {@link Projection.NothingIsLeft}, so that a caller cannot reach a range out of a
+     * domain whose rules contradict — read as open, it would widen whatever it was met with and the
+     * contradiction would leave with it.
+     */
+    public Projection projectionOf(A atom) {
+        if (isBottom()) {
+            return new Projection.NothingIsLeft();
+        }
+        return atomsSpokenOf().contains(atom)
+                ? new Projection.Within(boundsOf(atom)) : new Projection.NotSpokenOf();
+    }
+
+    /** What a domain says about one atom: nothing, where its values lie, or that it has none. */
+    public sealed interface Projection {
+
+        /** No rule here names the atom, so nothing about it follows from these rules. */
+        record NotSpokenOf() implements Projection {}
+
+        /** The rules name it and prove it lies here — which is every value where they place no
+         *  edge. */
+        record Within(Bounds bounds) implements Projection {}
+
+        /** The rules admit no assignment at all, so the atom is at no value rather than at any. */
+        record NothingIsLeft() implements Projection {}
+    }
+
+    /**
      * The tightest bounds the rules prove on a whole form.
      *
      * <p>Read for a value the rules cannot carry directly: a product of two positions and a
