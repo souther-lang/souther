@@ -151,4 +151,33 @@ class PositionsHeldAsOneAreClosedByAConjunctionAndCutByAChoiceTest {
     void thereIsNoBlockOfNoPositions() {
         assertThrows(IllegalArgumentException.class, () -> Sameness.Block.of(Set.<String>of()));
     }
+
+    /**
+     * Blocks that share a position are the classes of no relation, and reading them as one is
+     * refused.
+     *
+     * <p>Read as a relation, {@code p} would be held with {@code q} while the two of them answered
+     * to different classes — which is not a partition and is not something anything below can be
+     * asked about. Refused where the relation is built, so that a caller with blocks in hand
+     * cannot reach a state a product would have refused.
+     */
+    @Test
+    void blocksThatShareAPositionAreTheClassesOfNoRelation() {
+        Sameness.Block<String> pq = Sameness.of("p", "q").blockOf("p");
+        Sameness.Block<String> qr = Sameness.of("q", "r").blockOf("q");
+
+        assertThrows(IllegalArgumentException.class, () -> Sameness.of(List.of(pq, qr)));
+    }
+
+    /** And blocks that share none are read as the relation they are the classes of. */
+    @Test
+    void blocksThatShareNoPositionAreReadAsTheRelationTheyAreTheClassesOf() {
+        Sameness.Block<String> pq = Sameness.of("p", "q").blockOf("p");
+        Sameness.Block<String> rs = Sameness.of("r", "s").blockOf("r");
+
+        Sameness<String> both = Sameness.of(List.of(pq, rs));
+
+        assertEquals(pq, both.blockOf("p"));
+        assertEquals(rs, both.blockOf("s"));
+    }
 }

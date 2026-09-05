@@ -10,9 +10,11 @@ import souther.compiler.values.Value;
 import souther.compiler.values.ValueSet;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.SequencedMap;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -98,6 +100,59 @@ class AProofNamesOneBlockAndNotAllOfThemTest {
         assertEquals(2, at.where().size(), "one block, not the four positions of both");
         assertEquals(new Emptiness.AtAField.Where.In("p"), at.where().getFirst(),
                 "and the one whose places the value declares first, whichever was met first");
+    }
+
+    /**
+     * Two blocks beginning at one position are told apart by the places after it.
+     *
+     * <p>What is carried is one witness per way the rules were shown empty, so two of them may
+     * overlap — and both of these begin at {@code p}. A reader that chose by the first declared
+     * position they hold would pick whichever a set happened to iterate to, which is an order
+     * salted per run of the machine: one model would be refused two ways.
+     */
+    @Test
+    void twoBlocksBeginningAtOnePositionAreToldApartByThePlacesAfterIt() {
+        for (boolean reversed : new boolean[] {false, true}) {
+            Allowance<FactSubject> sets = AsACompilationAllows.forAdmittedValues();
+            AdmissibleValues<FactSubject> one = emptiedAt(P, R, sets);
+            AdmissibleValues<FactSubject> other = emptiedAt(P, Q, sets);
+            AdmissibleValues<FactSubject> both = reversed
+                    ? other.meet(one, sets) : one.meet(other, sets);
+            assertEquals(2, both.emptiedBlocks().size(), "or the two witnesses are not both here");
+
+            ConstraintState<FactSubject> state = ConstraintState.<FactSubject>top()
+                    .takingRead(Confinement.Worked.of(both, OrderedIntervals.top(), Map.of()),
+                            sets);
+
+            Emptiness.AtEqualPositions at = assertInstanceOf(Emptiness.AtEqualPositions.class,
+                    state.holdsNothing(declared()).orElseThrow());
+            assertEquals(List.of(new Emptiness.AtAField.Where.In("p"),
+                            new Emptiness.AtAField.Where.In("q")), at.where(),
+                    "p with q is declared before p with r, met either way round");
+        }
+    }
+
+    /**
+     * Two branches left with no value at blocks that are not the same block have shown nothing
+     * about the positions those blocks share.
+     *
+     * <p>The counterexample the proof is carried as blocks for. Read as the positions each of them
+     * named, the two would meet at {@code p} and {@code q}, and the choice would be refused for a
+     * pair neither branch says has no value.
+     */
+    @Test
+    void twoBranchesShownAtOverlappingBlocksShowNothingAboutWhatTheyShare() {
+        Confinement.Admission<FactSubject> one = new Confinement.Admission<>(
+                souther.compiler.values.Emptiness.EMPTY,
+                Confinement.EmptyBy.POSITIONS_HELD_AS_ONE,
+                Set.of(souther.compiler.values.Sameness.of(P, Q).joining(Q, R).blockOf(P)));
+        Confinement.Admission<FactSubject> other = new Confinement.Admission<>(
+                souther.compiler.values.Emptiness.EMPTY,
+                Confinement.EmptyBy.POSITIONS_HELD_AS_ONE,
+                Set.of(souther.compiler.values.Sameness.of(P, Q).joining(Q, S).blockOf(P)));
+
+        assertTrue(Confinement.Admission.bothShown(one, other).at().isEmpty(),
+                "neither branch says the value p and q share has none");
     }
 
     /** And a block whose places this value does not declare is one no sentence can be written

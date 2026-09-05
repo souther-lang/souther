@@ -9,6 +9,8 @@ import souther.compiler.values.AdmissibleValues;
 import souther.compiler.values.ConjoinedAdmissibleValues;
 
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -193,27 +195,68 @@ public record ConstraintState<A>(NumericDomain<A> numbers, PredicateFacts<A> fac
     private static <A> List<Emptiness.AtAField.Where> nearestBlock(
             Set<souther.compiler.values.Sameness.Block<A>> blocks,
             SequencedMap<A, Emptiness.AtAField.Where> positions) {
-        // Which blocks can be named at all, and then the earliest of those. A block one of whose
-        // positions this value does not declare is one no sentence can be written about, and it
-        // says nothing about the block declared after it — asked in one pass, the first block
-        // touched decided the answer for the rest.
-        for (Map.Entry<A, Emptiness.AtAField.Where> first : positions.entrySet()) {
-            for (souther.compiler.values.Sameness.Block<A> block : blocks) {
-                if (!block.holds(first.getKey())) {
-                    continue;
-                }
-                List<Emptiness.AtAField.Where> where = new ArrayList<>();
-                positions.forEach((position, place) -> {
-                    if (block.holds(position)) {
-                        where.add(place);
-                    }
-                });
-                if (where.size() == block.members().size()) {
-                    return where;
-                }
+        Map<A, Integer> ordinal = new LinkedHashMap<>();
+        positions.keySet().forEach(each -> ordinal.put(each, ordinal.size()));
+        List<Integer> nearest = null;
+        souther.compiler.values.Sameness.Block<A> chosen = null;
+        for (souther.compiler.values.Sameness.Block<A> block : blocks) {
+            List<Integer> where = declared(block, ordinal);
+            // A block one of whose positions this value does not declare is one no sentence can be
+            // written about, and it says nothing about the blocks beside it.
+            if (where != null && (nearest == null || earlier(where, nearest))) {
+                nearest = where;
+                chosen = block;
             }
         }
-        return List.of();
+        if (chosen == null) {
+            return List.of();
+        }
+        souther.compiler.values.Sameness.Block<A> named = chosen;
+        List<Emptiness.AtAField.Where> out = new ArrayList<>();
+        positions.forEach((position, place) -> {
+            if (named.holds(position)) {
+                out.add(place);
+            }
+        });
+        return out;
+    }
+
+    /** Where the value declares each of a block's positions, in that order, or null where it
+     *  declares none of one of them. */
+    private static <A> List<Integer> declared(souther.compiler.values.Sameness.Block<A> block,
+                                              Map<A, Integer> ordinal) {
+        List<Integer> out = new ArrayList<>();
+        for (A member : block.members()) {
+            Integer at = ordinal.get(member);
+            if (at == null) {
+                return null;
+            }
+            out.add(at);
+        }
+        out.sort(Comparator.naturalOrder());
+        return out;
+    }
+
+    /**
+     * Whether one block is declared before another, comparing the places they are at.
+     *
+     * <p>Every place and not the first of them. Two blocks may begin at one position — a state left
+     * with no value at {@code p} with {@code q} and at {@code p} with {@code r} has both, since
+     * what is carried is one witness per way the rules were shown empty and not a partition — and
+     * a reader that stopped at the first would pick whichever of them a set happened to iterate to.
+     * Which is an order salted per run of the machine, so one model would be refused two ways.
+     *
+     * <p>A total order over the blocks a value can name, since two of them made of declared
+     * positions are the same block wherever their places are the same. Shorter first where one is
+     * the beginning of the other, which is the only pair the places do not tell apart.
+     */
+    private static boolean earlier(List<Integer> these, List<Integer> those) {
+        for (int at = 0; at < Math.min(these.size(), those.size()); at++) {
+            if (!these.get(at).equals(those.get(at))) {
+                return these.get(at) < those.get(at);
+            }
+        }
+        return these.size() < those.size();
     }
 
     /**
