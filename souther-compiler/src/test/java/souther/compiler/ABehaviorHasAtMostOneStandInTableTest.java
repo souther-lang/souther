@@ -59,6 +59,18 @@ class ABehaviorHasAtMostOneStandInTableTest {
                 Decision { approver = findManager(applicant) }
             """;
 
+    /** A module declaring the behavior, for the blocks another module writes about it. */
+    private static final String DECLARES = """
+            module example.people exposing ( EmployeeId, findManager )
+
+            import String ( length )
+
+            data EmployeeId = String
+                invariant length(value) > 0
+
+            behavior findManager : (id: EmployeeId) -> EmployeeId
+            """;
+
     private static final String IN_TWO_BLOCKS = """
 
             fake findManager
@@ -181,6 +193,84 @@ class ABehaviorHasAtMostOneStandInTableTest {
                   | "one" : (EmployeeId("e-1")) -> Decision { approver = EmployeeId("boss-1") }
                 """;
         assertEquals(List.of(), codesOf(diagnosticsOf(twoDependencies)));
+    }
+
+    /**
+     * The behavior each block names is what resolution answered, and not how the target reads.
+     *
+     * <p>A dependency another module declares may be written bare where the scope settles it or
+     * qualified through the module that declares it, and both are the same behavior. A rule read
+     * off the characters would let an author write one table under each spelling and be told
+     * nothing.
+     */
+    @Test
+    void twoSpellingsOfOneBehaviorAreOneBehavior() {
+        assertEquals(List.of("E1933", "E1933"), codesOf(diagnosticsOf(List.of(DECLARES, """
+                module example.approvals
+
+                import example.people ( EmployeeId, findManager )
+
+                data Decision = { approver: EmployeeId }
+
+                behavior decideApprover : (applicant: EmployeeId) -> Decision
+                    depends on findManager
+                    constructs Decision
+
+                let decideApprover (applicant, findManager) =
+                    Decision { approver = findManager(applicant) }
+
+                fake findManager
+                  | (EmployeeId("e-1")) -> EmployeeId("boss-1")
+
+                fake example.people.findManager
+                  | (EmployeeId("e-2")) -> EmployeeId("boss-2")
+                """))),
+                "the bare name and the qualified one reach one declaration");
+    }
+
+    /** And one block in each of two modules is one block each: the count is a module's own. */
+    @Test
+    void aBlockInAnotherModuleIsNotASecondBlockHere() {
+        assertEquals(List.of(), codesOf(diagnosticsOf(List.of(DECLARES, """
+                module example.approvals
+
+                import example.people ( EmployeeId, findManager )
+
+                data Decision = { approver: EmployeeId }
+
+                behavior decideApprover : (applicant: EmployeeId) -> Decision
+                    depends on findManager
+                    constructs Decision
+
+                let decideApprover (applicant, findManager) =
+                    Decision { approver = findManager(applicant) }
+
+                fake findManager
+                  | (EmployeeId("e-1")) -> EmployeeId("boss-1")
+
+                example decideApprover
+                  | "one" : (EmployeeId("e-1")) -> Decision { approver = EmployeeId("boss-1") }
+                """, """
+                module example.audits
+
+                import example.people ( EmployeeId, findManager )
+
+                data Note = { of: EmployeeId }
+
+                behavior noteApprover : (applicant: EmployeeId) -> Note
+                    depends on findManager
+                    constructs Note
+
+                let noteApprover (applicant, findManager) =
+                    Note { of = findManager(applicant) }
+
+                fake findManager
+                  | (EmployeeId("e-1")) -> EmployeeId("boss-1")
+
+                example noteApprover
+                  | "one" : (EmployeeId("e-1")) -> Note { of = EmployeeId("boss-1") }
+                """))),
+                "each module writes one block for the behavior it borrows");
     }
 
     // --- where it is said ----------------------------------------------------------------------
