@@ -21,6 +21,8 @@ import souther.compiler.check.SyntaxSymbols;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.msg.DeclarationMessage;
+import souther.compiler.diag.msg.ExampleMessage;
+import souther.compiler.examples.ExampleStatements;
 import souther.compiler.diag.msg.DataMessage;
 import souther.compiler.diag.msg.ModuleMessage;
 import souther.compiler.diag.msg.ImportMessage;
@@ -1065,6 +1067,83 @@ public final class Names {
         public Answer<Hir.Module> compute(Db db) {
             Answer<Resolve.Resolution> resolution = db.ask(new Resolution(name));
             return resolution.present() ? Answer.of(resolution.value().module()) : Answer.absent();
+        }
+    }
+
+    /**
+     * What this module's {@code fake} blocks declare: which behavior each names, and how many name
+     * one.
+     *
+     * <p>Asked of the resolved module, which is as early as it can be asked and as late as it needs
+     * to be. What it takes is that the module has every block — its own source's and every attached
+     * {@code examples for} file's, which are joined before resolution — and that each block's
+     * target has been read against the names in scope. Nothing else about the module bears on it: a
+     * block naming a behavior twice is written twice whether or not a representation was derived
+     * for a declaration elsewhere, or a body desugared. Asked further down, that is what would
+     * decide whether the refusal is said at all.
+     */
+    public record FakeTables(String name) implements Key<souther.compiler.check.FakeTables> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<souther.compiler.check.FakeTables> compute(Db db) {
+            Answer<Hir.Module> resolved = db.ask(new Resolved(name));
+            return resolved.present()
+                    ? Answer.of(souther.compiler.check.FakeTables.classify(resolved.value()))
+                    : Answer.absent();
+        }
+    }
+
+    /**
+     * What {@code id} is told about the blocks it writes that stand in for a behavior another block
+     * of the module also stands in for.
+     *
+     * <p>Counted over the module and said in the file: a module's blocks are its own source's and
+     * its attached files', and a report is quoted from the file the block is written in. Every
+     * block naming the behavior is reported, none of them marked as the one to keep — the blocks
+     * are what they are whichever order the compile was handed its files in, so which is the one to
+     * write differently is not the language's to answer.
+     *
+     * <p>Asked of the classification and of nothing further down. What is wrong is wrong about what
+     * was written, and a module that failed to derive a representation or desugar a body has the
+     * same two blocks in it.
+     */
+    public record StandInBlocks(SourceId id) implements Key<Boolean> {
+        @Override
+        public SourceId sourceId() {
+            return id;
+        }
+
+        @Override
+        public Answer<Boolean> compute(Db db) {
+            String module = db.ask(new Front.ModuleOf(id)).value();
+            if (module == null) {
+                return Answer.of(Boolean.TRUE);   // said where the source is read
+            }
+            Answer<souther.compiler.check.FakeTables> declared = db.ask(new FakeTables(module));
+            if (!declared.present()) {
+                return Answer.of(Boolean.TRUE);
+            }
+            List<Report> reports = new ArrayList<>();
+            for (souther.compiler.check.FakeTables.Declaration.Conflict conflict
+                    : declared.value().conflicts()) {
+                for (souther.compiler.check.FakeTables.Occurrence.Resolved block
+                        : conflict.tables()) {
+                    Hir.Fake wrote = block.read();
+                    if (!wrote.pos().isIn(id)) {
+                        continue;   // written in another file, and reported by that file's own key
+                    }
+                    String named = ExampleStatements.wrote(wrote);
+                    reports.add(Report.of(Diagnostic.at(ExampleStatements.marked(wrote))
+                            .say(new ExampleMessage.MoreThanOneFakeStandsInForOneBehavior(named))
+                            .hint(new ExampleMessage.WriteTheRowsAsOneFake(named))
+                            .build()));
+                }
+            }
+            return reports.isEmpty() ? Answer.of(Boolean.TRUE) : Answer.of(Boolean.TRUE, reports);
         }
     }
 

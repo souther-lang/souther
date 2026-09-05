@@ -289,8 +289,11 @@ public final class ExampleVerifier {
         if (sig == null) {
             return List.of();
         }
+        // The block that answers, where one does. A behavior more than one block names has none,
+        // and the entries a caller would enumerate here are entries of a table nothing stands in
+        // with.
         souther.compiler.check.Prepared.FakeTable answering =
-                module.standingInFor(module.targeted(behavior));
+                module.tablesThatAnswer().get(module.targeted(behavior));
         if (answering == null) {
             return List.of();
         }
@@ -2036,13 +2039,20 @@ public final class ExampleVerifier {
                 }
             }
             case ExampleProvisioning.Standin.InTheModule inTheModule ->
-                    tableStandin(fixtures, inTheModule.table().read(), dependency, depSig);
+                    tableStandin(fixtures, inTheModule.table(), dependency, depSig);
             case ExampleProvisioning.Standin.Nothing _ -> {
                 String spelt = spelling(dependency);
                 yield notRead(dependency, row.pos(), fakeMissingDiag(target, req, row,
                         "add `with " + spelt + " = ...` on the row, or a `fake " + spelt
                                 + "` table"));
             }
+            // Saying nothing, as a row reaching a table that would not build says nothing: what is
+            // wrong is wrong about what the module wrote and is said where the blocks are. A row
+            // told a stand-in is missing here would be pointed at a requirement it wrote two
+            // answers to, and one told a table has no output for its input would be pointed at a
+            // row of a table that stands in for nothing.
+            case ExampleProvisioning.Standin.MoreThanOneBlock _ ->
+                    notRead(dependency, row.pos());
         };
     }
 
@@ -2103,8 +2113,10 @@ public final class ExampleVerifier {
      * default or a miss. Works for any arity: a 0/1-input dep's tuple has 0/1 elements, a 2+-input
      * dep's has one per parameter (issue #57). What the row states of the table is read off the same
      * build, so the two say what one table was written to answer. */
-    private StoodInFor tableStandin(FixtureReader fixtures, Hir.Fake fk,
+    private StoodInFor tableStandin(FixtureReader fixtures,
+                                    souther.compiler.check.Prepared.FakeTable standingIn,
                                     ValueName.Behavior dependency, Sig depSig) {
+        Hir.Fake fk = standingIn.read();
         // The dependency's own signature, which admitted what its boundary carries. Rebuilding the
         // types from what it declared would put them through that walk a second time, and a
         // stand-in stands where the behavior does.
@@ -2118,7 +2130,7 @@ public final class ExampleVerifier {
         if (built == null) {
             return notRead(dependency, fk.pos());
         }
-        if (!ExampleStatements.notKept(ensures, fk, built).isEmpty()) {
+        if (!ExampleStatements.notKept(ensures, standingIn, built).isEmpty()) {
             // A table stating what the dependency declares cannot happen is not one to stand in
             // with, as a table that will not build is not. The row stops without a fake and says
             // nothing of its own: what is wrong is wrong about the table, and is said once where the

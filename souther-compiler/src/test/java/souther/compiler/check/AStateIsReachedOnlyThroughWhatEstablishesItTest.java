@@ -733,9 +733,10 @@ class AStateIsReachedOnlyThroughWhatEstablishesItTest {
                 }
             }
         }
-        assertEquals(List.of("CheckSurface.assemble(InvariantSettled, Map, Map, Symbols, Map)",
-                        "CheckSurface.<init>(InvariantSettled, List, List, List, List, List, List,"
-                                + " Map)",
+        assertEquals(List.of("CheckSurface.assemble(InvariantSettled, Map, Map, Symbols, Map,"
+                                + " FakeTables)",
+                        "CheckSurface.<init>(InvariantSettled, List, List, List, List, FakeTables,"
+                                + " List, Map)",
                         "CheckSurface.settling"),
                 handling,
                 "a class here that is handed a state can reach its projection, and taking a part "
