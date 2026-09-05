@@ -574,7 +574,8 @@ public final class Partitions {
         // Where they are the whole of what divides the position, the classes are what they come to
         // between them and there is nothing to put them beside.
         List<SetDivision> divisions = PartitionEvidence.divisionsIn(mine);
-        if (!divisions.isEmpty() && here.isEmpty() && points.isEmpty()) {
+        Classing.Vocabulary vocabulary = Classing.vocabularyOf(mine);
+        if (vocabulary == Classing.Vocabulary.BY_SETS) {
             return bySets(out, at, axis, term, mine, divisions, cells, id, type, reading,
                     ruleSource, rules, account);
         }
@@ -583,12 +584,12 @@ public final class Partitions {
         // position are observations of their own, so the walk below runs and this takes away the
         // classes it would have come to.
         RulesWithNoLine stated = rules;
-        if (!divisions.isEmpty()) {
+        if (vocabulary == Classing.Vocabulary.NOT_ONE) {
             stated = alsoNotComposed(rules, divisions, term);
             divisions.forEach(each -> account.disposedOf(new PartitionEvidence.BySet(each),
                     new EvidenceAccount.Disposition.TheClassesWereNotComposed(term)));
         }
-        boolean composes = divisions.isEmpty();
+        boolean composes = vocabulary == Classing.Vocabulary.ON_AN_ORDER;
         if (here.isEmpty() && !points.isEmpty()) {
             // Nothing orders this position, so its classes are the values singled out and
             // everything else. Ranges here would ask the rows for a distinction between the two

@@ -41,6 +41,50 @@ final class Classing {
     private Classing() {
     }
 
+    /**
+     * Which vocabulary a position's rules can all be said in.
+     *
+     * <p>The one place the question is answered. Asked again by whoever is assembling the measure,
+     * the two would agree by having been written alike — until one of them learned about a third
+     * vocabulary, and then a position would be divided by one answer and accounted for by the other.
+     */
+    enum Vocabulary {
+
+        /** Every rule puts a line on the order the values are counted on. */
+        ON_AN_ORDER,
+
+        /** Every rule tells a set of the values from the rest. */
+        BY_SETS,
+
+        /**
+         * The rules are not all in one vocabulary, so the position has no classes.
+         *
+         * <p>A class on an order and a class that is a set cannot be written as each other: a run
+         * of values has a least and a next, and a set has neither. Divided by the half that happened
+         * to be expressible, a run would be counted at a class the model tells apart from the one
+         * beside it.
+         */
+        NOT_ONE
+    }
+
+    /** Which of the three {@code mine} is, over all of a position's rules and not the first of
+     *  them. */
+    static Vocabulary vocabularyOf(List<PartitionEvidence> mine) {
+        boolean sets = false;
+        boolean lines = false;
+        for (PartitionEvidence each : mine) {
+            if (each instanceof PartitionEvidence.BySet) {
+                sets = true;
+            } else {
+                lines = true;
+            }
+        }
+        if (sets && lines) {
+            return Vocabulary.NOT_ONE;
+        }
+        return sets ? Vocabulary.BY_SETS : Vocabulary.ON_AN_ORDER;
+    }
+
     /** What the rules of one position came to. */
     sealed interface Classed {
 
@@ -83,21 +127,14 @@ final class Classing {
     static Classed of(NumericTerm.FromOnePosition term, List<PartitionEvidence> mine,
                       List<SetDivisions.Cell> cells, Supplier<List<PartitionClass>> onAnOrder,
                       Function<Place, FixtureTemplate> writing) {
-        boolean bySets = mine.stream().anyMatch(PartitionEvidence.BySet.class::isInstance);
-        if (!bySets) {
-            return new Classed.Composed(onAnOrder.get());
-        }
-        // A line on the order and a set of the values are two vocabularies, and a class written in
-        // one cannot be written in the other: a run of values has a least and a next and a set has
-        // neither. So a position reached by both has no single list of classes here.
-        if (mine.stream().anyMatch(each -> !(each instanceof PartitionEvidence.BySet))) {
-            return new Classed.NotComposed(new BlockReason.ClassesNotComposed());
-        }
-        // A position whose rules were read as sets and whose cells were not built. The rules are
-        // the evidence and the cells are what they come to, and a reader handed the first without
-        // the second would have the position divided by nothing it could name.
-        if (cells.isEmpty()) {
-            return new Classed.NotComposed(new BlockReason.BehaviorDistinctionsTooCostly());
+        switch (vocabularyOf(mine)) {
+            case ON_AN_ORDER -> {
+                return new Classed.Composed(onAnOrder.get());
+            }
+            case NOT_ONE -> {
+                return new Classed.NotComposed(new BlockReason.ClassesNotComposed());
+            }
+            default -> { }
         }
         List<PartitionClass> out = new ArrayList<>();
         for (SetDivisions.Cell cell : cells) {
