@@ -198,8 +198,8 @@ public final class StandingAtAPoint {
 
         @Override
         public ObservedValue at(TermPath path) {
-            List<BehaviorInputs.Occurrence> values = where.occurrencesAt(observedInputs.inputs(), path);
-            if (values == null) {
+            if (!(where.occurrencesAt(observedInputs.inputs(), path)
+                    instanceof WalkResult.Reached(List<BehaviorInputs.Occurrence> values))) {
                 return null;   // the walk and the type disagree, which is the quantity's to report
             }
             if (values.isEmpty()) {
@@ -238,7 +238,8 @@ public final class StandingAtAPoint {
         public List<ObservedValue> everyValueAt(TermPath path) {
             // Null where the walk and the type disagree, which is the quantity's to report, as it
             // is for the one value a place holds.
-            return where.valuesAt(observedInputs.inputs(), path);
+            return where.valuesAt(observedInputs.inputs(), path)
+                    instanceof WalkResult.Reached(List<ObservedValue> values) ? values : null;
         }
 
         /** Whether {@code each} was reached through the elements this reading chose. */

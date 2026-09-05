@@ -81,10 +81,10 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, RuleRead
      * and a row writes one of the cases, so a walk asking where a value is written reaches nothing
      * at a name every reading of the model may use.
      *
-     * <p>Empty where the walk was taken and no value stands there, and null where it could not be
-     * taken at all. A caller asking what is covered at a position is answered with what was
-     * written, and a list of none is nothing written there — which an empty list is, and which the
-     * walk not having been made is not.
+     * <p>{@link WalkResult.Reached} holding none where the walk was taken and no value stands
+     * there, and {@link WalkResult.CouldNotWalk} where it could not be taken at all. A caller
+     * asking what is covered at a position is answered with what was written, and a list of none is
+     * nothing written there — which the walk not having been made is not.
      *
      * <p>The one walk into a row's values, done with the declared types beside them. A field of a
      * record is reached through the names the record is written under: {@code data SlotN = Slot} is
@@ -109,9 +109,12 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, RuleRead
      * position, or a value that is not the construction the reading says stands there. Neither is
      * something an observation did, and no observation says why because nothing went wrong with one.
      */
-    List<ObservedValue> valuesAt(List<ObservedValue> inputs, TermPath path) {
-        List<Occurrence> found = occurrencesAt(inputs, path);
-        return found == null ? null : found.stream().map(Occurrence::value).toList();
+    WalkResult<List<ObservedValue>> valuesAt(List<ObservedValue> inputs, TermPath path) {
+        return switch (occurrencesAt(inputs, path)) {
+            case WalkResult.Reached(List<Occurrence> found) ->
+                    WalkResult.reached(found.stream().map(Occurrence::value).toList());
+            case WalkResult.CouldNotWalk<List<Occurrence>> _ -> WalkResult.couldNotWalk();
+        };
     }
 
     /**
@@ -169,10 +172,10 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, RuleRead
      * candidate this package composed are both read at these positions, and both have to be read
      * the way a written row is or the classes they land in are two readings rather than one.
      */
-    List<Occurrence> occurrencesAt(List<ObservedValue> inputs, TermPath path) {
+    WalkResult<List<Occurrence>> occurrencesAt(List<ObservedValue> inputs, TermPath path) {
         int at = indexOf(path);
         if (at < 0 || at >= inputs.size()) {
-            return null;
+            return WalkResult.couldNotWalk();
         }
         List<Standing> standing = List.of(new Standing(inputs.get(at), types.get(at),
                 TermPath.of(path.head()), Map.of()));
@@ -191,14 +194,15 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, RuleRead
             // as one flag for the whole walk, what survived was answered with and whatever could
             // not be reached was left out with nothing saying so.
             if (took != standing.size()) {
-                return null;
+                return WalkResult.couldNotWalk();
             }
             standing = next;
         }
         // Nothing here is a row that wrote no element, which is a reading that arrived: a step that
-        // could not be taken has already answered null above. Answered alike, a row writing the
-        // empty list would be reported as one nothing could be read from.
-        return standing.stream().map(each -> new Occurrence(each.at(), each.value())).toList();
+        // could not be taken has already said so above. Answered alike, a row writing the empty
+        // list would be reported as one nothing could be read from.
+        return WalkResult.reached(
+                standing.stream().map(each -> new Occurrence(each.at(), each.value())).toList());
     }
 
     /**
@@ -278,25 +282,6 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, RuleRead
                                 : presence.present() ? optional.element() : view.declared();
             };
         };
-    }
-
-    /**
-     * The value at {@code path}, or null where there is not one readable value there.
-     *
-     * <p>For a position one value stands at. A position inside a sequence has as many as were
-     * written, and answering a caller that wants one with the first of them would report what is
-     * covered off an element it chose — so such a position answers null here and {@link #valuesAt}
-     * is what reads it.
-     *
-     * <p><b>Null runs three answers together, and a caller that has to tell them apart asks
-     * {@link #occurrencesAt}.</b> The walk could not be taken, or it was taken and the row stands
-     * nowhere here — the empty list, an element of nothing or a position under a case the row is
-     * not at — or several values stand and none of them is the one. What is covered and what a
-     * measurement is short of are different answers about a row, and only that one keeps them.
-     */
-    public ObservedValue valueAt(List<ObservedValue> inputs, TermPath path) {
-        List<ObservedValue> values = valuesAt(inputs, path);
-        return values != null && values.size() == 1 ? values.get(0) : null;
     }
 
     /**

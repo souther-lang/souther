@@ -88,8 +88,8 @@ public final class InputClassifications {
      */
     private static Classification classify(List<ObservedValue> inputs, BehaviorInputs where,
                                            Axis axis) {
-        List<BehaviorInputs.Occurrence> values = where.occurrencesAt(inputs, axis.path());
-        if (values == null) {
+        if (!(where.occurrencesAt(inputs, axis.path())
+                instanceof WalkResult.Reached(List<BehaviorInputs.Occurrence> values))) {
             return Classification.unreadable(Incompleteness.Code.VALUE_UNREADABLE,
                     axis.id().behavior(), axis.id().term());
         }

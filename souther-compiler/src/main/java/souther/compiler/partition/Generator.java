@@ -2869,9 +2869,8 @@ public final class Generator {
         List<souther.compiler.observe.ObservedValue> row = new ArrayList<>(
                 java.util.Collections.nCopies(subject.parameters().size(), null));
         row.set(parameter, observed);
-        List<souther.compiler.observe.ObservedValue> values =
-                subject.inputs().valuesAt(row, target.term().subjectPath());
-        if (values == null) {
+        if (!(subject.inputs().valuesAt(row, target.term().subjectPath())
+                instanceof WalkResult.Reached(List<souther.compiler.observe.ObservedValue> values))) {
             return new RealizationReadback.CouldNotTell(new ReadbackGap.WalkAndTypeDisagree());
         }
         if (values.isEmpty()) {
