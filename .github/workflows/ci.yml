@@ -5,23 +5,21 @@ on:
     branches: [ main, develop ]
   pull_request:
   schedule:
-    # Nightly over what is released. A scheduled run is made against the default branch and no
-    # other, so this watches `main` — what a day's merges left behind on `develop` is found by
-    # the run that merge itself starts, below, and not here.
+    # Nightly, and the only thing that asks the population.
     - cron: '0 18 * * *'
 
 permissions:
   contents: read
 
 jobs:
-  # What a pull request waits on: everything except the tests whose subjects are the models this
-  # repository carries. Those are the job below.
+  # What a pull request and a push wait on: everything except the tests whose subjects are the
+  # models this repository carries. Those are the job below, and nobody waits on them.
   #
-  # A pull request and nothing else. The job below runs everything this one runs and the population
-  # besides, so on a push the two together would build the reactor twice over and answer the same
-  # question the second time.
+  # Not on a schedule: the job below runs everything this one runs and the population besides, so
+  # the two together would build the reactor twice over and answer the same question the second
+  # time.
   build:
-    if: github.event_name == 'pull_request'
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -36,19 +34,30 @@ jobs:
         # machine somebody is also working on, and a runner is nobody's.
         run: mvn -B --no-transfer-progress verify -DforkCount=2
 
-  # And the population, asked where waiting for it costs nobody an edit: on the merge into
-  # develop or main, and once a night. Emptying the property is what asks them; everything the
-  # job above runs is run here too, so this is the whole suite and not the remainder of it.
+  # And the population, asked where waiting for it costs nobody an edit: once a night, and nowhere
+  # a change is on its way in. Emptying the property is what asks them; everything the job above
+  # runs is run here too, so this is the whole suite and not the remainder of it.
+  #
+  # A scheduled run is made against the default branch and no other, so the branches a day's work
+  # lands on are named here and checked out by name. What a merge into `develop` left behind is
+  # found by the morning, and against the commit the day ended on rather than the one that broke
+  # it.
   population:
-    if: github.event_name != 'pull_request'
+    if: github.event_name == 'schedule'
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        branch: [ develop, main ]
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ matrix.branch }}
       - name: Set up JDK 25
         uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '25'
           cache: maven
-      - name: Build and test, the population included
+      - name: Build and test ${{ matrix.branch }}, the population included
         run: mvn -B --no-transfer-progress verify -DforkCount=2 -Dtest.excluded.groups=

@@ -234,9 +234,9 @@
                         <reuseForks>true</reuseForks>
                         <!-- Left out of a plain run: what a test tagged this way is about is every
                              model, source or specification this repository carries, and answering
-                             those is most of what the suite costs. A run that means to ask them
-                             empties this — `-Dtest.excluded.groups=` — which is what the merge into
-                             develop and the nightly build do. -->
+                             those is a third of what the suite costs. A run that means to ask them
+                             empties this — `-Dtest.excluded.groups=` — which is what the nightly
+                             build does and nothing a change waits on. -->
                         <excludedGroups>${test.excluded.groups}</excludedGroups>
                         <!-- Classes go to the forks by what they took last time, which is recorded
                              in a `.surefire-*` file beside the module. Handed out in file order
