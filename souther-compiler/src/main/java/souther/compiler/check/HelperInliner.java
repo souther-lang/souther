@@ -1058,7 +1058,7 @@ public final class HelperInliner {
      * is taken where it is made rather than worked out again from the tree
      * ({@link CallsLeftStanding}).
      */
-    public Expansion<Hir.Expr> expanding(Hir.Expr e, BindingOwner into) {
+    Expansion<Hir.Expr> expanding(Hir.Expr e, BindingOwner into) {
         return expanding(() -> inline(e, into));
     }
 

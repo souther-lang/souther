@@ -196,12 +196,12 @@ class WhatFallsOpenIsWhatSomebodyNamedALimitTest {
         CheckContext ctx = CheckContext.of(symbolsOf(c)).forData(data).forDischarge();
 
         assertInstanceOf(TypedClause.Stopped.class,
-                SecondaryClauseReading.of(clause.clause().expr(), clause.standing(), over, ctx,
-                        "a test"),
+                SecondaryClauseReading.of(clause.asExpanded(), over, ctx, "a test"),
                 "the expansion says it left the call standing, so this reading stops on it");
 
         assertThrows(IllegalStateException.class,
-                () -> SecondaryClauseReading.of(clause.clause().expr(), CallsLeftStanding.NONE,
+                () -> SecondaryClauseReading.of(
+                        new ClauseAsExpanded(clause.clause().expr(), CallsLeftStanding.NONE),
                         over, ctx, "a test"),
                 "and where no expansion left it there, it is this compiler that failed");
     }

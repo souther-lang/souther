@@ -303,7 +303,7 @@ public final class InvariantChecker {
         // seeded of them — what a clause owes is the question, and answering it here would be
         // assuming it.
         return c.capabilityOf(clause,
-                read -> c.clauses.typed(read, clause.standing(), named, data),
+                _ -> c.clauses.typed(clause.asExpanded(), named, data),
                 Denotations.none().locations(c.clauses.bindingsOf(named, data).values(),
                         c.terms::placeSubject, c.terms::placeTerm),
                 data.name());
@@ -682,8 +682,7 @@ public final class InvariantChecker {
                 skipped = true;
                 continue;
             }
-            Core stated = c.clauses.typed(declared.clause().expr(), declared.standing(),
-                    named, data).orNull();
+            Core stated = c.clauses.typed(declared.asExpanded(), named, data).orNull();
             if (stated == null) {
                 read = false;
                 gathering.missed(RuleKey.THE_VALUE, new RulesMissed.ClauseNotTyped());

@@ -117,6 +117,11 @@ public final class ClausesForDischarge {
      */
     public record ClauseReading(Hir.Expr written, Hir.Expr read, CallsLeftStanding standing) {
 
+        /** The tree and what its expansion left standing, which is what a reading of it takes. */
+        ClauseAsExpanded asExpanded() {
+            return new ClauseAsExpanded(read, standing);
+        }
+
         /** Where the author wrote it — the earliest position anything written carries. */
         public SourcePos at() {
             return ClauseHelpers.beginsAt(written);

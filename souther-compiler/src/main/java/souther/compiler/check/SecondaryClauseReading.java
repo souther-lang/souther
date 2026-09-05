@@ -30,20 +30,23 @@ final class SecondaryClauseReading {
     /**
      * {@code read} as this reading types it, or the limit it stopped on.
      *
-     * <p>{@code standing} is the expansion's own answer about the tree in hand. Asked before the
+     * <p>What {@code clause} carries beside its tree is the expansion's own answer about it. Asked
+     * before the
      * elaborator, because a call left standing that this reading cannot name is a limit and the
      * elaborator has no way to say so: reaching it with one is this compiler having failed to expand
      * what it says it expands, which is what it refuses.
      */
-    static TypedClause of(Hir.Expr read, CallsLeftStanding standing, Scope scope, CheckContext ctx,
+    static TypedClause of(ClauseAsExpanded clause, Scope scope, CheckContext ctx,
                           String describing) {
-        WhatTheCheckCannotRead unreadable = standingCallNothingHereNames(read, standing, scope);
+        WhatTheCheckCannotRead unreadable =
+                standingCallNothingHereNames(clause.read(), clause.standing(), scope);
         if (unreadable != null) {
             InvariantChecker.gaveUp(describing, unreadable);
             return new TypedClause.Stopped();
         }
         try {
-            return new TypedClause.Typed(Elaborator.elaborate(read, scope, ctx, Type.BOOL));
+            return new TypedClause.Typed(
+                    Elaborator.elaborate(clause.read(), scope, ctx, Type.BOOL));
         } catch (CompileException why) {
             InvariantChecker.gaveUp(describing,
                     WhatTheCheckCannotRead.secondaryTypingDidNotFinish(why));
