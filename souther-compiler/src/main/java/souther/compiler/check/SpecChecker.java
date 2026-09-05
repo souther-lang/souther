@@ -247,8 +247,12 @@ public final class SpecChecker {
      * (spec §fn-declaration). The {@code fn}'s parameters are the behavior's inputs followed by its
      * {@code depends on} (§depends-on); the trailing ones name the injection targets in declared order and
      * do not bind values — they resolve as inline calls to those behaviors.
+     *
+     * <p>Both representations come back, because both were typed here and only one of them used to
+     * leave. The analysis one was built to be read by the invariant check and then dropped, so every
+     * later reader that wanted the meanings had the algorithm and nothing saying so.
      */
-    static Core checkSpecFn(Hir.SpecBehavior spec, Hir.FnDef fn, Hir.Expr inlinedBody,
+    static Checked checkSpecFn(Hir.SpecBehavior spec, Hir.FnDef fn, Hir.Expr inlinedBody,
                                     InvariantChecker.Source discharge,
                                     Symbols symbols, ReadingPolicy policy,
                                     Map<ValueName.Behavior, ReqSig> calleeSigs,
@@ -456,7 +460,30 @@ public final class SpecChecker {
         if (!inv.errors().isEmpty()) {
             throw inv.errors().get(0);
         }
-        return elaboratedBody;
+        return new Checked(elaboratedBody,
+                dischargeBody == null ? null : new AnalysisBody(dischargeBody));
+    }
+
+    /**
+     * What checking one body produced: the tree the backend emits, and the tree an analysis reads.
+     *
+     * <p>Both, because both were typed and they are not the same tree. Which one a reader wants
+     * follows from what it is asking — what runs, or what the model means — and handing back one
+     * {@code Core} made that a question nobody could ask.
+     *
+     * @param emitted  the algorithm, with the language's own operations expanded into what they do
+     * @param analysis the meanings, with those operations standing as themselves, or null where this
+     *                 behavior has no such representation. Null is "there is none" and never "it is
+     *                 the other one": a reader owed the meanings and given the algorithm finds the
+     *                 operations gone with nothing saying they were there
+     */
+    public record Checked(Core emitted, AnalysisBody analysis) {
+
+        public Checked {
+            if (emitted == null) {
+                throw new IllegalArgumentException("a body that was checked was elaborated");
+            }
+        }
     }
 
     /**

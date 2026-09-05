@@ -1961,12 +1961,14 @@ public final class Bodies {
                     : null;
             List<Diagnostic> warnings = new ArrayList<>();
             try {
-                Core core = TypeChecker.checkBehavior(spec.value(), fn.value(),
+                souther.compiler.check.SpecChecker.Checked checked =
+                        TypeChecker.checkBehavior(spec.value(), fn.value(),
                         body.value().value().writtenBody(),
                         db.ask(new Front.Reading()).value(),
                         dischargeSource, scope.value(), calleeSigs.value(), reqSigs.value(),
                         inliner.value(), sigs.value(), constructs.value(),
                         warnings);
+                Core core = checked.emitted();
                 List<Report> reports = new ArrayList<>();
                 for (Diagnostic warning : warnings) {
                     reports.add(Report.of(warning));
@@ -1996,7 +1998,15 @@ public final class Bodies {
                                 // and this declaration is the one nothing calls.
                                 Map.of(new ReachName.Own(
                                         new ValueName.Behavior(module, behavior)), fn.value())),
-                        body.value().supplied()), reports);
+                        body.value().supplied(),
+                        // The same body as the analysis reads it, which is a different tree and is
+                        // kept as one. What a rule about this behavior's inputs means is read
+                        // there: the language's own operations stand as themselves, and the tree
+                        // beside it has expanded them into what they do.
+                        //
+                        // Not rewritten the way the emitted one is. A fold turned into a build is
+                        // what a backend writes out, and the analysis reads the operation.
+                        checked.analysis()), reports);
             } catch (Unanswerable _) {
                 // The name it rested on was reported where it was written. This body has no meaning
                 // to emit, which the absence says, and nothing further to add.
@@ -2194,10 +2204,23 @@ public final class Bodies {
      * <p>Together because the second cannot be read off the first. What handed a closure an element
      * is gone from the tree the rewrite answers with, so a caller given only the body would have to
      * recognise the shapes that rewrite produces — which is what carrying the pair avoids.
+     *
+     * <p>And the body an analysis reads, beside the one the backend emits, for the same reason: it
+     * cannot be read off the other. The language's own operations are expanded into what they do in
+     * the emitted tree, so a reader after what a rule <em>means</em> would be looking at a walk
+     * where an operation stood.
+     *
+     * @param body     the tree the backend emits, with the language's own operations expanded into
+     *                 what they do
+     * @param analysis the same body as an analysis reads it, with those operations standing as
+     *                 themselves, or null where this behavior has no such representation. Two trees
+     *                 and not one, and which is which is said by the type rather than by which
+     *                 accessor a reader happened to call
      */
     public record CheckedBody(Core body, souther.compiler.check.ElementBindings elements,
                              souther.compiler.coverage.DecisionSources decisions,
-                             souther.compiler.coverage.SuppliedRules supplied) {}
+                             souther.compiler.coverage.SuppliedRules supplied,
+                             souther.compiler.check.AnalysisBody analysis) {}
 
     /**
      * What a successful check produced for the backend (issue #81): the Core of every body it typed,
@@ -2225,19 +2248,22 @@ public final class Bodies {
         private final Map<String, souther.compiler.check.ElementBindings> elements;
         private final souther.compiler.coverage.DecisionSources decisions;
         private final souther.compiler.coverage.SuppliedRules supplied;
+        private final Map<String, souther.compiler.check.AnalysisBody> analysed;
 
         private Elaborated(souther.compiler.coverage.ModuleBodies of,
                            Map<String, Core> emittedHelpers,
                            Map<String, souther.compiler.claims.Claims> claims,
                            Map<String, souther.compiler.check.ElementBindings> elements,
                            souther.compiler.coverage.DecisionSources decisions,
-                           souther.compiler.coverage.SuppliedRules supplied) {
+                           souther.compiler.coverage.SuppliedRules supplied,
+                           Map<String, souther.compiler.check.AnalysisBody> analysed) {
             this.of = of;
             this.supplied = supplied;
             this.emittedHelpers = emittedHelpers;
             this.claims = claims;
             this.elements = elements;
             this.decisions = decisions;
+            this.analysed = Map.copyOf(analysed);
         }
 
         /**
@@ -2315,6 +2341,23 @@ public final class Bodies {
         /** The Core of each behavior body, by the behavior's name. */
         public Map<String, Core> behaviorBodies() {
             return of.bodies();
+        }
+
+        /**
+         * The body an analysis reads, by the behavior's name.
+         *
+         * <p>Beside {@link #behaviorBodies} and not instead of it, because they are two trees. The
+         * one above is the algorithm a backend writes out, with the language's own operations
+         * expanded into what they do; this one is the meanings, with those operations standing as
+         * themselves. A rule a body writes about its inputs is read here — read off the other,
+         * {@code String.startsWith} is a walk and there is no operation left to recognise.
+         *
+         * <p>A behavior with no reading is absent from this map, and absent is what a reader is
+         * answered with. Taking the emitted tree instead is answering a question about meanings
+         * with the tree the question is not about.
+         */
+        public Map<String, souther.compiler.check.AnalysisBody> analysisBodies() {
+            return analysed;
         }
 
         /** The Core of each helper the module emits as a method of its own. */
@@ -2398,6 +2441,7 @@ public final class Bodies {
             }
             // In the order the module declares them, which is what the numbering below is of.
             java.util.SequencedMap<String, Core> bodies = new LinkedHashMap<>();
+            Map<String, souther.compiler.check.AnalysisBody> analysed = new LinkedHashMap<>();
             Map<String, souther.compiler.check.ElementBindings> elements = new LinkedHashMap<>();
             // One reading for the module. Every behavior's check walks the same declarations, so the
             // entries agree wherever two of them wrote one fork; kept as one map so a reader asking
@@ -2422,6 +2466,13 @@ public final class Bodies {
                     if (core.present()) {
                         bodies.put(spec.name(), core.value().body());
                         elements.put(spec.name(), core.value().elements());
+                        // Only where there is one. A behavior with no representation for the
+                        // analysis to read is absent from here, which is what a reader owed the
+                        // meanings is answered with — the tree beside it is a different question's
+                        // answer and is not a fallback.
+                        if (core.value().analysis() != null) {
+                            analysed.put(spec.name(), core.value().analysis());
+                        }
                         decisions.putAll(core.value().decisions().byFork());
                         supplied.putAll(core.value().supplied().byExpansion());
                     } else {
@@ -2463,7 +2514,7 @@ public final class Bodies {
                     judged(db, of, settled.value(), read, handed);
             return Answer.of(
                     new Elaborated(of, module.value().emittedHelpers(), claims, elements,
-                            read, handed),
+                            read, handed, analysed),
                     contradicted(db, name, claims));
         }
     }

@@ -74,13 +74,13 @@ class WhyAComparisonBearsNoLineIsAnAnswerAndNotAnAbsenceTest {
         RuleReadingSource rules = RuleReadings.of(compilation, module);
 
         Map<Integer, BoundaryPolicy.Standing> byLine = new LinkedHashMap<>();
-        for (ComparisonReadings.Reading each
-                : ComparisonReadings.of(body, plan, inputs.reading(rules),
+        for (BodyReadings.ComparisonReading each
+                : BodyReadings.of("read", body, plan, inputs.reading(rules),
                         InputReads.ofParameters(inputs.parameterReads(),
                                 checked.elementBindings().get("read")),
                         // What arrives is not what this is about: read with nothing said about it,
                         // every line is held to the declarations alone.
-                        souther.compiler.check.PathReachability.Answers.NONE).all()) {
+                        souther.compiler.check.PathReachability.Answers.NONE).comparisons()) {
             souther.compiler.diag.Citation.Written at = assertInstanceOf(
                     souther.compiler.diag.Citation.Written.class, each.catalogued().at(),
                     "the model under test is written in this compile's own source");

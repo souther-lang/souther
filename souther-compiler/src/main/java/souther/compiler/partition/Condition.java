@@ -47,7 +47,7 @@ import souther.compiler.semantics.ConditionJoin;
  * comparison was established only where a fork was written — {@code A && B} said nothing about
  * {@code B} where {@code if A then B else false} did. Which comparisons a body holds is
  * {@link souther.compiler.coverage.ComparisonCatalog}'s and where each of them stands is
- * {@link ComparisonReadings}'s, and neither has a root to be given.
+ * {@link BodyReadings}'s, and neither has a root to be given.
  */
 sealed interface Condition {
 

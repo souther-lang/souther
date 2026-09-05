@@ -141,7 +141,7 @@ class ANameStandsForEveryValueItsContainerWasWrittenWithTest {
                 """.formatted(body);
 
         ReadComparisons read = ReadComparisons.of(source, "classify");
-        ComparisonReadings.Reading only = read.only();
+        BodyReadings.ComparisonReading only = read.only();
         Symbols symbols = read.rules().symbols();
 
         Core side = only.comparison().right();
