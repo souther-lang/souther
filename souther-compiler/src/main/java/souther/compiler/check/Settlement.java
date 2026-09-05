@@ -70,13 +70,19 @@ record Settlement(Confinement.Worked<FactSubject> confinement,
      * ({@link #asPositionStanding()}) and is made where a position is being described; nothing
      * builds an account of a rule out of it, which is the direction the loss runs in.
      */
-    record Sided(Emptiness emptiness, Map<FactSubject, List<UnreadReason>> answerStanding,
+    record Sided(Confinement.Admission<FactSubject> shown,
+                 Map<FactSubject, List<UnreadReason>> answerStanding,
                  Set<souther.compiler.values.Unbuilt.RuleShortfall<FactSubject>> ruleShortfalls,
                  Set<FactSubject> unbuilt) {
 
+        /** Whether anything satisfies this branch, as far as its occurrences settled it. */
+        Emptiness emptiness() {
+            return shown.emptiness();
+        }
+
         /** A branch nobody has probed yet, which everything joins onto. */
-        static Sided settledAs(Emptiness emptiness) {
-            return new Sided(emptiness, Map.of(), Set.of(), Set.of());
+        static Sided settledAs(Confinement.Admission<FactSubject> shown) {
+            return new Sided(shown, Map.of(), Set.of(), Set.of());
         }
 
         /**
@@ -124,8 +130,14 @@ record Settlement(Confinement.Worked<FactSubject> confinement,
             Set<souther.compiler.values.Unbuilt.RuleShortfall<FactSubject>> asked =
                     new java.util.LinkedHashSet<>(ruleShortfalls);
             asked.addAll(other.ruleShortfalls());
-            return new Sided(emptiness.joined(other.emptiness()), why,
-                    java.util.Collections.unmodifiableSet(asked), gaveUp);
+            // And what showed the branch empty, where both occurrences of it are. Where they were
+            // shown by different things, or refused at different positions, neither speaks for the
+            // branch — which is the same rule a choice of two dead branches is under.
+            Emptiness said = emptiness().joined(other.emptiness());
+            Confinement.Admission<FactSubject> both = said == Emptiness.EMPTY
+                    ? Confinement.Admission.bothShown(shown, other.shown)
+                    : Confinement.Admission.left(said);
+            return new Sided(both, why, java.util.Collections.unmodifiableSet(asked), gaveUp);
         }
     }
 }

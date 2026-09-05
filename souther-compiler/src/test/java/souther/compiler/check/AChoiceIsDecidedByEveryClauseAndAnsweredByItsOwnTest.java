@@ -204,12 +204,12 @@ class AChoiceIsDecidedByEveryClauseAndAnsweredByItsOwnTest {
         // side and the other way round from the other, and the aggregate of a branch would be a
         // fact about which copy was settled first.
         Settlement.Sided one = new Settlement.Sided(
-                souther.compiler.values.Emptiness.UNDECIDED, Map.of(),
+                Confinement.Admission.left(souther.compiler.values.Emptiness.UNDECIDED), Map.of(),
                 java.util.Set.of(new souther.compiler.values.Unbuilt.RuleShortfall<>(UNREAD,
                         aPattern("a{300}"), UnreadReason.PATTERN_TOO_COSTLY)),
                 java.util.Set.of());
         Settlement.Sided other = new Settlement.Sided(
-                souther.compiler.values.Emptiness.UNDECIDED, Map.of(),
+                Confinement.Admission.left(souther.compiler.values.Emptiness.UNDECIDED), Map.of(),
                 java.util.Set.of(new souther.compiler.values.Unbuilt.RuleShortfall<>(UNREAD,
                         aPattern("b{300}"), UnreadReason.PATTERN_TOO_COSTLY)),
                 java.util.Set.of());

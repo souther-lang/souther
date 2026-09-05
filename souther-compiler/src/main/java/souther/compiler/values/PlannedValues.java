@@ -140,6 +140,43 @@ public sealed interface PlannedValues<A> {
         };
     }
 
+    /**
+     * The positions every alternative is refused at, out of the descriptions alone.
+     *
+     * <p>{@link AdmissibleValues#refusedInEveryAlternativeAt} of a reading that has not been worked
+     * out, and the same rule: a position no alternative has a value at is one the lack can be named
+     * at, and where the alternatives are refused at different positions there is none. A position
+     * whose description this could not ask about is not one of them — it was not refused, it was not
+     * asked.
+     */
+    default Set<A> refusedInEveryAlternativeAt(AskedOfEachPosition<A> asked) {
+        if (!(this instanceof Settled<A> it
+                && it.held() instanceof PlannedHeld.Alternatives<A> boxes)) {
+            return Set.of();
+        }
+        Set<A> everywhere = null;
+        for (PlannedHeld.Box<A> box : boxes.boxes()) {
+            Set<A> here = new LinkedHashSet<>();
+            box.at().forEach((position, plan) -> {
+                if (askedOf(position, plan, asked) == Emptiness.EMPTY) {
+                    here.add(position);
+                }
+            });
+            if (here.isEmpty()) {
+                return Set.of();
+            }
+            if (everywhere == null) {
+                everywhere = here;
+            } else {
+                everywhere.retainAll(here);
+                if (everywhere.isEmpty()) {
+                    return Set.of();
+                }
+            }
+        }
+        return everywhere == null ? Set.of() : Collections.unmodifiableSet(everywhere);
+    }
+
     /** What one position's description comes to under the question, waiting where a machine would
      *  have to be made to ask it. */
     private static <A> Emptiness askedOf(A position, AdmittedPlan plan,

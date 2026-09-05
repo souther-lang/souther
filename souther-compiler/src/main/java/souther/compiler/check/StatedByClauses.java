@@ -571,8 +571,8 @@ sealed interface StatedByClauses {
             if (here.emptiness() == Emptiness.EMPTY && there.emptiness() == Emptiness.EMPTY) {
                 // The rule for a choice nobody can take, named rather than arrived at: a join is
                 // what two branches somebody can take come to, and neither of these is one.
-                return new StatedTogether.Said(
-                        one.confinement().bothDead(other.confinement()));
+                return new StatedTogether.Said(one.confinement().bothDead(other.confinement(),
+                        Confinement.Admission.bothShown(here.shown(), there.shown())));
             }
             if (here.emptiness() == Emptiness.EMPTY) {
                 return keptTogether(other, there);
@@ -617,16 +617,16 @@ sealed interface StatedByClauses {
          */
         private Settlement.Sided probed(StatedTogether.Said read,
                                         souther.compiler.values.Allowance<FactSubject> by) {
-            Emptiness said = read.confinement().admits();
-            if (said != Emptiness.UNDECIDED) {
+            Confinement.Admission<FactSubject> said = read.confinement().admission();
+            if (said.emptiness() != Emptiness.UNDECIDED) {
                 return Settlement.Sided.settledAs(said);
             }
             // Worked out, the descriptions become sets and every alternative can be asked where its
             // positions stop — the same question, and a different answer for having been asked of
             // what a pattern comes to.
             Confinement.Worked<FactSubject> worked = read.confinement().resolve(by);
-            Emptiness admitted = worked.admits();
-            if (admitted != Emptiness.UNDECIDED) {
+            Confinement.Admission<FactSubject> admitted = worked.admission();
+            if (admitted.emptiness() != Emptiness.UNDECIDED) {
                 return Settlement.Sided.settledAs(admitted);
             }
             souther.compiler.values.Realized<FactSubject> made = worked.made();
@@ -638,8 +638,8 @@ sealed interface StatedByClauses {
                     new java.util.LinkedHashMap<>();
             made.aboutTheAnswer().forEach(each -> answered.merge(each.at(),
                     java.util.List.of(each.why()), ReadByClauses::alsoSaying));
-            return new Settlement.Sided(Emptiness.UNDECIDED, answered, made.aboutARule(),
-                    made.unbuilt());
+            return new Settlement.Sided(Confinement.Admission.left(Emptiness.UNDECIDED), answered,
+                    made.aboutARule(), made.unbuilt());
         }
 
         /**
@@ -857,7 +857,9 @@ sealed interface StatedByClauses {
             return new Said(
                     // The rule for a choice nobody can take, named rather than arrived at: a join
                     // is what two branches somebody can take come to, and neither of these is one.
-                    here.confinement().bothDead(there.confinement()),
+                    here.confinement().bothDead(there.confinement(),
+                            Confinement.Admission.bothShown(here.confinement().admission(),
+                                    there.confinement().admission())),
                     here.byValues().bothDead(there.byValues()),
                     here.byOrder().bothDead(there.byOrder()),
                     // And what either of them said about the strings goes with them. A run drawn

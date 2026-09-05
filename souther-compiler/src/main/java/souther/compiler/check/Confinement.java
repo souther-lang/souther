@@ -51,12 +51,77 @@ import java.util.function.Function;
  */
 sealed interface Confinement<A> {
 
+    /** Whether anything satisfies both readings, and what showed it where nothing does. */
+    Admission<A> admission();
+
     /** Whether anything satisfies both readings. */
-    Emptiness admits();
+    default Emptiness admits() {
+        return admission().emptiness();
+    }
 
     /** Whether it is settled that nothing does. */
     default boolean holdsNothing() {
         return admits() == Emptiness.EMPTY;
+    }
+
+    /**
+     * What the two readings leave, and which of them left it so.
+     *
+     * <p>One computation and two things read off it. Whether anything satisfies the pair and which
+     * reading is why it does not are the same walk: the second was worked out a second time from
+     * the first's ingredients, and a rule assembled twice is the shape this whole change is about.
+     *
+     * <p>{@code by} is a fact about the readings and not a sentence about the model. Which proof an
+     * author is told is chosen from it in one place, and what is chosen is not decided here.
+     *
+     * @param at   where every alternative was refused, empty where no one position is why. Only ever
+     *             read of {@link EmptyBy#SET_AND_RANGE} and {@link EmptyBy#ORDER}
+     */
+    record Admission<A>(Emptiness emptiness, EmptyBy by, Set<A> at) {
+
+        public Admission {
+            at = Set.copyOf(at);
+        }
+
+        /** Something may satisfy the pair, so nothing emptied it. */
+        static <A> Admission<A> left(Emptiness emptiness) {
+            return new Admission<>(emptiness, EmptyBy.NOTHING_SHOWN, Set.of());
+        }
+
+        /**
+         * Two readings both shown to hold nothing, as one.
+         *
+         * <p>What emptied them is what emptied both, and where is where both were refused: an
+         * alternative of one and an alternative of the other are refused at a position only if that
+         * position is in each of their answers. Where they disagree about either, no one of them
+         * speaks for the pair — the first found would settle the proof by the order the operands
+         * were written in.
+         */
+        static <A> Admission<A> bothShown(Admission<A> one, Admission<A> other) {
+            Set<A> both = new java.util.LinkedHashSet<>(one.at);
+            both.retainAll(other.at);
+            return new Admission<>(Emptiness.EMPTY,
+                    one.by == other.by ? one.by : EmptyBy.RULES_TOGETHER, both);
+        }
+    }
+
+    /** Which reading left the pair nothing. */
+    enum EmptyBy {
+
+        /** Nothing did: something may satisfy the pair, or nothing showed that nothing does. */
+        NOTHING_SHOWN,
+
+        /** The values admit nothing, whatever the ranges hold. */
+        VALUES,
+
+        /** Some position's order holds no value, whatever the values admit. */
+        ORDER,
+
+        /** Each of them holds something and no alternative has a value in both. */
+        SET_AND_RANGE,
+
+        /** Two readings shown empty in ways that are not one way. */
+        RULES_TOGETHER
     }
 
     /** What each position is ordered on, which is what a range and a set of values are put
@@ -74,35 +139,41 @@ sealed interface Confinement<A> {
      * <p>A position on no order is one nothing here can refuse: what it admits is a set and there is
      * no range to share a value with.
      */
-    static <A> Emptiness admitted(OrderedIntervals<A> ordered, Map<A, Carrier> carriers,
-                                  Function<AskedOfEachPosition<A>, Emptiness> alternatives) {
+    static <A> Admission<A> admission(OrderedIntervals<A> ordered, Map<A, Carrier> carriers,
+                                      Function<AskedOfEachPosition<A>, Emptiness> admitting,
+                                      Function<AskedOfEachPosition<A>, Set<A>> refused) {
         if (ordered.isBottom()) {
-            return Emptiness.EMPTY;
+            return new Admission<>(Emptiness.EMPTY, EmptyBy.ORDER, ordered.holdingNothing());
         }
         // A meter of this question's own, spent on this asking of it. What may be built to decide
         // whether a declaration has a value cannot come out of a position's allowance: the same
         // rules would then be decided differently depending on what the readings before them had
         // already built.
         Meter meter = PatternPlan.Budget.OF_WHAT_A_SET_AND_A_RANGE_SHARE.meter();
-        return alternatives.apply((position, set) -> {
+        AskedOfEachPosition<A> asked = (position, set) -> {
             Carrier carrier = carriers.get(position);
             return carrier == null ? Emptiness.NONEMPTY
                     : carrier.meets(set, ordered.at(position), meter);
-        });
+        };
+        Emptiness said = admitting.apply(asked);
+        if (said != Emptiness.EMPTY) {
+            return Admission.left(said);
+        }
+        // The values holding no alternative at all is the values' own answer, and asking anything
+        // of the ranges would not have changed it. Told apart here rather than by a second reader
+        // reassembling the same three facts.
+        if (admitting.apply((_, _) -> Emptiness.NONEMPTY) == Emptiness.EMPTY) {
+            return new Admission<>(Emptiness.EMPTY, EmptyBy.VALUES, Set.of());
+        }
+        return new Admission<>(Emptiness.EMPTY, EmptyBy.SET_AND_RANGE, refused.apply(asked));
     }
 
-    /** The positions every alternative is left no value at, out of the same walk. */
-    static <A> Set<A> sharingNothingAt(OrderedIntervals<A> ordered, Map<A, Carrier> carriers,
-                                       Function<AskedOfEachPosition<A>, Set<A>> alternatives) {
-        if (ordered.isBottom()) {
-            return Set.of();
+    /** What showed a conjunction of two readings empty, where either of them was. */
+    static <A> Admission<A> eitherShown(Admission<A> one, Admission<A> other) {
+        if (one.emptiness() != Emptiness.EMPTY) {
+            return other.emptiness() == Emptiness.EMPTY ? other : null;
         }
-        Meter meter = PatternPlan.Budget.OF_WHAT_A_SET_AND_A_RANGE_SHARE.meter();
-        return alternatives.apply((position, set) -> {
-            Carrier carrier = carriers.get(position);
-            return carrier == null ? Emptiness.NONEMPTY
-                    : carrier.meets(set, ordered.at(position), meter);
-        });
+        return other.emptiness() == Emptiness.EMPTY ? Admission.bothShown(one, other) : one;
     }
 
     /** What each position is ordered on, both tables put together. */
@@ -132,11 +203,27 @@ sealed interface Confinement<A> {
         private final PlannedValues<A> values;
         private final OrderedIntervals<A> ordered;
         private final Map<A, Carrier> carriers;
+        /**
+         * What already showed this holds nothing, or null where nothing has.
+         *
+         * <p>A branch taken as holding nothing keeps no rules to be asked again, so what it was
+         * shown by is only knowable while it is being dropped. Carried from there, the proof
+         * survives the join that drops it and reaches the declaration's refusal; worked out again
+         * afterwards, the answer would be that the values admit nothing — which is true, and is the
+         * general form of what was actually shown.
+         */
+        private final Admission<A> shown;
 
         Planned(PlannedValues<A> values, OrderedIntervals<A> ordered, Map<A, Carrier> carriers) {
+            this(values, ordered, carriers, null);
+        }
+
+        private Planned(PlannedValues<A> values, OrderedIntervals<A> ordered,
+                        Map<A, Carrier> carriers, Admission<A> shown) {
             this.values = values;
             this.ordered = ordered;
             this.carriers = Collections.unmodifiableMap(new LinkedHashMap<>(carriers));
+            this.shown = shown;
         }
 
         /** Nothing read, so nothing ruled out. */
@@ -154,8 +241,9 @@ sealed interface Confinement<A> {
         }
 
         @Override
-        public Emptiness admits() {
-            return Confinement.admitted(ordered, carriers, values::anyAlternativeAdmits);
+        public Admission<A> admission() {
+            return shown != null ? shown : Confinement.admission(ordered, carriers,
+                    values::anyAlternativeAdmits, values::refusedInEveryAlternativeAt);
         }
 
         /**
@@ -173,13 +261,21 @@ sealed interface Confinement<A> {
             return values.holdsNothingAsBuilt(by) ? Emptiness.EMPTY : Emptiness.UNDECIDED;
         }
 
-        /** Both readings holding at once. */
+        /**
+         * Both readings holding at once.
+         *
+         * <p>A conjunction with a side that holds nothing holds nothing, and by what that side was
+         * shown by — so the proof crosses the meet rather than being worked out again from a
+         * reading that has nothing left in it to be asked.
+         */
         Planned<A> meet(Planned<A> other) {
             return new Planned<>(values.meet(other.values), ordered.meet(other.ordered),
-                    Confinement.both(carriers, other.carriers));
+                    Confinement.both(carriers, other.carriers),
+                    eitherShown(admission(), other.admission()));
         }
 
-        /** Either of them, as each reading says it. */
+        /** Either of them, as each reading says it. Both sides are ones somebody can be in, so
+         *  nothing has shown the choice empty. */
         Planned<A> either(Planned<A> other, boolean apart) {
             return new Planned<>(
                     apart ? values.joinApart(other.values) : values.join(other.values),
@@ -187,25 +283,32 @@ sealed interface Confinement<A> {
                     Confinement.both(carriers, other.carriers));
         }
 
-        /** This, taken as holding nothing at all. */
+        /** This, taken as holding nothing at all, remembering what showed it. */
         Planned<A> leavingNothing() {
-            return new Planned<>(values.leavingNothing(), ordered.leavingNothing(), carriers);
+            return new Planned<>(values.leavingNothing(), ordered.leavingNothing(), carriers,
+                    admission());
         }
 
-        /** Two branches neither of which anybody can be in, said as that. */
-        Planned<A> bothDead(Planned<A> other) {
+        /**
+         * Two branches neither of which anybody can be in, said as that.
+         *
+         * <p>What the choice was shown by is what both of them were shown by, and where is where
+         * both were refused. Neither speaks for the other: alternatives refused at different
+         * positions leave a choice no position is why, which is what the proof has to say.
+         */
+        Planned<A> bothDead(Planned<A> other, Admission<A> shown) {
             return new Planned<>(values.leavingNothing().bothDead(other.values.leavingNothing()),
-                    ordered.join(other.ordered), Confinement.both(carriers, other.carriers));
+                    ordered.join(other.ordered), Confinement.both(carriers, other.carriers), shown);
         }
 
         /** This, holding what working it out could not build. */
         Planned<A> alsoStanding(Map<A, List<UnreadReason>> standing) {
-            return new Planned<>(values.alsoStanding(standing), ordered, carriers);
+            return new Planned<>(values.alsoStanding(standing), ordered, carriers, shown);
         }
 
         /** The values worked out, under {@code by}, and the same ranges beside them. */
         Worked<A> resolve(Allowance<A> by) {
-            return new Worked<>(values.resolve(by), ordered, carriers);
+            return new Worked<>(values.resolve(by), ordered, carriers, shown);
         }
 
         @Override
@@ -225,17 +328,22 @@ sealed interface Confinement<A> {
         private final Realized<A> made;
         private final OrderedIntervals<A> ordered;
         private final Map<A, Carrier> carriers;
+        /** What already showed this holds nothing — see {@link Planned#shown}. */
+        private final Admission<A> shown;
 
-        Worked(Realized<A> made, OrderedIntervals<A> ordered, Map<A, Carrier> carriers) {
+        Worked(Realized<A> made, OrderedIntervals<A> ordered, Map<A, Carrier> carriers,
+               Admission<A> shown) {
             this.made = made;
             this.ordered = ordered;
             this.carriers = Collections.unmodifiableMap(new LinkedHashMap<>(carriers));
+            this.shown = shown;
         }
 
         /** A reading whose positions were all worked out, beside the ranges they stop at. */
         static <A> Worked<A> of(AdmissibleValues<A> values, OrderedIntervals<A> ordered,
                                 Map<A, Carrier> carriers) {
-            return new Worked<>(new Realized<>(values, Set.of(), List.of()), ordered, carriers);
+            return new Worked<>(new Realized<>(values, Set.of(), List.of()), ordered, carriers,
+                    null);
         }
 
         Realized<A> made() {
@@ -252,14 +360,18 @@ sealed interface Confinement<A> {
         }
 
         @Override
-        public Emptiness admits() {
-            Emptiness said = Confinement.admitted(ordered, carriers,
-                    made.values()::anyAlternativeAdmits);
+        public Admission<A> admission() {
+            if (shown != null) {
+                return shown;
+            }
+            Admission<A> said = Confinement.admission(ordered, carriers,
+                    made.values()::anyAlternativeAdmits,
+                    made.values()::refusedInEveryAlternativeAt);
             // A position nobody could build is one what stands there is wider than the rules, so a
             // pair the ranges did not refuse may still hold nothing. Settled empty is settled all
             // the same: a narrower reading refuses no less.
-            return said == Emptiness.NONEMPTY && !made.unbuilt().isEmpty()
-                    ? Emptiness.UNDECIDED : said;
+            return said.emptiness() == Emptiness.NONEMPTY && !made.unbuilt().isEmpty()
+                    ? Admission.left(Emptiness.UNDECIDED) : said;
         }
 
         /** The positions the order leaves no value at, for a reader writing down where. */
@@ -284,12 +396,20 @@ sealed interface Confinement<A> {
         private final ConjoinedAdmissibleValues<A> values;
         private final OrderedIntervals<A> ordered;
         private final Map<A, Carrier> carriers;
+        /** What already showed this holds nothing — see {@link Planned#shown}. */
+        private final Admission<A> shown;
 
         Conjoined(ConjoinedAdmissibleValues<A> values, OrderedIntervals<A> ordered,
                   Map<A, Carrier> carriers) {
+            this(values, ordered, carriers, null);
+        }
+
+        private Conjoined(ConjoinedAdmissibleValues<A> values, OrderedIntervals<A> ordered,
+                          Map<A, Carrier> carriers, Admission<A> shown) {
             this.values = values;
             this.ordered = ordered;
             this.carriers = Collections.unmodifiableMap(new LinkedHashMap<>(carriers));
+            this.shown = shown;
         }
 
         /** Nothing read, so nothing ruled out. */
@@ -308,33 +428,14 @@ sealed interface Confinement<A> {
         }
 
         @Override
-        public Emptiness admits() {
-            return Confinement.admitted(ordered, carriers, values::anyAlternativeAdmits);
-        }
-
-        /**
-         * Whether the two readings hold nothing between them though neither of them holds nothing.
-         *
-         * <p>What tells this refusal from the two it is written beside. A position whose ends cross
-         * is the order's own answer and a reading that admits nothing is the values', and each of
-         * those is said as itself; this is the one nothing said until the two were put together.
-         */
-        boolean holdNothingOnlyTogether() {
-            return !ordered.isBottom()
-                    && values.anyAlternativeAdmits((_, _) -> Emptiness.NONEMPTY)
-                            != Emptiness.EMPTY
-                    && admits() == Emptiness.EMPTY;
+        public Admission<A> admission() {
+            return shown != null ? shown : Confinement.admission(ordered, carriers,
+                    values::anyAlternativeAdmits, values::refusedInEveryAlternativeAt);
         }
 
         /** The positions the order leaves no value at. */
         Set<A> holdingNothing() {
             return ordered.holdingNothing();
-        }
-
-        /** The positions every alternative is left no value at by its set and its range together. */
-        Set<A> sharingNothingAt() {
-            return Confinement.sharingNothingAt(ordered, carriers,
-                    values::refusedInEveryAlternativeAt);
         }
 
         /** Which values may stand at one position. */
@@ -345,25 +446,31 @@ sealed interface Confinement<A> {
         /** Both conjunctions holding at once, in both languages. */
         Conjoined<A> meet(Conjoined<A> other) {
             return new Conjoined<>(values.meet(other.values), ordered.meet(other.ordered),
-                    Confinement.both(carriers, other.carriers));
+                    Confinement.both(carriers, other.carriers),
+                    eitherShown(admission(), other.admission()));
         }
 
         /** The same rules about the same positions, under the names {@code naming} gives them. */
         <B> Conjoined<B> renamed(Function<A, B> naming) {
             Map<B, Carrier> out = new LinkedHashMap<>();
             carriers.forEach((position, carrier) -> out.put(naming.apply(position), carrier));
-            return new Conjoined<>(values.renamed(naming), ordered.renamed(naming), out);
+            Admission<B> said = shown == null ? null : new Admission<>(shown.emptiness(),
+                    shown.by(), shown.at().stream().map(naming)
+                            .collect(java.util.stream.Collectors.toCollection(
+                                    java.util.LinkedHashSet::new)));
+            return new Conjoined<>(values.renamed(naming), ordered.renamed(naming), out, said);
         }
 
         /** The same, with these values in place of what nothing read leaves. */
         Conjoined<A> withValues(ConjoinedAdmissibleValues<A> read) {
-            return new Conjoined<>(read, ordered, carriers);
+            return new Conjoined<>(read, ordered, carriers, shown);
         }
 
         /** The same, with {@code bounded} taken as holding of the positions it bounds, on the
          *  orders {@code on} says they are counted by. */
         Conjoined<A> taking(OrderedIntervals<A> bounded, Map<A, Carrier> on) {
-            return new Conjoined<>(values, ordered.meet(bounded), Confinement.both(carriers, on));
+            return new Conjoined<>(values, ordered.meet(bounded), Confinement.both(carriers, on),
+                    shown);
         }
 
         /**
@@ -391,18 +498,24 @@ sealed interface Confinement<A> {
             return new Conjoined<>(
                     ConjoinedAdmissibleValues.of(
                             AdmissibleValues.<A>top().meet(read.values(), sets), sets),
-                    ordered.meet(read.ordered), Confinement.both(carriers, read.carriers()));
+                    ordered.meet(read.ordered), Confinement.both(carriers, read.carriers()),
+                    // What the reading was already shown empty by, which is a fact about the rules
+                    // and travels with them. Left behind, a declaration refused because two of its
+                    // branches share no value between their sets and their ranges would be reported
+                    // as one whose values admit nothing, which is what dropping the branches left.
+                    eitherShown(admission(), read.admission()));
         }
 
         @Override
         public boolean equals(Object other) {
             return other instanceof Conjoined<?> it && values.equals(it.values)
-                    && ordered.equals(it.ordered) && carriers.equals(it.carriers);
+                    && ordered.equals(it.ordered) && carriers.equals(it.carriers)
+                    && Objects.equals(shown, it.shown);
         }
 
         @Override
         public int hashCode() {
-            return Objects.hash(values, ordered, carriers);
+            return Objects.hash(values, ordered, carriers, shown);
         }
 
         @Override

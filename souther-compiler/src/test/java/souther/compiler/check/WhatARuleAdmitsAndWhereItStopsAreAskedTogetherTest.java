@@ -107,10 +107,13 @@ class WhatARuleAdmitsAndWhereItStopsAreAskedTogetherTest {
      * it. A denial is a set already, so a reading that answered "something is admitted" off the
      * descriptions alone settled both branches as live before anything asked the order — and two
      * branches nothing satisfies were then joined into a choice that does.
+     *
+     * <p>The place is named because both branches were refused at it. Which is the same rule the
+     * choice below is under, answered the other way by what the branches happen to be about.
      */
     @Test
     void aChoiceOfTwoSuchBranchesAdmitsNothing() {
-        assertEquals(new Emptiness.ConflictingRules(), only("""
+        assertEquals(atTheValue(new Emptiness.NoAllowedValueInRange()), only("""
                 module demo
 
                 data Code = String
@@ -123,7 +126,7 @@ class WhatARuleAdmitsAndWhereItStopsAreAskedTogetherTest {
     /** And the same over an enumeration, where the interval algebra carries nothing at all. */
     @Test
     void aChoiceOfTwoSuchBranchesOverAnEnumerationAdmitsNothing() {
-        assertEquals(new Emptiness.ConflictingRules(), only("""
+        assertEquals(atAField("q", new Emptiness.NoAllowedValueInRange()), only("""
                 module demo
 
                 data Ready
@@ -146,14 +149,13 @@ class WhatARuleAdmitsAndWhereItStopsAreAskedTogetherTest {
      * refused at {@code y} and the other way round.
      *
      * <p>No position is named, for the same reason: each of them holds values some alternative
-     * stands at, so the lack is the whole product's. What is written is the general form, because
-     * of where the alternatives are dropped — a branch nobody can be in is dropped while the
-     * declaration is being settled, so by the time the whole is asked, the values admit nothing and
-     * the proof is theirs.
+     * stands at, so the lack is the whole product's. What was shown travels with the branches as
+     * they are dropped — worked out again after the drop, the answer would be that the values admit
+     * nothing, which is the general form of what was actually shown.
      */
     @Test
     void alternativesRefusedAtDifferentPositionsLeaveNothingAndNameNoPosition() {
-        assertEquals(new Emptiness.ConflictingRules(), only("""
+        assertEquals(new Emptiness.NoAllowedValueInRange(), only("""
                 module demo
 
                 data Held = { x: String, y: String }
@@ -161,6 +163,44 @@ class WhatARuleAdmitsAndWhereItStopsAreAskedTogetherTest {
                         || (String.startsWith("C", x) && String.startsWith("D", y)))
                         && x < "B" && y >= "D"
                 """));
+    }
+
+    /**
+     * And the author is told it in a sentence that names no place.
+     *
+     * <p>The other end of the same proof. What names a position and what does not are two sentences,
+     * and a proof shown of a whole product read as one about a position would send an author to a
+     * place its own rules are fine with — so the sentence chosen where the proof names none is the
+     * one that says the rules cannot all hold.
+     */
+    @Test
+    void andTheSentenceForOneNamesNoPlace() {
+        assertEquals(List.of("ItsRulesCannotAllHold"), saidBy("""
+                module demo
+
+                data Held = { x: String, y: String }
+                    invariant no = ((String.startsWith("A", x) && String.startsWith("B", y))
+                        || (String.startsWith("C", x) && String.startsWith("D", y)))
+                        && x < "B" && y >= "D"
+                """));
+        assertEquals(List.of("NoValueItsRulesAllowIsInThatRange"), saidBy("""
+                module demo
+
+                data Code = String
+                    invariant no = String.startsWith("JP", value) && value < "JA"
+                """), "and one that names a place is said with it");
+    }
+
+    /** What an author is told about the one declaration of {@code source}. */
+    private static List<String> saidBy(String source) {
+        Compilation compilation = Compilation.ofSource(source, "Main");
+        compilation.answerEverything();
+        return compilation.diagnostics().values().stream()
+                .flatMap(List::stream)
+                .map(souther.compiler.diag.Located::diagnostic)
+                .filter(each -> "E1013".equals(each.code()))
+                .map(each -> each.said().getClass().getSimpleName())
+                .toList();
     }
 
     /** And the same alternatives with one of them left standing are a rule somebody satisfies. */

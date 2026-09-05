@@ -11,7 +11,6 @@ import souther.compiler.values.ConjoinedAdmissibleValues;
 import java.util.Map;
 import java.util.Optional;
 import java.util.SequencedMap;
-import java.util.Set;
 
 /**
  * What the rules say, in each of the languages this reading has for saying it.
@@ -139,24 +138,30 @@ public record ConstraintState<A>(NumericDomain<A> numbers, PredicateFacts<A> fac
         // the pair rather than about one of them. Written only where the pair is what holds nothing:
         // a state the numbers refuse is refused by the numbers, whatever the sets and the ranges
         // leave beside them.
-        boolean onlyTogether = confinement.holdNothingOnlyTogether();
-        Set<A> empty = confinement.holdingNothing();
-        Set<A> outside = onlyTogether ? confinement.sharingNothingAt() : Set.of();
-        Emptiness placed = null;
+        Confinement.Admission<A> shown = confinement.admission();
+        Emptiness said = switch (shown.by()) {
+            case ORDER -> new Emptiness.EmptyOrderedInterval();
+            case SET_AND_RANGE -> new Emptiness.NoAllowedValueInRange();
+            case NOTHING_SHOWN, VALUES, RULES_TOGETHER -> null;
+        };
+        if (said == null) {
+            return Optional.ofNullable(why);
+        }
         for (Map.Entry<A, Emptiness.AtAField.Where> each : positions.entrySet()) {
-            Emptiness at = empty.contains(each.getKey()) ? new Emptiness.EmptyOrderedInterval()
-                    : outside.contains(each.getKey()) ? new Emptiness.NoAllowedValueInRange() : null;
-            if (at != null) {
-                placed = new Emptiness.AtAField(each.getValue(), at);
-                break;
+            if (shown.at().contains(each.getKey())) {
+                return Optional.of(Emptiness.preferred(why,
+                        new Emptiness.AtAField(each.getValue(), said)));
             }
         }
-        if (placed != null) {
-            why = Emptiness.preferred(why, placed);
-        } else if (why != null && onlyTogether) {
-            why = Emptiness.preferred(why, new Emptiness.NoAllowedValueInRange());
-        }
-        return Optional.ofNullable(why);
+        // No position to name, which is what a choice refused at two of them leaves: each of them
+        // holds values some alternative stands at, so what was shown is about the whole product.
+        //
+        // Only where what was shown is true of the pair rather than of one position. A range with
+        // nothing in it is a position's own answer and is said of that position or not at all —
+        // written without one, the sentence read off it would name whatever place the reader
+        // happened to be at, which is the declaration's own value.
+        return Optional.of(shown.by() == Confinement.EmptyBy.SET_AND_RANGE
+                ? Emptiness.preferred(why, said) : why);
     }
 
     /**
