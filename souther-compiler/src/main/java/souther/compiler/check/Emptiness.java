@@ -100,6 +100,27 @@ public sealed interface Emptiness {
     record NoAllowedValueInRange() implements Emptiness {}
 
     /**
+     * The values a position is allowed and the bounds the rules require it to be within share none.
+     *
+     * <p>What no reading of the position showed on its own. Its values are a set some rule left it,
+     * its order is a range some rule left it, and the bounds here are what follows from rules
+     * written about it and its neighbours together — {@code x} between one and two, and {@code x}
+     * three or more because it is one past a {@code y} that is at least two. Each of those is
+     * satisfiable and no two of them were ever asked together.
+     *
+     * <p>Which is why this says the bounds are required and not where they come from. What can
+     * require a position to be somewhere is every reading of the state that has anything to say
+     * about one position at a time, and a proof naming the reading it came from would be a new proof
+     * for each of them — an author acts on the same fact whichever it was.
+     *
+     * <p>Not {@link NoAllowedValueInRange}, which is the same shape between two readings of one
+     * declaration's own clauses. The difference is worth keeping: that one is answered by looking at
+     * the rules about the position, and this one is not answered until the rules about its
+     * neighbours are read with them.
+     */
+    record NoAllowedValueWithinRequiredBounds() implements Emptiness {}
+
+    /**
      * Positions the rules hold as one value are left no value they can all hold.
      *
      * <p>Not a position's own lack. Each of them on its own is left something — {@code p} may be
@@ -294,6 +315,7 @@ public sealed interface Emptiness {
             // The declaration's own rules. An empty interval is one of these and not a shape: it is
             // the rules contradicting, with the place and the reason filled in.
             case ConflictingRules _, EmptyOrderedInterval _, NoAllowedValueInRange _,
+                 NoAllowedValueWithinRequiredBounds _,
                  NoCommonValueForEqualPositions _ -> Nearness.DIRECT;
             case EmptyNumericInterval _, SetRequiresTooManyDistinctValues _,
                  NoAllowedCollectionSize _ -> Nearness.STRUCTURAL;

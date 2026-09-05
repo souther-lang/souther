@@ -53,8 +53,22 @@ import java.util.function.Function;
  */
 sealed interface Confinement<A> {
 
-    /** Whether anything satisfies both readings, and what showed it where nothing does. */
-    Admission<A> admission();
+    /**
+     * Whether anything satisfies both readings once {@code outside} has placed the positions, and
+     * what showed it where nothing does.
+     *
+     * <p>The envelope is the question and never a reading of this one. What it holds is what the
+     * components beside this can prove about where a position sits, and it is asked here because
+     * this is where the alternatives are: a restriction met against what a position admits across
+     * all of them is met against a value no alternative stands for, and every one of them has to be
+     * asked whole.
+     */
+    Admission<A> admission(PositionEnvelope<A> outside);
+
+    /** The same, with nothing placed from outside: what these two readings show on their own. */
+    default Admission<A> admission() {
+        return admission(PositionEnvelope.nothingSpokenOf());
+    }
 
     /** Whether anything satisfies both readings. */
     default Emptiness admits() {
@@ -76,6 +90,16 @@ sealed interface Confinement<A> {
      * <p>{@code by} is a fact about the readings and not a sentence about the model. Which proof an
      * author is told is chosen from it in one place, and what is chosen is not decided here.
      *
+     * @param how whether these two readings showed it between them, or only once something outside
+     *            them said where the positions sit. Two different facts about the model and not two
+     *            spellings of one: the first is a declaration whose own values and ends share
+     *            nothing, and the second is one whose values are fine until a rule read somewhere
+     *            else is asked with them.
+     *
+     *            <p>Which is why {@code by} is read only where this says the pair showed it alone.
+     *            That word names which of the two readings left the pair nothing, and where the
+     *            answer needed a restriction from outside, neither of them did
+     *
      * @param at   the blocks every alternative was refused at, empty where no one of them is why.
      *             Read of {@link EmptyBy#SET_AND_RANGE}, {@link EmptyBy#ORDER} and
      *             {@link EmptyBy#POSITIONS_HELD_AS_ONE}.
@@ -89,22 +113,33 @@ sealed interface Confinement<A> {
      *             between two dead branches would intersect those sets and claim a lack about
      *             whatever the two happened to share
      */
-    record Admission<A>(Emptiness emptiness, EmptyBy by, Set<Sameness.Block<A>> at) {
+    record Admission<A>(Emptiness emptiness, EmptyBy by, Set<Sameness.Block<A>> at, Shown how) {
 
         public Admission {
             at = Set.copyOf(at);
         }
 
         /** The same, where what was refused is places rather than values several of them share. */
-        static <A> Admission<A> at(Emptiness emptiness, EmptyBy by, Set<A> positions) {
+        static <A> Admission<A> at(Emptiness emptiness, EmptyBy by, Set<A> positions, Shown how) {
             Set<Sameness.Block<A>> blocks = new LinkedHashSet<>();
             positions.forEach(each -> blocks.add(Sameness.Block.of(each)));
-            return new Admission<>(emptiness, by, blocks);
+            return new Admission<>(emptiness, by, blocks, how);
         }
 
         /** Something may satisfy the pair, so nothing emptied it. */
         static <A> Admission<A> left(Emptiness emptiness) {
-            return new Admission<>(emptiness, EmptyBy.NOTHING_SHOWN, Set.of());
+            return new Admission<>(emptiness, EmptyBy.NOTHING_SHOWN, Set.of(),
+                    Shown.BY_THE_READINGS);
+        }
+
+        /** Whether it is settled that nothing satisfies what was asked. */
+        boolean holdsNothing() {
+            return emptiness == Emptiness.EMPTY;
+        }
+
+        /** Whether these two readings are the whole of what showed it. */
+        boolean byTheReadings() {
+            return how == Shown.BY_THE_READINGS;
         }
 
         /**
@@ -119,9 +154,31 @@ sealed interface Confinement<A> {
         static <A> Admission<A> bothShown(Admission<A> one, Admission<A> other) {
             Set<Sameness.Block<A>> both = new LinkedHashSet<>(one.at);
             both.retainAll(other.at);
+            // And shown by the readings alone only where both of them were. A choice one of whose
+            // branches needed a restriction from outside is a choice that needed it.
             return new Admission<>(Emptiness.EMPTY,
-                    one.by == other.by ? one.by : EmptyBy.RULES_TOGETHER, both);
+                    one.by == other.by ? one.by : EmptyBy.RULES_TOGETHER, both,
+                    one.byTheReadings() && other.byTheReadings()
+                            ? Shown.BY_THE_READINGS : Shown.ONCE_THE_POSITIONS_ARE_PLACED);
         }
+    }
+
+    /**
+     * What an emptiness was shown by: these two readings, or these two asked with what stands
+     * outside them.
+     *
+     * <p>Not a second kind of proof for every kind there already is. A component added beside these
+     * readings does not multiply this: what it can say about a position arrives as one more
+     * restriction in the envelope, and every emptiness that needed any of them is the second of
+     * these.
+     */
+    enum Shown {
+
+        /** The values and the ends of one declaration, between them. */
+        BY_THE_READINGS,
+
+        /** Those, asked where something outside them requires the positions to be. */
+        ONCE_THE_POSITIONS_ARE_PLACED
     }
 
     /** Which reading left the pair nothing. */
@@ -168,11 +225,64 @@ sealed interface Confinement<A> {
      * no range to share a value with.
      */
     static <A> Admission<A> admission(OrderedIntervals<A> ordered, Map<A, Carrier> carriers,
+                                      PositionEnvelope<A> outside,
                                       Function<AskedOfEachBlock<A>, Emptiness> admitting,
                                       Function<AskedOfEachBlock<A>, Set<Sameness.Block<A>>> refused,
                                       Set<Sameness.Block<A>> heldAsOneAndEmptied) {
-        if (ordered.isBottom()) {
-            return Admission.at(Emptiness.EMPTY, EmptyBy.ORDER, ordered.holdingNothing());
+        Admission<A> said = shownBy(ordered, carriers, ordered::at, admitting, refused,
+                heldAsOneAndEmptied, Shown.BY_THE_READINGS);
+        // Asked with the envelope only where these two readings left something. What a declaration
+        // is refused by is the nearest thing that refuses it, and the nearest is a reading of its
+        // own values and its own ends: asked the other way round, a pair whose set and whose range
+        // share no value would be reported against a bound derived somewhere else, which is true and
+        // is not what the author wrote.
+        if (said.emptiness() == Emptiness.EMPTY || outside.saysNothing()) {
+            return said;
+        }
+        Admission<A> placed = shownBy(ordered, carriers,
+                position -> ordered.at(position).meet(outside.at(position).interval()),
+                admitting, refused, heldAsOneAndEmptied, Shown.ONCE_THE_POSITIONS_ARE_PLACED);
+        // And only an emptiness is taken from it. What the narrowed question leaves is bounded by a
+        // restriction the rules require and no author wrote, so anything it says short of "nothing
+        // is here" is this compiler's own answer to a question nobody asked.
+        return placed.emptiness() == Emptiness.EMPTY ? placed : said;
+    }
+
+    /**
+     * The same question against one placing of the positions, whatever put them there.
+     *
+     * <p>One walk over the alternatives, whichever of the two askings above it is answering. Written
+     * twice instead, the second copy would be free to compose the blocks of an alternative
+     * differently from the first, and a declaration would be refused by one and not the other for
+     * reasons nobody could name.
+     *
+     * @param sits where a position is, which is where its own reading of the ends leaves it or
+     *             that met with what is required of it elsewhere
+     */
+    private static <A> Admission<A> shownBy(OrderedIntervals<A> ordered, Map<A, Carrier> carriers,
+                                            Function<A, OrderedInterval> sits,
+                                            Function<AskedOfEachBlock<A>, Emptiness> admitting,
+                                            Function<AskedOfEachBlock<A>, Set<Sameness.Block<A>>>
+                                                    refused,
+                                            Set<Sameness.Block<A>> heldAsOneAndEmptied,
+                                            Shown how) {
+        if (how == Shown.BY_THE_READINGS) {
+            if (ordered.isBottom()) {
+                return Admission.at(Emptiness.EMPTY, EmptyBy.ORDER, ordered.holdingNothing(), how);
+            }
+        } else {
+            // A position left nowhere to be, which is a lack the alternatives never hear about: a
+            // position no alternative names is not one they are asked about, and where the rules
+            // require it to be somewhere its own ends do not reach, nothing else will say so.
+            Set<A> nowhere = new LinkedHashSet<>();
+            carriers.keySet().forEach(position -> {
+                if (sits.apply(position).holdsNothing()) {
+                    nowhere.add(position);
+                }
+            });
+            if (!nowhere.isEmpty()) {
+                return Admission.at(Emptiness.EMPTY, EmptyBy.ORDER, nowhere, how);
+            }
         }
         // A meter of this question's own, spent on this asking of it. What may be built to decide
         // whether a declaration has a value cannot come out of a position's allowance: the same
@@ -200,7 +310,7 @@ sealed interface Confinement<A> {
                 if (here != null) {
                     carrier = here;
                 }
-                within = within.meet(ordered.at(position));
+                within = within.meet(sits.apply(position));
             }
             return carrier == null ? Emptiness.NONEMPTY : carrier.meets(set, within, meter);
         };
@@ -216,15 +326,15 @@ sealed interface Confinement<A> {
             // positions share. Each of them holds something on its own, so the general answer —
             // that the values admit nothing — is true and says less than what was shown.
             return heldAsOneAndEmptied.isEmpty()
-                    ? new Admission<>(Emptiness.EMPTY, EmptyBy.VALUES, Set.of())
+                    ? new Admission<>(Emptiness.EMPTY, EmptyBy.VALUES, Set.of(), how)
                     : new Admission<>(Emptiness.EMPTY, EmptyBy.POSITIONS_HELD_AS_ONE,
-                            heldAsOneAndEmptied);
+                            heldAsOneAndEmptied, how);
         }
         // The blocks it was asked at, which is what the question was about. A block of several
         // positions is refused as one value and not as each of them: {@code p == r && p < "b" && r
         // > "y"} leaves each position a range with something in it, and what has nothing is the
         // range the two of them share.
-        return new Admission<>(Emptiness.EMPTY, EmptyBy.SET_AND_RANGE, refused.apply(asked));
+        return new Admission<>(Emptiness.EMPTY, EmptyBy.SET_AND_RANGE, refused.apply(asked), how);
     }
 
     /** What showed a conjunction of two readings empty, where either of them was. */
@@ -300,8 +410,8 @@ sealed interface Confinement<A> {
         }
 
         @Override
-        public Admission<A> admission() {
-            return shown != null ? shown : Confinement.admission(ordered, carriers,
+        public Admission<A> admission(PositionEnvelope<A> outside) {
+            return shown != null ? shown : Confinement.admission(ordered, carriers, outside,
                     values::anyAlternativeAdmits, values::refusedInEveryAlternativeAt,
                     values.emptiedBlocks());
         }
@@ -434,11 +544,11 @@ sealed interface Confinement<A> {
         }
 
         @Override
-        public Admission<A> admission() {
+        public Admission<A> admission(PositionEnvelope<A> outside) {
             if (shown != null) {
                 return shown;
             }
-            Admission<A> said = Confinement.admission(ordered, carriers,
+            Admission<A> said = Confinement.admission(ordered, carriers, outside,
                     made.values()::anyAlternativeAdmits,
                     made.values()::refusedInEveryAlternativeAt,
                     made.values().emptiedBlocks());
@@ -503,8 +613,8 @@ sealed interface Confinement<A> {
         }
 
         @Override
-        public Admission<A> admission() {
-            return shown != null ? shown : Confinement.admission(ordered, carriers,
+        public Admission<A> admission(PositionEnvelope<A> outside) {
+            return shown != null ? shown : Confinement.admission(ordered, carriers, outside,
                     values::anyAlternativeAdmits, values::refusedInEveryAlternativeAt,
                     values.emptiedBlocks());
         }
@@ -535,7 +645,7 @@ sealed interface Confinement<A> {
                 shown.at().forEach(block -> at.add(block.renamed(naming)));
             }
             Admission<B> said = shown == null ? null
-                    : new Admission<>(shown.emptiness(), shown.by(), at);
+                    : new Admission<>(shown.emptiness(), shown.by(), at, shown.how());
             return new Conjoined<>(values.renamed(naming), ordered.renamed(naming), out, said);
         }
 

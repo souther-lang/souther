@@ -319,6 +319,7 @@ public final class TypeCardinality {
         return switch (why) {
             case Emptiness.ConflictingRules _, Emptiness.EmptyNumericInterval _,
                  Emptiness.EmptyOrderedInterval _, Emptiness.NoAllowedValueInRange _,
+                 Emptiness.NoAllowedValueWithinRequiredBounds _,
                  Emptiness.NoCommonValueForEqualPositions _,
                  Emptiness.SetRequiresTooManyDistinctValues _,
                  Emptiness.NoAllowedCollectionSize _ -> true;

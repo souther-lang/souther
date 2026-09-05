@@ -530,6 +530,9 @@ public final class DataChecker {
                 case Emptiness.NoAllowedValueInRange _ ->
                         at.say(new DataMessage.NoValueTheseAllowIsInTheRangeTheyShare(
                                 data, written(it.where())));
+                case Emptiness.NoAllowedValueWithinRequiredBounds _ ->
+                        at.say(new DataMessage.NoValueTheseAllowIsWithinTheBoundsTheyRequire(
+                                data, written(it.where())));
                 case Emptiness.NoCommonValueForEqualPositions _ ->
                         at.say(new DataMessage.NoValueTheseCanAllHold(data, written(it.where())));
                 // Every other proof, named rather than gathered under a default: a proof added
@@ -566,6 +569,14 @@ public final class DataChecker {
             // is what this reading could show and no more.
             case Emptiness.NoAllowedValueInRange _ -> placed
                     ? at.say(new DataMessage.NoValueItsRulesAllowIsInThatRange(data, written(path)))
+                    : at.say(new DataMessage.ItsRulesCannotAllHold(data));
+            // And with a place on the same terms. What was shown of a whole product is said of the
+            // product: the bounds one position is required to be within are met with what an
+            // alternative allows it, so where the alternatives were refused at different positions
+            // there is no one of them the author can be sent to.
+            case Emptiness.NoAllowedValueWithinRequiredBounds _ -> placed
+                    ? at.say(new DataMessage.NoValueItsRulesAllowIsWithinTheBoundsTheyRequire(
+                            data, written(path)))
                     : at.say(new DataMessage.ItsRulesCannotAllHold(data));
             case Emptiness.SetRequiresTooManyDistinctValues it ->
                     at.say(new DataMessage.ASetCannotBeFilledFromItsElement(
