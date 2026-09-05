@@ -131,8 +131,8 @@ class WhoMayReadWhatAStringPredicateMeansTest {
      * taken as they came; what an author wrote them in, and how it was reached, are the walk's and
      * are gone by this point.
      */
-    private static final String WHAT_A_BODYS_RULE_DIVIDES =
-            "souther/compiler/partition/SetDivisions -> " + OWNER;
+    private static final String WHAT_A_RULE_STATES =
+            "souther/compiler/partition/BehaviorSetStatements -> " + OWNER;
 
     private static final String IN_A_DESCRIPTOR = " (in a descriptor)";
 
@@ -151,6 +151,16 @@ class WhoMayReadWhatAStringPredicateMeansTest {
             READS + "$Stated",
             READS + "$Stated#reading()L" + OWNER + "$Reading;",
             READS + "$Stated#subject()Lsouther/compiler/core/Core;",
+            WHAT_A_RULE_STATES,
+            WHAT_A_RULE_STATES + IN_A_DESCRIPTOR,
+            WHAT_A_RULE_STATES + "$Reading",
+            WHAT_A_RULE_STATES + "$Reading$Accepting",
+            WHAT_A_RULE_STATES
+                    + "$Reading$Accepting#accepts()Lsouther/compiler/regex/PatternSyntax;",
+            WHAT_A_RULE_STATES + "$Reading$PatternNotRead",
+            WHAT_A_RULE_STATES
+                    + "$Reading$PatternNotRead#why()Lsouther/compiler/regex/PatternRead$Unsupported;",
+            WHAT_A_RULE_STATES + "$Reading$WrittenArgumentNotKnown",
             WITNESS,
             WITNESS + IN_A_DESCRIPTOR,
             WITNESS + "#statedByWritten(Lsouther/compiler/ast/Hir$Expr;"
@@ -174,17 +184,7 @@ class WhoMayReadWhatAStringPredicateMeansTest {
             // value the reading came in and never worked out again: a name for a class derived a
             // second time would be one that agrees with the rule until one of the two changes.
             A_BODYS_RULE + "$Stated#statement()Lsouther/compiler/check/PredicateStatement;",
-            A_BODYS_RULE + "$Stated#subject()Lsouther/compiler/core/Core;",
-            WHAT_A_BODYS_RULE_DIVIDES,
-            WHAT_A_BODYS_RULE_DIVIDES + IN_A_DESCRIPTOR,
-            WHAT_A_BODYS_RULE_DIVIDES + "$Reading",
-            WHAT_A_BODYS_RULE_DIVIDES + "$Reading$Accepting",
-            WHAT_A_BODYS_RULE_DIVIDES
-                    + "$Reading$Accepting#accepts()Lsouther/compiler/regex/PatternSyntax;",
-            WHAT_A_BODYS_RULE_DIVIDES + "$Reading$PatternNotRead",
-            WHAT_A_BODYS_RULE_DIVIDES
-                    + "$Reading$PatternNotRead#why()Lsouther/compiler/regex/PatternRead$Unsupported;",
-            WHAT_A_BODYS_RULE_DIVIDES + "$Reading$WrittenArgumentNotKnown");
+            A_BODYS_RULE + "$Stated#subject()Lsouther/compiler/core/Core;");
 
     @Test
     void everyClassThatReadsOneIsWrittenDownWithWhatItReadsItFor() {

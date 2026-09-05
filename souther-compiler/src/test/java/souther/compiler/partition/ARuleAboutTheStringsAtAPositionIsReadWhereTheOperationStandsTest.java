@@ -148,7 +148,9 @@ class ARuleAboutTheStringsAtAPositionIsReadWhereTheOperationStandsTest {
         assertNotNull(body, "the behavior has a body for the analysis to read");
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         InputDomain inputs = compilation.db().ask(new Adequacy.Inputs(module)).value().get("f");
-        return PredicateReadings.of("f", body, inputs.reading(rules), inputs.parameterReads(),
+        return PredicateReadings.of("f", body,
+                        compilation.db().ask(new Bodies.StatedContracts(module)).value().get("f"),
+                        inputs.reading(rules), inputs.parameterReads(),
                         checked.elementBindings().get("f"))
                 .predicates();
     }

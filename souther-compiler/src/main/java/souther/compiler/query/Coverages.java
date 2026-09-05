@@ -106,12 +106,14 @@ final class Coverages {
         // And what the declarations state between two of this input's positions. Such a rule places
         // no end at either of them, so the reading of ends has nothing to draw it from; read here,
         // it is a line like the two above and is arranged with them.
-        // And what the body states about the strings at its positions, read off the tree that has
-        // those rules in it. The emitted body has each of them expanded into what it does, so a
-        // reading of it holds none — which is why this is the other body and not the one above.
-        souther.compiler.partition.SetDivisions.Read divisions = analysis == null
-                ? souther.compiler.partition.SetDivisions.NONE
-                : souther.compiler.partition.SetDivisions.of(behavior.name(), analysis, read,
+        // And what the behavior states about the strings at its positions, in its body and in its
+        // own clauses alike. Read off the tree that has those rules in it: the emitted body has
+        // each of them expanded into what it does, so a reading of it holds none — which is why
+        // this is the other body and not the one above. Both go to one reader, because a term
+        // written about in both places is one term with one set of classes, and two readers would
+        // be two measures of it, each told nothing of the other's.
+        souther.compiler.partition.BehaviorSetStatements.Read sets =
+                souther.compiler.partition.BehaviorSetStatements.of(behavior.name(), analysis, stated, read,
                         read.domain().parameterReads(), elements, distinctions);
         List<souther.compiler.partition.LineDrawn> declared =
                 souther.compiler.partition.DeclaredThresholds.between(behavior.name(), read);
@@ -125,14 +127,14 @@ final class Coverages {
         // the same rule.
         souther.compiler.partition.LinesWhereTheyFall.Filed filed =
                 souther.compiler.partition.LinesWhereTheyFall.of(read,
-                        both(both(clauses.evidence(), guards.evidence()), divisions.divided()),
-                        divisions.blocked(),
+                        both(both(clauses.evidence(), guards.evidence()), sets.statements()),
+                        sets.blocked(),
                         both(declared, both(clauses.between(), guards.between())));
         return new Partitioned(Partitions.withEvidence(partitioning, quantities,
                 filed.evidence(), filed.blocked(), distinctions, ruleSource, policy,
                 // And the lines this had nowhere to put, which are findings of the same kind: a rule
                 // of the model that came to no line at a position it is about.
-                everyRuleWithNoLine(clauses, guards, filed, divisions),
+                everyRuleWithNoLine(clauses, guards, filed, sets),
                 filed.between(),
                 // What a row had to satisfy to arrive at each comparison, from the walk that
                 // assumed it. A clause of a declaration is not written at a place in a body and has
@@ -150,7 +152,7 @@ final class Coverages {
     private static RulesWithNoLine everyRuleWithNoLine(
             EnsuresThresholds.Clauses clauses, GuardThresholds.Guards guards,
             LinesWhereTheyFall.Filed filed,
-            souther.compiler.partition.SetDivisions.Read divisions) {
+            souther.compiler.partition.BehaviorSetStatements.Read sets) {
         // And the rules about the strings that divided no position, which are findings of the same
         // kind. Left out, a rule an author wrote would reach the measure, come to nothing, and be
         // shown to nobody — while the position it names came back as one the model says nothing
@@ -162,7 +164,7 @@ final class Coverages {
         // a rule read to the end that tells nothing apart has been read, and one about a value an
         // operation made from a position is about that value — so they are said and nothing waits
         // on them.
-        divisions.saying().forEach(found::add);
+        sets.saying().forEach(found::add);
         return clauses.noLine().and(guards.noLine()).and(filed.notPlaced()).and(found.found());
     }
 

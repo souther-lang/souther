@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import souther.compiler.check.AnalysisBody;
 import souther.compiler.check.ElementBindings;
 import souther.compiler.check.PredicateStatement;
+import souther.compiler.check.StatedContract;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.StringPredicates;
 import souther.compiler.inputs.BlockReason;
@@ -26,13 +27,19 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * What a behavior's rules about the strings at its positions divide those positions into.
+ * What a behavior's rules about the strings at its positions state of those positions.
  *
- * <p>The one crossing from a plan to a set on this side. What a reading of a body hands on is the
- * rule and the strings it names; what a partition works with is the values on either side of it, and
- * turning the first into the second is making a machine. Done anywhere a reader felt like it, the
- * machine would be built under whatever allowance that reader happened to hold, and the same rule
- * would divide the position differently depending on who asked.
+ * <p>The one crossing from a plan to a set on this side. What a reading hands on is the rule and the
+ * strings it names; what a partition works with is the values on either side of it, and turning the
+ * first into the second is making a machine. Done anywhere a reader felt like it, the machine would
+ * be built under whatever allowance that reader happened to hold, and the same rule would come to a
+ * different set depending on who asked.
+ *
+ * <p><b>Stating and dividing are two answers.</b> A rule states a set of the position's values and
+ * the rest; whether the position holds values on both sides of that is a fact about the position,
+ * settled where its values are known ({@link Classing}). So nothing here says a position was
+ * divided — what leaves is what the rules state, and every reader of it is one that has the
+ * position's own values in hand.
  *
  * <p><b>One rule at a time, and what a position comes to is not asked here.</b> What several rules
  * leave a position between them is a question about every rule that reached it, and the rules of a
@@ -63,20 +70,17 @@ import java.util.Set;
  * the same answer the reading of a comparison gives the same shape — so what is claimed is that
  * every rule is classified, and not that every rule is reported.
  */
-public final class SetDivisions {
+public final class BehaviorSetStatements {
 
-    private SetDivisions() {
+    private BehaviorSetStatements() {
     }
-
-    /** What a behavior with no body to read comes to, which is no rules and nothing became of
-     *  them. Not the same as a body that states none: there the walk ran and found nothing, and
-     *  here there was nothing to walk. */
-    public static final Read NONE = new Read(List.of(), List.of(), List.of());
 
     /**
      * What the rules came to.
      *
-     * @param divided the positions divided, as evidence a partition reads like any other
+     * @param statements what each rule states of a position, as evidence a partition reads like any
+     *                   other. Whether it divides the position turns on the values the position
+     *                   holds, which is settled where those are known and not here
      * @param blocked the distinctions of a position this compiler did not get, which is what keeps
      *                its classes from being composed out of the ones it did
      * @param saying  the rules that reached here and divide no position, which a reader is owed and
@@ -84,11 +88,11 @@ public final class SetDivisions {
      *                position is one of these: it is about that value, and a denominator held open
      *                by it would be held open by a rule that never reached the position
      */
-    public record Read(List<PartitionEvidence> divided, List<ClassingBlocker> blocked,
+    public record Read(List<PartitionEvidence> statements, List<ClassingBlocker> blocked,
                        List<RuleWithoutALine> saying) {
 
         public Read {
-            divided = List.copyOf(divided);
+            statements = List.copyOf(statements);
             blocked = List.copyOf(blocked);
             saying = List.copyOf(saying);
         }
@@ -118,16 +122,22 @@ public final class SetDivisions {
                          AdmittedPlan whenTrue, AdmittedPlan whenFalse) {}
 
     /**
-     * What {@code read} divides, built under {@code allowance}.
+     * What {@code read} states, built under {@code allowance}.
      *
      * <p>{@code symbols} and the reading each rule carries are what turn its subject into a
      * position: a rule inside an expanded helper is about the argument the call handed it, so where
      * it stands is asked of the reading that stands there and never of the body as a whole.
+     *
+     * <p>A behavior writes such a rule in its body and in its {@code ensures}, and both are read
+     * here so that what is stated of one position is what the two come to between them. Read apart,
+     * a term written about in both places would be measured twice and the second measure would be
+     * told nothing of the first's classes.
      */
-    public static Read of(String behavior, AnalysisBody body, InputReading read,
+    public static Read of(String behavior, AnalysisBody body, StatedContract stated,
+                          InputReading read,
                           Map<BindingId, String> parameters, ElementBindings elements,
                           Allowance<NumericTerm.FromOnePosition> allowance) {
-        return of(PredicateReadings.of(behavior, body, read, parameters, elements),
+        return of(PredicateReadings.of(behavior, body, stated, read, parameters, elements),
                 read.symbols(), allowance);
     }
 
@@ -168,11 +178,11 @@ public final class SetDivisions {
         Map<NumericTerm.FromOnePosition, Realizations> answers = new LinkedHashMap<>();
         byTerm.forEach((term, plans) ->
                 answers.put(term, allowance.realizeAll(purseOf(term), plans)));
-        List<PartitionEvidence> divided = new ArrayList<>();
+        List<PartitionEvidence> statements = new ArrayList<>();
         for (Asked each : asked) {
-            divide(each, answers.get(each.term()), divided, blocked);
+            state(each, answers.get(each.term()), statements, blocked);
         }
-        return new Read(divided, blocked, saying);
+        return new Read(statements, blocked, saying);
     }
 
     /**
@@ -186,7 +196,7 @@ public final class SetDivisions {
      * never reached it.
      *
      * <p>Filled from the branches a reading fell through, the three were one list: everything that
-     * did not become a division kept the position's classes shut, and a rule read to the end that
+     * did not become a statement kept the position's classes shut, and a rule read to the end that
      * says nothing took its siblings down with it.
      */
     private sealed interface Outcome {
@@ -254,21 +264,21 @@ public final class SetDivisions {
     }
 
     /**
-     * One rule as the division it came to, out of what its position's group was built to.
+     * One rule as the statement it came to, out of what its position's group was built to.
      *
      * <p>Whether the two sides hold anything is not asked here. What a rule leaves is a set of every
      * string there is, and what the position holds is what its declarations left it — so the two
      * sides of a rule can be inhabited among the strings and one of them empty at the position. That
      * is a question about the position's values and is asked where they are known.
      */
-    private static void divide(Asked each, Realizations answer,
-                               List<PartitionEvidence> divided, List<ClassingBlocker> blocked) {
+    private static void state(Asked each, Realizations answer,
+                              List<PartitionEvidence> statements, List<ClassingBlocker> blocked) {
         if (!(answer instanceof Realizations.Exact built)) {
             blocked.add(new ClassingBlocker(each.term(), each.by(),
                     new BlockReason.BehaviorDistinctionsTooCostly()));
             return;
         }
-        divided.add(new PartitionEvidence.BySet(new SetStatement(each.term(),
+        statements.add(new PartitionEvidence.BySet(new SetStatement(each.term(),
                 built.of(each.whenTrue()), built.of(each.whenFalse()), each.states(), each.by())));
     }
 }

@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.check.AnalysisBody;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
+import souther.compiler.check.StatedContract;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.NumericTerm;
@@ -43,9 +44,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class WhatABehaviorsRuleAboutItsStringsDividesAPositionIntoTest {
 
+    /** Enough for the two sides of one of the rules written below, and not for two of them. The
+     *  two assertions that say so are beside the one test this is for. */
+    private static final PatternPlan.Budget ONE_RULE = new PatternPlan.Budget(1000, 100);
+
     @Test
     void aRuleAboutTheStringsDividesThePositionIntoWhatItAdmitsAndTheRest() {
-        SetDivisions.Read read = readingsOf("""
+        BehaviorSetStatements.Read read = readingsOf("""
                 behavior f : (code: String) -> Answer
                 let f (code) = if String.startsWith("JP", code) then Yes else No
                 """);
@@ -72,7 +77,7 @@ class WhatABehaviorsRuleAboutItsStringsDividesAPositionIntoTest {
      */
     @Test
     void twoRulesAboutOnePositionAreTwoDivisionsOfIt() {
-        SetDivisions.Read read = readingsOf("""
+        BehaviorSetStatements.Read read = readingsOf("""
                 behavior f : (code: String) -> Answer
                 let f (code) =
                     if String.startsWith("JP", code) then Yes
@@ -80,10 +85,97 @@ class WhatABehaviorsRuleAboutItsStringsDividesAPositionIntoTest {
                 """);
 
         assertEquals(List.of(), read.blocked(), "both rules divide the position");
-        assertEquals(2, read.divided().size(), "and each of them is a division of it");
-        assertEquals(1, read.divided().stream().map(PartitionEvidence::at).distinct().count(),
+        assertEquals(2, read.statements().size(), "and each of them is a division of it");
+        assertEquals(1, read.statements().stream().map(PartitionEvidence::at).distinct().count(),
                 "of the one position both are written about");
     }
+
+    /**
+     * A rule an {@code ensures} states divides the position it is about.
+     *
+     * <p>Where the rule is written is not what makes it a division. A behavior's clause states what
+     * the behavior is held to, and a clause about the strings at one of its inputs tells a set of
+     * them from the rest exactly as a body's condition does — so the position is divided by it, and
+     * read only in the body it would be a rule of the model this stage never heard.
+     */
+    @Test
+    void aRuleAClauseStatesDividesThePositionItIsAbout() {
+        BehaviorSetStatements.Read read = readingsOf("""
+                behavior f : (code: String) -> Answer
+                    ensures Yes -> String.startsWith("JP", code)
+                let f (code) = Yes
+                """);
+
+        assertEquals(List.of(), read.blocked(), "the rule divides the position");
+        SetStatement only = divisionIn(read);
+        assertEquals(new NumericTerm.ValueOf(souther.compiler.inputs.TermPath.of("code")),
+                only.term(), "the position the clause is written about");
+        assertTrue(only.whenTrue().has(new Value.Text("JP-1")),
+                "a string that satisfies the rule is on the side that does");
+        assertTrue(only.whenFalse().has(new Value.Text("US-1")),
+                "and one that does not is on the side that does not");
+    }
+
+    /**
+     * A body and a clause writing about one position divide one position.
+     *
+     * <p>Two readers and one position. What the position is divided into is what the two rules come
+     * to between them, so they meet before anything is built — read apart, the term would be
+     * measured twice and each measure would hold a partition the model does not draw.
+     */
+    @Test
+    void aBodyAndAClauseAboutOnePositionDivideOnePosition() {
+        BehaviorSetStatements.Read read = readingsOf("""
+                behavior f : (code: String) -> Answer
+                    ensures Yes -> String.startsWith("JP", code)
+                let f (code) = if String.endsWith("X", code) then Yes else No
+                """);
+
+        assertEquals(List.of(), read.blocked(), "both rules divide the position");
+        assertEquals(2, read.statements().size(), "and each of them is a division of it");
+        assertEquals(1, read.statements().stream().map(PartitionEvidence::at).distinct().count(),
+                "of the one position both are written about");
+    }
+
+    /**
+     * And the two are one group, which is what an allowance affording one of them shows.
+     *
+     * <p>Enough to build the two sides of a single rule and no more. Read as two groups, the first
+     * one asked would take the whole of it and divide the position while the second was refused —
+     * so which rule a reader heard about would follow the order the two walks happened to run in.
+     * As one group it is all of them or none, and the position is divided by neither.
+     */
+    @Test
+    void aBodyAndAClauseAboutOnePositionAreOneGroup() {
+        BehaviorSetStatements.Read read = readingsOf("""
+                behavior f : (code: String) -> Answer
+                    ensures Yes -> String.startsWith("JP", code)
+                let f (code) = if String.endsWith("X", code) then Yes else No
+                """,
+                ONE_RULE);
+
+        // What the allowance affords, said by the same allowance answering for each rule on its
+        // own. Without these the two below would hold of an allowance that affords nothing, and
+        // would say nothing about the grouping they are here for.
+        assertEquals(1, readingsOf("""
+                behavior f : (code: String) -> Answer
+                    ensures Yes -> String.startsWith("JP", code)
+                let f (code) = Yes
+                """, ONE_RULE).statements().size(),
+                "the allowance affords the clause on its own");
+        assertEquals(1, readingsOf("""
+                behavior f : (code: String) -> Answer
+                let f (code) = if String.endsWith("X", code) then Yes else No
+                """, ONE_RULE).statements().size(),
+                "and the body's rule on its own");
+
+        assertEquals(List.of(), read.statements(), "neither rule divides the position");
+        assertEquals(List.of(new BlockReason.BehaviorDistinctionsTooCostly(),
+                        new BlockReason.BehaviorDistinctionsTooCostly()),
+                read.blocked().stream().map(ClassingBlocker::why).toList(),
+                "and both are answered for as the position's distinctions not being built");
+    }
+
 
     /**
      * A rule every value satisfies divides nothing, and is said to.
@@ -100,12 +192,12 @@ class WhatABehaviorsRuleAboutItsStringsDividesAPositionIntoTest {
      */
     @Test
     void aRuleEveryStringSatisfiesIsStillHandedOn() {
-        SetDivisions.Read read = readingsOf("""
+        BehaviorSetStatements.Read read = readingsOf("""
                 behavior f : (code: String) -> Answer
                 let f (code) = if String.startsWith("", code) then Yes else No
                 """);
 
-        assertEquals(1, read.divided().size(), "the rule is read and handed on");
+        assertEquals(1, read.statements().size(), "the rule is read and handed on");
         assertEquals(List.of(), read.blocked(),
                 "and nothing about the position's classes is held open by it");
     }
@@ -129,12 +221,12 @@ class WhatABehaviorsRuleAboutItsStringsDividesAPositionIntoTest {
      */
     @Test
     void aRuleAboutAValueMadeFromThePositionDividesNoPosition() {
-        SetDivisions.Read read = readingsOf("""
+        BehaviorSetStatements.Read read = readingsOf("""
                 behavior f : (code: String) -> Answer
                 let f (code) = if String.startsWith("JP", String.trim(code)) then Yes else No
                 """);
 
-        assertEquals(List.of(), read.divided(), "no position is divided");
+        assertEquals(List.of(), read.statements(), "no position is divided");
         assertEquals(List.of(), read.blocked(),
                 "and nothing is filed, because the value it is about came from no position the"
                         + " reading can name");
@@ -150,7 +242,7 @@ class WhatABehaviorsRuleAboutItsStringsDividesAPositionIntoTest {
      */
     @Test
     void aPositionWhoseGroupCannotBeBuiltIsDividedByNoneOfItsRules() {
-        SetDivisions.Read read = readingsOf("""
+        BehaviorSetStatements.Read read = readingsOf("""
                 behavior f : (code: String) -> Answer
                 let f (code) =
                     if String.startsWith("JP", code) then Yes
@@ -160,7 +252,7 @@ class WhatABehaviorsRuleAboutItsStringsDividesAPositionIntoTest {
                 // refused where reading each of them was fine.
                 new PatternPlan.Budget(1, 1));
 
-        assertEquals(List.of(), read.divided(), "neither rule divides the position");
+        assertEquals(List.of(), read.statements(), "neither rule divides the position");
         assertEquals(List.of(new BlockReason.BehaviorDistinctionsTooCostly(),
                         new BlockReason.BehaviorDistinctionsTooCostly()),
                 read.blocked().stream().map(ClassingBlocker::why).toList(),
@@ -184,43 +276,43 @@ class WhatABehaviorsRuleAboutItsStringsDividesAPositionIntoTest {
     void whereTheAllowanceRunsOutComposingTheRulesAreStillAnsweredFor() {
         // Read under an allowance that affords the rule's two sides, so this stage gets as far as
         // handing over a statement about the position.
-        SetDivisions.Read read = readingsOf("""
+        BehaviorSetStatements.Read read = readingsOf("""
                 behavior f : (code: String) -> Answer
                 let f (code) = if String.matches("[a-z]+", code) then Yes else No
                 """, new PatternPlan.Budget(100, 100));
-        assertEquals(1, read.divided().size(), "the rule was read and both its sides were built");
+        assertEquals(1, read.statements().size(), "the rule was read and both its sides were built");
         assertEquals(List.of(), read.blocked(), "so nothing was held open before this point");
 
         // And composed under one that does not afford meeting them with what the position holds.
         Allowance<NumericTerm.FromOnePosition> spent =
                 Allowance.of(new PatternPlan.Budget(1, 1));
-        Classing.Result answered = Classing.of(read.divided().get(0).at(), read.divided(),
+        Classing.Result answered = Classing.of(read.statements().get(0).at(), read.statements(),
                 List.of(), new souther.compiler.check.Carrier.Text(),
                 // A position whose own declarations leave it a language, which is what an
                 // `invariant String.matches(...)` leaves. Meeting a rule with it is machine work,
                 // and that is the work this allowance cannot afford.
-                ((PartitionEvidence.BySet) read.divided().get(0)).states().whenTrue(),
+                ((PartitionEvidence.BySet) read.statements().get(0)).states().whenTrue(),
                 spent, place -> null);
 
         assertInstanceOf(Classing.Classed.NotComposed.class, answered.classed(),
                 "the position has no classes");
-        assertEquals(read.divided().size(), answered.forEach().size(),
+        assertEquals(read.statements().size(), answered.forEach().size(),
                 "and every rule that reached here is answered for, which is what the account that"
                         + " follows is owed: " + answered.forEach());
     }
 
     /** The one division the model under test states. */
-    private static SetStatement divisionIn(SetDivisions.Read read) {
-        assertEquals(1, read.divided().size(), "the model under test states one division");
-        return ((PartitionEvidence.BySet) read.divided().get(0)).states();
+    private static SetStatement divisionIn(BehaviorSetStatements.Read read) {
+        assertEquals(1, read.statements().size(), "the model under test states one division");
+        return ((PartitionEvidence.BySet) read.statements().get(0)).states();
     }
 
-    private static SetDivisions.Read readingsOf(String behavior) {
+    private static BehaviorSetStatements.Read readingsOf(String behavior) {
         return readingsOf(behavior, PatternPlan.Budget.OF_BEHAVIOR_DISTINCTIONS);
     }
 
     /** What {@code behavior}'s rules about its strings divide, built under {@code budget}. */
-    private static SetDivisions.Read readingsOf(String behavior, PatternPlan.Budget budget) {
+    private static BehaviorSetStatements.Read readingsOf(String behavior, PatternPlan.Budget budget) {
         String source = """
                 module demo
 
@@ -238,12 +330,14 @@ class WhatABehaviorsRuleAboutItsStringsDividesAPositionIntoTest {
         String module = compilation.modules().get(0);
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
         AnalysisBody body = checked.analysisBodies().get("f");
-        assertNotNull(body, "the behavior has a body for the analysis to read");
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         InputDomain inputs = compilation.db().ask(new Adequacy.Inputs(module)).value().get("f");
-        PredicateReadings read = PredicateReadings.of("f", body, inputs.reading(rules),
+        assertNotNull(inputs, "the behavior under test is the one named");
+        StatedContract stated =
+                compilation.db().ask(new Bodies.StatedContracts(module)).value().get("f");
+        PredicateReadings read = PredicateReadings.of("f", body, stated, inputs.reading(rules),
                 inputs.parameterReads(), checked.elementBindings().get("f"));
         Allowance<NumericTerm.FromOnePosition> allowance = Allowance.of(budget);
-        return SetDivisions.of(read, rules.symbols(), allowance);
+        return BehaviorSetStatements.of(read, rules.symbols(), allowance);
     }
 }

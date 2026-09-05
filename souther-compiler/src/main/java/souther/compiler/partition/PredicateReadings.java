@@ -5,12 +5,14 @@ import souther.compiler.check.ElementBindings;
 import souther.compiler.check.PredicateStatement;
 import souther.compiler.check.RuleCitation;
 import souther.compiler.check.RuleRef;
+import souther.compiler.check.StatedContract;
 import souther.compiler.check.StringPredicates;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.diag.Citation;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
+import souther.compiler.semantics.ConditionJoin;
 
 import souther.compiler.types.BindingId;
 
@@ -101,12 +103,94 @@ record PredicateReadings(List<Reading> predicates) {
      * be handed the emitted body's reading and the first rule about a value an operation made would
      * come back as this compiler having failed to expand something.
      */
-    static PredicateReadings of(String behavior, AnalysisBody body, InputReading read,
-                                Map<BindingId, String> parameters, ElementBindings elements) {
-        InputReads reads = InputReads.ofParametersWhereCallsStand(parameters, elements);
+    static PredicateReadings of(String behavior, AnalysisBody body, StatedContract stated,
+                                InputReading read, Map<BindingId, String> parameters,
+                                ElementBindings elements) {
         List<Reading> found = new ArrayList<>();
-        walk(body.core(), behavior, read, reads, LiveFlow.of(body.core()), true, found);
+        if (body != null) {
+            walk(body.core(), behavior, read,
+                    InputReads.ofParametersWhereCallsStand(parameters, elements),
+                    LiveFlow.of(body.core()), true, found);
+        }
+        // And what the behavior states about its own answer, which is the same kind of rule written
+        // somewhere else. Two walks and one list: a body and an `ensures` may write a rule about one
+        // position, and what that position is divided into is what they come to between them — so
+        // they meet before anything is built, and not in two groups a term is measured by twice.
+        //
+        // The walks are apart because what counts as a rule differs. A body states one wherever it
+        // computes something it reads; a clause states its own and those of both sides of every
+        // `&&` above them, and neither side of an `||` states what the rule states. That is each
+        // reader's own answer, and what a predicate means is neither's.
+        if (stated != null && !stated.isEmpty()) {
+            InputReads reads = InputReads.ofWhatIsDeclared(
+                    EnsuresThresholds.rootsOf(stated.params()));
+            for (StatedContract.StatedRule rule : stated.rules()) {
+                for (StatedContract.Conjunct conjunct : rule.conjuncts()) {
+                    Core one = conjunct.stated().orNull();
+                    if (one != null) {
+                        stated(one, behavior, read, reads, found);
+                    }
+                }
+            }
+        }
         return new PredicateReadings(found);
+    }
+
+    /**
+     * The predicates a clause states outright: its own, and those of both sides of every {@code &&}
+     * above them.
+     *
+     * <p>The same descent {@link EnsuresThresholds} makes for the comparisons a clause states, and
+     * for the same reasons. Nothing below anything else: a disjunct holds where the other one does
+     * not, and a call's argument is not what the call comes to — so a set told from the rest by one
+     * of those is not one the rule tells from the rest.
+     */
+    private static void stated(Core e, String behavior, InputReading read, InputReads reads,
+                               List<Reading> out) {
+        // Through what a `let` binds, which is not a choice: what the expression comes to is its
+        // body. This is the shape a helper called from a clause arrives in.
+        if (e instanceof Core.LetIn let) {
+            stated(let.body(), behavior, read, reads.and(let.binder(), let.value()), out);
+            return;
+        }
+        if (e instanceof Core.Binary binary) {
+            ConditionJoin joined = ConditionJoin.of(binary.op()).orElse(null);
+            if (joined == ConditionJoin.BOTH) {
+                stated(binary.left(), behavior, read, reads, out);
+                stated(binary.right(), behavior, read, reads, out);
+            }
+            return;   // and an `||` states neither of its sides
+        }
+        found(e, behavior, read, reads, out);
+    }
+
+    /**
+     * One predicate, wherever a walk met it.
+     *
+     * <p>The one crossing from a node to what it states, so that a rule written in a body and one
+     * written in an {@code ensures} come back as the same thing. What differs between the two is
+     * which nodes a walk reaches, which is each walk's own answer and is above.
+     *
+     * <p>The text an author wrote is reached through the names in force here, which is what a walk
+     * holds and the table does not. Handed a fold of its own, the table would report a rule under
+     * {@code let prefix = "JP"} as one whose argument nothing worked out while the walk had the
+     * answer.
+     */
+    private static void found(Core e, String behavior, InputReading read, InputReads reads,
+                              List<Reading> out) {
+        if (!(e instanceof Core.PreservedCall call) || !call.origin().isWritten()) {
+            return;
+        }
+        Symbols symbols = read.symbols();
+        StringPredicates.Stated stated =
+                StringPredicates.statedBy(call, symbols, at -> reads.writtenStringOf(at, symbols));
+        if (stated != null) {
+            out.add(new Reading(
+                    new PredicateOrigin(new RuleRef.Predicate(behavior, call.origin()),
+                            new PredicateOccurrence(out.size()),
+                            new RuleCitation.WrittenAt(Citation.of(call.pos()))),
+                    stated, reads));
+        }
     }
 
     /**
@@ -116,21 +200,8 @@ record PredicateReadings(List<Reading> predicates) {
      */
     private static void walk(Core e, String behavior, InputReading read, InputReads reads,
                              LiveFlow flow, boolean live, List<Reading> out) {
-        Symbols symbols = read.symbols();
-        if (live && e instanceof Core.PreservedCall call && call.origin().isWritten()) {
-            // The text an author wrote is reached through the names in force here, which is what
-            // this walk holds and the table does not. Handed a fold of its own, the table would
-            // report a rule under `let prefix = "JP"` as one whose argument nothing worked out
-            // while this walk had the answer.
-            StringPredicates.Stated stated =
-                    StringPredicates.statedBy(call, symbols, at -> reads.writtenStringOf(at, symbols));
-            if (stated != null) {
-                out.add(new Reading(
-                        new PredicateOrigin(new RuleRef.Predicate(behavior, call.origin()),
-                                new PredicateOccurrence(out.size()),
-                                new RuleCitation.WrittenAt(Citation.of(call.pos()))),
-                        stated, reads));
-            }
+        if (live) {
+            found(e, behavior, read, reads, out);
         }
         switch (e) {
             // What a `let` computes is read on the way to the answer only where the name is read;
@@ -148,8 +219,8 @@ record PredicateReadings(List<Reading> predicates) {
             case Core.Match match -> {
                 walk(match.scrutinee(), behavior, read, reads, flow, live, out);
                 for (Core.Case arm : match.cases()) {
-                    walk(arm.body(), behavior, read, reads.insideArm(match, arm, symbols), flow,
-                            live, out);
+                    walk(arm.body(), behavior, read, reads.insideArm(match, arm, read.symbols()),
+                            flow, live, out);
                 }
             }
             default -> Core.forEachChild(e, child ->

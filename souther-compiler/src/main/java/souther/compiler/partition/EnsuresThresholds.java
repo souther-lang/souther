@@ -369,7 +369,7 @@ public final class EnsuresThresholds {
      * so a clause of an injected behavior draws its lines like any other, and there is no body for
      * a reading to have taken them from.
      */
-    private static Map<BindingId, String> rootsOf(List<Contract.Param> params) {
+    static Map<BindingId, String> rootsOf(List<Contract.Param> params) {
         Map<BindingId, String> roots = new LinkedHashMap<>();
         for (Contract.Param param : params) {
             roots.putIfAbsent(param.binding(), param.name());
