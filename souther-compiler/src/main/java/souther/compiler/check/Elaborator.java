@@ -17,7 +17,7 @@ import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
-import souther.compiler.types.CoverageOrigin;
+import souther.compiler.types.SourceConstructOrigin;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
@@ -1504,7 +1504,7 @@ public final class Elaborator {
         // as is a call; what an author wrote there is a name, so there is no application of this
         // source for it to be.
         return new Core.PreservedCall(settled.declaring(), List.of(),
-                CoverageOrigin.unwritten(), settled.result(), pos);
+                SourceConstructOrigin.unwritten(), settled.result(), pos);
     }
 
     /**

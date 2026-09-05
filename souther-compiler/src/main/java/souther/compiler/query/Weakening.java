@@ -4,7 +4,7 @@ import souther.compiler.coverage.ArmProbe;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.RunSensitivity;
 import souther.compiler.partition.ClosureGap;
-import souther.compiler.types.CoverageOrigin;
+import souther.compiler.types.SourceConstructOrigin;
 
 /**
  * One thing that leaves a measurement weaker than it looks.
@@ -266,10 +266,10 @@ public sealed interface Weakening {
      * Two decisions of one body could not be told apart, so the arms counted as one arm are more
      * than one.
      *
-     * <p>What the numbers then hold is more than they say. {@link CoverageOrigin} names the fork
+     * <p>What the numbers then hold is more than they say. {@link SourceConstructOrigin} names the fork
      * within its module, so this needs nothing beside it to be a fact.
      */
-    record ArmsUnsettled(CoverageOrigin fork) implements Weakening {
+    record ArmsUnsettled(SourceConstructOrigin fork) implements Weakening {
 
         /** Two decisions that could not be told apart are not told apart by allowing more. */
         @Override

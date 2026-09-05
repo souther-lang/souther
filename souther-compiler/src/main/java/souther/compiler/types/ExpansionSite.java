@@ -20,11 +20,11 @@ public sealed interface ExpansionSite {
      * An application the source wrote.
      *
      * <p>The construct, which every application takes when it is read
-     * ({@link CoverageOrigin}) and carries through every copy of it. A helper holding a call,
+     * ({@link SourceConstructOrigin}) and carries through every copy of it. A helper holding a call,
      * expanded at two of its own call sites, has that one call at both — and the two are told apart
      * by what they are inside.
      */
-    record Written(CoverageOrigin call) implements ExpansionSite {
+    record Written(SourceConstructOrigin call) implements ExpansionSite {
 
         public Written {
             if (call == null || !call.isWritten()) {

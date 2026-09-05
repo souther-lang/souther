@@ -10,7 +10,7 @@ import java.util.Optional;
  * What one way through a coverage construct means, said in the source's own terms.
  *
  * <p>Half of an answer. Which construct this is an outcome of is {@link CoverageSites.Site}'s other
- * half, read off the {@link souther.compiler.types.CoverageOrigin} its obligation carries, and the
+ * half, read off the {@link souther.compiler.types.SourceConstructOrigin} its obligation carries, and the
  * meaning is the two together: a condition holding is {@code then} under an {@code if}, the rest of
  * the block under a {@code guard}, and an element kept under a comprehension. The construct is not
  * repeated here, so nothing can say one construct in one component and another in the next.

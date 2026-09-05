@@ -2467,7 +2467,7 @@ public final class Bodies {
             // One reading for the module. Every behavior's check walks the same declarations, so the
             // entries agree wherever two of them wrote one fork; kept as one map so a reader asking
             // about a fork does not have to know which behavior's check happened to reach it.
-            Map<souther.compiler.types.CoverageOrigin,
+            Map<souther.compiler.types.SourceConstructOrigin,
                     souther.compiler.coverage.DecisionSource> decisions = new LinkedHashMap<>();
             Map<souther.compiler.types.BindingOwner,
                     souther.compiler.coverage.SuppliedRules.Handed> supplied = new LinkedHashMap<>();

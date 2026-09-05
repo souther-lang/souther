@@ -5,7 +5,7 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.core.Core;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
-import souther.compiler.types.CoverageOrigin;
+import souther.compiler.types.SourceConstructOrigin;
 
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -66,9 +66,9 @@ class ACopiedForkKeepsTheOriginItWasWrittenWithTest {
 
         // The behavior's own `match side`, and one copy of `match band` per call of `rate`.
         assertEquals(3, matches.size(), "the expansion put a copy of the helper's fork at each call");
-        CoverageOrigin own = matches.get(0).origin();
-        CoverageOrigin first = matches.get(1).origin();
-        CoverageOrigin second = matches.get(2).origin();
+        SourceConstructOrigin own = matches.get(0).origin();
+        SourceConstructOrigin first = matches.get(1).origin();
+        SourceConstructOrigin second = matches.get(2).origin();
 
         assertEquals(first, second,
                 "one `match` was written, so the two copies of it are one obligation");
@@ -143,7 +143,7 @@ class ACopiedForkKeepsTheOriginItWasWrittenWithTest {
 
         List<Core.Match> matches = matchesIn(body);
         assertEquals(3, matches.size());
-        Set<CoverageOrigin> origins = new LinkedHashSet<>();
+        Set<SourceConstructOrigin> origins = new LinkedHashSet<>();
         for (Core.Match m : matches) {
             origins.add(m.origin());
         }

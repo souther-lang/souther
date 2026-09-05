@@ -15,7 +15,7 @@ package souther.compiler.types;
  * reference is. A place is where to underline a complaint, which is a different contract that has
  * already parted company with identity elsewhere — a body copied into another module carries the
  * place it was written at. So identity is minted where the source is read and carried from there,
- * which is what {@link CoverageOrigin} already does for the constructs a source writes.
+ * which is what {@link SourceConstructOrigin} already does for the constructs a source writes.
  *
  * <p><b>Not a name anything outside one compilation can be matched by.</b> {@code ordinal} is the
  * builder's own count over the source it is reading. What identity needs is that the numbering be a

@@ -1,8 +1,8 @@
 package souther.compiler.ast;
 
 import souther.compiler.diag.SourcePos;
-import souther.compiler.types.CoverageConstruct;
-import souther.compiler.types.CoverageOrigin;
+import souther.compiler.types.SourceConstruct;
+import souther.compiler.types.SourceConstructOrigin;
 
 import org.junit.jupiter.api.Test;
 
@@ -56,6 +56,6 @@ class AForkIsOneOfTheGuardsWrittenTest {
             written.add(new Hir.BoolLit(true, AT, null));
         }
         return new Hir.ListComp(new Hir.IntLit(1, AT, null), written,
-                CoverageOrigin.written("m", 0, CoverageConstruct.COMPREHENSION), AT, null);
+                SourceConstructOrigin.written("m", 0, SourceConstruct.COMPREHENSION), AT, null);
     }
 }

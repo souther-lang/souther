@@ -10,8 +10,8 @@ import souther.compiler.coverage.SourceOutcome;
 import souther.compiler.diag.Citation;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.source.SourceId;
-import souther.compiler.types.CoverageConstruct;
-import souther.compiler.types.CoverageOrigin;
+import souther.compiler.types.SourceConstruct;
+import souther.compiler.types.SourceConstructOrigin;
 
 import java.util.List;
 import java.util.Map;
@@ -38,15 +38,15 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class AGapIsRefusedOverByWhatSettledItTest {
 
-    private static final CoverageOrigin SETTLED =
-            CoverageOrigin.written("m", 0, CoverageConstruct.IF);
-    private static final CoverageOrigin UNSETTLED =
-            CoverageOrigin.written("m", 1, CoverageConstruct.IF);
+    private static final SourceConstructOrigin SETTLED =
+            SourceConstructOrigin.written("m", 0, SourceConstruct.IF);
+    private static final SourceConstructOrigin UNSETTLED =
+            SourceConstructOrigin.written("m", 1, SourceConstruct.IF);
 
     /** Four places of one numbering, so that arms put in one list are addresses of one. */
     private static final Map<Integer, ArmProbe> PLACES = Numberings.arms(4);
 
-    private static CoverageSites.ArmSite arm(CoverageOrigin fork, int index, DecidedBy decided) {
+    private static CoverageSites.ArmSite arm(SourceConstructOrigin fork, int index, DecidedBy decided) {
         return new CoverageSites.ArmSite("b",
                 new SourceOutcome.Held(new SourceOutcome.HeldBy.Condition()),
                 Citation.of(new SourcePos(1, 1, new SourceId("0"))),

@@ -111,8 +111,8 @@ final class AReportOfOneBorder {
      */
     static Border aBorderABodyDrew() {
         LineOrigin origin = new LineOrigin.ComparisonOrigin(
-                new RuleRef.Comparison("weigh", new souther.compiler.types.CoverageOrigin(
-                        "example.rate", 2, 0, souther.compiler.types.CoverageConstruct.BINARY)),
+                new RuleRef.Comparison("weigh", new souther.compiler.types.SourceConstructOrigin(
+                        "example.rate", 2, 0, souther.compiler.types.SourceConstruct.BINARY)),
                 new LineOrigin.ComparisonOrigin.Read(
                         new souther.compiler.coverage.ComparisonOccurrence(
                                 "example.rate", "weigh", 0),

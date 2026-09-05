@@ -9,7 +9,7 @@ import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
-import souther.compiler.types.CoverageOrigin;
+import souther.compiler.types.SourceConstructOrigin;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
@@ -52,7 +52,7 @@ class ACallStandsWithTheArgumentsItsDeclarationTakesTest {
     void aCallOfFewerIsRefused() {
         IllegalStateException e = assertThrows(IllegalStateException.class,
                 () -> new Core.PreservedCall(KeptCalls.declared(LENGTH), List.of(),
-                        CoverageOrigin.unwritten(), Type.INT, POS));
+                        SourceConstructOrigin.unwritten(), Type.INT, POS));
 
         assertTrue(e.getMessage().contains("List.length"), e.getMessage());
     }
@@ -64,7 +64,7 @@ class ACallStandsWithTheArgumentsItsDeclarationTakesTest {
 
         assertThrows(IllegalStateException.class,
                 () -> new Core.PreservedCall(KeptCalls.declared(LENGTH), two,
-                        CoverageOrigin.unwritten(), Type.INT, POS));
+                        SourceConstructOrigin.unwritten(), Type.INT, POS));
     }
 
     /**
@@ -78,7 +78,7 @@ class ACallStandsWithTheArgumentsItsDeclarationTakesTest {
     void andGoesOnStandingWithThemAfterTheCallerHasMovedOn() {
         List<Core> handed = new ArrayList<>(KeptCalls.to(LENGTH, POS).args());
         Core.PreservedCall call = new Core.PreservedCall(KeptCalls.declared(LENGTH), handed,
-                CoverageOrigin.unwritten(), Type.INT, POS);
+                SourceConstructOrigin.unwritten(), Type.INT, POS);
 
         handed.add(new Core.Int(0, Type.INT, POS));
 
@@ -97,10 +97,10 @@ class ACallStandsWithTheArgumentsItsDeclarationTakesTest {
         ValueName value = new ValueName.Helper("demo", "half");
 
         assertEquals(0, new Core.PreservedCall(KeptCalls.settledValue(value, Type.INT), List.of(),
-                CoverageOrigin.unwritten(), Type.INT, POS).args().size());
+                SourceConstructOrigin.unwritten(), Type.INT, POS).args().size());
         assertThrows(IllegalStateException.class,
                 () -> new Core.PreservedCall(KeptCalls.settledValue(value, Type.INT),
-                        List.of(new Core.Int(0, Type.INT, POS)), CoverageOrigin.unwritten(),
+                        List.of(new Core.Int(0, Type.INT, POS)), SourceConstructOrigin.unwritten(),
                         Type.INT, POS));
     }
 

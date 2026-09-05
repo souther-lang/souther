@@ -1,6 +1,6 @@
 package souther.compiler.coverage;
 
-import souther.compiler.types.CoverageConstruct;
+import souther.compiler.types.SourceConstruct;
 
 /**
  * What a reader is told one outcome of one construct is.
@@ -67,7 +67,7 @@ public enum OutcomeName {
      *                                  a pair nothing can be written as is a walk that has put an
      *                                  outcome on the wrong construct
      */
-    public static OutcomeName of(CoverageConstruct construct, SourceOutcome outcome) {
+    public static OutcomeName of(SourceConstruct construct, SourceOutcome outcome) {
         return switch (outcome) {
             case SourceOutcome.Held(SourceOutcome.HeldBy.Condition _) -> switch (construct) {
                 case IF -> THEN;
@@ -111,7 +111,7 @@ public enum OutcomeName {
         };
     }
 
-    private static OutcomeName refuse(CoverageConstruct construct, SourceOutcome outcome) {
+    private static OutcomeName refuse(SourceConstruct construct, SourceOutcome outcome) {
         throw new IllegalArgumentException(
                 "no construct of the language has this outcome: " + construct + " with " + outcome);
     }

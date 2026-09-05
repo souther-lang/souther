@@ -60,7 +60,7 @@ class WhatThisGrammarReadsIsReadWithoutACallersLeafTest {
     private static Core computed() {
         return new Core.Binary(souther.compiler.types.BinOp.ADD,
                 new Core.Int(99, Type.INT, SOMEWHERE), new Core.Int(1, Type.INT, SOMEWHERE),
-                souther.compiler.types.CoverageOrigin.unwritten(), Type.INT, SOMEWHERE);
+                souther.compiler.types.SourceConstructOrigin.unwritten(), Type.INT, SOMEWHERE);
     }
 
     /** A newtype's construction is the value it wraps, and the grammar says so. */

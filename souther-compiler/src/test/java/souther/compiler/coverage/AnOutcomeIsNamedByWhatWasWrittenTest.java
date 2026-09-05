@@ -5,8 +5,8 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.core.Core;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
-import souther.compiler.types.CoverageConstruct;
-import souther.compiler.types.CoverageOrigin;
+import souther.compiler.types.SourceConstruct;
+import souther.compiler.types.SourceConstructOrigin;
 
 import java.util.List;
 import java.util.Map;
@@ -164,9 +164,9 @@ class AnOutcomeIsNamedByWhatWasWrittenTest {
     /** A guard of a comprehension is a fork of that comprehension, and not of something else. */
     @Test
     void aLoweredForkKeepsTheConstructItWasLoweredFrom() {
-        CoverageOrigin written = CoverageOrigin.written("m", 3, CoverageConstruct.COMPREHENSION);
+        SourceConstructOrigin written = SourceConstructOrigin.written("m", 3, SourceConstruct.COMPREHENSION);
 
-        assertEquals(CoverageConstruct.COMPREHENSION, written.lowered(1).kind());
+        assertEquals(SourceConstruct.COMPREHENSION, written.lowered(1).kind());
     }
 
     /**
@@ -188,10 +188,10 @@ class AnOutcomeIsNamedByWhatWasWrittenTest {
                 let total (a, b) = if a + b >= 10 && a > 0 then a * b else a - b
                 """;
 
-        List<CoverageConstruct> written = binariesIn(source);
+        List<SourceConstruct> written = binariesIn(source);
         assertEquals(6, written.size(), () -> "four arithmetic, two comparisons, one `&&`: "
                 + written);
-        assertTrue(written.stream().allMatch(k -> k == CoverageConstruct.BINARY),
+        assertTrue(written.stream().allMatch(k -> k == SourceConstruct.BINARY),
                 () -> "what the source wrote is a binary expression, whichever operator: " + written);
 
         // And two of the six are sites: the comparisons. The `&&` is walked into rather than
@@ -213,19 +213,19 @@ class AnOutcomeIsNamedByWhatWasWrittenTest {
      */
     @Test
     void everyPairTheLanguageHasIsNamed() {
-        assertEquals(OutcomeName.THEN, OutcomeName.of(CoverageConstruct.IF, held()));
-        assertEquals(OutcomeName.ELSE, OutcomeName.of(CoverageConstruct.IF, failed()));
-        assertEquals(OutcomeName.CONTINUED, OutcomeName.of(CoverageConstruct.GUARD, held()));
-        assertEquals(OutcomeName.ELSE, OutcomeName.of(CoverageConstruct.GUARD, failed()));
-        assertEquals(OutcomeName.KEPT, OutcomeName.of(CoverageConstruct.COMPREHENSION, held()));
-        assertEquals(OutcomeName.DROPPED, OutcomeName.of(CoverageConstruct.COMPREHENSION, failed()));
-        assertEquals(OutcomeName.CONSTRUCTED, OutcomeName.of(CoverageConstruct.IF, built()));
-        assertEquals(OutcomeName.DEPARTURE, OutcomeName.of(CoverageConstruct.IF, refused()));
-        assertEquals(OutcomeName.CONSTRUCTED, OutcomeName.of(CoverageConstruct.GUARD, built()));
-        assertEquals(OutcomeName.DEPARTURE, OutcomeName.of(CoverageConstruct.GUARD, refused()));
-        assertEquals(OutcomeName.CASE, OutcomeName.of(CoverageConstruct.MATCH,
+        assertEquals(OutcomeName.THEN, OutcomeName.of(SourceConstruct.IF, held()));
+        assertEquals(OutcomeName.ELSE, OutcomeName.of(SourceConstruct.IF, failed()));
+        assertEquals(OutcomeName.CONTINUED, OutcomeName.of(SourceConstruct.GUARD, held()));
+        assertEquals(OutcomeName.ELSE, OutcomeName.of(SourceConstruct.GUARD, failed()));
+        assertEquals(OutcomeName.KEPT, OutcomeName.of(SourceConstruct.COMPREHENSION, held()));
+        assertEquals(OutcomeName.DROPPED, OutcomeName.of(SourceConstruct.COMPREHENSION, failed()));
+        assertEquals(OutcomeName.CONSTRUCTED, OutcomeName.of(SourceConstruct.IF, built()));
+        assertEquals(OutcomeName.DEPARTURE, OutcomeName.of(SourceConstruct.IF, refused()));
+        assertEquals(OutcomeName.CONSTRUCTED, OutcomeName.of(SourceConstruct.GUARD, built()));
+        assertEquals(OutcomeName.DEPARTURE, OutcomeName.of(SourceConstruct.GUARD, refused()));
+        assertEquals(OutcomeName.CASE, OutcomeName.of(SourceConstruct.MATCH,
                 new SourceOutcome.Matched(List.of())));
-        assertEquals(OutcomeName.COMPARISON, OutcomeName.of(CoverageConstruct.BINARY,
+        assertEquals(OutcomeName.COMPARISON, OutcomeName.of(SourceConstruct.BINARY,
                 new SourceOutcome.Compared(souther.compiler.types.BinOp.GE)));
     }
 
@@ -233,13 +233,13 @@ class AnOutcomeIsNamedByWhatWasWrittenTest {
     @Test
     void aPairTheLanguageDoesNotHaveIsRefused() {
         assertThrows(IllegalArgumentException.class,
-                () -> OutcomeName.of(CoverageConstruct.COMPREHENSION, built()));
+                () -> OutcomeName.of(SourceConstruct.COMPREHENSION, built()));
         assertThrows(IllegalArgumentException.class,
-                () -> OutcomeName.of(CoverageConstruct.MATCH, held()));
+                () -> OutcomeName.of(SourceConstruct.MATCH, held()));
         assertThrows(IllegalArgumentException.class,
-                () -> OutcomeName.of(CoverageConstruct.BINARY, failed()));
+                () -> OutcomeName.of(SourceConstruct.BINARY, failed()));
         assertThrows(IllegalArgumentException.class,
-                () -> OutcomeName.of(CoverageConstruct.NOT_WRITTEN, held()));
+                () -> OutcomeName.of(SourceConstruct.NOT_WRITTEN, held()));
     }
 
     /** And a site cannot be made holding one, which is where the two halves are first put together. */
@@ -247,7 +247,7 @@ class AnOutcomeIsNamedByWhatWasWrittenTest {
     void aSiteCannotHoldAPairTheLanguageDoesNotHave() {
         assertThrows(IllegalArgumentException.class, () -> new CoverageSites.ArmSite("b", built(),
                 null, Numberings.arm(1, 0), 0, new CoverageSites.Obligation("b",
-                        CoverageOrigin.written("m", 0, CoverageConstruct.COMPREHENSION), 0,
+                        SourceConstructOrigin.written("m", 0, SourceConstruct.COMPREHENSION), 0,
                         souther.compiler.coverage.DecidedBy.THE_DECLARATION)));
     }
 
@@ -259,7 +259,7 @@ class AnOutcomeIsNamedByWhatWasWrittenTest {
      */
     @Test
     void whatIsAnArmIsTheSameQuestionOnBothSidesOfTheProjection() {
-        for (CoverageConstruct construct : CoverageConstruct.values()) {
+        for (SourceConstruct construct : SourceConstruct.values()) {
             for (SourceOutcome outcome : List.of(held(), failed(), built(), refused(),
                     new SourceOutcome.Matched(List.of()),
                     new SourceOutcome.Compared(souther.compiler.types.BinOp.GE))) {
@@ -290,7 +290,7 @@ class AnOutcomeIsNamedByWhatWasWrittenTest {
         Core answer = new Core.Int(1, souther.compiler.types.Type.INT, at);
         Core fork = new Core.If(new Core.Bool(true, souther.compiler.types.Type.BOOL, at),
                 answer, new Core.Int(2, souther.compiler.types.Type.INT, at),
-                CoverageOrigin.unwritten(), souther.compiler.types.Type.INT, at, java.util.List.of());
+                SourceConstructOrigin.unwritten(), souther.compiler.types.Type.INT, at, java.util.List.of());
 
         IllegalStateException refused = assertThrows(IllegalStateException.class,
                 () -> CoverageSites.of(
@@ -306,9 +306,9 @@ class AnOutcomeIsNamedByWhatWasWrittenTest {
 
     @Test
     void anOriginSaysWhichConstructDrewTheLine() {
-        assertEquals(CoverageConstruct.IF, drewTheLine(AN_IF));
-        assertEquals(CoverageConstruct.GUARD, drewTheLine(A_GUARD));
-        assertEquals(CoverageConstruct.COMPREHENSION, drewTheLine(A_COMPREHENSION));
+        assertEquals(SourceConstruct.IF, drewTheLine(AN_IF));
+        assertEquals(SourceConstruct.GUARD, drewTheLine(A_GUARD));
+        assertEquals(SourceConstruct.COMPREHENSION, drewTheLine(A_COMPREHENSION));
     }
 
     // --- helpers ------------------------------------------------------------------------------------
@@ -340,7 +340,7 @@ class AnOutcomeIsNamedByWhatWasWrittenTest {
     }
 
     /** Which construct the line on this body's only fork was drawn in. */
-    private static CoverageConstruct drewTheLine(String source) {
+    private static SourceConstruct drewTheLine(String source) {
         CoverageSites.Plan plan = planOf(source);
         List<CoverageSites.GuardRef> guards = plan.guards();
         assertEquals(1, guards.size(), () -> "one fork, so one reference: " + guards);
@@ -348,13 +348,13 @@ class AnOutcomeIsNamedByWhatWasWrittenTest {
     }
 
     /** The construct every binary expression of this body was written as. */
-    private static List<CoverageConstruct> binariesIn(String source) {
-        List<CoverageConstruct> out = new java.util.ArrayList<>();
+    private static List<SourceConstruct> binariesIn(String source) {
+        List<SourceConstruct> out = new java.util.ArrayList<>();
         bodiesOf(source).values().forEach(body -> collectBinaries(body, out));
         return out;
     }
 
-    private static void collectBinaries(Core e, List<CoverageConstruct> out) {
+    private static void collectBinaries(Core e, List<SourceConstruct> out) {
         if (e instanceof Core.Binary binary) {
             out.add(binary.origin().kind());
         }

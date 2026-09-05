@@ -1,10 +1,10 @@
 package souther.compiler.types;
 
 /**
- * Which construct of the language a coverage obligation was written as.
+ * Which construct of the language the author wrote.
  *
- * <p>The other half of {@link CoverageOrigin}. That says which construct this is, so that copies of
- * one fork stay one obligation; this says what the author wrote there. Both are answers about the
+ * <p>The other half of {@link SourceConstructOrigin}. That says which construct this is, so that
+ * copies of one construct stay one; this says what was written there. Both are answers about the
  * source, and neither can be read off the tree that runs: {@code guard} is sugar for {@code if}
  * (ADR-0020), a list comprehension is rewritten before Core exists, and by the time coverage is
  * numbered one node stands for all three. A reader asking what to call the construct, or what one of
@@ -15,7 +15,7 @@ package souther.compiler.types;
  * rewrite between the AST and Core copies the origin it was given, so this arrives at a report
  * unchanged however many times a helper holding the construct was expanded.
  */
-public enum CoverageConstruct {
+public enum SourceConstruct {
 
     /** {@code if c then a else b}, and {@code if T(v) as x then a else …}. */
     IF,
@@ -32,7 +32,7 @@ public enum CoverageConstruct {
      * A list comprehension's guard — {@code [e | c]}.
      *
      * <p>One construct however many conditions it lists. Each becomes a fork of its own, derived
-     * from this one by {@link CoverageOrigin#lowered}, so the guards of one comprehension are told
+     * from this one by {@link SourceConstructOrigin#lowered}, so the guards of one comprehension are told
      * apart without any of them being taken for a construct the author wrote separately.
      */
     COMPREHENSION,
@@ -71,7 +71,7 @@ public enum CoverageConstruct {
     /**
      * No source wrote it.
      *
-     * <p>What {@link CoverageOrigin#unwritten} carries. A comparison rebuilt for an analysis is a
+     * <p>What {@link SourceConstructOrigin#unwritten} carries. A comparison rebuilt for an analysis is a
      * binary expression, and giving it {@link #BINARY} would make it a value that passes for a
      * coverage obligation — which is the thing that origin exists not to be. Named here so that a
      * switch needing a construct the author wrote has somewhere to refuse it.

@@ -7,7 +7,7 @@ import souther.compiler.diag.SourcePos;
 import souther.compiler.stdlib.Stdlib;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
-import souther.compiler.types.CoverageOrigin;
+import souther.compiler.types.SourceConstructOrigin;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
@@ -40,7 +40,7 @@ public final class KeptCalls {
     /** No source wrote a call a fixture composes, which is what these carry as their construct. A
      *  written one would be a number this fixture invented, standing for an application in a file
      *  nobody read. */
-    private static final CoverageOrigin UNWRITTEN = CoverageOrigin.unwritten();
+    private static final SourceConstructOrigin UNWRITTEN = SourceConstructOrigin.unwritten();
 
     /** A call to {@code operation} over {@code args}, answering {@code type}. */
     public static Core.PreservedCall to(ValueName.Stdlib.Operation operation, List<Core> args,

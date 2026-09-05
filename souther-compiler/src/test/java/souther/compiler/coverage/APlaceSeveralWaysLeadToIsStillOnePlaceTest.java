@@ -7,8 +7,8 @@ import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BinOp;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
-import souther.compiler.types.CoverageConstruct;
-import souther.compiler.types.CoverageOrigin;
+import souther.compiler.types.SourceConstruct;
+import souther.compiler.types.SourceConstructOrigin;
 import souther.compiler.types.Type;
 
 import java.util.LinkedHashMap;
@@ -36,8 +36,8 @@ class APlaceSeveralWaysLeadToIsStillOnePlaceTest {
 
     private static final SourcePos AT = new SourcePos(1, 1);
 
-    private static final CoverageOrigin FORK =
-            CoverageOrigin.written("demo", 0, CoverageConstruct.IF);
+    private static final SourceConstructOrigin FORK =
+            SourceConstructOrigin.written("demo", 0, SourceConstruct.IF);
 
     /** One fork standing in both sides of a comparison, which is two ways to one place. */
     private static Core sharedFork() {

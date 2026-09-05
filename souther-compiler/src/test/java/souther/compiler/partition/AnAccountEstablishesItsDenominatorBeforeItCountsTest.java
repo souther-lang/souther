@@ -103,8 +103,8 @@ class AnAccountEstablishesItsDenominatorBeforeItCountsTest {
      *  values, which is what the account may not be asked to do by name alone. */
     private static LineOrigin origin() {
         return new LineOrigin.ComparisonOrigin(
-                new RuleRef.Comparison("f", new souther.compiler.types.CoverageOrigin(
-                        "example.one", 2, 0, souther.compiler.types.CoverageConstruct.BINARY)),
+                new RuleRef.Comparison("f", new souther.compiler.types.SourceConstructOrigin(
+                        "example.one", 2, 0, souther.compiler.types.SourceConstruct.BINARY)),
                 new LineOrigin.ComparisonOrigin.Read(
                         new souther.compiler.coverage.ComparisonOccurrence("example.one", "f", 0),
                         new RuleCitation.WrittenAt(Citation.of(

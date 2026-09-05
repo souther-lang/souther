@@ -2,7 +2,7 @@ package souther.compiler.query;
 
 import souther.compiler.core.Core;
 import souther.compiler.types.BindingOwner;
-import souther.compiler.types.CoverageOrigin;
+import souther.compiler.types.SourceConstructOrigin;
 
 import org.junit.jupiter.api.Test;
 
@@ -60,12 +60,12 @@ class WhereAComparisonStandsIsNotWhatTellsItFromAnotherReadingTest {
     @Test
     void andWhereItStandsIsTwoPlaces() {
         Bodies.Elaborated checked = checked();
-        Map<CoverageOrigin, List<BindingOwner>> analysed =
+        Map<SourceConstructOrigin, List<BindingOwner>> analysed =
                 comparisonsIn(checked.analysisBodies().get("go").core());
-        Map<CoverageOrigin, List<BindingOwner>> emitted =
+        Map<SourceConstructOrigin, List<BindingOwner>> emitted =
                 comparisonsIn(checked.behaviorBodies().get("go"));
 
-        CoverageOrigin one = analysed.keySet().iterator().next();
+        SourceConstructOrigin one = analysed.keySet().iterator().next();
         assertNotEquals(analysed.get(one), emitted.get(one),
                 "the same comparison of the same model, standing in two different copy trees");
     }
@@ -80,11 +80,11 @@ class WhereAComparisonStandsIsNotWhatTellsItFromAnotherReadingTest {
     @Test
     void andTheDifferenceIsTheOperationsOwnBody() {
         Bodies.Elaborated checked = checked();
-        Map<CoverageOrigin, List<BindingOwner>> emitted =
+        Map<SourceConstructOrigin, List<BindingOwner>> emitted =
                 comparisonsIn(checked.behaviorBodies().get("go"));
-        Map<CoverageOrigin, List<BindingOwner>> analysed =
+        Map<SourceConstructOrigin, List<BindingOwner>> analysed =
                 comparisonsIn(checked.analysisBodies().get("go").core());
-        CoverageOrigin one = analysed.keySet().iterator().next();
+        SourceConstructOrigin one = analysed.keySet().iterator().next();
 
         assertEquals(List.of(), expandedIn(analysed.get(one), "map"),
                 "the analysis reads a tree where the operation stands, so nothing is inside it");
@@ -104,7 +104,7 @@ class WhereAComparisonStandsIsNotWhatTellsItFromAnotherReadingTest {
     @Test
     void andTheWalkFindsWhereItStands() {
         Bodies.Elaborated checked = checked();
-        Map<CoverageOrigin, List<BindingOwner>> analysed =
+        Map<SourceConstructOrigin, List<BindingOwner>> analysed =
                 comparisonsIn(checked.analysisBodies().get("go").core());
 
         assertEquals(1, analysed.size(), "the model under test writes one comparison");
@@ -128,14 +128,14 @@ class WhereAComparisonStandsIsNotWhatTellsItFromAnotherReadingTest {
      * <p>Read off the bindings because a comparison has none of its own: where it stands is the copy
      * it stands in, and what says which copy that is is what the names around it belong to.
      */
-    private static Map<CoverageOrigin, List<BindingOwner>> comparisonsIn(Core body) {
-        Map<CoverageOrigin, List<BindingOwner>> out = new LinkedHashMap<>();
+    private static Map<SourceConstructOrigin, List<BindingOwner>> comparisonsIn(Core body) {
+        Map<SourceConstructOrigin, List<BindingOwner>> out = new LinkedHashMap<>();
         walk(body, null, out);
         return out;
     }
 
     private static void walk(Core e, BindingOwner within,
-                             Map<CoverageOrigin, List<BindingOwner>> out) {
+                             Map<SourceConstructOrigin, List<BindingOwner>> out) {
         BindingOwner here = ownerOf(e, within);
         if (e instanceof Core.Binary it && it.origin() != null && it.origin().isWritten()) {
             out.put(it.origin(), ancestryOf(here));

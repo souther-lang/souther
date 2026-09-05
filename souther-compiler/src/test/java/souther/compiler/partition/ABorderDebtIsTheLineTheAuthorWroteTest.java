@@ -226,8 +226,8 @@ class ABorderDebtIsTheLineTheAuthorWroteTest {
     private static LineOrigin readAt(int occurrence) {
         souther.compiler.check.RuleRef.Comparison rule =
                 new souther.compiler.check.RuleRef.Comparison("twice",
-                        new souther.compiler.types.CoverageOrigin("example.banding", 2, 0,
-                                souther.compiler.types.CoverageConstruct.BINARY));
+                        new souther.compiler.types.SourceConstructOrigin("example.banding", 2, 0,
+                                souther.compiler.types.SourceConstruct.BINARY));
         return new LineOrigin.ComparisonOrigin(rule,
                 new LineOrigin.ComparisonOrigin.Read(
                         new souther.compiler.coverage.ComparisonOccurrence(

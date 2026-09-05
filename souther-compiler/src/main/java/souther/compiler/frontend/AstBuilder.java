@@ -3,8 +3,8 @@ package souther.compiler.frontend;
 import souther.compiler.diag.msg.Reported;
 import souther.compiler.diag.msg.Supporting;
 import souther.compiler.ast.Ast;
-import souther.compiler.types.CoverageConstruct;
-import souther.compiler.types.CoverageOrigin;
+import souther.compiler.types.SourceConstruct;
+import souther.compiler.types.SourceConstructOrigin;
 import souther.compiler.types.SourceReferenceOrigin;
 import souther.compiler.ast.StructuralCost;
 import souther.compiler.ast.WrittenName;
@@ -57,7 +57,7 @@ public final class AstBuilder {
     private int spreadCounter = 0;
     /**
      * How many coverage-bearing constructs this source has been read to hold, which is what numbers
-     * the next one ({@link CoverageOrigin}).
+     * the next one ({@link SourceConstructOrigin}).
      *
      * <p>One number per construct the author wrote, not per fork object built. An {@code if} that is
      * written as an attempted construction is one construct however many of the three shapes below it
@@ -125,8 +125,8 @@ public final class AstBuilder {
      * arithmetic among the binary expressions, and it is a rule about the strings at a position —
      * which owes rows for the classes it divides a position into and has no run to record.
      */
-    private CoverageOrigin construct(CoverageConstruct kind) {
-        return CoverageOrigin.written(moduleName, constructCounter++, kind);
+    private SourceConstructOrigin construct(SourceConstruct kind) {
+        return SourceConstructOrigin.written(moduleName, constructCounter++, kind);
     }
 
     /** Which block of this source the next one is. Taken here for the same reason the construct's
@@ -878,7 +878,7 @@ public final class AstBuilder {
                 args.add(expr(arg));
             }
         });
-        return new Ast.Apply(expr(callee), args, construct(CoverageConstruct.CALL), pos(callee),
+        return new Ast.Apply(expr(callee), args, construct(SourceConstruct.CALL), pos(callee),
                 region(n));
     }
 
@@ -888,7 +888,7 @@ public final class AstBuilder {
         // Anchored at the operator, which is what a report about the operation is about, and written
         // over both operands, which is what the operation is.
         return new Ast.Binary(binOp(op.kind()), expr(operands.get(0)), expr(operands.get(1)),
-                construct(CoverageConstruct.BINARY), posOf(op), region(n));
+                construct(SourceConstruct.BINARY), posOf(op), region(n));
     }
 
     private static Ast.BinOp binOp(SyntaxKind k) {
@@ -929,14 +929,14 @@ public final class AstBuilder {
             return new Ast.Apply(c.function(), args, c.origin(), c.pos(), written);
         }
         if (right instanceof Ast.Var v) {
-            return new Ast.Apply(v, List.of(left), construct(CoverageConstruct.CALL), v.pos(),
+            return new Ast.Apply(v, List.of(left), construct(SourceConstruct.CALL), v.pos(),
                     written);
         }
         // `e |> Mod.name`: the read is handed over as the callee it is, rather than reassembled
         // into a name here. Whether it is a namespace member or a field taken off a binding is
         // resolution's to say, and it says it once, for this and for `Mod.name(e)` alike.
         if (right instanceof Ast.FieldAccess fa) {
-            return new Ast.Apply(fa, List.of(left), construct(CoverageConstruct.CALL),
+            return new Ast.Apply(fa, List.of(left), construct(SourceConstruct.CALL),
                     pos(operands.get(1)), written);
         }
         throw CompileException.of(Diagnostic.at(right.pos())
@@ -950,7 +950,7 @@ public final class AstBuilder {
         for (int i = 1; i < exprs.size(); i++) {
             guards.add(expr(exprs.get(i)));
         }
-        return new Ast.ListComp(element, guards, construct(CoverageConstruct.COMPREHENSION),
+        return new Ast.ListComp(element, guards, construct(SourceConstruct.COMPREHENSION),
                 pos(n), region(n));
     }
 
@@ -960,7 +960,7 @@ public final class AstBuilder {
         String binder = as == null ? null : ident(as);
         List<Ast.ElseArm> arms = elseArms(n, binder);
         // One construct, so one origin whichever of the three shapes it is written as.
-        CoverageOrigin origin = construct(CoverageConstruct.IF);
+        SourceConstructOrigin origin = construct(SourceConstruct.IF);
         if (arms != null) {
             return new Ast.IfConstructed(expr(exprs.get(0)),
                     binderOf(as), expr(exprs.get(1)), arms, origin, pos(n), region(n));
@@ -1119,7 +1119,7 @@ public final class AstBuilder {
         for (SyntaxNode c : childNodes(n, SyntaxKind.MATCH_CASE)) {
             cases.add(matchCase(c));
         }
-        return new Ast.Match(scrutinee, cases, construct(CoverageConstruct.MATCH), pos(n),
+        return new Ast.Match(scrutinee, cases, construct(SourceConstruct.MATCH), pos(n),
                 region(n));
     }
 
@@ -1426,7 +1426,7 @@ public final class AstBuilder {
                 Ast.Expr rest = foldStatements(stmts, index + 1, result);
                 List<Ast.ElseArm> arms = elseArms(s, binder);
                 // One construct, so one origin whichever of the three shapes it is written as.
-                CoverageOrigin origin = construct(CoverageConstruct.GUARD);
+                SourceConstructOrigin origin = construct(SourceConstruct.GUARD);
                 if (arms != null) {
                     yield new Ast.IfConstructed(expr(exprs.get(0)), binderOf(as), rest, arms, origin,
                             pos, held);

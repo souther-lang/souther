@@ -6,8 +6,8 @@ import souther.compiler.ast.WrittenName;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
-import souther.compiler.types.CoverageConstruct;
-import souther.compiler.types.CoverageOrigin;
+import souther.compiler.types.SourceConstruct;
+import souther.compiler.types.SourceConstructOrigin;
 import souther.compiler.types.SourceReferenceOrigin;
 import souther.compiler.types.ReachName;
 import souther.compiler.types.ValueName;
@@ -364,7 +364,7 @@ class CompilePostfixApplicationTest {
         Ast.Expr callee = new Ast.Var(applied, new SourceReferenceOrigin("m", 0),
                 applied.region());
         return Hir.Apply.read(new Ast.Apply(callee, java.util.List.of(),
-                        CoverageOrigin.written("m", 0, CoverageConstruct.CALL), at, null),
+                        SourceConstructOrigin.written("m", 0, SourceConstruct.CALL), at, null),
                 new Hir.AppliedCallee(applied, callee.reportedAt()),
                 new Hir.Var.Unanswered(applied, null, applied.region()), java.util.List.of());
     }

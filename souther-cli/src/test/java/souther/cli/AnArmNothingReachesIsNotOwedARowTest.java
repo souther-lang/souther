@@ -4,7 +4,7 @@ import souther.compiler.report.AdequacyReport;
 import souther.compiler.query.WeakeningSet;
 import souther.cli.Main;
 import org.junit.jupiter.api.Test;
-import souther.compiler.types.CoverageOrigin;
+import souther.compiler.types.SourceConstructOrigin;
 
 import souther.compiler.coverage.ArmProbe;
 import souther.compiler.coverage.CoverageSites;
@@ -338,8 +338,8 @@ class AnArmNothingReachesIsNotOwedARowTest {
                         new souther.compiler.coverage.SourceOutcome.HeldBy.Condition()),
                 null, probe, probe.raw(),
                 new CoverageSites.Obligation("classify",
-                        CoverageOrigin.written("t", probe.raw(),
-                                souther.compiler.types.CoverageConstruct.IF), 0,
+                        SourceConstructOrigin.written("t", probe.raw(),
+                                souther.compiler.types.SourceConstruct.IF), 0,
                         souther.compiler.coverage.DecidedBy.THE_DECLARATION));
     }
 

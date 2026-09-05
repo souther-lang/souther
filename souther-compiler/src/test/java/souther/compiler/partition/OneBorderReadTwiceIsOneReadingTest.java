@@ -217,8 +217,8 @@ class OneBorderReadTwiceIsOneReadingTest {
     /** A line of a body, for a place to be parted by something other than the bound. */
     private static AuthoredLine aComparison() {
         return new AuthoredLine(new RuleRef.Comparison("weigh",
-                new souther.compiler.types.CoverageOrigin("example.weigh", 2, 0,
-                        souther.compiler.types.CoverageConstruct.BINARY)),
+                new souther.compiler.types.SourceConstructOrigin("example.weigh", 2, 0,
+                        souther.compiler.types.SourceConstruct.BINARY)),
                 0, new LineFacts(new ComparisonClaim.Cut(Towards.BELOW, true)), List.of());
     }
 }

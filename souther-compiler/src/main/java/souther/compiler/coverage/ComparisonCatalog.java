@@ -3,7 +3,7 @@ package souther.compiler.coverage;
 import souther.compiler.check.Comparison;
 import souther.compiler.core.Core;
 import souther.compiler.diag.Citation;
-import souther.compiler.types.CoverageOrigin;
+import souther.compiler.types.SourceConstructOrigin;
 
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
@@ -62,7 +62,7 @@ public final class ComparisonCatalog {
      *                   with it everything the recognition already answered
      */
     public record Catalogued(ComparisonOccurrence which, Comparison comparison, Citation at,
-                             CoverageOrigin origin) {
+                             SourceConstructOrigin origin) {
 
         public Catalogued {
             if (which == null || comparison == null || at == null || origin == null) {

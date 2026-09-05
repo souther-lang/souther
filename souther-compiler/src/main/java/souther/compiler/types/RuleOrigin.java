@@ -14,7 +14,7 @@ package souther.compiler.types;
  * the first counts two rules as one and reports a rule nothing exercised as covered; the second asks
  * an author for a row establishing what another row already does.
  *
- * <p>Beside {@link CoverageOrigin} and minted the same way, because it answers the same kind of
+ * <p>Beside {@link SourceConstructOrigin} and minted the same way, because it answers the same kind of
  * question about a different construct. They are counted apart: what numbers one is not what numbers
  * the other, and a construct is one or the other and never both.
  *

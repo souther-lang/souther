@@ -3,7 +3,7 @@ package souther.compiler.ast;
 import souther.compiler.diag.Region;
 import souther.compiler.observe.RowIdentity;
 import souther.compiler.diag.SourcePos;
-import souther.compiler.types.CoverageOrigin;
+import souther.compiler.types.SourceConstructOrigin;
 import souther.compiler.types.SourceReferenceOrigin;
 import souther.compiler.types.TypeKey;
 
@@ -946,9 +946,9 @@ public interface Ast {
      * every guard holds, giving a 0-or-1 element list (spec §stdlib-list, conditional accumulation).
      *
      * <p>{@code origin} names the comprehension, and the fork each guard lowers to is derived from it
-     * ({@link CoverageOrigin#lowered}) rather than minted where the lowering runs — so a comprehension
+     * ({@link SourceConstructOrigin#lowered}) rather than minted where the lowering runs — so a comprehension
      * inside a helper answers the same whichever call site expanded it. */
-    record ListComp(Expr element, List<Expr> guards, CoverageOrigin origin, SourcePos pos,
+    record ListComp(Expr element, List<Expr> guards, SourceConstructOrigin origin, SourcePos pos,
                     Region region) implements Expr {}
 
     /** A tuple {@code (e1, e2, ...)} of two or more values (ADR-0036), an expression-level value
@@ -964,8 +964,8 @@ public interface Ast {
      *
      * <p>{@code origin} is the fork the author wrote, kept through every rewrite and every copy an
      * expansion makes, so the arms of one {@code if} are one obligation however many times a helper
-     * holding it is called ({@link CoverageOrigin}). */
-    record If(Expr cond, Expr then, Expr els, CoverageOrigin origin, SourcePos pos, Region region)
+     * holding it is called ({@link SourceConstructOrigin}). */
+    record If(Expr cond, Expr then, Expr els, SourceConstructOrigin origin, SourcePos pos, Region region)
             implements Expr {}
 
     /**
@@ -987,11 +987,11 @@ public interface Ast {
      * are resolved.
      */
     record IfConstructed(Expr construct, Binder binder, Expr then, List<ElseArm> els,
-                         CoverageOrigin origin, SourcePos pos, Region region) implements Expr {
+                         SourceConstructOrigin origin, SourcePos pos, Region region) implements Expr {
 
         /** The attempt whose failure is not told apart: one arm, naming no clause. */
         public IfConstructed(Expr construct, Binder binder, Expr then, Expr els,
-                             CoverageOrigin origin, SourcePos pos, Region region) {
+                             SourceConstructOrigin origin, SourcePos pos, Region region) {
             this(construct, binder, then, List.of(ElseArm.any(els)), origin, pos, region);
         }
 
@@ -1026,7 +1026,7 @@ public interface Ast {
 
     /** {@code match scrutinee { case Case as x -> body ... }} over a sum type. {@code origin} is the
      * fork the author wrote; see {@link If}. */
-    record Match(Expr scrutinee, List<Case> cases, CoverageOrigin origin, SourcePos pos,
+    record Match(Expr scrutinee, List<Case> cases, SourceConstructOrigin origin, SourcePos pos,
                  Region region) implements Expr {}
 
     /**
@@ -1204,7 +1204,7 @@ public interface Ast {
      * part of it — every application the source writes takes one, and which of them state a rule is
      * settled where names are resolved.
      */
-    record Apply(Expr function, List<Expr> args, CoverageOrigin origin, SourcePos pos,
+    record Apply(Expr function, List<Expr> args, SourceConstructOrigin origin, SourcePos pos,
                  Region region) implements Expr {
 
         /** The same application over rewritten arguments — a pass that touches only the arguments
@@ -1217,8 +1217,8 @@ public interface Ast {
     /** {@code origin} is where the comparison was written, which is not always where the fork
      * testing it was: a condition can be an application of a function parameter, and the predicate
      * handed to it is the caller's. Carried so that two predicates written separately stay two lines
-     * and one predicate applied twice stays one ({@link CoverageOrigin}). */
-    record Binary(BinOp op, Expr left, Expr right, CoverageOrigin origin, SourcePos pos,
+     * and one predicate applied twice stays one ({@link SourceConstructOrigin}). */
+    record Binary(BinOp op, Expr left, Expr right, SourceConstructOrigin origin, SourcePos pos,
                   Region region) implements Expr {}
 
 

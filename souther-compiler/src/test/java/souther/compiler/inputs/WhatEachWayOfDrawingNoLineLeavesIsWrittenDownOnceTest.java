@@ -11,8 +11,8 @@ import souther.compiler.diag.SourcePos;
 import souther.compiler.observe.RunSensitivity;
 import souther.compiler.partition.ReportedReason;
 import souther.compiler.partition.UndividedPosition;
-import souther.compiler.types.CoverageConstruct;
-import souther.compiler.types.CoverageOrigin;
+import souther.compiler.types.SourceConstruct;
+import souther.compiler.types.SourceConstructOrigin;
 import souther.compiler.values.UnreadReason;
 
 import java.util.Arrays;
@@ -288,7 +288,7 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
         for (BlockReason.RuleWithoutLineReason each : everyRuleWithoutALine()) {
             RulesWithNoLine.Gathered gathered = new RulesWithNoLine.Gathered();
             gathered.add(new RuleRef.Comparison("b",
-                            new CoverageOrigin("m", 1, 1, CoverageConstruct.IF)),
+                            new SourceConstructOrigin("m", 1, 1, SourceConstruct.IF)),
                     new RuleCitation.Named("n"),
                     new FilingCoordinate.AtPosition(TermPath.of("x")), each);
             RulesWithNoLine filed = gathered.found();

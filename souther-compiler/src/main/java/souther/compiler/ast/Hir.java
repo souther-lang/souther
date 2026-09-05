@@ -8,7 +8,7 @@ import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
 import souther.compiler.types.MapKeyRepresentation;
 import souther.compiler.types.LeafScalar;
-import souther.compiler.types.CoverageOrigin;
+import souther.compiler.types.SourceConstructOrigin;
 import souther.compiler.types.ReachName;
 import souther.compiler.types.SourceReferenceOrigin;
 import souther.compiler.types.Type;
@@ -1479,7 +1479,7 @@ public interface Hir {
      * <p>{@code origin} names the comprehension, and the fork each guard lowers to is derived from it
      * ({@link #forkOfGuard}) rather than minted where the lowering runs — so a comprehension
      * inside a helper answers the same whichever call site expanded it. */
-    record ListComp(Expr element, List<Expr> guards, CoverageOrigin origin, SourcePos pos,
+    record ListComp(Expr element, List<Expr> guards, SourceConstructOrigin origin, SourcePos pos,
                     Region region) implements Expr {
 
         /**
@@ -1499,7 +1499,7 @@ public interface Hir {
          *                                   pass for this one, and the fork after the last is a
          *                                   branch the lowering does not build
          */
-        public CoverageOrigin forkOfGuard(int at) {
+        public SourceConstructOrigin forkOfGuard(int at) {
             if (at < 0 || at >= guards.size()) {
                 throw new IndexOutOfBoundsException(
                         "a fork is one of the guards written: " + at + " of " + guards.size());
@@ -1521,8 +1521,8 @@ public interface Hir {
      *
      * <p>{@code origin} is the fork the author wrote, kept through every rewrite and every copy an
      * expansion makes, so the arms of one {@code if} are one obligation however many times a helper
-     * holding it is called ({@link CoverageOrigin}). */
-    record If(Expr cond, Expr then, Expr els, CoverageOrigin origin, SourcePos pos, Region region)
+     * holding it is called ({@link SourceConstructOrigin}). */
+    record If(Expr cond, Expr then, Expr els, SourceConstructOrigin origin, SourcePos pos, Region region)
             implements Expr {}
 
     /**
@@ -1544,11 +1544,11 @@ public interface Hir {
      * are resolved.
      */
     record IfConstructed(Expr construct, Binder binder, Expr then, List<ElseArm> els,
-                         CoverageOrigin origin, SourcePos pos, Region region) implements Expr {
+                         SourceConstructOrigin origin, SourcePos pos, Region region) implements Expr {
 
         /** The attempt whose failure is not told apart: one arm, naming no clause. */
         public IfConstructed(Expr construct, Binder binder, Expr then, Expr els,
-                             CoverageOrigin origin, SourcePos pos, Region region) {
+                             SourceConstructOrigin origin, SourcePos pos, Region region) {
             this(construct, binder, then, List.of(ElseArm.any(els)), origin, pos, region);
         }
 
@@ -1587,7 +1587,7 @@ public interface Hir {
 
     /** {@code match scrutinee { case Case as x -> body ... }} over a sum type. {@code origin} is the
      * fork the author wrote; see {@link If}. */
-    record Match(Expr scrutinee, List<Case> cases, CoverageOrigin origin, SourcePos pos,
+    record Match(Expr scrutinee, List<Case> cases, SourceConstructOrigin origin, SourcePos pos,
                  Region region) implements Expr {}
 
     /**
@@ -2195,7 +2195,7 @@ public interface Hir {
      * binding, or the type a newtype construction wraps — answered once during resolution.
      */
     record Apply(Expr function, List<Expr> args, ConstructionOrigin origin, AppliedCallee applied,
-                 CoverageOrigin construct, SourcePos pos, Region region) implements Expr {
+                 SourceConstructOrigin construct, SourcePos pos, Region region) implements Expr {
 
         // `construct` and not `origin`, because the slot beside it is already an answer to a
         // different question: that one says how the construction this application stands for
@@ -2244,7 +2244,7 @@ public interface Hir {
         public static Apply synthetic(Expr function, List<Expr> args, SourcePos pos,
                                       Region region) {
             return new Apply(function, args, Origins.Own.IT_IS, appliedCallee(function, pos),
-                    CoverageOrigin.unwritten(), pos, region);
+                    SourceConstructOrigin.unwritten(), pos, region);
         }
 
         /** What {@code function} answers as the applied callee, anchored at {@code where} it stands
@@ -2415,8 +2415,8 @@ public interface Hir {
     /** {@code origin} is where the comparison was written, which is not always where the fork
      * testing it was: a condition can be an application of a function parameter, and the predicate
      * handed to it is the caller's. Carried so that two predicates written separately stay two lines
-     * and one predicate applied twice stays one ({@link CoverageOrigin}). */
-    record Binary(BinOp op, Expr left, Expr right, CoverageOrigin origin, SourcePos pos,
+     * and one predicate applied twice stays one ({@link SourceConstructOrigin}). */
+    record Binary(BinOp op, Expr left, Expr right, SourceConstructOrigin origin, SourcePos pos,
                   Region region) implements Expr {}
 
 

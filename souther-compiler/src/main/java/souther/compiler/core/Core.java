@@ -3,7 +3,7 @@ package souther.compiler.core;
 import souther.compiler.types.BinOp;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.CaseSelector;
-import souther.compiler.types.CoverageOrigin;
+import souther.compiler.types.SourceConstructOrigin;
 import souther.compiler.types.Refinement;
 import souther.compiler.types.ReachName;
 import souther.compiler.types.ResolvedCase;
@@ -125,7 +125,7 @@ public sealed interface Core {
     record FieldAccess(Core target, String field, Type type, SourcePos pos) implements Core {}
 
     /** {@code origin} is where the comparison was written; see {@link souther.compiler.ast.Hir.Binary}. */
-    record Binary(BinOp op, Core left, Core right, CoverageOrigin origin, Type type,
+    record Binary(BinOp op, Core left, Core right, SourceConstructOrigin origin, Type type,
                   SourcePos pos) implements Core {}
 
     /**
@@ -404,7 +404,7 @@ public sealed interface Core {
      * from different declarations — what may say that a name has been read against a declaration is
      * {@link CompleteSignature} and nothing else.
      */
-    record PreservedCall(DeclaredOperation declared, List<Core> args, CoverageOrigin origin,
+    record PreservedCall(DeclaredOperation declared, List<Core> args, SourceConstructOrigin origin,
                          Type type, SourcePos pos) implements Core {
 
         // `origin` says which application of which source this is, and it is here for the reason a
@@ -455,14 +455,14 @@ public sealed interface Core {
 
     /**
      * {@code origin} is the fork the source wrote this as, carried from the AST so that the copies
-     * an expansion made of one fork are one coverage obligation ({@link CoverageOrigin}).
+     * an expansion made of one fork are one coverage obligation ({@link SourceConstructOrigin}).
      *
      * <p>{@code expansion} is which copy of a body this fork stands in, innermost first, empty where it
      * stands in the body as written. What settles a fork can be a rule the caller supplied, and which rule that
      * was is a fact about this copy — so it travels with the fork rather than being recovered from
      * whatever names the fork's own subtree happens to hold. A rewrite that keeps a fork keeps this.
      */
-    record If(Core cond, Core then, Core els, CoverageOrigin origin, Type type, SourcePos pos,
+    record If(Core cond, Core then, Core els, SourceConstructOrigin origin, Type type, SourcePos pos,
               List<souther.compiler.types.BindingOwner> expansion) implements Core {
     }
 
@@ -483,7 +483,7 @@ public sealed interface Core {
      * whatever names the fork's own subtree happens to hold. A rewrite that keeps a fork keeps this.
      */
     record IfConstructed(Construct construct, Binder binder, Core then, List<ElseArm> els,
-                         CoverageOrigin origin, Type type, SourcePos pos,
+                         SourceConstructOrigin origin, Type type, SourcePos pos,
                          List<souther.compiler.types.BindingOwner> expansion) implements Core {
     }
 
@@ -715,7 +715,7 @@ public sealed interface Core {
      * was is a fact about this copy — so it travels with the fork rather than being recovered from
      * whatever names the fork's own subtree happens to hold. A rewrite that keeps a fork keeps this.
      */
-    record Match(Core scrutinee, List<Case> cases, CoverageOrigin origin, Type type, SourcePos pos,
+    record Match(Core scrutinee, List<Case> cases, SourceConstructOrigin origin, Type type, SourcePos pos,
                  List<souther.compiler.types.BindingOwner> expansion) implements Core {
     }
 
