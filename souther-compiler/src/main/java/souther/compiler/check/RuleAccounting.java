@@ -2,8 +2,10 @@ package souther.compiler.check;
 
 import souther.compiler.values.UnreadReason;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -232,11 +234,14 @@ public final class RuleAccounting {
      * which is the sentence #842 is about, one level down.
      *
      * <p><b>And one arm that names no reading.</b> A question stands where no reading adopted the
-     * rule, which is not the same as a reading having been asked and fallen short: the readings a
-     * clause reaches are the ones that recognise the positions it names, and a clause about a
-     * position none of them knows is claimed by none of them. Answered with a reading's arm, such a
-     * question is attributed to a reader that never held the rule — and the account then says which
-     * capability of that reader would lift it, which is a sentence about the wrong reader.
+     * rule, and what stopped things is then not always a fact about the rule: a reading may consume
+     * the rule entirely and still be unable to build the exact answer its rules come to within its
+     * allowance. Answered with a reading's arm, such a question is attributed to a reader that was
+     * not short of anything — and the account then says which capability of that reader would lift
+     * it, which is a sentence about the wrong thing.
+     *
+     * <p>A question with neither is the accounting disagreeing with itself and is refused where it
+     * is made ({@link FieldDomains.AStandingQuestionWithNoAccount}).
      */
     public sealed interface Why {
 
@@ -253,8 +258,11 @@ public final class RuleAccounting {
          * .ReportedReason}'s. Two vocabularies with a projection between them is what keeps a
          * published word from reaching back into what a reading is allowed to record.
          *
-         * <p>In the order the parts of the clause were met, and each said once: two parts one limit
-         * stopped are one thing for a reader to lift.
+         * <p>Each said once: two parts one limit stopped are one thing for a reader to lift. In no
+         * order anybody may read as the author's — what is carried is a set of facts, and the order
+         * they come out in is the order they were met, which is kept so that one compiler over one
+         * source publishes one document and is asserted as nothing more. Which written place a
+         * reader is sent to first is the source's to say and is settled where a document is written.
          */
         default List<souther.compiler.inputs.BlockReason.AboutARule> stopped() {
             List<souther.compiler.inputs.BlockReason.AboutARule> out = new java.util.ArrayList<>();
@@ -276,19 +284,41 @@ public final class RuleAccounting {
         /**
          * The reading that turns a clause into a set of values.
          *
-         * <p>Everything it was stopped by, in the order the parts of the clause were met. One
-         * position is named by as many parts as the author wrote about it, and two of them stop
-         * this reading in two ways that are lifted by different work — so a single reason here is a
-         * choice among an author's rules, made where the only thing to choose by is which part came
-         * first.
+         * <p>Everything it was stopped by, as facts and not as an order. One position is named by
+         * as many parts as the author wrote about it, and two of them stop this reading in two ways
+         * that are lifted by different work — so a single reason here would be a choice among an
+         * author's rules, and each of these says the written place it was decided at instead.
+         *
+         * <p>The set is held in the order the facts were met, and that order is asserted of
+         * nothing: it is what keeps one compiler over one source publishing one document. What
+         * {@link #why()} answers with is a projection that loses the places, and where a reader is
+         * owed the author's order it is the source that is asked.
          */
-        record TheValueReadingSays(List<UnreadReason> why) implements Why {
+        record TheValueReadingSays(Set<RuleShortfall> shortfalls) implements Why {
 
             public TheValueReadingSays {
-                if (why == null || why.isEmpty()) {
+                if (shortfalls == null || shortfalls.isEmpty()) {
                     throw new IllegalArgumentException("a reading that stopped says why");
                 }
-                why = List.copyOf(why);
+                shortfalls = Collections.unmodifiableSet(new LinkedHashSet<>(shortfalls));
+            }
+
+            /**
+             * The reasons alone, for a reader that has no use for where they were decided.
+             *
+             * <p>The projection out of this and never what is held. Two choices of one rule each
+             * offering an alternative nothing could read leave the position open twice and are two
+             * things an author can look at; asked as reasons they are one, and which of the two a
+             * reader is sent to would be whichever the walk met first.
+             */
+            public List<UnreadReason> why() {
+                List<UnreadReason> out = new ArrayList<>();
+                shortfalls.forEach(each -> {
+                    if (!out.contains(each.why())) {
+                        out.add(each.why());
+                    }
+                });
+                return List.copyOf(out);
             }
         }
 
@@ -321,12 +351,21 @@ public final class RuleAccounting {
         }
 
         /**
-         * No reading took the rule in, and none of them recorded why.
+         * The question stands, and no reading has a reason attributable to the rule that raised it.
          *
-         * <p>Nothing to carry, and that is what it says. The readings that record a reason are the
-         * ones that recognised the position and gave up on the rule about it; where the position is
-         * one none of them knows, the rule is claimed by nobody and there is no reader whose
-         * account this could be.
+         * <p>Nothing to carry, and that is what it says. The arms beside it are a reading's own
+         * words for where it gave up on <em>this rule</em>; here there are none, and what stands in
+         * their place is a fact about something other than the rule.
+         *
+         * <p>One way this happens is that the rule was read in full and composing the exact answer
+         * ran past the allowance. That loss is about the answer rather than about any rule that paid
+         * into it — the same rules met in another order would have been built — so it is refused
+         * where reasons are filed under rules ({@link ReadingEvidence#stoppedBy}) and reaches the
+         * question as this.
+         *
+         * <p>Said as "no reading" rather than "no reason about the rule", which is what it is. The
+         * name is older than the state it now holds and the reading did take the rule in; see the
+         * issue on what an answer-level limit should be called out there.
          */
         record NothingTookItIn() implements Why {}
     }

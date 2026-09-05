@@ -144,23 +144,6 @@ class OneLocationMeasuredAtTwoNumbersIsStillOneLocationTest {
                 filled.unresolved().toString());
     }
 
-    /** What the behavior takes, as the reader that composes a row is told it. */
-    private static BehaviorInputs inputsOf() {
-        Compilation compilation = Compilation.ofSource(TWO_NUMBERS, "Main");
-        compilation.answerEverything();
-        String module = compilation.modules().get(0);
-        return new BehaviorInputs(List.of("slot"),
-                compilation.db().ask(new souther.compiler.query.Bodies.Signatures(module)).value()
-                        .get("gate").inputTypes(),
-                RuleReadings.of(compilation, module),
-                souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
-    }
-
-    private static RuleReadingSource rulesOf() {
-        Compilation compilation = Compilation.ofSource(TWO_NUMBERS, "Main");
-        compilation.answerEverything();
-        return RuleReadings.of(compilation, compilation.modules().get(0));
-    }
 
     /** What the reading of that input says about its numbers, which is what a subject is asked
      *  through. */

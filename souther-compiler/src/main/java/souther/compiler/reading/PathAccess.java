@@ -56,7 +56,7 @@ public sealed interface PathAccess {
     }
 
     /** No run gets here, and this is what shows it. */
-    record Unreachable(Why why) implements PathAccess {
+    record Unreachable(Unreachable.Why why) implements PathAccess {
 
         public Unreachable {
             if (why == null) {
@@ -77,7 +77,7 @@ public sealed interface PathAccess {
     }
 
     /** This reading cannot say what the way here is, which is no statement about the body. */
-    record Unsupported(Why why) implements PathAccess {
+    record Unsupported(Unsupported.Why why) implements PathAccess {
 
         public Unsupported {
             if (why == null) {

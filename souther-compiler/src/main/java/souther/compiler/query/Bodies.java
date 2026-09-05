@@ -1,6 +1,5 @@
 package souther.compiler.query;
 
-import souther.compiler.check.AnalysisInvariants;
 import souther.compiler.check.ReadingPolicy;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.ast.Ast;
@@ -1323,7 +1322,9 @@ public final class Bodies {
      */
     public record Expanding(String name, InliningPolicy policy) implements Key<Expanding.Of> {
 
-        /** @param table which declaration each name reaches
+        /** The helpers a module offers an expansion, read.
+         *
+         *  @param table which declaration each name reaches
          *  @param graph what each of them calls, and which of them recurse */
         public record Of(HelperTable table, HelperGraph graph) {}
 
@@ -1333,7 +1334,7 @@ public final class Bodies {
         }
 
         @Override
-        public Answer<Of> compute(Db db) {
+        public Answer<Expanding.Of> compute(Db db) {
             Answer<Hir.Module> settled = db.ask(new Settled(name));
             Answer<Map<String, Hir.FnDef>> imported = db.ask(new ImportedDefinitions(name));
             if (!settled.present() || !imported.present()) {
@@ -1346,7 +1347,7 @@ public final class Bodies {
             // would answer that it does not.
             HelperTable table = HelperTable.of(settled.value(), imported.value(), policy,
                     db.ask(new Front.Library()).value());
-            return Answer.of(new Of(table, HelperGraph.of(table)));
+            return Answer.of(new Expanding.Of(table, HelperGraph.of(table)));
         }
     }
 
@@ -1879,7 +1880,7 @@ public final class Bodies {
         Set<String> names = new HashSet<>();
         for (Hir.Var req : spec.value().dependsOn()) {
             // Reported where it is written; it names no parameter for a body to be held to.
-            if (req.answered() instanceof Hir.Var.Denoting named) {
+            if (req instanceof Hir.Var.Denoting named) {
                 names.add(named.denotes().name());
             }
         }
@@ -1932,8 +1933,6 @@ public final class Bodies {
             Answer<Map<String, DataChecker.Constructs>> constructs =
                     db.ask(new RecursiveHelperConstructs(module));
             Answer<Hir.FnDef> discharge = db.ask(new BodyForInvariantDischarge(module, behavior));
-            Answer<AnalysisInvariants> dischargeInvariants =
-                    db.ask(new Shapes.InvariantsForDischarge(module));
             // What the behaviors this body reaches state about their answers, and only those: a
             // relation declared by a behavior it does not call is no part of what it is checked
             // against, and depending on one would re-check this body whenever that one was edited.
@@ -1945,15 +1944,19 @@ public final class Bodies {
                 return Answer.absent();
             }
             // The invariant-discharge analysis reads its own representation of the body and of the
-            // invariants (spec §invariant-discharge). Where either is not available the check is
+            // invariants (spec §invariant-discharge). Where the body's is not available the check is
             // skipped rather than run against the emitted tree, whose operations are no longer
-            // operations — so the source is made where both arrived and nowhere else. An empty
-            // representation cannot stand for a missing one: they are the same value and opposite
-            // facts, a module stating nothing and a module nothing could be read of.
+            // operations.
+            //
+            // The clauses are not a second thing to wait for. They are asked for one declaration at a
+            // time, wherever it was written, and a declaration whose module could not be expanded
+            // answers nothing rather than answering wrongly — so there is no representation here to
+            // arrive late, and nothing this body reads turns on a declaration beside the ones it
+            // names.
             InvariantChecker.Source dischargeSource =
-                    discharge.present() && dischargeInvariants.present()
+                    discharge.present()
                     ? new InvariantChecker.Source(discharge.value().writtenBody(),
-                            dischargeInvariants.value(),
+                            Shapes.expandedClauses(db),
                             contracts.present() ? contracts.value() : Map.of())
                     : null;
             List<Diagnostic> warnings = new ArrayList<>();
@@ -2092,6 +2095,8 @@ public final class Bodies {
     public record ModuleCheck(String name) implements Key<ModuleCheck.Of> {
 
         /**
+         * What checking one module came to.
+         *
          * @param emittedHelpers the bodies it elaborated, which the backend emits as methods
          * @param sound whether it found nothing wrong. An abandoned unit is wrong and says nothing
          *              of its own, so this is not the same as having reported nothing
@@ -2106,7 +2111,7 @@ public final class Bodies {
         }
 
         @Override
-        public Answer<Of> compute(Db db) {
+        public Answer<ModuleCheck.Of> compute(Db db) {
             Answer<Lower.Lowered> lowering = db.ask(new Lowering(name));
             Answer<DerivedSymbols> scope = Names.derivedSymbols(db, name);
             // The signatures the check reads are the ones every other reader reads. Asked for here
@@ -2176,7 +2181,7 @@ public final class Bodies {
             Map<String, Core> helperBodies = new LinkedHashMap<>();
             reported.emittedHelpers().forEach((h, core) ->
                     helperBodies.put(h, GrowingFold.rewrite(core, scope.value().theWalk())));
-            return Answer.of(new Of(helperBodies, sound, reported.stopped()), reports);
+            return Answer.of(new ModuleCheck.Of(helperBodies, sound, reported.stopped()), reports);
         }
     }
 

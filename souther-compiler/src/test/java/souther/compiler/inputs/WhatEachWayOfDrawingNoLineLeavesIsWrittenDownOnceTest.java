@@ -87,6 +87,18 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
         // Its own word and not the one above — that one reached the values and this did not.
         table.put("PatternTooDeeplyNested",
                 "PATTERN_TOO_DEEPLY_NESTED/MAY_CHANGE");
+        // And the third figure, which is the further work of asking where the strings a rule was
+        // read to actually stop. One word with `PatternTooCostly` because out there both are the
+        // values coming out wider than the rules leave them; its own row because what was too much
+        // is a machine nobody wrote, and an author sent after their pattern would find one this
+        // read perfectly.
+        table.put("OrderedExtentTooCostly", "EXACT_VALUES_TOO_COSTLY/MAY_CHANGE");
+        // And a position that could not hand its rules on as the sets they leave, which is the one
+        // row here that names no rule: the sets are made as a group out of one allowance, so a rule
+        // cheap enough on its own goes unmade beside one that was not, and a reader asking which of
+        // them was too much would be told about whichever the building reached last. One word with
+        // `PatternTooCostly` out there, where both are a set the rules name not being worked out.
+        table.put("RulesNotHandedOnAsSets", "EXACT_VALUES_TOO_COSTLY/MAY_CHANGE");
         // One word with `ComparisonBetweenPositions` below, and on purpose: they are the two
         // readings of `a < b`, opposite sentences about this compiler, and a document promises
         // its reader which kind of thing stopped a derivation rather than which reader stopped.
@@ -359,7 +371,10 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
                 new BlockReason.UnreadValueRule(),
                 new BlockReason.PatternTooCostly(),
                 new BlockReason.PatternTooDeeplyNested(),
+                new BlockReason.OrderedExtentTooCostly(
+                        souther.compiler.regex.Meter.Stopped.ONE_MACHINE),
                 new BlockReason.ExactValuesTooCostly(),
+                new BlockReason.RulesNotHandedOnAsSets(),
                 new BlockReason.ValueRuleRelatingTwoPositions(),
                 new BlockReason.CompetingCoordinates(),
                 new BlockReason.CasePairingNotDetermined(),

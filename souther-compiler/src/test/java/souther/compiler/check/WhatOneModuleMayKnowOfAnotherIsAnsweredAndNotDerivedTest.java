@@ -9,7 +9,6 @@ import org.junit.jupiter.api.Test;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.lang.reflect.Constructor;
-import java.lang.reflect.Executable;
 import java.lang.reflect.GenericArrayType;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
@@ -24,7 +23,6 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -198,62 +196,6 @@ class WhatOneModuleMayKnowOfAnotherIsAnsweredAndNotDerivedTest {
         }
         assertEquals(List.of("ModuleUniverse.java"), reached,
                 "publication is settled where a module becomes a reading, and asked of that");
-    }
-
-    /** Every class this build produced, so that nothing is left out by not being named. */
-    private static List<Class<?>> compiled() {
-        List<Class<?>> found = new ArrayList<>();
-        for (String entry : System.getProperty("java.class.path").split(java.io.File.pathSeparator)) {
-            if (!entry.contains("souther-")) {
-                continue;
-            }
-            Path root = Path.of(entry);
-            if (Files.isDirectory(root)) {
-                try (Stream<Path> walk = Files.walk(root)) {
-                    walk.filter(each -> each.toString().endsWith(".class"))
-                            .map(each -> root.relativize(each).toString())
-                            .forEach(name -> load(name, found));
-                } catch (IOException e) {
-                    throw new UncheckedIOException(e);
-                }
-            } else if (entry.endsWith(".jar") && Files.isRegularFile(root)) {
-                try (java.util.jar.JarFile jar = new java.util.jar.JarFile(root.toFile())) {
-                    jar.stream().map(java.util.zip.ZipEntry::getName)
-                            .filter(name -> name.endsWith(".class"))
-                            .forEach(name -> load(name, found));
-                } catch (IOException e) {
-                    throw new UncheckedIOException(e);
-                }
-            }
-        }
-        assertTrue(found.size() > 500, () -> "the scan read " + found.size() + " classes");
-        return found;
-    }
-
-    private static void load(String entry, List<Class<?>> found) {
-        String name = entry.replace('/', '.').replace('\\', '.')
-                .substring(0, entry.length() - ".class".length());
-        if (!name.startsWith("souther.")) {
-            return;
-        }
-        try {
-            found.add(Class.forName(name, false,
-                    WhatOneModuleMayKnowOfAnotherIsAnsweredAndNotDerivedTest.class
-                            .getClassLoader()));
-        } catch (Throwable _) {
-            // a class this build cannot link is one nothing here can ask about either
-        }
-    }
-
-    private static List<Executable> members(Class<?> of) {
-        List<Executable> all = new ArrayList<>();
-        try {
-            all.addAll(List.of(of.getDeclaredMethods()));
-            all.addAll(List.of(of.getDeclaredConstructors()));
-        } catch (Throwable _) {
-            return List.of();
-        }
-        return all;
     }
 
     /** Every class a type mentions, through generics and arrays, so a wrapper hides nothing. */

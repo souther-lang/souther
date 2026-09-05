@@ -137,7 +137,7 @@ class EveryDiagnosticCodeIsReadableTest {
 
     /**
      * The way back is closed. A check that refuses a program raises a {@link Diagnostic} through
-     * {@link Diagnostic#of}, which takes a {@link DiagnosticCode} — there is no builder that does
+     * {@link Diagnostic#say}, which takes a message carrying a {@link DiagnosticCode} — there is no builder that does
      * not, so a diagnostic a reader cannot look up cannot be written.
      *
      * <p>{@link Diagnostic#literal} is the exception and is not a check raising one: it wraps a

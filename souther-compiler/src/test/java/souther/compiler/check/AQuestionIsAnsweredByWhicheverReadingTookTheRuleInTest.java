@@ -2,7 +2,6 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.ast.Hir;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Scopes;
 import souther.compiler.types.TypeKey;
@@ -52,9 +51,8 @@ class AQuestionIsAnsweredByWhicheverReadingTookTheRuleInTest {
         Symbols symbols = Scopes.derived(compilation.db(), module).value();
         assertNotNull(symbols);
         TypeSymbol.AtModule named = TypeSymbols.declared(new TypeKey(module, type));
-        Hir.Data data = (Hir.Data) symbols.declaredNode(named.key());
-        assertNotNull(data, "no `" + type + "` declared");
-        return FieldDomains.of(named, data, RuleReadings.of(compilation, module),
+        assertNotNull(symbols.declaredNode(named.key()), "no `" + type + "` declared");
+        return FieldDomains.of(named, RuleReadings.of(compilation, module),
                 souther.compiler.query.ReadAs.THE_COMPILATION_DOES).accounting();
     }
 
@@ -134,10 +132,8 @@ class AQuestionIsAnsweredByWhicheverReadingTookTheRuleInTest {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
         String module = compilation.modules().get(0);
-        Symbols symbols = Scopes.derived(compilation.db(), module).value();
         TypeSymbol.AtModule holder = TypeSymbols.declared(new TypeKey(module, "Holder"));
-        return FieldDomains.of(holder,
-                        (Hir.Data) symbols.declaredNode(holder.key()), RuleReadings.of(compilation, module),
+        return FieldDomains.of(holder, RuleReadings.of(compilation, module),
                 souther.compiler.query.ReadAs.THE_COMPILATION_DOES)
                 .at(RuleKey.of("len")).bounds().min().at().toString();
     }
@@ -357,10 +353,8 @@ class AQuestionIsAnsweredByWhicheverReadingTookTheRuleInTest {
         Compilation compilation = Compilation.ofSource(beside("value == 3 || value == 5"), "Main");
         compilation.answerEverything();
         String module = compilation.modules().get(0);
-        Symbols symbols = Scopes.derived(compilation.db(), module).value();
         TypeSymbol.AtModule named = TypeSymbols.declared(new TypeKey(module, "Length"));
-        FieldDomains read = FieldDomains.of(named,
-                (Hir.Data) symbols.declaredNode(named.key()), RuleReadings.of(compilation, module),
+        FieldDomains read = FieldDomains.of(named, RuleReadings.of(compilation, module),
                 souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
 
         assertFalse(read.projection().isCertified(), "the bounds hold no hole");

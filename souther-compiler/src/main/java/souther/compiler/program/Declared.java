@@ -15,7 +15,7 @@ package souther.compiler.program;
  * <p>Nothing for a name nothing declares. An identity comes from a declaration world having said
  * one is at an address, so a reader that assembled one from two strings is asking about something
  * that is not a declaration — {@link CheckedProgram#declaration} refuses rather than answering, for
- * the reason {@link CheckedData.Product#positionOf} does. A case for it would be an output handling
+ * the reason {@link CheckedData.WithFields#positionOf} does. A case for it would be an output handling
  * a mistake of its own as one of the states a checked program is in.
  */
 public record Declared(CheckedData data, DeclaredBy declaredBy) {

@@ -3,6 +3,7 @@ package souther.compiler.query;
 import souther.compiler.conformance.ConformanceCorpus;
 import souther.compiler.report.AdequacyReport;
 import souther.compiler.diag.SourceNameResolver;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -33,6 +34,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * to and what the compile said getting there, and {@code Db} compares both — so a corpus of models
  * nothing is said about exercises one half of every answer in the store.
  */
+@Tag("population")
 class EverythingAnAnswerHoldsMeansSomethingTest {
 
     /**

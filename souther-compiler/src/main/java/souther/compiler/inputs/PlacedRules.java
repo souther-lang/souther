@@ -95,7 +95,7 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
         // Made per call instead, every ask would get its own allowance and the whole of what a
         // reading costs would be bounded by nothing.
         return new PlacedRules(root, read, Rules.of(read, source, policy), alsoReaching,
-                souther.compiler.values.Allowance.ofAdmittedValues());
+                policy.allowanceForAdmittedValues());
     }
 
     /**
@@ -480,6 +480,25 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
      */
     List<FieldDomains.Placed> movedAtTheValue() {
         return bounds().movedEnds().stream()
+                .filter(each -> each.path().isTheValueItself())
+                .toList();
+    }
+
+    /**
+     * The ends the value's own conjuncts state on its own coordinates.
+     *
+     * <p>What {@link #placedAt} leaves out for the same reason it leaves the moved ones out: the
+     * ends of a value's own coordinates are read off the clauses as they are written, and this is
+     * the rest of them. A rule about the strings at a position leaves them running from one place
+     * to another and states no comparison, so that reading sees nothing of it.
+     *
+     * <p>The comparisons are here too and are not left out. An end two readings both saw is one
+     * end drawn by one conjunct of one rule, and putting the two together is what
+     * {@link souther.compiler.check.DeclaredBounds.End#tighter} does with them — a second copy adds
+     * no name and moves nothing.
+     */
+    List<FieldDomains.Placed> statedAtTheValue() {
+        return bounds().stated().stream()
                 .filter(each -> each.path().isTheValueItself())
                 .toList();
     }

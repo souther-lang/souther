@@ -75,12 +75,12 @@ public sealed interface BlockReason {
      */
     sealed interface AnswerRealizationStopped extends ReadingStopReason {
 
-        /** The answer was larger than the allowance it was built under, which is a figure a run may
+        /** Both are an allowance a reading was granted running out, which is a figure a run may
          *  allow more of. */
         @Override
         default RunSensitivity runSensitivity() {
             return switch (this) {
-                case ExactValuesTooCostly _ -> RunSensitivity.MAY_CHANGE;
+                case ExactValuesTooCostly _, RulesNotHandedOnAsSets _ -> RunSensitivity.MAY_CHANGE;
             };
         }
     }
@@ -101,6 +101,23 @@ public sealed interface BlockReason {
      * observable predicate — this rule has no line here — and that is what the name says.
      */
     sealed interface RuleWithoutLineReason extends BlockReason {
+    }
+
+    /**
+     * A rule with no line here where this compiler is what fell short, whether or not the shortfall
+     * is about the rule.
+     *
+     * <p>The half of {@link RuleWithoutLineReason} that is a stop, beside {@link
+     * ReadToEndWithoutLine}, which is the half that is not. What a caller asks this for is whether
+     * anything is outstanding at the place a finding sits — a rule read to the end says the model
+     * states something, and one of these says nobody knows yet.
+     *
+     * <p>Wider than {@link RuleReadingStopped} by exactly what does not name a rule. A rule whose
+     * own reading stopped is answerable as that rule; a rule whose position could not hand its sets
+     * on is not, and both leave the same thing outstanding here. Held as the narrower type, a
+     * shortfall no rule is answerable for could only be carried by pretending one is.
+     */
+    sealed interface StoppedWithoutALine extends RuleWithoutLineReason, ReadingStopReason {
     }
 
     /**
@@ -147,20 +164,21 @@ public sealed interface BlockReason {
      * the only member of {@link ReadingStopReason} that names a rule, and the only member of
      * {@link RuleWithoutLineReason} a caller asking about a stop may be handed.
      */
-    sealed interface RuleReadingStopped extends RuleWithoutLineReason, ReadingStopReason,
-            AboutARule {
+    sealed interface RuleReadingStopped extends StoppedWithoutALine, AboutARule {
 
         /**
-         * One switch over the nine, and the reason for it being one: a division of these into two
-         * is only reviewable where all nine answers are visible together.
+         * One switch over the ten, and the reason for it being one: a division of these into two
+         * is only reviewable where all ten answers are visible together.
          */
         @Override
         default RunSensitivity runSensitivity() {
             return switch (this) {
-                // Two figures this compiler compared a rule against: the states a pattern is built
-                // into, and how deeply one may be bracketed. A run allowed more of either need not
-                // stop at the same rule.
-                case PatternTooCostly _, PatternTooDeeplyNested _ -> RunSensitivity.MAY_CHANGE;
+                // Three figures this compiler compared a rule against: the states a pattern is
+                // built into, how deeply one may be bracketed, and the machines that say where the
+                // strings it admits stop. A run allowed more of any of them need not stop at the
+                // same rule.
+                case PatternTooCostly _, PatternTooDeeplyNested _,
+                     OrderedExtentTooCostly _ -> RunSensitivity.MAY_CHANGE;
                 // And seven where nothing was compared against anything. A form nothing takes
                 // apart, values no line can be drawn on, a rule about a value made from this one, a
                 // relation between two positions, two rules about two coordinates and a pairing
@@ -413,6 +431,32 @@ public sealed interface BlockReason {
     record PatternTooDeeplyNested() implements RuleReadingStopped {}
 
     /**
+     * A rule whose strings this read, and whose place on the order they are measured on would take
+     * more machines than this compiler will make.
+     *
+     * <p>Its own case beside {@link PatternTooCostly}, and the difference is what was too large. That
+     * one is the pattern an author wrote turned into the strings it accepts, which is a machine as
+     * big as the pattern is written and is something they can write differently. This is the further
+     * work of asking where those strings begin and end — the strings above the first of them, the
+     * ones the rule leaves out, and the two put together — and none of those is a machine anybody
+     * wrote. Told the other, an author would go looking at a pattern that was read perfectly.
+     *
+     * <p>Which limit refused it is kept. A machine larger than one machine may be is a shape
+     * somebody wrote and could write smaller; an answer that had already spent what it was allowed
+     * is not, and the same rule asked first would have been read.
+     */
+    record OrderedExtentTooCostly(souther.compiler.regex.Meter.Stopped stopped)
+            implements RuleReadingStopped {
+
+        public OrderedExtentTooCostly {
+            if (stopped == null) {
+                throw new IllegalArgumentException(
+                        "a construction that stopped was stopped by a limit");
+            }
+        }
+    }
+
+    /**
      * The rules about this position were followed, every one of them became the set it names, and
      * what those sets come to between them is more than this compiler will build.
      *
@@ -429,18 +473,43 @@ public sealed interface BlockReason {
     record ExactValuesTooCostly() implements AnswerRealizationStopped {}
 
     /**
+     * The rules about the strings at this position were read, what the position admits was worked
+     * out, and what each of those rules leaves on its own was more than this compiler would build.
+     *
+     * <p>Two questions and this is the second. What a position admits is every rule of it met
+     * together; what a reader drawing lines needs is what each of them leaves on its own, and a
+     * rule met with its neighbours can be settled without ever making its machine — a pattern
+     * beside a value the rules write out is a question about that value. So the sets handed on are
+     * not the sets the answer needed, and where they cannot be made the answer stands exactly while
+     * nothing says where the strings of one rule stop.
+     *
+     * <p><b>About the position and about none of its rules.</b> They are made as a group out of one
+     * allowance, so a rule cheap enough on its own goes unmade beside one that was not — and which
+     * of them was which may not be told, because it would send an author to rewrite whichever rule
+     * the building reached last. Which is why this carries no rule and is not among the reasons
+     * that do ({@link AboutARule}).
+     *
+     * <p>Beside {@link ExactValuesTooCostly} rather than the same thing said twice: that one is the
+     * position's own answer coming out wider than the rules leave it, and here that answer is what
+     * the rules leave and a reader is short of something else.
+     */
+    record RulesNotHandedOnAsSets() implements AnswerRealizationStopped, StoppedWithoutALine {}
+
+    /**
      * Every reading was asked about the rule at this position and none of them took it in, and none
      * of them wrote down why.
      *
      * <p>Its own case because it names no reading. The others are one reading's account of where it
-     * gave up, and a question left standing by nobody has no such account to give — answered with
-     * one of them, an author is told which reader fell short of their clause, and the named reader
-     * may be one that has no word for such a rule at all and never claimed it.
+     * gave up on a rule, and here no reading was short of the rule at all — answered with one of
+     * them, an author is told that a reader fell short of their clause, and is sent to lift a
+     * capability that was never the matter.
      *
-     * <p>What produces it is the accounting, from the two answers coming apart: a rule no reading
-     * adopted, at a position no reading recorded a reason for. A helper that reads a field of a
-     * value the readings do not know the positions of is one — the clause is about that field, and
-     * every reader here passed over it.
+     * <p><b>Despite the name, the reading may well have taken the rule in.</b> What produces this is
+     * a question standing with no reason filed under the rule that raised it, and the case that
+     * reaches it is a reading that read every rule and could not build the exact answer they come to
+     * within its allowance. That loss is about the answer, so no rule is answerable for it and none
+     * is filed. What the name should be is its own question — see the issue on where an answer-level
+     * limit belongs in the published vocabulary.
      *
      * <p>Nothing is claimed about which capability would lift it, which is what makes it different
      * from every case above. What a document writes for it is the same word it writes for a rule

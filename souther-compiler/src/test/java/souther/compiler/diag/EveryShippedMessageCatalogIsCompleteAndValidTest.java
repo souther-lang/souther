@@ -300,8 +300,9 @@ public class EveryShippedMessageCatalogIsCompleteAndValidTest {
      * construction, before any argument is substituted, and a message with a stray brace and no
      * placeholder names none.
      *
-     * <p>What the message says survives that: a literal brace is written {@code '{'} and a literal
-     * apostrophe {@code ''}, and the check below renders each pattern to see what comes out.
+     * <p>What the message says survives that: a literal brace is written <code>'{'</code> and a
+     * literal apostrophe <code>''</code>, and the check below renders each pattern to see what
+     * comes out.
      */
     @Test
     void everyMessageIsAPatternTheFormatterAccepts() throws IOException {

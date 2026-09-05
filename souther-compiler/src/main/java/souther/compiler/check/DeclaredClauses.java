@@ -1,7 +1,6 @@
 package souther.compiler.check;
 
 import souther.compiler.ast.Hir;
-import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 
 import java.util.ArrayList;
@@ -13,8 +12,17 @@ import java.util.List;
  * <p>Every name the value wears, not the outermost one. A rule written on the type a newtype wraps
  * bounds the value as much as one written on the newtype does, and the two are read together:
  * {@code Inner: value >= 0} under {@code Outer: value <= 10} is a range of {@code [0, 10]}, and
- * neither layer alone says so. How far that reaches is asked of {@link TypeOps} rather than walked
- * again here.
+ * neither layer alone says so.
+ *
+ * <p>The names are handed in, never worked out here. Which names a position wears is what reading
+ * its type comes to ({@link TypeView#wrappers}), and a second walk to the same place is a second
+ * answer to how far a newtype reaches — they would part the day either of them changed. So this is
+ * a projection of that reading and takes it as its subject.
+ *
+ * <p>Grouped by the name each rule is written on, because a caller that has to put the rules in an
+ * order has only this to take it from. Which rules govern a value does not turn on the order — every
+ * name's do — so nothing here reads one into them, and a caller enumerating them says for itself
+ * which end it starts at.
  *
  * <p>Walked once, because the number a conjunct carries is part of an identity. A line is named by
  * the clause and the conjunct it came out of ({@link DeclaredBounds.Drawn}), counted over every
@@ -51,29 +59,62 @@ public final class DeclaredClauses {
         }
     }
 
-    /** Every conjunct of every rule written on {@code type} and on the types it wraps. */
-    public static List<Conjunct> of(Type type, RuleReadingSource source) {
-        List<Conjunct> out = new ArrayList<>();
-        for (TypeOps.Layer layer : TypeOps.newtypeChain(type, source.symbols())) {
-            // A layer wraps a declaration a module wrote, which is what having a `Hir.Data` for it
-            // says; the pattern is where the layer's name says so.
-            if (!(layer.named() instanceof TypeSymbol.AtModule named)) {
-                continue;
-            }
-            // The clauses with the declaration each was written on, which is what names the line
-            // (ADR-0090). Read flat, every clause a spread brought in was named after the type that
-            // spread it, and two clauses of one declaration were one rule.
-            for (TypeOps.Declared declared : TypeOps.declaredForAnalysis(
-                    named, layer.data(), source.symbols(), source.invariants())) {
-                RuleRef.Invariant rule = new RuleRef.Invariant(Clause.Ref.of(declared));
-                int conjunct = -1;
-                for (Hir.Expr each : ClauseHelpers.conjunctsOf(declared.clause().expr())) {
-                    conjunct++;
-                    out.add(new Conjunct(rule, conjunct, each));
-                }
-            }
+    /**
+     * The conjuncts written on one of the names a value wears.
+     *
+     * @param worn      the name, as the reading of the position read it off
+     * @param conjuncts every conjunct of every rule written on it, in the order the author wrote
+     *                  them; empty where the name carries none
+     */
+    public record OnAName(TypeSymbol worn, List<Conjunct> conjuncts) {
+
+        public OnAName {
+            conjuncts = List.copyOf(conjuncts);
+        }
+    }
+
+    /** Every conjunct of every rule written on the names {@code worn}, one entry per name, in the
+     *  order the names were read off the position. */
+    public static List<OnAName> of(List<TypeSymbol> worn, RuleReadingSource source) {
+        List<OnAName> out = new ArrayList<>();
+        for (TypeSymbol wears : worn) {
+            out.add(new OnAName(wears, writtenOn(wears, source)));
         }
         return List.copyOf(out);
+    }
+
+    /** Every conjunct written on every one of them, which is what a reader that has no use for
+     *  where a rule was written asks for. */
+    public static List<Conjunct> allOf(List<TypeSymbol> worn, RuleReadingSource source) {
+        List<Conjunct> out = new ArrayList<>();
+        for (OnAName each : of(worn, source)) {
+            out.addAll(each.conjuncts());
+        }
+        return List.copyOf(out);
+    }
+
+    private static List<Conjunct> writtenOn(TypeSymbol wears, RuleReadingSource source) {
+        // The declaration the name was written by, read here. A name a module wrote is one this
+        // finds a data for; a caller handed the body instead would be holding a declaration for a
+        // question that is this one's, and could read the position's structure back out of it.
+        if (!(wears instanceof TypeSymbol.AtModule named)
+                || !(source.symbols().declaredNode(named) instanceof Hir.Data data)) {
+            return List.of();
+        }
+        List<Conjunct> out = new ArrayList<>();
+        // The clauses with the declaration each was written on, which is what names the line
+        // (ADR-0090). Read flat, every clause a spread brought in was named after the type that
+        // spread it, and two clauses of one declaration were one rule.
+        for (TypeOps.Declared declared : TypeOps.declaredExpanded(
+                named, data, source.symbols(), source.invariants()).reached()) {
+            RuleRef.Invariant rule = new RuleRef.Invariant(Clause.Ref.of(declared));
+            int conjunct = -1;
+            for (Hir.Expr each : ClauseHelpers.conjunctsOf(declared.clause().expr())) {
+                conjunct++;
+                out.add(new Conjunct(rule, conjunct, each));
+            }
+        }
+        return out;
     }
 
     private DeclaredClauses() {}

@@ -4,6 +4,7 @@ import souther.compiler.Compiler;
 import souther.compiler.conformance.ConformanceCorpus;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.report.GeneratedRows;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -47,6 +48,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * the suite would be a list of stimuli invented to reach a list, and a question added to one of these
  * operations would arrive uncovered while the arithmetic still added up.
  */
+@Tag("population")
 class EveryQuestionThisCompilerDeclaresIsReachedOrOutsideABatchRunTest {
 
     /**

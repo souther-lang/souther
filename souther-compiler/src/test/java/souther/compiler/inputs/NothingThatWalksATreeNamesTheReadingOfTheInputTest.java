@@ -428,6 +428,9 @@ class NothingThatWalksATreeNamesTheReadingOfTheInputTest {
     }
 
     private static final class InAMethodSignature {
+        // The concrete class in the signature is what puts the reading in the class file, which is
+        // what this witnesses.
+        @SuppressWarnings("NonApiType")
         static java.util.ArrayList<InputDomain> none() {
             return null;
         }
@@ -462,6 +465,8 @@ class NothingThatWalksATreeNamesTheReadingOfTheInputTest {
     }
 
     private static final class InAMethodType {
+        // The lambda is what puts the reading in the method's type, which is what this witnesses.
+        @SuppressWarnings("UnnecessaryLambda")
         static Supplier<InputDomain> none() {
             return () -> null;
         }

@@ -1,9 +1,8 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.ReadingPolicy;
-import souther.compiler.ast.Hir;
 import souther.compiler.check.RuleReadingSource;
-import souther.compiler.check.TypeOps;
+import souther.compiler.check.Shape;
 import souther.compiler.check.TypeView;
 import souther.compiler.inputs.Case;
 import souther.compiler.inputs.Distinctions;
@@ -31,9 +30,11 @@ final class PartitionClasses {
     /** The classes a type states, before any rule is crossed with them. What a witness varies over
      *  and what a generator offers for a bare position, which are asked of a type and not of a
      *  position of one. */
-    static List<PartitionClass> of(Type type, RuleReadingSource ruleSource, ReadingPolicy policy) {
+    static List<PartitionClass> of(Type type, RuleReadingSource ruleSource, ReadingPolicy policy,
+                                   java.util.Set<TypeSymbol> expanding) {
         TypeView view = TypeView.of(type, ruleSource.symbols());
-        return of(Distinctions.ofType(view, ruleSource.symbols()), view, ruleSource, policy);
+        return of(Distinctions.ofType(view, ruleSource.symbols()), view, ruleSource, policy,
+                expanding);
     }
 
     /**
@@ -42,29 +43,34 @@ final class PartitionClasses {
      * <p>A name the position wears that nothing here writes takes every class with it: the classes
      * are still the position's and a row already sitting in one still covers it, so what is absent
      * is the offer of a new row rather than the class.
+     *
+     * @param expanding the names whose own value is already being built. A class carries what stands
+     *                  for it, and what stands for it is built from the position under it — so the
+     *                  walk that reaches a class is the walk that reaches that position, and a class
+     *                  built without what is already being built starts the descent again with
+     *                  nothing to stop it
      */
     static List<PartitionClass> of(List<Case> cases, TypeView view, RuleReadingSource ruleSource,
-                                   ReadingPolicy policy) {
+                                   ReadingPolicy policy, java.util.Set<TypeSymbol> expanding) {
         if (cases.isEmpty()) {
             return List.of();
         }
-        List<TypeSymbol> worn = view.wrappers().stream().map(TypeOps.Layer::named).toList();
+        List<TypeSymbol> worn = view.wrappers();
         // The same names twice over, because two different questions are asked of them. Whether an
         // observed value is under this class is asked of the declarations, and what a row writes it
         // under is asked of the module doing the writing — one of these is an identity and the other
         // is a reference, and a module reaching a name through an alias answers them differently.
-        List<TypeReachName.Written> writes = new ArrayList<>();
-        for (TypeSymbol each : worn) {
-            if (!(ruleSource.symbols().scope().reach(each) instanceof TypeReachName.Written written)) {
-                return unwritable(cases, view, ruleSource, policy, worn, each);
+        return switch (WornNames.of(view.wrappers(), ruleSource)) {
+            case WornNames.Unwritable unwritable ->
+                    unwritable(cases, view, ruleSource, policy, worn, unwritable, expanding);
+            case WornNames.Spelled spelled -> {
+                List<PartitionClass> out = new ArrayList<>();
+                for (Case one : cases) {
+                    out.add(classOf(one, view, worn, policy, spelled.names(), ruleSource, expanding));
+                }
+                yield List.copyOf(out);
             }
-            writes.add(written);
-        }
-        List<PartitionClass> out = new ArrayList<>();
-        for (Case one : cases) {
-            out.add(classOf(one, view, worn, policy, writes, ruleSource));
-        }
-        return List.copyOf(out);
+        };
     }
 
     /**
@@ -77,30 +83,21 @@ final class PartitionClasses {
      */
     private static List<PartitionClass> unwritable(List<Case> cases, TypeView view, RuleReadingSource ruleSource,
                                                    ReadingPolicy policy,
-                                                   List<TypeSymbol> worn, TypeSymbol unnamed) {
-        String why = notExposed(unnamed);
+                                                   List<TypeSymbol> worn, WornNames.Unwritable unnamed,
+                                                   java.util.Set<TypeSymbol> expanding) {
+        String why = unnamed.why();
         List<PartitionClass> out = new ArrayList<>();
         // The classes of the same position with no names to write them under. What each is and what
         // reads a value into it are the position's either way; only the recipes are dropped, and
         // they are what there is no writing them.
         for (PartitionClass each : of(cases,
-                new TypeView(view.declared(), List.of(), view.shape()), ruleSource, policy)) {
+                new TypeView(view.declared(), List.of(), view.shape()), ruleSource, policy,
+                expanding)) {
             out.add(PartitionClass.ungeneratable(each.id(), each.label(),
                     Recognition.Under.of(worn, each.recognises()), why)
                     .holding(each.denotes()).selecting(each.selects()));
         }
         return List.copyOf(out);
-    }
-
-    /** Why nothing here can write a value of {@code unnamed}: no spelling reaches it. */
-    private static String notExposed(TypeSymbol unnamed) {
-        return unnamed instanceof TypeSymbol.AtModule at
-                ? "`" + at.module() + "` does not expose `" + at.name()
-                        + "`, so nothing here can name it"
-                // What the language declares is kept by nobody: a declaration of this module
-                // spells it, so the language's has no name left here.
-                : "`" + unnamed.name() + "` is declared here, so what the language declares under"
-                        + " that name has no name here";
     }
 
     /** What a case's class is called, in one place: a reading that decides which cases the position
@@ -124,11 +121,14 @@ final class PartitionClasses {
      */
     private static PartitionClass classOf(Case one, TypeView view, List<TypeSymbol> worn,
                                           ReadingPolicy policy,
-                                          List<TypeReachName.Written> writes, RuleReadingSource ruleSource) {
+                                          List<TypeReachName.Written> writes, RuleReadingSource ruleSource,
+                                          java.util.Set<TypeSymbol> expanding) {
         PartitionClass built = switch (one) {
             case Case.Truth truth -> eitherWay(truth.value(), worn, writes);
-            case Case.Presence presence -> heldOrNot(presence.present(), view, worn, policy, writes, ruleSource);
-            case Case.SumCase sum -> caseClass(sum, view.declared(), worn, policy, writes, ruleSource);
+            case Case.Presence presence ->
+                    heldOrNot(presence.present(), view, worn, policy, writes, ruleSource, expanding);
+            case Case.SumCase sum ->
+                    caseClass(sum, view.declared(), worn, policy, writes, ruleSource, expanding);
             case Case.Named named -> ValueClasses.classAt(named.value(), view, worn, ruleSource);
         };
         Refinement narrowing = Refinement.of(one);
@@ -152,7 +152,8 @@ final class PartitionClasses {
     /** Whether an optional holds anything, which is the one division its type makes. */
     private static PartitionClass heldOrNot(boolean present, TypeView view, List<TypeSymbol> worn,
                                             ReadingPolicy policy,
-                                            List<TypeReachName.Written> writes, RuleReadingSource ruleSource) {
+                                            List<TypeReachName.Written> writes, RuleReadingSource ruleSource,
+                                            java.util.Set<TypeSymbol> expanding) {
         if (!present) {
             return PartitionClass.of("None", "None",
                     Recognition.Under.of(worn, new Recognition.Held(false)),
@@ -168,7 +169,10 @@ final class PartitionClasses {
                             + " from it disagree about its shape");
         }
         Type element = optional.element();
-        List<FixtureTemplate> some = Partitions.representativesOf(element, ruleSource, policy);
+        // Under what is already being built: what stands for `Some` is what stands at the element,
+        // and the walk that got here is the walk that is building it.
+        List<FixtureTemplate> some =
+                Partitions.representativesOf(element, ruleSource, policy, null, expanding);
         Recognition is = Recognition.Under.of(worn, new Recognition.Held(true));
         return some.isEmpty()
                 ? PartitionClass.ungeneratable("Some", "Some", is,
@@ -179,8 +183,10 @@ final class PartitionClasses {
 
     private static PartitionClass caseClass(Case.SumCase one, Type of, List<TypeSymbol> worn,
                                             ReadingPolicy policy,
-                                            List<TypeReachName.Written> writes, RuleReadingSource ruleSource) {
-        return holdingWhatItIs(one, writableCase(one.leaf(), of, worn, policy, writes, ruleSource));
+                                            List<TypeReachName.Written> writes, RuleReadingSource ruleSource,
+                                            java.util.Set<TypeSymbol> expanding) {
+        return holdingWhatItIs(one,
+                writableCase(one.leaf(), of, worn, policy, writes, ruleSource, expanding));
     }
 
     /**
@@ -201,7 +207,8 @@ final class PartitionClasses {
     private static PartitionClass writableCase(TypeSymbol leaf, Type of, List<TypeSymbol> worn,
                                                ReadingPolicy policy,
                                                List<TypeReachName.Written> writes,
-                                               RuleReadingSource ruleSource) {
+                                               RuleReadingSource ruleSource,
+                                               java.util.Set<TypeSymbol> expanding) {
         // Where the case sits on the position's order, decided here where the case, the position's
         // type and the declarations are all in hand. A line a body draws on an ordered enumeration
         // is at one of these places, and the class holding it is asked with the place.
@@ -212,26 +219,30 @@ final class PartitionClasses {
         // author here can write down. Said as that, rather than offered under a spelling that
         // resolves to nothing wherever the row is pasted (issue #696).
         if (!(ruleSource.symbols().scope().reach(leaf) instanceof TypeReachName.Written names)) {
-            return PartitionClass.ungeneratable(idOfCase(leaf), leaf.name(), is, notExposed(leaf));
+            return PartitionClass.ungeneratable(idOfCase(leaf), leaf.name(), is,
+                    WornNames.noSpellingFor(leaf));
         }
         // A case of a primitive-headed union is a primitive or one of the language's own, which
         // no module declares and nothing composes field by field: naming it builds it, the same as
         // a unit data. So the two are told apart here, where the declaration is asked for.
-        if (!(leaf instanceof TypeSymbol.AtModule declared)
-                || !(ruleSource.symbols().declaredNode(declared) instanceof Hir.Data data)) {
-            return PartitionClass.of(idOfCase(leaf), leaf.name(), is,   // naming it builds it
-                    RepresentativeSource.under(writes,
-                            RepresentativeSource.of(FixtureTemplate.unitCase(names))));
+        if (!(leaf instanceof TypeSymbol.AtModule declared)) {
+            return namingItBuildsIt(leaf, is, writes, names);
         }
-        if (data.newtype()) {
-            List<FixtureTemplate> inner =
-                    Partitions.insideTheNewtype(declared, ruleSource, policy);
-            return inner.isEmpty()
+        TypeView held = TypeView.of(Type.ref(declared), ruleSource.symbols());
+        if (!held.isWrapped() && !(held.shape() instanceof Shape.Product)) {
+            return namingItBuildsIt(leaf, is, writes, names);
+        }
+        if (held.isWrapped()) {
+            // Values of the case, which is a position of its own: it is read like any other, and
+            // what comes back already wears the case's own name. Under the position's names as well,
+            // since a case of a `data DecisionN = Decision` is written inside that name too.
+            List<FixtureTemplate> values = Partitions.representativesOf(
+                    Type.ref(declared), ruleSource, policy, null, expanding);
+            return values.isEmpty()
                     ? PartitionClass.ungeneratable(idOfCase(leaf), leaf.name(), is,
-                            "nothing here composed a value of what `" + leaf.name() + "` wraps")
+                            "nothing here composed a value of `" + leaf.name() + "`")
                     : PartitionClass.of(idOfCase(leaf), leaf.name(), is,
-                            RepresentativeSource.under(writes, RepresentativeSource.under(
-                                    List.of(names), RepresentativeSource.of(inner))));
+                            RepresentativeSource.under(writes, RepresentativeSource.of(values)));
         }
         // A record case is written field by field, which is the generator's composition. So the class
         // names the constructor and the generator does the composing — the same walk every other
@@ -240,6 +251,22 @@ final class PartitionClasses {
         // { id = 1 })`.
         return PartitionClass.of(idOfCase(leaf), leaf.name(), is,
                 RepresentativeSource.under(writes, new RepresentativeSource.Composed(declared)));
+    }
+
+    /**
+     * The class of a case whose value is written by naming it.
+     *
+     * <p>What a unit data is, and what a case of a primitive-headed union is: neither is composed
+     * field by field, because there are no fields to compose. Written once because the two arrive
+     * at it by different questions — one has no declaration of this module's at all, and the other
+     * has one that makes no record — and what they come to is the same class.
+     */
+    private static PartitionClass namingItBuildsIt(TypeSymbol leaf, Recognition is,
+                                                   List<TypeReachName.Written> writes,
+                                                   TypeReachName.Written names) {
+        return PartitionClass.of(idOfCase(leaf), leaf.name(), is,
+                RepresentativeSource.under(writes,
+                        RepresentativeSource.of(FixtureTemplate.unitCase(names))));
     }
 
     private PartitionClasses() {}

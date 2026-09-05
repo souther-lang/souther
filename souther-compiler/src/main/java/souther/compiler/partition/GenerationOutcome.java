@@ -85,7 +85,7 @@ public sealed interface GenerationOutcome {
      * finding no row would answer, and every measurement shortfall would read as generator work
      * waiting to be done.
      */
-    record NotApplicable(Reason reason) implements GenerationOutcome {
+    record NotApplicable(NotApplicable.Reason reason) implements GenerationOutcome {
 
         /** Why row synthesis is not what answers it — a fact about the finding, not about a run. */
         public enum Reason {
@@ -141,7 +141,7 @@ public sealed interface GenerationOutcome {
     record ObligationAlreadySettled() implements GenerationOutcome {}
 
     /** No strategy takes a finding of this kind, or the form this one would need. */
-    record NotSupported(Reason reason) implements GenerationOutcome {
+    record NotSupported(NotSupported.Reason reason) implements GenerationOutcome {
 
         /**
          * Why nothing takes it — a fact about which strategies are written, not about the model.

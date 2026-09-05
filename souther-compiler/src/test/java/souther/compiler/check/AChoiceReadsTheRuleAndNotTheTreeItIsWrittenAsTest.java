@@ -32,7 +32,7 @@ class AChoiceReadsTheRuleAndNotTheTreeItIsWrittenAsTest {
 
     /**
      * One alternative and whether anything satisfies it, composed the way
-     * {@link StatedByClauses#either} composes them.
+     * {@link StatedByClauses.Reading#either} composes them.
      *
      * <p>Whether a branch admits nothing is the state's to know and not the evidence's, so it is
      * carried beside here. A choice is dead where every alternative is, which is the rule the states

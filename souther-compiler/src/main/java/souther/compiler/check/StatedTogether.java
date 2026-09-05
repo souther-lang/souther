@@ -1,7 +1,6 @@
 package souther.compiler.check;
 
-import souther.compiler.numeric.OrderedIntervals;
-import souther.compiler.values.PlannedValues;
+import java.util.Map;
 
 /**
  * What every clause of one value says between them, with the choices still open.
@@ -21,10 +20,14 @@ import souther.compiler.values.PlannedValues;
  */
 sealed interface StatedTogether {
 
-    /** What the clauses reaching here leave, in both languages. */
-    record Said(PlannedValues<FactSubject> values, OrderedIntervals<FactSubject> ordered)
-            implements StatedTogether {
-    }
+    /**
+     * What the clauses reaching here leave, in both languages.
+     *
+     * <p>One field and not two. Which values a position may take and where its order stops are one
+     * answer, and a reader holding them apart is a reader that can ask each of them whether anything
+     * satisfies the rules — which is what read a branch nobody can be in as one somebody can.
+     */
+    record Said(Confinement.Planned<FactSubject> confinement) implements StatedTogether {}
 
     /**
      * A choice whose branches are not settled yet, standing for the written {@code ||} named by
@@ -41,8 +44,8 @@ sealed interface StatedTogether {
     }
 
     /** Nothing read, so nothing ruled out — the identity of {@link #meet}. */
-    static StatedTogether top() {
-        return new Said(PlannedValues.top(), OrderedIntervals.top());
+    static StatedTogether top(Map<FactSubject, Carrier> carriers) {
+        return new Said(Confinement.Planned.top(carriers));
     }
 
     /**
@@ -61,7 +64,6 @@ sealed interface StatedTogether {
         }
         Said here = (Said) this;
         Said there = (Said) other;
-        return new Said(here.values().meet(there.values()),
-                here.ordered().meet(there.ordered()));
+        return new Said(here.confinement().meet(there.confinement()));
     }
 }

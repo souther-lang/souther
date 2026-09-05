@@ -6,6 +6,7 @@ import souther.compiler.ast.Hir;
 import souther.compiler.frontend.CstFrontend;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
+import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeSymbols;
 
 import java.util.List;
@@ -109,9 +110,9 @@ class OneReadingSaysWhatAPositionIsAndHowItIsWrittenTest {
     @Test
     void theNamesWornAreKeptOutermostFirst() {
         assertEquals(List.of("StageNN", "StageN"),
-                view("StageNN").wrappers().stream().map(l -> l.named().name()).toList());
+                view("StageNN").wrappers().stream().map(TypeSymbol::name).toList());
         assertEquals(List.of("StageN"),
-                view("StageN").wrappers().stream().map(l -> l.named().name()).toList());
+                view("StageN").wrappers().stream().map(TypeSymbol::name).toList());
     }
 
     @Test

@@ -143,30 +143,30 @@ public final class CoverageSites {
      * rest of the block under a {@code guard}, and both of those are said in a language, by whoever
      * has a reader in front of them.
      *
-     * @param outcome     what this way through the construct means, in the source's terms
-     * @param at          where the arm is written, as a report may say it. A {@link Citation} and
-     *                    not a place, because an arm of a body spliced in from out of sight is at a
-     *                    call in the caller's file and is not written there — a report handed the
-     *                    coordinate said it was, in both of its renderings
-     * @param index       what identifies it in this run — the probe number, and what a hit set holds.
-     *                    One per occurrence: the emitter lights this one, and the reachability
-     *                    analysis proves things about this one
-     * @param ordinal     where it comes in its behavior, for display
-     * @param obligation  what a row would be owed for, which several occurrences share
      */
     public sealed interface Site permits ArmSite, ComparisonSite {
 
         String behavior();
 
+        /** What this way through the construct means, in the source's terms. */
         SourceOutcome outcome();
 
+        /** Where the arm is written, as a report may say it. A {@link Citation} and not a place,
+         *  because an arm of a body spliced in from out of sight is at a call in the caller's file
+         *  and is not written there — a report handed the coordinate said it was, in both of its
+         *  renderings. */
         Citation at();
 
-        /** Where a run through this is recorded, of whichever family it was issued to. */
+        /** Where a run through this is recorded, of whichever family it was issued to. What
+         *  identifies it in this run — the probe number, and what a hit set holds. One per
+         *  occurrence: the emitter lights this one, and the reachability analysis proves things
+         *  about this one. */
         RunSite index();
 
+        /** Where it comes in its behavior, for display. */
         int ordinal();
 
+        /** What a row would be owed for, which several occurrences share. */
         Obligation obligation();
 
         /** What the author wrote this an outcome of. */
@@ -553,7 +553,7 @@ public final class CoverageSites {
      *
      * <p>The walk carries numbers because it is what makes the numbering: what a number means is
      * fixed by every place still to be reached and by what the bodies do, so no address of it can
-     * exist until the walk is over. The numbers become places once, at {@link #issued}, and the
+     * exist until the walk is over. The numbers become places once, at {@link #of}, and the
      * places are what everything downstream is handed.
      */
     private record DraftSite(String behavior, SourceOutcome outcome, Citation at, int raw,
@@ -647,6 +647,8 @@ public final class CoverageSites {
          * gets as far as an {@code unreachable} is E1911 and states nothing, so an arm only such a
          * row could go through is an arm no row will ever be recorded in.
          */
+        // The `unreachable` above is the language's own word, not this method's `reachable`.
+        @SuppressWarnings("InvalidParam")
         private DraftArm armOf(SourceOutcome.Arm outcome, Core owner,
                                CoverageOrigin origin, int part, Core arm,
                                boolean reachable,
@@ -709,12 +711,12 @@ public final class CoverageSites {
          * entirely. An arm quoted at a comment sends the author to the wrong place, and there is
          * nothing in the position itself to notice that by.
          *
+         * <p>What the number about to be handed out is an address of is passed in rather than
+         * worked out from the rest: which family a number was issued to is what a reader of the
+         * recording has no other way of telling, and reading it back off the outcome here would be
+         * the numbering deciding it twice.
+         *
          * @param owner the {@code if}, {@code match} or attempted construction the arm is one of
-         * @param arm   the arm's body, which says what the arm is made of and not where it is
-         * @param where what the number about to be handed out is an address of. Passed in rather
-         *              than worked out from the rest: which family a number was issued to is what
-         *              a reader of the recording has no other way of telling, and reading it back
-         *              off the outcome here would be the numbering deciding it twice
          */
         private int armSite(SourceOutcome.Arm outcome, Core owner, CoverageOrigin origin,
                             int part, DecidedBy decided) {

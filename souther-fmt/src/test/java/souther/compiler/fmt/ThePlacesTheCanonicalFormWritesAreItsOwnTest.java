@@ -1,5 +1,6 @@
 package souther.compiler.fmt;
 
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import souther.compiler.cst.CstParser;
 import souther.compiler.cst.SyntaxKind;
@@ -23,6 +24,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * differ: its parameters move to the left of the {@code =}, and what is written after the {@code =}
  * is the lambda's body rather than the child the source has there.
  */
+@Tag("population")
 class ThePlacesTheCanonicalFormWritesAreItsOwnTest {
 
     /**

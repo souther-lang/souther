@@ -297,7 +297,7 @@ class CompilePartialAdequacyTest {
      * <p>Two different pieces of news. A search that ran out of room leaves a class still owed and
      * a row still writable by this compiler; a position held back leaves a class nothing was ever
      * going to look for, and a row offered there may be one already sitting in the file. Said the
-     * first way, the block printed `the search stopped before reaching it` two lines under the
+     * first way, the block printed `the search left something untried before reaching it` two lines under the
      * line saying the position had been withheld.
      *
      * <p>What made this possible: the finding's answer is read off there being no attempt recorded

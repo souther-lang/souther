@@ -467,8 +467,8 @@ public final class InputReads {
     @Override
     public boolean equals(Object other) {
         return this == other
-                || other instanceof InputReads that && names.equals(that.names)
-                        && alternatives.equals(that.alternatives);
+                || (other instanceof InputReads that && names.equals(that.names)
+                        && alternatives.equals(that.alternatives));
     }
 
     @Override

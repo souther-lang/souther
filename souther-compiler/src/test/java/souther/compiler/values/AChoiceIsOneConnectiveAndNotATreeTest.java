@@ -37,7 +37,7 @@ class AChoiceIsOneConnectiveAndNotATreeTest {
     private static final Value A = Value.text("A");
     private static final Value B = Value.text("B");
 
-    private final Allowance<String> sets = Allowance.ofAdmittedValues();
+    private final Allowance<String> sets = AsACompilationAllows.forAdmittedValues();
 
     private Map<String, AdmissibleValues<String>> readings() {
         Map<String, AdmissibleValues<String>> out = new LinkedHashMap<>();

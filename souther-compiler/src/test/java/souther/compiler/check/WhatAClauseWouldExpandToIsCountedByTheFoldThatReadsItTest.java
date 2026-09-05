@@ -48,14 +48,20 @@ class WhatAClauseWouldExpandToIsCountedByTheFoldThatReadsItTest {
                 POS);
     }
 
-    /** As the analysis representation spells one, which is what {@link Predicates#negated} reads. */
+    /** As the analysis representation spells one, which is what {@link Predicates} reads. */
     private static Core not(Core e) {
         return new Core.If(e, new Core.Bool(false, Type.BOOL, POS),
                 new Core.Bool(true, Type.BOOL, POS), CoverageOrigin.unwritten(), Type.BOOL, POS, java.util.List.of());
     }
 
     private static long cost(Core e) {
-        return new ExpansionCost(64).read(e, true);
+        return counted(new ExpansionCost(64), e, true);
+    }
+
+    /** The count this reading comes to. It carries no environment, so a binding leaves what it was
+     *  given ({@link ClauseScope#unchanged}) and the count is over the shape alone. */
+    private static long counted(ExpansionCost counting, Core e, boolean positive) {
+        return counting.read(e, positive, null, ClauseScope.unchanged());
     }
 
     /** A conjunction of choices, which doubles what it comes to per level and stays as long as the
@@ -92,7 +98,7 @@ class WhatAClauseWouldExpandToIsCountedByTheFoldThatReadsItTest {
     void aDenialCountsWhatTheClauseUnderItCountsDenied() {
         for (Core each : List.of(leaf(), or(leaf(), leaf()), and(leaf(), leaf()),
                 and(or(leaf(), leaf()), leaf()), or(and(leaf(), leaf()), leaf()))) {
-            assertEquals(new ExpansionCost(64).read(each, false), cost(not(each)),
+            assertEquals(counted(new ExpansionCost(64), each, false), cost(not(each)),
                     "a denial is carried down and not applied to what a branch came to");
         }
         assertEquals(1L, cost(not(or(leaf(), leaf()))), "a denied choice is a conjunction");
@@ -134,7 +140,8 @@ class WhatAClauseWouldExpandToIsCountedByTheFoldThatReadsItTest {
     @Test
     void aCountThatRunsPastTheLimitSaturates() {
         assertEquals(65, cost(doubling(64)), "saturated at one past the limit, and not overflowed");
-        assertEquals(4L, new ExpansionCost(3).read(and(or(leaf(), leaf()), or(leaf(), leaf())), true),
+        assertEquals(4L, counted(new ExpansionCost(3),
+                        and(or(leaf(), leaf()), or(leaf(), leaf())), true),
                 "a limit of its own is saturated at one past that");
     }
 
@@ -150,11 +157,21 @@ class WhatAClauseWouldExpandToIsCountedByTheFoldThatReadsItTest {
         Core wide = doubling(40);
 
         for (int limit : new int[] {Integer.MAX_VALUE - 1, Integer.MAX_VALUE}) {
-            assertEquals((long) limit + 1, new ExpansionCost(limit).read(wide, true),
+            assertEquals((long) limit + 1, counted(new ExpansionCost(limit), wide, true),
                     "one past the limit, whatever the limit is: " + limit);
-            assertTrue(new ExpansionCost(limit).read(wide, true) > limit,
+            assertTrue(counted(new ExpansionCost(limit), wide, true) > limit,
                     "and above it, so the guardrail refuses what it exists to refuse: " + limit);
         }
+    }
+
+    /** What a compilation grants a reading to build with, which these are not about. */
+    private static souther.compiler.regex.PatternPlan.Budget allowed() {
+        return souther.compiler.values.AsACompilationAllows.admittedValues();
+    }
+
+    /** And the other of the two, for the same reason. */
+    private static souther.compiler.regex.PatternPlan.Budget handedOn() {
+        return souther.compiler.values.AsACompilationAllows.whatARuleLeaves();
     }
 
     /**
@@ -170,9 +187,18 @@ class WhatAClauseWouldExpandToIsCountedByTheFoldThatReadsItTest {
      */
     @Test
     void aLimitThatBoundsNothingIsRefused() {
-        assertThrows(IllegalArgumentException.class, () -> new ReadingPolicy(0, 2));
-        assertThrows(IllegalArgumentException.class, () -> new ReadingPolicy(-1, 2));
-        assertThrows(IllegalArgumentException.class, () -> new ReadingPolicy(64, -1));
-        assertEquals(0, new ReadingPolicy(64, 0).scalePlacesLimit());
+        assertThrows(IllegalArgumentException.class,
+                () -> new ReadingPolicy(0, 2, allowed(), handedOn()));
+        assertThrows(IllegalArgumentException.class,
+                () -> new ReadingPolicy(-1, 2, allowed(), handedOn()));
+        assertThrows(IllegalArgumentException.class,
+                () -> new ReadingPolicy(64, -1, allowed(), handedOn()));
+        // And the two allowances, which a reading is granted rather than numbers it compares
+        // anything against: a reading with neither is one nothing bounds what it builds.
+        assertThrows(IllegalArgumentException.class,
+                () -> new ReadingPolicy(64, 2, null, handedOn()));
+        assertThrows(IllegalArgumentException.class,
+                () -> new ReadingPolicy(64, 2, allowed(), null));
+        assertEquals(0, new ReadingPolicy(64, 0, allowed(), handedOn()).scalePlacesLimit());
     }
 }

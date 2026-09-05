@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.Compiler;
@@ -44,6 +45,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
  * reconstruction the accounting exists to take away — so the population here is the positions
  * themselves and the accounts that answer for them.
  */
+@Tag("population")
 class APositionIsUnderivableOnlyWhereSomethingStandsAtItTest {
 
     /**

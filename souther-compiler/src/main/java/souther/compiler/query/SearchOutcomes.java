@@ -18,9 +18,9 @@ import java.util.Set;
  * first, and what the other found out was gone before anything could read it.
  *
  * <p><b>Nothing here ranks them.</b> A row that was composed, a search a budget of this compiler's
- * ended, and a search that ran through what it had are three facts about one point; there is no
- * order in which one of them stands for another, and every question a reader puts is answered by
- * looking at all of them. What is chosen is a row to offer somebody ({@link #rowToOffer}), which is
+ * ended, a search that ran to the end of what this compiler writes, and a search that ran through
+ * what it had are facts about one point; there is no order in which one of them stands for another,
+ * and every question a reader puts is answered by looking at all of them. What is chosen is a row to offer somebody ({@link #rowToOffer}), which is
  * a choice about what to show and not about what happened.
  */
 public record SearchOutcomes(List<ItemAssessment.Attempt> each) {

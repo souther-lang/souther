@@ -6,7 +6,6 @@ import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.Prepared;
-import souther.compiler.check.Sig;
 import souther.compiler.diag.Citation;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.inputs.InputDomain;
@@ -17,7 +16,6 @@ import souther.compiler.numeric.Count;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.Place;
-import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
 import souther.compiler.query.Shapes;
@@ -200,7 +198,6 @@ class ACutTheComposerCannotPlaceIsSaidAndNotHalfAppliedTest {
     }
 
     private static MeasuredInput subject() {
-        Map<String, Sig> sigs = COMPILATION.db().ask(new Bodies.Signatures(module())).value();
         List<String> names = new ArrayList<>();
         spec().params().forEach(each -> names.add(each.name()));
         return MeasuredInput.of(spec().name(), domain().reading(rules()),

@@ -2,7 +2,6 @@ package souther.compiler.check;
 
 import souther.compiler.DefaultStdlib;
 import souther.compiler.stdlib.Stdlib;
-import souther.compiler.diag.SourcePos;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
@@ -24,7 +23,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  */
 class ASignatureIsNotInstantiatedPerUseTest {
 
-    private static final SourcePos POS = new SourcePos(1, 1);
 
     /** Two library functions that both wrote {@code 'a} hand back one name for two unrelated
      * elements — which is what a helper's own minting has to separate. */

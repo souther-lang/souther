@@ -55,6 +55,113 @@ final class Automaton {
     }
 
     /**
+     * A machine written out state by state, for a builder in this package that has one to write.
+     *
+     * <p>Beside {@link #of} and not instead of it. That one is handed a pattern and works out the
+     * states; a builder here holds a machine whose states follow from something that is not a
+     * pattern — where a string sits against another on the runtime's order, which no pattern says —
+     * and has nothing to be read from. Both end in the same three tables, which is what keeps a
+     * machine made this way answerable to everything below.
+     *
+     * <p>No free steps: a builder writing its own states writes what each one leads to, so a step
+     * costing no symbol is a state it did not need. One that wants them builds through {@link #of}.
+     */
+    static Automaton madeOf(List<List<Step>> steps, BitSet accepting) {
+        List<int[]> free = new ArrayList<>();
+        for (int at = 0; at < steps.size(); at++) {
+            free.add(new int[0]);
+        }
+        return new Automaton(steps, free, accepting);
+    }
+
+    /**
+     * The steps out of one state, for a reader in this package walking a canonical machine.
+     *
+     * <p>Only ever asked of one that is canonical, where a walk is the whole of what there is to do:
+     * the machine is deterministic and complete, so every symbol leads somewhere and where it leads
+     * is a fact about the symbol. Asked of a machine that is not, a reader would be walking one of
+     * the ways the pattern happened to be written.
+     */
+    List<Step> stepsFrom(int state) {
+        return steps.get(state);
+    }
+
+    /** Whether a walk may stop at {@code state}. */
+    boolean stopsAt(int state) {
+        return accepting.get(state);
+    }
+
+    /**
+     * Whether a walk over this may stop having read a high surrogate and a low one in turn.
+     *
+     * <p>That pair of symbols is the one thing no string is read as, so a machine that stops on no
+     * sequence holding them already accepts nothing but strings and taking them out would change
+     * nothing.
+     *
+     * <p><b>Whether it stops, and not whether it has a step.</b> A canonical machine is complete —
+     * every symbol leads somewhere from every state — so every one of them has a step over a high
+     * surrogate and asking that says only that the machine is complete. Where such a step leads is
+     * the question: a pattern naming no surrogate leads to the state nothing stops at, and the
+     * sequence is refused there as it always was.
+     *
+     * <p>A walk over the states and nothing built. What it saves is a product every language would
+     * otherwise be put through.
+     */
+    boolean mayStopHavingReadALoneSurrogatePair() {
+        CodePoints high = CodePoints.between(0xD800, 0xDBFF);
+        CodePoints low = CodePoints.between(0xDC00, 0xDFFF);
+        boolean[] reaches = reachingSomewhereItStops();
+        for (int at = 0; at < steps.size(); at++) {
+            for (Step first : steps.get(at)) {
+                if (first.over().and(high).isEmpty()) {
+                    continue;
+                }
+                for (Step second : steps.get(first.to())) {
+                    if (!second.over().and(low).isEmpty() && reaches[second.to()]) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
+     * For each state, whether a walk from it may still reach one it stops at.
+     *
+     * <p>Here because it is a fact about the machine and about nothing else, and because more than
+     * one reader wants it: what a walk looking for a string does with a step is settled by whether
+     * anything is stopped at past it, and so is whether a shape the machine has is one a string
+     * ever reaches. Worked out by each of them, the two would be one walk written twice.
+     */
+    boolean[] reachingSomewhereItStops() {
+        List<List<Integer>> back = new ArrayList<>();
+        for (int at = 0; at < steps.size(); at++) {
+            back.add(new ArrayList<>());
+        }
+        for (int at = 0; at < steps.size(); at++) {
+            for (Step each : steps.get(at)) {
+                back.get(each.to()).add(at);
+            }
+        }
+        boolean[] out = new boolean[steps.size()];
+        List<Integer> waiting = new ArrayList<>();
+        for (int at = accepting.nextSetBit(0); at >= 0; at = accepting.nextSetBit(at + 1)) {
+            out[at] = true;
+            waiting.add(at);
+        }
+        for (int at = 0; at < waiting.size(); at++) {
+            for (int from : back.get(waiting.get(at))) {
+                if (!out[from]) {
+                    out[from] = true;
+                    waiting.add(from);
+                }
+            }
+        }
+        return out;
+    }
+
+    /**
      * The machine for {@code syntax}, or null where building it would take more than
      * {@code mostStates}.
      *

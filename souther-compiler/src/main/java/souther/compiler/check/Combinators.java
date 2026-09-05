@@ -149,9 +149,9 @@ final class Combinators {
                 read(DefaultStdlib.get());
     }
 
-    /* A pure function of the library, so the holder above is the only thing here that reaches for
-     * the process's own — {@link souther.compiler.DefaultStdlib} says who may and why the loader
-     * may not. */
+    /** A pure function of the library, so the holder above is the only thing here that reaches for
+     *  the process's own — {@link souther.compiler.DefaultStdlib} says who may and why the loader
+     *  may not. */
     private static Map<ValueName, Combinator> read(Stdlib stdlib) {
         Map<ValueName, Combinator> rules = new LinkedHashMap<>();
         stdlib.entries().forEach((operation, entry) -> {

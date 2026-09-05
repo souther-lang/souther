@@ -51,7 +51,7 @@ public enum OutcomeName {
     /**
      * Whether a document names this among the arms a branch measure counts.
      *
-     * <p>The image of {@link SourceOutcome#isArm()} under this projection, and held to it by
+     * <p>The image of {@link SourceOutcome.Arm} under this projection, and held to it by
      * {@code AnOutcomeIsNamedByWhatWasWrittenTest}, which walks the admissible pairs and asks both.
      */
     public boolean isArm() {

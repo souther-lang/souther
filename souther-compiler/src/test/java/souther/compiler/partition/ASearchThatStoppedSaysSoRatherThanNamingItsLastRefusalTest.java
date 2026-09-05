@@ -10,7 +10,6 @@ import souther.compiler.check.Sig;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.SiteNumbering;
 import souther.compiler.inputs.InputDomain;
-import souther.compiler.reading.Interaction;
 import souther.compiler.reading.CoverageRead;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
@@ -92,7 +91,7 @@ class ASearchThatStoppedSaysSoRatherThanNamingItsLastRefusalTest {
         Model model = Model.of(TWO_FREE, "shippingFee");
         FillResult filled = fill(model, _ -> missed(model));
 
-        assertEquals(Generator.UnresolvedCombination.Reason.SEARCH_LIMIT,
+        assertEquals(Generator.UnresolvedCombination.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED,
                 reasonFor(filled, List.of("member=Premium", "delivery=Express")),
                 "a fourth set of values, and no run left to watch it at: " + filled.unresolved());
     }
@@ -184,10 +183,6 @@ class ASearchThatStoppedSaysSoRatherThanNamingItsLastRefusalTest {
                          SiteNumbering numbering) {
 
         /** The groups of the one reading, for a caller asking about the combinations alone. */
-        List<Interaction> groups() {
-            return read.interactions();
-        }
-
         static Model of(String source, String behavior) {
             Compilation compilation = Compilation.ofSource(source, "Main");
             compilation.answerEverything();
@@ -201,7 +196,6 @@ class ASearchThatStoppedSaysSoRatherThanNamingItsLastRefusalTest {
             assertNotNull(checked);
             Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().stream()
                     .filter(b -> b.name().equals(behavior)).findFirst().orElseThrow();
-            Sig sig = sigs.get(behavior);
             InputDomain inputs =
                     compilation.db().ask(new Adequacy.Inputs(module)).value().get(behavior);
             assertNotNull(inputs, "the behavior's inputs were read");

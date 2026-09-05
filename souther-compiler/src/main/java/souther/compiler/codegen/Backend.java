@@ -2,7 +2,7 @@ package souther.compiler.codegen;
 
 import souther.compiler.query.Bodies;
 
-import souther.compiler.check.AnalysisInvariants;
+import souther.compiler.check.ExpandedClauseLookup;
 import souther.compiler.check.Boundary;
 import souther.compiler.check.DerivedSymbols;
 import souther.compiler.diag.CompileException;
@@ -151,7 +151,7 @@ public final class Backend {
                                                Map<String, List<BehaviorRequirement>> requirements,
                                                Bodies.Elaborated checked,
                                                Map<ValueName.Behavior, Composition> compositions,
-                                               AnalysisInvariants dischargeInvariants,
+                                               ExpandedClauseLookup dischargeInvariants,
                                                Map<TypeSymbol.AtModule, ValueShape> shapes,
                                                Map<ValueName.Behavior, EnsuresEnforcement> checks,
                                                Map<String, Type> standingCalls) {
@@ -183,7 +183,7 @@ public final class Backend {
                                                Map<String, List<BehaviorRequirement>> requirements,
                                                Bodies.Elaborated checked,
                                                Map<ValueName.Behavior, Composition> compositions,
-                                               AnalysisInvariants dischargeInvariants,
+                                               ExpandedClauseLookup dischargeInvariants,
                                                Map<TypeSymbol.AtModule, ValueShape> shapes,
                                                Map<ValueName.Behavior, EnsuresEnforcement> checks,
                                                Map<String, Type> standingCalls,
@@ -210,7 +210,7 @@ public final class Backend {
                                                   Map<String, List<BehaviorRequirement>> requirements,
                                                   Bodies.Elaborated checked,
                                                   Map<ValueName.Behavior, Composition> compositions,
-                                                  AnalysisInvariants dischargeInvariants,
+                                                  ExpandedClauseLookup dischargeInvariants,
                                                   Map<TypeSymbol.AtModule, ValueShape> shapes,
                                                   Map<ValueName.Behavior, EnsuresEnforcement> checks,
                                                   Map<String, Type> standingCalls,
@@ -1292,7 +1292,7 @@ public final class Backend {
             cb.withInterfaceSymbols(cdBehavior(spec.name()));
             emitInjection(cb, cdB, injected);
             if (where instanceof EnsuresEnforcement.AtTheCallee(Contract contract)) {
-                emitCheckingApply(cb, cdB, spec, contract, mtdApply, n);
+                emitCheckingApply(cb, cdB, spec, mtdApply, n);
             }
             cb.withMethodBody(bodyMethod, mtdApply, bodyFlags, code -> {
                 BodyGen gen = new BodyGen(ctx, code, null, cdB, n + 1);
@@ -1347,7 +1347,7 @@ public final class Backend {
      * this wrapper stands between a behavior and its own recursion.
      */
     private void emitCheckingApply(ClassBuilder cb, ClassDesc cdB, Hir.SpecBehavior spec,
-                                   Contract contract, MethodTypeDesc mtdApply, int n) {
+                                   MethodTypeDesc mtdApply, int n) {
         ClassDesc cdEnsures = ctx.cd(new GeneratedClass.Ensures(
                 new GeneratedClass.BehaviorInterface(ctx.pkg, spec.name())));
         List<TypeSymbol> bridged = ctx.bridgedMembers(successType(spec.ret()));

@@ -153,8 +153,7 @@ public final class PipelineSigs {
      * composition has no meaning to work out: the behavior it belongs to is abandoned, and the
      * definitions around it are checked as they would be without it.
      */
-    private static Sig stageSig(Hir.Var stage, Map<ValueName.Behavior, Sig> sigs, Symbols symbols,
-                               SourcePos pos) {
+    private static Sig stageSig(Hir.Var stage, Map<ValueName.Behavior, Sig> sigs) {
         ValueName.Behavior named = reaches(stage);
         if (named == null) {
             throw new Unanswerable(stage.pos());
@@ -184,7 +183,7 @@ public final class PipelineSigs {
                                           Map<ValueName.Behavior, List<Hir.Var>> pipeStages) {
         // flatten nested pipeline stages so `>->` is associative (spec §type-routing)
         List<Hir.Var> stages = flattenStages(pipe.stages(), pipeStages, pipe.pos());
-        Sig first = stageSig(stages.get(0), sigs, symbols, pipe.pos());
+        Sig first = stageSig(stages.get(0), sigs);
         List<Composition.Stage> walked = new ArrayList<>();
         // the first stage takes the composition's own arguments, so nothing is routed into it
         walked.add(new Composition.Stage(reaches(stages.get(0)), first.outputType(),
@@ -192,7 +191,7 @@ public final class PipelineSigs {
         Type mainline = first.outputType();
         Set<TypeSymbol> retired = new LinkedHashSet<>();
         for (int i = 1; i < stages.size(); i++) {
-            Sig g = stageSig(stages.get(i), sigs, symbols, pipe.pos());
+            Sig g = stageSig(stages.get(i), sigs);
             // Every stage after the first takes exactly one input (spec §sequential-composition).
             // `checkStagesAreSingleInput` says so too and is the diagnostic the author usually sees, but
             // signatures are built before it runs and are also built for an imported module that was never

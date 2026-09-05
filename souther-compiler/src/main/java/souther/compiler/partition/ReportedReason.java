@@ -75,7 +75,17 @@ public final class ReportedReason {
             // question about what this compiler may say next rather than about what a document
             // promises its reader. Out there both are the same kind of thing: the values are wider
             // than the rules leave them, because working them out was too much.
-            case BlockReason.PatternTooCostly _, BlockReason.ExactValuesTooCostly _ ->
+            // And a third with them, for the same reason and about further work again: where the
+            // strings a rule admits stop is asked of machines made out of the ones the rule named,
+            // and a limit reached there is the values coming out wider than the rules leave them.
+            // Which of the three it was decides what may be said next and not what a reader is
+            // promised.
+            // And a fourth, which is a position that could not hand its rules on as the sets they
+            // leave. Out there it is the same news again: what a rule of the model leaves was more
+            // than this compiler would work out. Which of the four it was decides what may be said
+            // next and not what a reader is promised.
+            case BlockReason.PatternTooCostly _, BlockReason.ExactValuesTooCostly _,
+                 BlockReason.OrderedExtentTooCostly _, BlockReason.RulesNotHandedOnAsSets _ ->
                     UndividedPosition.Reason.EXACT_VALUES_TOO_COSTLY;
             // And its own word again, because this one never reached the values at all. A reader
             // told the values were too much would go looking for what makes them so, and what is
@@ -83,12 +93,14 @@ public final class ReportedReason {
             case BlockReason.PatternTooDeeplyNested _ ->
                     UndividedPosition.Reason.PATTERN_TOO_DEEPLY_NESTED;
             // Its own word, and not the one above. That one promises a rule was read and could not
-            // be used, which is a reader having engaged with it and given up; here none did, and an
-            // author sent after the form their clause is written in would be looking for a
+            // be used, which sends an author after the form their clause is written in; here the
+            // rule was read and nothing complained of the form, so they would be looking for a
             // complaint nobody made. Neither is it the rule never having been reached — it was.
             // The published words had these two and the state between them is one a model reaches,
             // so the partition is one finer rather than the state going out under a word whose
-            // promise it does not meet.
+            // promise it does not meet. What the word itself should be is #1335: it says nothing
+            // established an interpretation, and what happened is that the interpretations were
+            // established and building what they come to together ran past the allowance.
             case BlockReason.NoReadingTookItIn _ ->
                     UndividedPosition.Reason.RULE_NOT_INTERPRETED_HERE;
             // Its own word, and not the one above. Both are rules this reading did not turn into a

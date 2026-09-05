@@ -196,7 +196,7 @@ public final class RowFixtures {
     /** Whether an expression is a bare name standing for a declared type — the form an expectation
      *  takes when it asserts the arm and nothing under it. */
     static boolean assertsAnArm(Hir.Expr e) {
-        return e instanceof Hir.Var v && v.answered() instanceof Hir.Var.Denoting d
+        return e instanceof Hir.Var.Denoting d
                 && d.denotes() instanceof souther.compiler.types.ValueName.OfType;
     }
 }

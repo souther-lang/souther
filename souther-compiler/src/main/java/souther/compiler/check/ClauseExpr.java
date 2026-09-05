@@ -31,6 +31,14 @@ import java.util.List;
  * a denial and what is under it map to the same shape and both are named. Shapes are not gathered
  * across brackets for the same reason: {@code (a && b) && c} holds a node for {@code a && b}, and a
  * reader asking about it is asking about something the author wrote.
+ *
+ * <p><b>A binding is a shape here, and it is not a connective.</b> What a helper call expands to is
+ * a binding holding the argument and the helper's body written against it (spec
+ * §invariant-discharge-representation), so a clause stating its rule through a helper is a clause
+ * under a binding. {@link Scoped} is where the environment a reading carries changes and nothing
+ * else: it composes no statements, and what is under it is read exactly as the same rule written out
+ * would be. Left as a leaf, it was a form every reading below had no word for, and an author who
+ * named a rule lost the reading an author who repeated it kept.
  */
 sealed interface ClauseExpr {
 
@@ -70,6 +78,23 @@ sealed interface ClauseExpr {
         }
     }
 
+    /**
+     * A binding and the clause under it, which is read in the environment the binding makes.
+     *
+     * <p>Not a connective: it composes nothing, and what it says is what {@link #body} says. What it
+     * marks is where the environment changes, so that a reading meets the leaves under it holding
+     * what their names mean rather than the names alone.
+     *
+     * @param binding the binding as the tree holds it, which the fold hands to {@link ClauseScope}
+     *                — the shape says a binding stands here, and what it means is settled elsewhere
+     */
+    record Scoped(List<Core> spelled, Core.LetIn binding, ClauseExpr body) implements ClauseExpr {
+
+        public Scoped {
+            spelled = named(spelled);
+        }
+    }
+
     private static List<Core> named(List<Core> spelled) {
         if (spelled == null || spelled.isEmpty()) {
             throw new IllegalArgumentException("a shape is what some part of the tree was written as");
@@ -91,6 +116,12 @@ sealed interface ClauseExpr {
     private static ClauseExpr of(Core clause, boolean positive, List<Core> above) {
         List<Core> spelled = new ArrayList<>(above);
         spelled.add(clause);
+        // The scope first, so that what is read under it is read in the environment its names mean
+        // something in. Everything below — a denial, a connective, a leaf — is then the same rule
+        // written out, and a helper whose body denies or joins is this one rule and not another.
+        if (clause instanceof Core.LetIn let) {
+            return new Scoped(spelled, let, of(let.body(), positive, List.of()));
+        }
         Conditions.Restated under = Conditions.restated(clause);
         if (under != null) {
             return of(under.condition(), under.denied() != positive, spelled);

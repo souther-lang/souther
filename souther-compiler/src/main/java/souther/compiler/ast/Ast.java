@@ -316,6 +316,7 @@ public interface Ast {
         }
 
         /** Where the entry is written. */
+        @Override
         public SourcePos pos() {
             return written.pos();
         }
@@ -337,6 +338,7 @@ public interface Ast {
             return written().canonical();
         }
 
+        @Override
         SourcePos pos();
     }
 
@@ -384,6 +386,7 @@ public interface Ast {
         }
 
         /** Where the name is written. */
+        @Override
         public SourcePos pos() {
             return written.pos();
         }
@@ -661,6 +664,7 @@ public interface Ast {
             return written().authored() ? written().pos() : null;
         }
 
+        @Override
         SourcePos pos();
     }
 
@@ -733,6 +737,7 @@ public interface Ast {
         }
 
         /** Where the name is written. */
+        @Override
         public SourcePos pos() {
             return written.pos();
         }
@@ -806,6 +811,7 @@ public interface Ast {
         }
 
         /** Where the field name is written. */
+        @Override
         public SourcePos pos() {
             return written.pos();
         }
@@ -923,11 +929,12 @@ public interface Ast {
                     region);
         }
 
-        /** The type the source wrote on this binding, or null when it wrote none. An annotation is an
-         * ordinary type (a function type belongs only in a helper's parameter), so this is the one
-         * place that narrows {@code declaredType}, and a carrier from inlining never reads as one. */
+        /** The type the source wrote on this binding, or null when it wrote none. What the source
+         * wrote and what a later pass put there are both held in {@code declaredType}, and
+         * {@code annotated} is what tells them apart: a carrier from inlining is not an annotation
+         * and is not answered here. */
         public RetType annotation() {
-            return annotated && declaredType instanceof RetType rt ? rt : null;
+            return annotated ? declaredType : null;
         }
     }
 
@@ -1162,7 +1169,7 @@ public interface Ast {
          * <p>The field is named and written nowhere, the occurrence it was read from being in the
          * file this copy is no longer being read against. The characters are still somebody's, and
          * they are whatever stands at {@code region} in the file this is read in. The counterpart of
-         * {@link Var#respelled}, for the same reason.
+         * {@link Hir.Var#respelled}, for the same reason.
          */
         public static FieldAccess restamped(Expr target, String field, SourcePos at, Region over) {
             return new FieldAccess(target, WrittenName.synthetic(field, at), at, over);

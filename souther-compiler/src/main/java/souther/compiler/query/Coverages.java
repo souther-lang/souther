@@ -7,10 +7,10 @@ import souther.compiler.inputs.InputQuestion;
 import souther.compiler.inputs.RulesWithNoLine;
 import souther.compiler.inputs.StandingQuestion;
 import souther.compiler.partition.LinesWhereTheyFall;
+import souther.compiler.publish.PublicationOrders;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.PathReachability;
 import souther.compiler.check.RuleReadingSource;
-import souther.compiler.check.Symbols;
 import souther.compiler.numeric.Place;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.CoverageSites;
@@ -88,7 +88,6 @@ final class Coverages {
                                       CoverageSites.Plan plan,
                                       PathReachability.Answers arrives,
                                       souther.compiler.check.StatedContract stated) {
-        Symbols symbols = read.symbols();
         RuleReadingSource ruleSource = read.rules();
         ReadingPolicy policy = read.domain().policy();
         souther.compiler.inputs.Quantities quantities = read.quantities();
@@ -153,14 +152,15 @@ final class Coverages {
     }
 
     /**
-     * @param partitioning what the model divides this behavior into, made once by
-     *                   {@link souther.compiler.query.Adequacy.Divided} and read here. Worked out
-     *                   again on the way in, this and the boundaries beside it would be two
-     *                   derivations of one thing and two chances to disagree about it. The lines
-     *                   those rules drew are not here: what a behavior is owed at them is the
-     *                   module's one relation projected to it
-     *                   ({@link souther.compiler.query.Adequacy.BodyBorders}), and the classes
-     *                   measure reads none of it
+     * What the classes measure comes to for one behavior.
+     *
+     * <p>What the model divides this behavior into is made once by
+     * {@link souther.compiler.query.Adequacy.Divided} and read off {@code subject} here. Worked out
+     * again on the way in, this and the boundaries beside it would be two derivations of one thing
+     * and two chances to disagree about it. The lines those rules drew are not part of it: what a
+     * behavior is owed at them is the module's one relation projected to it
+     * ({@link souther.compiler.query.Adequacy.BodyBorders}), and the classes measure reads none of
+     * it.
      */
     static PartitionEvidence of(souther.compiler.partition.MeasuredInput subject,
                                 souther.compiler.query.Adequacy.RowReading observed,
@@ -609,22 +609,20 @@ final class Coverages {
      * it because an earlier branch went the other way. Nothing measures that until the arms are
      * instrumented, so a guard's boundary is unmeasured rather than met or missed.
      *
-     * @param armsAsked whether the build asked for the arms at all. Whether the run then managed to
-     *                  read them is a second question, and {@code observed} answers it — the two fail
-     *                  differently and a measure that took one boolean for both could not say which
-     *                  had happened.
-     * @param probe     null where the module's classes or the runtime are not there to build against
-     * @param reaching  what a row had already satisfied when each comparison ran. Threaded here as
-     *                  well as into {@link #assessBetween} because which shape of quantity a rule
-     *                  cuts says nothing about where a row for it may be written — and a region put
-     *                  into one of the two paths would leave the other searching over everything its
-     *                  position could ever hold. No model was found where it moves an answer down
-     *                  this path, and no test holds it: the points of a line at one position all sit
-     *                  beside the line, and every line tried that the region excludes turned out to
-     *                  be one {@link souther.compiler.check.PathReachability} had already taken the
-     *                  obligation away for. Whether those two always coincide is not established
-     *                  here — they are different readings — so what this says is that a path is not
-     *                  left short of what it is owed, and not that the region is idle here.
+     * <p>Whether the build asked for the arms at all and whether the run then managed to read them
+     * are two questions, and {@code observed} answers the second — the two fail differently, and a
+     * measure that took one answer for both could not say which had happened.
+     *
+     * <p>What a row had already satisfied when each comparison ran is threaded here as well as into
+     * {@link #assessBetween}, because which shape of quantity a rule cuts says nothing about where a
+     * row for it may be written — and a region put into one of the two paths would leave the other
+     * searching over everything its position could ever hold. No model was found where it moves an
+     * answer down this path, and no test holds it: the points of a line at one position all sit
+     * beside the line, and every line tried that the region excludes turned out to be one
+     * {@link souther.compiler.check.PathReachability} had already taken the obligation away for.
+     * Whether those two always coincide is not established here — they are different readings — so
+     * what this says is that a path is not left short of what it is owed, and not that the region is
+     * idle here.
      */
     static List<BorderAssessment> assess(
             List<Border> lines, souther.compiler.partition.MeasuredInput subject,
@@ -754,9 +752,8 @@ final class Coverages {
         // clause's are about the values — one refuses everything outside its bound, the other states
         // a relation — so for both of those writing the value is the whole of what there is to reach.
         boolean guard = border.origin().comparisonAt().isPresent();
-        Measurement<ItemAssessment.Coverage> absent = guard
-                ? whyNoGuardLine(observed, level)
-                : whyNoInvariantLine(observed, level);
+        Measurement<ItemAssessment.Coverage> absent =
+                whyNothingWasReadAgainstTheLine(guard, observed, level);
 
         // The rows as the values they hold and what running them recorded, which is the whole of
         // what a point is met by. Read once for the border: what a row is stays the same however
@@ -911,7 +908,9 @@ final class Coverages {
                                     new souther.compiler.partition.Generator.UnresolvedCombination(
                                             java.util.List.of(label), wordOf(unknown)),
                                     within, java.util.List.of(),
-                                    EstablishmentGap.Composition.of(unknown.stoppedBy()));
+                                    PublicationOrders.COMPOSITION_BUDGETS.keep(unknown.stoppedBy()),
+                                    PublicationOrders.COMPOSITION_REPERTOIRES.keep(
+                                            java.util.List.of()));
                 };
             }
         };
@@ -1013,14 +1012,16 @@ final class Coverages {
         souther.compiler.partition.ObservedInputs read =
                 probe.read(built.row().inputs()).asInputs();
         if (read == null) {
-            // Nothing came back to read the row off, which is not an observation of it. What did
-            // not happen here is the running: the values would not build a second time, or the
-            // model refused them, or the classes would not link — and every one of those is
-            // something this run did rather than a value a limit shortened. Named as the second, a
-            // linkage failure arrives at the account as an observation that was stopped, and the
-            // report says a limit did something that never fired.
+            // Nothing came back to read the row off, which is not an observation of it and is not a
+            // position holding no value either. What did not happen here is the running: the values
+            // would not build a second time, or the model refused them, or the classes would not
+            // link — and every one of those is something this run did rather than a value a limit
+            // shortened or a place a row wrote nothing at. Named as the first, a linkage failure
+            // arrives at the account as an observation that was stopped and the report says a limit
+            // did something that never fired; named as the second, it says the row put nothing
+            // where nothing ever looked.
             return new StandingAtAPoint.Met.CouldNotTell(
-                    Set.of(souther.compiler.partition.ReadingGap.NO_VALUE));
+                    Set.of(souther.compiler.partition.ReadingGap.COULD_NOT_READ_ROW));
         }
         return StandingAtAPoint.met(line, List.of(read), criterion, site);
     }
@@ -1060,18 +1061,9 @@ final class Coverages {
         return switch (unknown.why()) {
             case NOTHING_COMPOSED_ONE -> souther.compiler.partition.Generator
                     .UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE;
-            case THE_SEARCH_RAN_OUT -> souther.compiler.partition.Generator
-                    .UnresolvedCombination.Reason.SEARCH_LIMIT;
+            case THE_SEARCH_LEFT_SOMETHING_UNTRIED -> souther.compiler.partition.Generator
+                    .UnresolvedCombination.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED;
         };
-    }
-
-    /** A search that came to nothing at {@code subject}, which is what a point is written as. */
-    private static ItemAssessment.Attempt nothingComposedOne(
-            String subject, souther.compiler.partition.WayToTheBorder within) {
-        return new ItemAssessment.Attempt.Unresolved(
-                new souther.compiler.partition.Generator.UnresolvedCombination(List.of(subject),
-                        souther.compiler.partition.Generator.UnresolvedCombination.Reason
-                                .NOTHING_COMPOSES_ONE), within);
     }
 
     /**
@@ -1152,19 +1144,28 @@ final class Coverages {
             // declined to work on left the count as one the model admits no row at.
             case souther.compiler.partition.Generator.BoundaryAttempt.Stopped left ->
                     new ItemAssessment.Attempt.Stopped(left.why(), within, left.unrepresented(),
-                            EstablishmentGap.Composition.of(left.by()));
+                            PublicationOrders.COMPOSITION_BUDGETS.keep(left.by()),
+                            PublicationOrders.COMPOSITION_REPERTOIRES.keep(left.notAllOf()));
+            // A search that ran to the end of what this compiler writes, where that is not the end
+            // of what there is to write. It leaves the point open the way the one above does and
+            // names nothing anybody could raise, which is why it arrives as its own arm and its
+            // gap holds a vocabulary of its own.
+            case souther.compiler.partition.Generator.BoundaryAttempt.Unexhausted left ->
+                    new ItemAssessment.Attempt.Unexhausted(left.why(), within,
+                            left.unrepresented(),
+                            PublicationOrders.COMPOSITION_REPERTOIRES.keep(left.writes()));
             // A search that ran to the end of what it was handed, where what it was handed was
             // short of the point. It names a figure like the one above and its word is its own, so
             // the two are carried side by side rather than one being read off the other.
             case souther.compiler.partition.Generator.BoundaryAttempt.Limited left ->
                     new ItemAssessment.Attempt.Limited(left.why(), within, left.unrepresented(),
-                            EstablishmentGap.Composition.of(left.by()));
+                            PublicationOrders.COMPOSITION_BUDGETS.keep(left.by()));
             // And a point no search was made for at all. It names a figure like the two above and
             // is not an outcome of a search, which is what keeps it out of what the readings of a
             // line together establish.
             case souther.compiler.partition.Generator.BoundaryAttempt.Unplanned left ->
                     new ItemAssessment.Attempt.Unplanned(left.why(), within, left.unrepresented(),
-                            EstablishmentGap.Composition.of(left.by()));
+                            PublicationOrders.COMPOSITION_BUDGETS.keep(left.by()));
         };
     }
 
@@ -1212,7 +1213,6 @@ final class Coverages {
     private static Measurement<ItemAssessment.Coverage> verdictOf(
             StandingAtAPoint.Met met, boolean guard, souther.compiler.partition.Border border,
             souther.compiler.query.Adequacy.RowReading observed) {
-        List<RowOutcome> rows = observed.rowsSeen();
         if (met instanceof StandingAtAPoint.Met.Reached) {
             // Found is found: a row settles this whatever else went unread, so nothing weakens it.
             return new Measurement.Complete<>(new ItemAssessment.Coverage.Hit());
@@ -1246,6 +1246,21 @@ final class Coverages {
         ItemAssessment.Coverage seen = new ItemAssessment.Coverage.NoHit();
         return by.isEmpty() ? new Measurement.Complete<>(seen)
                 : new Measurement.Partial<>(seen, WeakeningSet.ofAll(by));
+    }
+
+    /**
+     * Why nothing was read against a line at all, or null where the rows are what answer it.
+     *
+     * <p>The gates, behind one name. Which of them a line goes through is settled by the level the
+     * build asked for and by whether a fork or an invariant drew it, and that is one decision with
+     * one owner — a caller writing the choice out again, and a check enumerating what a reading can
+     * come to, would be two more statements of it, free to say what this stopped saying.
+     */
+    static Measurement<ItemAssessment.Coverage> whyNothingWasReadAgainstTheLine(
+            boolean drawnByAFork,
+            souther.compiler.query.Adequacy.RowReading observed,
+            souther.compiler.query.Adequacy.Level level) {
+        return drawnByAFork ? whyNoGuardLine(observed, level) : whyNoInvariantLine(observed, level);
     }
 
     /**

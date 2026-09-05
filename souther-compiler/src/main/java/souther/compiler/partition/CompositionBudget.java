@@ -1,7 +1,5 @@
 package souther.compiler.partition;
 
-import java.util.function.IntSupplier;
-
 /**
  * A figure this compiler holds a piece of its own work to.
  *
@@ -34,58 +32,62 @@ import java.util.function.IntSupplier;
  * leaves the point unestablished, and one that had produced something leaves an offer that is some
  * of what there was — so the same member appears on both sides and is neither of them.
  *
- * <p>The figures are read through {@link #maximum()} and are not all written down. One of them is
- * how many shapes a decomposition is offered in, which is how many the walk has — read off the walk,
- * so that a shape added there is a budget raised here and not a number that stayed behind.
+ * <p><b>Every figure is written down here, and none is the size of the walk it bounds.</b> A figure
+ * set to how many pieces a walk has is reached on every run and on none: it says what this compiler
+ * is made of rather than what one search declined, and a reader handed it is told to raise something
+ * that stopped nothing. What such a number was saying belongs to
+ * {@link CompositionRepertoire}, which is a population this compiler offers some of and is not a
+ * number anybody raises.
  */
 public enum CompositionBudget {
 
     /** How many elements a proposed collection is worth building. A row is offered for somebody to
      *  read and complete, and a minimum past this asks for one nobody would. */
-    ELEMENTS_A_PROPOSAL_HOLDS(() -> 64),
+    ELEMENTS_A_PROPOSAL_HOLDS(64),
 
     /** How many characters a proposed string is worth building. Its own figure, because a string of
      *  sixty-five is one literal where a collection of sixty-five is sixty-five values each built in
      *  turn — holding the two to one number bounds a string by something about collections. */
-    CHARACTERS_A_PROPOSAL_HOLDS(() -> 4096),
+    CHARACTERS_A_PROPOSAL_HOLDS(4096),
 
     /** How many pairings of what a map's key and value propose are built at once. Every pair is
      *  built before any of them is tried, so this bounds what is allocated rather than what is
      *  walked. */
-    PAIRINGS_BUILT_AT_ONCE(() -> 64),
+    PAIRINGS_BUILT_AT_ONCE(64),
 
     /** How many elements a container built to reach a total is worth carrying. Its own figure and
      *  not {@link #ELEMENTS_A_PROPOSAL_HOLDS}, though they agree: held as one, a change made for one
      *  of them would move the other for no reason anybody could state. */
-    ELEMENTS_A_TOTAL_IS_SPREAD_OVER(() -> 64),
+    ELEMENTS_A_TOTAL_IS_SPREAD_OVER(64),
 
     /** How many containers are offered for one total. They are alike to the total, so what a fifth
      *  buys is another row reading like the last. */
-    SHAPES_OF_A_TOTAL_OFFERED(() -> 4),
+    SHAPES_OF_A_TOTAL_OFFERED(4),
 
-    /** How many ways the difference between a starting point and a total is spread over the
-     *  elements. Read off the walk that has them, so a third way of spreading is this budget
-     *  raised. */
-    DECOMPOSITIONS_OF_A_TOTAL_OFFERED(ContainersAddingUp::decompositionsOffered),
+    /** How many ways down to the number a total is read from are tried. Its own figure and not
+     *  {@link #SHAPES_OF_A_TOTAL_OFFERED}: a way that plans is not a container that was offered, and
+     *  charging one to the other leaves a case never tried because an earlier one planned and built
+     *  nothing. What multiplies here is the cases of every sum the way down crosses. */
+    WAYS_DOWN_TO_A_TOTAL_TRIED(8),
 
     /** How many places along a line a pair is tried at. What a range cannot say is that one of its
      *  values is missing, so what stepping past this walks over is holes, and there are as many of
      *  those as the rules state. */
-    PLACES_A_PAIR_IS_TRIED_AT(() -> 64),
+    PLACES_A_PAIR_IS_TRIED_AT(64),
 
     /** How many steps a walk over the positions of a form may take. A run without an end is not
      *  walked to the end at any length. */
-    STEPS_A_SEARCH_MAY_TAKE(() -> 200_000),
+    STEPS_A_SEARCH_MAY_TAKE(200_000),
 
     /** How many assignments of one parameter's positions a search composes. A bound on the search
      *  and not on any one position. */
-    ASSIGNMENTS_A_SEARCH_COMPOSES(() -> 256),
+    ASSIGNMENTS_A_SEARCH_COMPOSES(256),
 
     /** How many values of a progression nothing bounds are tried. */
-    VALUES_OF_AN_UNBOUNDED_PROGRESSION_TRIED(() -> 16),
+    VALUES_OF_AN_UNBOUNDED_PROGRESSION_TRIED(16),
 
     /** How many levels past the one a side starts from are asked for. */
-    LEVELS_A_SIDE_IS_ASKED_AT(() -> 8),
+    LEVELS_A_SIDE_IS_ASKED_AT(8),
 
     /**
      * How often a walk re-reads the rules with the positions it has fixed.
@@ -101,12 +103,12 @@ public enum CompositionBudget {
      * nothing. The others are named beside their carriers; this is named beside the reason it has
      * none.
      */
-    TIMES_THE_RULES_ARE_ASKED_AGAIN(() -> 2_000),
+    TIMES_THE_RULES_ARE_ASKED_AGAIN(2_000),
 
     /** How many values of one position on the way to a border are tried. Its outcome is not a
      *  composing that stopped: the row is composed, and what was not composed against is one
      *  condition on the way ({@link ReachabilityGap}). */
-    VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT(() -> 8),
+    VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT(8),
 
     /**
      * How deep a construction plan descends.
@@ -125,16 +127,16 @@ public enum CompositionBudget {
      * all: a row composed against such a plan is one the caller's own value is missing from, and
      * the plan says so instead of handing one back.
      */
-    DEPTH_A_CONSTRUCTION_PLAN_DESCENDS(() -> 8);
+    DEPTH_A_CONSTRUCTION_PLAN_DESCENDS(8);
 
-    private final IntSupplier maximum;
+    private final int maximum;
 
-    CompositionBudget(IntSupplier maximum) {
+    CompositionBudget(int maximum) {
         this.maximum = maximum;
     }
 
     /** The figure itself. What is done on reaching it is the member's to say. */
     public int maximum() {
-        return maximum.getAsInt();
+        return maximum;
     }
 }

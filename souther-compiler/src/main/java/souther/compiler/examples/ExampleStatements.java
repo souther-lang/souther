@@ -433,7 +433,7 @@ public final class ExampleStatements {
      * helper in it may not stop — so a budget covering the whole reading is one a
      * single slow row can spend, and spending it would drop every other statement's reading with it:
      * a plain contradiction elsewhere in the module would go unsaid because of a row it has nothing
-     * to do with. It is what {@link #checkRow} already does for a row it evaluates, and this reads
+     * to do with. It is what {@link ExampleVerifier#checkRow} already does for a row it evaluates, and this reads
      * strictly fewer statements than that evaluates rows.
      *
      * <p>What did not finish states nothing. Who says so is the caller's, and differs: a row and a

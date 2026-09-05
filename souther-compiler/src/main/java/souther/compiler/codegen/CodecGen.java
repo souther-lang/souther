@@ -16,6 +16,7 @@ import souther.compiler.types.Type;
 import souther.compiler.jvm.SoutherJvmAbi;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.check.TypeOps;
+import souther.compiler.diag.TheCompilerDisagreesWithItself;
 import souther.compiler.core.Core;
 
 import souther.compiler.jvm.DecoderKind;
@@ -184,6 +185,7 @@ final class CodecGen {
      * canonicalization collision is caught, and that is a property of every key type, not of the
      * ones that need converting.
      */
+    @SuppressWarnings("UnusedVariable")   // the key is what a narrowing would read; see above
     private static boolean needsRekey(MapKeyRepresentation key) {
         return true;
     }
@@ -703,12 +705,43 @@ final class CodecGen {
      * <p>The mapping is written against the operations an author wrote — {@code List.length},
      * {@code List.allDistinctBy} — and by the time the backend emits, a prelude helper has become the
      * fold it is derived from. Reading the settled form instead would leave every collection rule
-     * unrecognised. A type another module declares has no such form here; nothing asks, because a type's
-     * decoder is generated where the type is declared.
+     * unrecognised.
+     *
+     * <p><b>Every rule or none.</b> A decoder is what the boundary holds a value to, so one built
+     * from the rules that happened to be readable holds it to less than the model says and carries
+     * no word for having done so — a value the model refuses would cross. Where a rule was not
+     * reached this refuses instead, and the module emits nothing.
+     *
+     * <p>Refused as a disagreement and not reported to an author, because nothing an author writes
+     * reaches it: a module that spreads a declaration nothing expanded is already short of an input
+     * the emission takes and stops before here. What holds that is a dependency of the emission
+     * rather than anything this reads, so it is said here rather than assumed — reaching this line
+     * is the emitter having run past its own precondition, and the answer at it is the difference
+     * between a boundary that holds and one that quietly does not.
      */
     private List<Hir.InvariantClause> dischargeForm(Hir.Data data) {
-        return TypeOps.analysisInvariants(data.declares(), data, symbols,
-                ctx.dischargeInvariants());
+        return TypeOps.expandedInvariants(data.declares(), data, symbols,
+                ctx.dischargeInvariants()).whole()
+                .orElseThrow(() -> new RulesWereNotAllRead(data.declares().name()));
+    }
+
+    /**
+     * Raised where a decoder was to be built and a rule about the value had not been read.
+     *
+     * <p>Not a limit and not an author's mistake: the emission does not begin where a rule it reads
+     * could not be worked out, so arriving here is this compiler having gone past that. It carries
+     * {@link TheCompilerDisagreesWithItself} so that nothing below reads it as a shape the emitter
+     * has no rule for and carries on with a decoder that constrains less.
+     */
+    static final class RulesWereNotAllRead extends RuntimeException
+            implements TheCompilerDisagreesWithItself {
+
+        private static final long serialVersionUID = 1L;
+
+        RulesWereNotAllRead(String declaration) {
+            super("a decoder for `" + declaration + "` was to be built from rules this compiler had"
+                    + " not all read");
+        }
     }
 
     /** Collects the named types used as map keys anywhere in a derived decoder. */
@@ -1016,7 +1049,7 @@ final class CodecGen {
             case DATETIME -> emitTemporalLeaf(code, src, Type.Prim.DATETIME);
             case INSTANT -> emitTemporalLeaf(code, src, Type.Prim.INSTANT);
         }
-        emitInvariantConstraints(code, cdName, inputType, invariants);
+        emitInvariantConstraints(code, inputType, invariants);
         code.aload(1);                                                 // in (bare value)
         code.aload(2);                                                 // path
         code.invokeinterface(CD_RDecoder, "decode", MTD_Rdecode);      // Result
@@ -1064,17 +1097,17 @@ final class CodecGen {
             // needs the map the model declared — the keys converted and canonical — so it goes after.
             emitDecoderObject(code, mp.value(), src);
             code.invokestatic(srcListOwner(src), "map", MTD_mapDec);
-            emitInvariantConstraints(code, cdName, bindType(dec.inner()), invariants,
+            emitInvariantConstraints(code, bindType(dec.inner()), invariants,
                     ConstraintPhase.MAPPED);
             code.invokedynamic(rekeyCallSite(decoderClass, mp.key()));
             code.invokeinterface(CD_RDecoder, "flatMapWithPath", MTD_flatMapWithPath);
-            emitInvariantConstraints(code, cdName, bindType(dec.inner()), invariants,
+            emitInvariantConstraints(code, bindType(dec.inner()), invariants,
                     ConstraintPhase.REFINED);
         } else {
             emitDecoderObject(code, dec.inner(), src);                // Y's decoder (for this source)
             // Y's decoder is a plain Decoder, so no typed constraint applies here; whatever the
             // invariant says is checked through refine (and again by __construct).
-            emitInvariantConstraints(code, cdName, bindType(dec.inner()), invariants);
+            emitInvariantConstraints(code, bindType(dec.inner()), invariants);
         }
         code.aload(1);                                               // in
         code.aload(2);                                               // path
@@ -1340,19 +1373,18 @@ final class CodecGen {
      * the order a failure is reported in — the same order {@code __construct} decides in, so the
      * boundary and an attempted construction name the same clause for the same value.
      */
-    private void emitInvariantConstraints(CodeBuilder code, ClassDesc cdName, Type base,
-                                          Invariants invariants) {
-        emitInvariantConstraints(code, cdName, base, invariants, ConstraintPhase.BOTH);
+    private void emitInvariantConstraints(CodeBuilder code, Type base, Invariants invariants) {
+        emitInvariantConstraints(code, base, invariants, ConstraintPhase.BOTH);
     }
 
-    private void emitInvariantConstraints(CodeBuilder code, ClassDesc cdName, Type base,
+    private void emitInvariantConstraints(CodeBuilder code, Type base,
                                           Invariants invariants, ConstraintPhase phase) {
         for (ClauseEmit clause : invariants.clauses()) {
             if (phase != ConstraintPhase.REFINED) {
                 clause.constraints().forEach(c -> emitConstraint(code, c));
             }
             if (clause.refined() && phase != ConstraintPhase.MAPPED) {
-                code.invokedynamic(invariantPredicateCallSite(cdName, base, clause.index()));
+                code.invokedynamic(invariantPredicateCallSite(base, clause.index()));
                 // The clause is captured off the stack, so a clause with no name captures null —
                 // a constant-pool entry could not have been one.
                 if (clause.name().isPresent()) {
@@ -1446,7 +1478,7 @@ final class CodecGen {
     /** {@code invokedynamic} producing a {@code Predicate} over the type's {@code $Ctfe.check$i} — the
      * clause declared {@code i}th as a plain boolean, emitted beside the whole-invariant check
      * compile-time construction checking uses (ADR-0032). */
-    private DynamicCallSiteDesc invariantPredicateCallSite(ClassDesc cdName, Type base, int clause) {
+    private DynamicCallSiteDesc invariantPredicateCallSite(Type base, int clause) {
         ClassDesc cdCtfe = cd(new GeneratedClass.Ctfe(decodedValue));
         MethodTypeDesc check = MethodTypeDesc.of(ConstantDescs.CD_boolean, JvmTypes.jvmType(base, ctx));
         // A Predicate's argument is a reference, so the instantiated type takes the decoded value's

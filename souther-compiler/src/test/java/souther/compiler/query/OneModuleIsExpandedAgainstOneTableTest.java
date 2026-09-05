@@ -100,7 +100,7 @@ class OneModuleIsExpandedAgainstOneTableTest {
     private static void namedSpreads(Hir.Expr e, HelperTable table, Set<String> out) {
         if (e instanceof Hir.NewData nd) {
             for (Hir.Var spread : nd.spreads()) {
-                if (spread.answered() instanceof Hir.Var.Denoting named
+                if (spread instanceof Hir.Var.Denoting named
                         && named.reachesADeclaration() != null
                         && table.reaches(named.reachesADeclaration())) {
                     out.add(named.reaches());

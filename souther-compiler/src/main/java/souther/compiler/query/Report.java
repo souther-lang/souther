@@ -14,7 +14,7 @@ import java.util.List;
  *
  * <p>The second field is here because the first cannot reproduce it. A migrated throw site builds a
  * catalog-keyed diagnostic and passes its English body separately to
- * {@link CompileException#of(Diagnostic, String)}; that body never reaches the diagnostic, and it
+ * {@link CompileException#of(Diagnostic)}; that body never reaches the diagnostic, and it
  * cannot be put there, because {@link DiagnosticRenderer} prefers a literal message over a catalog
  * key — every migrated site would go back to rendering English instead of the reader's locale.
  *

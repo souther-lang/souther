@@ -17,7 +17,7 @@ import java.util.function.Function;
  * whoever applies the behavior. Making it something a constructor can take is not: a unary dependency
  * becomes a {@code Behavior} proxy and any other arity a generated subclass of the dependency's base,
  * and both are classes of the loader the implementation being constructed comes from. So the answer is
- * here and the instance is the answerer's ({@link Answerer#applying}).
+ * here and the instance is the answerer's ({@link Answerer.Answer.Something#applying}).
  *
  * <p>{@link #answers} takes and returns values of this compile's classes. That is not a general
  * protocol between a run and an answerer, and nothing needs it to be: a behavior with requirements is

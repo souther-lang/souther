@@ -131,17 +131,19 @@ final class EndNarrowing<C> {
      * @param candidates the declarations that wrote a relation about it, in the order they were
      *                   found
      * @param ends       the same coordinate read again with rules taken away
-     * @param order      the one order these are answered in, which is the caller's to say: what a
-     *                   line is told apart by is the answer, so an order read off the walk that
-     *                   collected the candidates would make two readings of one edge into two lines
      */
     static <C extends Comparable<? super C>> Answer<C> read(Endpoint end, List<C> candidates,
                                                             Ends<C> ends) {
         return read(end, candidates, ends, java.util.Comparator.naturalOrder());
     }
 
-    /** The same, where what a candidate is has no order of its own for the caller to leave
-     *  unsaid. */
+    /**
+     * The same, where what a candidate is has no order of its own for the caller to leave unsaid.
+     *
+     * @param order the one order these are answered in, which is the caller's to say: what a line
+     *              is told apart by is the answer, so an order read off the walk that collected the
+     *              candidates would make two readings of one edge into two lines
+     */
     static <C> Answer<C> read(Endpoint end, List<C> candidates, Ends<C> ends,
                               java.util.Comparator<C> order) {
         return end.sameAs(ends.without(Set.copyOf(candidates)))

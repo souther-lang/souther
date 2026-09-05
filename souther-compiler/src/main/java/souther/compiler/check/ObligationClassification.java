@@ -46,13 +46,15 @@ sealed interface ObligationClassification {
      * further — which is why the measure that answers this question stays open, and why the answer
      * is not that the model says nothing.
      */
-    record Undetermined(BlockReason.RuleReadingStopped why) implements ObligationClassification {
+    record Undetermined(java.util.List<BlockReason.RuleReadingStopped> why)
+            implements ObligationClassification {
 
         public Undetermined {
-            if (why == null) {
+            if (why.isEmpty()) {
                 throw new IllegalArgumentException(
                         "a classification that did not come out says what stopped it");
             }
+            why = java.util.List.copyOf(why);
         }
     }
 }

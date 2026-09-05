@@ -42,8 +42,11 @@ final class LocalInspection {
         // Said to be classes of this position's own measure as they are built. What a class means is
         // the same wherever it stands; which number's values it divides is this reading's answer,
         // and a reader working it back out of the meaning would be answering it again.
+        // Nothing is being built here: a position is being inspected, so no value's own name is
+        // already open.
         List<PartitionClass> classes =
-                PartitionClasses.of(position.obligationCases(), position.view(), ruleSource, policy)
+                PartitionClasses.of(position.obligationCases(), position.view(), ruleSource, policy,
+                                java.util.Set.of())
                         .stream().map(each -> each.ofTheNumber(position.term())).toList();
         DeclaredBounds.Bounds axis = position.nothingExists() ? null
                 : axisBounds(position.ownEnds(), position.rangeLeft());

@@ -154,7 +154,7 @@ public sealed interface Rules {
             // the identity to get one, so the test below never decides anything. It is how the
             // name says which kind it is rather than a reader assuming it.
             case Hir.Data data -> named instanceof TypeSymbol.AtModule at
-                    ? new Read(FieldDomains.of(at, data, source, policy))
+                    ? new Read(FieldDomains.of(at, source, policy))
                     : Declared.notAModules(named, data);
             // A sum names which cases a value can be and carries no clause of its own; a unit data
             // has one value and may write no rule about it (spec §unit-data). Both are declarations

@@ -2,10 +2,8 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.ast.Hir;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
-import souther.compiler.check.Prepared;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.inputs.BlockReason;
@@ -14,7 +12,6 @@ import souther.compiler.check.RuleCitation;
 import souther.compiler.check.RuleRef;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
-import souther.compiler.query.Shapes;
 
 import java.util.List;
 
@@ -64,12 +61,9 @@ class AComparisonThisDoesNotReadIsStillNoticedTest {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
         String module = compilation.modules().get(0);
-        Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
         assertNotNull(checked, () -> "the model under test compiles: " + condition);
-        Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().stream()
-                .filter(b -> b.name().equals("pick")).findFirst().orElseThrow();
         Core body = checked.behaviorBodies().get("pick");
         assertNotNull(body);
         CoverageSites.Plan plan = checked.plan();
@@ -196,7 +190,7 @@ class AComparisonThisDoesNotReadIsStillNoticedTest {
      * <p>The position was all this used to carry, so a report could say a rule about `+p.x+` went
      * unread and name no rule. What identifies a comparison is the behavior it is written in and
      * the construct the author wrote; what finds it is where it is written. Neither is the
-     * plan\u0027s: a condition nothing can be measured about is numbered nowhere, and the model
+     * plan's: a condition nothing can be measured about is numbered nowhere, and the model
      * states the rule regardless.
      */
     @Test

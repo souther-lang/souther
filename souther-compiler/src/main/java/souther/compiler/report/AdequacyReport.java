@@ -15,6 +15,7 @@ import souther.compiler.partition.AuthoredLine;
 import souther.compiler.partition.BorderObligationPoint;
 import souther.compiler.partition.ClosureGap;
 import souther.compiler.partition.CompositionBudget;
+import souther.compiler.partition.CompositionRepertoire;
 import souther.compiler.partition.DomainPoint;
 import souther.compiler.partition.FarEnd;
 import souther.compiler.partition.Generator;
@@ -61,6 +62,7 @@ import souther.compiler.query.ObligationCoverage;
 import souther.compiler.query.ObligationDisposition;
 import souther.compiler.query.ObligationSummary;
 import souther.compiler.query.ReadingReasons;
+import souther.compiler.query.UnaskedReasons;
 import souther.compiler.query.EstablishmentGap;
 import souther.compiler.query.WritabilityKnowledge;
 import souther.compiler.publish.CanonicalSelection;
@@ -176,6 +178,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
     }
 
     /**
+     * What one module's compile came to, as this report says it.
+     *
      * @param owedByDeclarations what this module's declarations are owed and how far the reading it
      *                           was made from got. An account and not a list of debts: a module
      *                           whose lines nobody could read holds no debts anybody found, and read
@@ -287,11 +291,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
     }
 
     /**
-     * @param reading   how far the reading of this behavior's rows got, and what it read. The
-     *                  counts a document prints are this measurement's value and are absent where
-     *                  it has none: a source nobody evaluated leaves no row to count, and printing
-     *                  {@code rows 0} for it says the author wrote none (issue #996)
-     * @param signature what those rows establish about the cases of its inputs and its output
+     * What one behavior's compile came to, as this report says it.
+     *
      * @param claimed   what the body declared cannot arrive, beside the measures rather than in
      *                  them. The two are joined where this report is written and nowhere else,
      *                  which is what keeps a claim from reaching a denominator
@@ -306,7 +307,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             findings = List.copyOf(findings);
         }
 
-        /** How far the reading of this behavior's rows got, and what it read. */
+        /** How far the reading of this behavior's rows got, and what it read. The counts a document
+         *  prints are this measurement's value and are absent where it has none: a source nobody
+         *  evaluated leaves no row to count, and printing {@code rows 0} for it says the author
+         *  wrote none. */
         public Adequacy.RowReading reading() {
             return evidence.reading();
         }
@@ -829,8 +833,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         for (ObligationDisposition.Uncertainty each : undecided.because().written()) {
             switch (each) {
                 case ObligationDisposition.Uncertainty.WhetherARowIsThere.ReadingsStopped _ -> { }
+                // One opening, which says one reason. What the readings gave is a set, and asking
+                // for it as one is where an opening with no room for the second says so.
                 case ObligationDisposition.Uncertainty.WhetherARowIsThere.NothingWasRead it ->
-                        out.add(new AdequacyOpening.NotMeasured(it.why()));
+                        out.add(new AdequacyOpening.NotMeasured(it.why().asOne()));
                 case ObligationDisposition.Uncertainty.WhetherARowCanBeWritten.Stopped it ->
                         it.by().by().written().forEach(gap ->
                                 out.add(new AdequacyOpening.ShowingStopped(gap)));
@@ -1050,8 +1056,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         return owed;
     }
 
-    /** Whether the bar refuses over any of {@code kinds}, which is what puts the measure that finds
-     *  them among the answers a verdict needs. */
+    /** Whether the bar refuses over {@code kind}, which is what puts the measure that finds them
+     *  among the answers a verdict needs. */
     private boolean refuses(Adequacy.Kind kind) {
         return held.refuses(kind);
     }
@@ -1746,8 +1752,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * one, since that is what tells two questions at one position apart; the position is what is
      * left.
      */
-    private static String subjectOf(PartitionEvidence.Unanswered asked,
-                                    SourceNameResolver names, SourceId declaredIn) {
+    private static String subjectOf(PartitionEvidence.Unanswered asked) {
         return asked.measure() != null ? asked.measure() : asked.at();
     }
 
@@ -1907,9 +1912,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 // that reached past it for the evidence would be one more reader working the
                 // answer out on its own terms.
                 case ObligationDisposition.Uncertainty.WhetherARowIsThere.NothingWasRead(
-                        MeasureReason why) ->
+                        UnaskedReasons why) ->
                         "undecided whether a row is at the " + point + " — "
-                                + ReasonProse.of(why).clause();
+                                + ReasonProse.of(why.asOne()).clause();
                 // Named for what happened, which is not one thing. A reading that did not come
                 // back is of a row this compiler composed; a composing that stopped never had one
                 // — and an opening written for the first says a row was built at a point where
@@ -1947,13 +1952,25 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         return said.isEmpty() ? "" : ", and " + String.join(", and ", said);
     }
 
-    /** What one reading met at a border instead of a number, in the reading's own words. */
-    private static String atTheBorder(ReadingGap why) {
+    /**
+     * What one reading met at a border instead of a number, in the reading's own words.
+     *
+     * <p>Where the reasons stay apart. Several of them weaken a document the same way and are one
+     * word to the vocabulary that sorts on that; a reader is still owed which of them happened, and
+     * this is what says it. So it is open to the census that holds every reason to a sentence
+     * nothing else writes.
+     */
+    static String atTheBorder(ReadingGap why) {
         return switch (why) {
             case ReadingGap.Observation(Incompleteness.Code code) -> whatStopped(code);
             // Nothing was observed here, so nothing about an observation is said. What a reader is
             // owed is that no value arrived at all, which no budget would have changed.
             case ReadingGap.NoValue _ -> "the walk reached no value there to read";
+            // And where nothing was looked at, what a reader is owed is that the position was never
+            // read -- said the way it happened, since "no value there" is a claim about the row and
+            // nothing here found anything out about one.
+            case ReadingGap.CouldNotWalk _ -> "the walk to that position could not be taken";
+            case ReadingGap.CouldNotReadRow _ -> "no row came back to read there";
         };
     }
 
@@ -1982,9 +1999,20 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 // this was, so what is written is what both of them establish: nothing was
                 // composed, and a figure of this compiler's is why. Which way it happened is said
                 // per search, where the outcome that knows is still in hand.
-                case EstablishmentGap.Composition(var budgets) ->
-                        "nothing was composed for it, and a figure of this compiler's is why: "
-                                + said(budgets);
+                // Two sentences and not one list, because what a reader does about them differs. A
+                // figure is a number to raise and reaching it is why the search went no further; a
+                // population this writes some of is work nobody has done, and no number anybody
+                // raises reaches the rest of it. Run together, an author reads the second as
+                // something to raise and finds that raising it changes nothing.
+                case EstablishmentGap.Composition(var budgets, var repertoires) ->
+                        "nothing was composed for it"
+                                + (budgets.isEmpty() ? ""
+                                        : ", and a figure of this compiler's is why: "
+                                                + said(budgets))
+                                + (repertoires.isEmpty() ? ""
+                                        : ", and this compiler writes some of "
+                                                + writes(repertoires)
+                                                + " rather than all of them");
             });
         }
         return String.join(", and ", out);
@@ -2019,10 +2047,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * short of whatever the reason is about.
      */
     private static void sayWhy(StringBuilder out, String measure, MeasureReason reason) {
-        ReasonProse why = ReasonProse.of(reason);
-        if (why.scope() == ReasonProse.Scope.BEHAVIOR) {
+        if (reason.about() == MeasureReason.About.THE_BEHAVIOR) {
             out.append(String.format("    %s%s%n",
-                    DisplayColumns.padRight(measure, 12), why.sentence()));
+                    DisplayColumns.padRight(measure, 12), ReasonProse.of(reason).sentence()));
         }
     }
 
@@ -2068,8 +2095,21 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         return switch (attempt) {
             case ItemAssessment.Attempt.Certified _, ItemAssessment.Attempt.Unverified _,
                  ItemAssessment.Attempt.Unavailable _ -> "";
+            // And what it separately writes some of, where it does. Both are things the offer is
+            // short of and only one is a number, so the second is said in its own clause rather
+            // than folded into the figures or left out because a figure was there to name.
             case ItemAssessment.Attempt.Stopped it ->
-                    " — this compiler stopped at " + said(it.stoppedBy().budgets()) + ": "
+                    " — this compiler stopped at " + said(it.stoppedBy())
+                            + andWritesSomeOf(it.notAllOf()) + ": "
+                            + it.why().said().orElseGet(() -> whyUnresolved(it.why()))
+                            + whatTheRegionLeftOut(it.unaccountedFor(), names, declaredIn);
+            // Said as what this compiler writes rather than as a number it stopped at, because
+            // there is no number: an author told to raise one would raise it and get the same
+            // offer. What would change this is somebody writing the rest of what it walks, and the
+            // sentence says so.
+            case ItemAssessment.Attempt.Unexhausted it ->
+                    " — this compiler writes some of " + writes(it.notAllOf())
+                            + " rather than all of them: "
                             + it.why().said().orElseGet(() -> whyUnresolved(it.why()))
                             + whatTheRegionLeftOut(it.unaccountedFor(), names, declaredIn);
             // Both halves, because neither says what the other does. The word is what the search
@@ -2078,14 +2118,14 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             // for; said as the figure alone, they go looking for a search that stopped.
             case ItemAssessment.Attempt.Limited it ->
                     " — as far as this compiler plans, which stops at "
-                            + said(it.limitedBy().budgets()) + ": "
+                            + said(it.limitedBy()) + ": "
                             + it.why().said().orElseGet(() -> whyUnresolved(it.why()))
                             + whatTheRegionLeftOut(it.unaccountedFor(), names, declaredIn);
             // No search to report on, which is what this says instead of saying what one found. The
             // figure is what an author would raise to get one made at all.
             case ItemAssessment.Attempt.Unplanned it ->
                     " — nothing was planned for it, because this compiler stops at "
-                            + said(it.limitedBy().budgets())
+                            + said(it.limitedBy())
                             + whatTheRegionLeftOut(it.unaccountedFor(), names, declaredIn);
             case ItemAssessment.Attempt.Unresolved it ->
                     (it.why().reason().provesInfeasible() ? " — " : " — nothing composed one: ")
@@ -2157,6 +2197,37 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
     }
 
     /**
+     * What a search that met a figure also walked in part, said after the figure, or nothing.
+     *
+     * <p>Beside the figure and never among them. What a reader does about the two differs, and a
+     * stop that also wrote some of a population is a point where raising the figure is worth doing
+     * and is not the whole of what is missing.
+     */
+    private static String andWritesSomeOf(
+            CanonicalSelection<CompositionRepertoire> repertoires) {
+        return repertoires.isEmpty() ? ""
+                : ", and writes some of " + writes(repertoires) + " rather than all of them";
+    }
+
+    /**
+     * What a population this compiler writes some of is called where a reader meets one.
+     *
+     * <p>Its own sentence and not one of the figures'. Nothing here is a number, so what a reader
+     * is told is what this compiler writes rather than how much of it — and a population added
+     * arrives here as a compile error rather than as a name nobody wrote a sentence for.
+     */
+    private static String writes(CanonicalSelection<CompositionRepertoire> repertoires) {
+        List<String> out = new ArrayList<>();
+        for (CompositionRepertoire each : repertoires.written()) {
+            out.add(switch (each) {
+                case WAYS_A_TOTAL_IS_SPREAD ->
+                        "the ways a total may be spread over what adds up to it";
+            });
+        }
+        return String.join(", ", out);
+    }
+
+    /**
      * What a budget of this compiler's is called where a reader meets one.
      *
      * <p>Its own words and not the constant's name. What the compiler calls a figure is a name for
@@ -2174,8 +2245,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 case ELEMENTS_A_TOTAL_IS_SPREAD_OVER ->
                         "how many elements a total is spread over";
                 case SHAPES_OF_A_TOTAL_OFFERED -> "how many containers are offered for one total";
-                case DECOMPOSITIONS_OF_A_TOTAL_OFFERED ->
-                        "how many ways a total is decomposed";
+                case WAYS_DOWN_TO_A_TOTAL_TRIED ->
+                        "how many ways down to what a total adds up are tried";
                 case PLACES_A_PAIR_IS_TRIED_AT -> "how many places a pair is tried at";
                 case STEPS_A_SEARCH_MAY_TAKE -> "how many steps a search takes";
                 case ASSIGNMENTS_A_SEARCH_COMPOSES -> "how many assignments a search composes";
@@ -2228,7 +2299,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         return switch (why.reason()) {
             case NOTHING_COMPOSES_ONE -> "nothing here could build a representative for " + at;
             case ALL_CANDIDATES_REJECTED -> "every value tried at " + at + " was refused";
-            case SEARCH_LIMIT -> "the search stopped before reaching " + at;
+            // Not "stopped", which is one of the two ways a search leaves something untried and is
+            // the only one with a number in it. Said as a stop, a walk that went to the end of what
+            // this compiler writes is reported as one that halted, and an author looks for the
+            // figure that halted it.
+            case THE_SEARCH_LEFT_SOMETHING_UNTRIED ->
+                    "the search left something untried before reaching " + at;
             // What is missing here, and not what cannot exist. The combinations are there and this
             // declined to walk them, so a reader is told the offer was not made rather than that
             // nothing reaches the arm — and told that raising the row budget is not what lifts it.
@@ -2271,13 +2347,6 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                     "no reading of the line this asked about could be searched, so nothing was"
                             + " looked for at " + at;
         };
-    }
-
-    /** What an obligation's coverage was left short by, where a reason says. A coverage that came
-     *  to an answer has none, and the note beside the item is what this fills in. */
-    private static String whyNoBoundaryItem(ObligationCoverage coverage) {
-        MeasureReason why = coverage.why();
-        return why == null ? "" : ReasonProse.of(why).clause();
     }
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
@@ -2335,7 +2404,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                     && mine.test(asked)) {
                 out.append(String.format("      %s not accounted for: %s — %s %s: %s%n",
                         mark(f), cited(asked.cited(), names, declaredIn),
-                        asked(asked.asked()), subjectOf(asked, names, declaredIn),
+                        asked(asked.asked()), subjectOf(asked),
                         whyStanding(asked).written().stream().map(AdequacyReport::whyUnread)
                                 .collect(Collectors.joining("; "))));
             }
@@ -3480,7 +3549,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             case About.AQuestionNothingAnswered(var asked) ->
                     handle(asked.cited()).said(sources::written, null)
                             + " — " + asked(asked.asked())
-                            + " " + subjectOf(asked, sources::written, null);
+                            + " " + subjectOf(asked);
             case About.ACaseNoRowAppliesItTo(var input, var missing) ->
                     missing.name() + " (in #" + (input.at() + 1) + ")";
             // The point and the line, and no quantity: a body's line is owed once wherever it is
@@ -3566,9 +3635,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         }
         ObligationCoverage coverage = owed.coverage();
         of.put("status", wire(ReportMeasurement.statusOf(coverage)));
-        if (coverage.why() != null) {
-            of.put("reason", word(coverage.why()));
-        }
+        // One word, which is what a boundary item promises. What the readings gave is a set, and
+        // asking for it as one is where an account with no room in the document says so.
+        coverage.theReasonAsOne().ifPresent(why -> of.put("reason", word(why)));
         weakening(of, coverage.weakening());
         if (coverage.hasAnswer()) {
             of.put("hit", coverage.hasRowWitness());
@@ -3767,6 +3836,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             case Weakening.BorderValueUnreadable it -> switch (it.why()) {
                 case ReadingGap.Observation _ -> WeakeningWord.BORDER_VALUE_UNREADABLE;
                 case ReadingGap.NoValue _ -> WeakeningWord.BORDER_VALUE_ABSENT;
+                // One word, and the reason underneath keeps which of the two it was. A position
+                // that was read and holds nothing is news about the row; neither of these is, and a
+                // reader weighing the document acts on both the same way.
+                case ReadingGap.CouldNotWalk _, ReadingGap.CouldNotReadRow _ ->
+                        WeakeningWord.BORDER_OBSERVATION_UNAVAILABLE;
             };
             case Weakening.ModelReadingIncomplete it -> switch (it.cause()) {
                 case ClosureGap.PositionNotReachedInto _ ->

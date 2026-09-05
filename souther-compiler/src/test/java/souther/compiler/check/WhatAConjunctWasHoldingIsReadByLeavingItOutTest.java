@@ -6,7 +6,6 @@ import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
-import souther.compiler.query.Scopes;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeSymbols;
@@ -129,7 +128,6 @@ class WhatAConjunctWasHoldingIsReadByLeavingItOutTest {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
         String module = compilation.modules().get(0);
-        Symbols symbols = Scopes.derived(compilation.db(), module).value();
         TypeSymbol subject = TypeSymbols.declared(new TypeKey(module, "Subject"));
         return Rules.of(subject, RuleReadings.of(compilation, module),
                 ReadAs.THE_COMPILATION_DOES).bounds();

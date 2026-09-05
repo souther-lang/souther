@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Deque;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -32,8 +33,9 @@ import java.util.function.Function;
  * makes the answers exact rather than approximate:
  *
  * <pre>
- *     isBottom()   any factor holding nothing, since the rest constrain none of its positions
- *     at(subject)  the one factor that names it, since no other says anything about it
+ *     anyAlternativeAdmits   every factor having one, since an alternative of the conjunction is
+ *                            one alternative of each of them side by side
+ *     at(subject)            the one factor that names it, since no other says anything about it
  * </pre>
  *
  * <p>So a conjunction is kept factored only where keeping it factored loses nothing. Where two
@@ -147,9 +149,9 @@ public final class ConjoinedAdmissibleValues<A> {
     /**
      * Whether any reading has been taken into this.
      *
-     * <p>For a caller that takes a reading in once and has to be able to say so — {@link
-     * souther.compiler.check.ConstraintState#takingValuesRead} is written against nothing having
-     * been taken in yet, and a second reading arriving there would replace the first without a word.
+     * <p>For a caller that takes a reading in once and has to be able to say so — a state takes one
+     * in against nothing having been taken in yet, and a second reading arriving there would replace
+     * the first without a word.
      *
      * <p><b>Whether and not how many.</b> How many factors are here is how many vocabularies the
      * readings fell into, which is not how many readings there were: two readings that name the
@@ -165,14 +167,41 @@ public final class ConjoinedAdmissibleValues<A> {
     }
 
     /**
-     * Whether nothing satisfies the readings together.
+     * Whether an alternative of the conjunction survives a question asked of every position.
      *
-     * <p>Any factor on its own. The others say nothing about the positions it names, so nothing they
-     * hold can put a value back into a factor that has none — and a factor that holds nothing leaves
-     * the conjunction nothing whatever the rest admit.
+     * <p>Factor by factor, and never the product of them. The vocabularies are disjoint, so an
+     * alternative of the conjunction is one alternative of each factor put side by side and the
+     * positions each of them names are asked about in that factor alone: the conjunction stands
+     * where every factor has an alternative that stands, and holds nothing where any factor has
+     * none. Expanded into the product first, the same answer would be reached over as many
+     * alternatives as the factors multiply to.
+     *
+     * <p>Nothing read is every value at every position, which stands whatever is asked — the
+     * question is one about which values a rule leaves, and no rule left any.
      */
-    public boolean isBottom() {
-        return factors.stream().anyMatch(AdmissibleValues::isBottom);
+    public Emptiness anyAlternativeAdmits(AskedOfEachPosition<A> asked) {
+        Emptiness stands = Emptiness.NONEMPTY;
+        for (AdmissibleValues<A> each : factors) {
+            stands = stands.met(each.anyAlternativeAdmits(asked));
+            if (stands == Emptiness.EMPTY) {
+                return stands;
+            }
+        }
+        return stands;
+    }
+
+    /**
+     * The positions every alternative of the conjunction is refused at.
+     *
+     * <p>Read off each factor and put together. An alternative of the conjunction is one alternative
+     * of every factor side by side, so it is refused at a position exactly where the factor naming
+     * that position is — and a position every alternative of its own factor is refused at is one
+     * every alternative of the conjunction is refused at.
+     */
+    public Set<A> refusedInEveryAlternativeAt(AskedOfEachPosition<A> asked) {
+        Set<A> out = new LinkedHashSet<>();
+        factors.forEach(each -> out.addAll(each.refusedInEveryAlternativeAt(asked)));
+        return Collections.unmodifiableSet(out);
     }
 
     /**
@@ -239,7 +268,7 @@ public final class ConjoinedAdmissibleValues<A> {
         // together by different composers are two answers, and meeting them would charge a position
         // of one against the allowance of the other. An assertion because it is a fact about how
         // this compiler reads a declaration rather than about any model — see
-        // `ConstraintState.takingValuesRead`, which holds the same kind of thing the same way.
+        // `Confinement.Conjoined.taking`, which holds the same kind of thing the same way.
         assert sets == other.sets
                 : "two readings put together by different composers are two answers";
         List<AdmissibleValues<A>> both = new ArrayList<>(factors);

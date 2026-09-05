@@ -20,7 +20,9 @@ import souther.compiler.observe.ObservedValue;
 import souther.compiler.partition.BorderQuantity;
 import souther.compiler.partition.Criterion;
 import souther.compiler.partition.Level;
+import souther.compiler.partition.ObservationAtPoint;
 import souther.compiler.partition.ReadingGap;
+import souther.compiler.partition.WalkResult;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
@@ -143,13 +145,13 @@ class ALimitThatFiredIsNotALimitTheTermReadTest {
         return new BorderQuantity.Observation() {
 
             @Override
-            public ObservedValue at(TermPath path) {
+            public WalkResult<ObservationAtPoint> at(TermPath path) {
                 assertEquals(TermPath.of("lines"), path, "read at the container the count is of");
-                return observed;
+                return WalkResult.reached(new ObservationAtPoint.Value(observed));
             }
 
             @Override
-            public List<ObservedValue> everyValueAt(TermPath path) {
+            public WalkResult<List<ObservedValue>> everyValueAt(TermPath path) {
                 throw new AssertionError("a count of a container is not read over a run");
             }
         };
@@ -160,14 +162,14 @@ class ALimitThatFiredIsNotALimitTheTermReadTest {
         return new BorderQuantity.Observation() {
 
             @Override
-            public ObservedValue at(TermPath path) {
+            public WalkResult<ObservationAtPoint> at(TermPath path) {
                 throw new AssertionError("a number over a run is not read from one value");
             }
 
             @Override
-            public List<ObservedValue> everyValueAt(TermPath path) {
-                return observed instanceof ObservedValue.Sequence held ? held.elements()
-                        : List.of(observed);
+            public WalkResult<List<ObservedValue>> everyValueAt(TermPath path) {
+                return WalkResult.reached(observed instanceof ObservedValue.Sequence held
+                        ? held.elements() : List.of(observed));
             }
         };
     }

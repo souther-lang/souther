@@ -59,7 +59,7 @@ class AValueTheRulesTakeOutOfARunIsSteppedOffForAFormTooTest {
         String report = report(A_HOLE_IN_BOTH_POSITIONS);
 
         assertTrue(report.contains("read as f/p.a + p.b: = 0"), report);
-        assertFalse(report.contains("the search stopped before reaching p.a + p.b = 0"), report);
+        assertFalse(report.contains("the search left something untried before reaching p.a + p.b = 0"), report);
     }
 
     /** And the point above it, which the same walk reaches at the value the coset names. */

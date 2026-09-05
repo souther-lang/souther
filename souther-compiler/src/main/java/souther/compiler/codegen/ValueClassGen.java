@@ -50,13 +50,11 @@ import static souther.compiler.codegen.JvmTypes.*;
 final class ValueClassGen {
 
     private final CodegenContext ctx;
-    private final String pkg;
     private final DerivedSymbols symbols;
     private final CodecGen codec;
 
     ValueClassGen(CodegenContext ctx, CodecGen codec) {
         this.ctx = ctx;
-        this.pkg = ctx.pkg;
         this.symbols = ctx.symbols;
         this.codec = codec;
     }
@@ -237,7 +235,7 @@ final class ValueClassGen {
             // A field every case spreads is readable on the sum (issue #160): declared here, and
             // implemented by each case record's accessor of the same name and descriptor.
             if (TypeView.of(Type.ref(sum.declares()), symbols).shape() instanceof Shape.Sum shape) {
-                for (Map.Entry<String, Type> e : ReadableFields.of(shape).fields().entrySet()) {
+                for (Map.Entry<String, Type> e : ReadableFields.of(shape).declaredFields().entrySet()) {
                     cb.withMethod(e.getKey(), MethodTypeDesc.of(jvmType(e.getValue())),
                             ClassFile.ACC_PUBLIC | ClassFile.ACC_ABSTRACT, mb -> { });
                 }

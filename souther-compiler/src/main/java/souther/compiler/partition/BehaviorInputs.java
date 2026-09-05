@@ -4,7 +4,6 @@ import souther.compiler.check.ReadableFields;
 import souther.compiler.check.Shape;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.Symbols;
-import souther.compiler.check.TypeOps;
 import souther.compiler.check.TypeView;
 import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.TermPath;
@@ -14,6 +13,7 @@ import souther.compiler.types.Type;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * What a behavior takes: what its inputs are called, what they are declared to be, and what those
@@ -74,12 +74,18 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, RuleRead
     }
 
     /**
-     * The values written at {@code path}, which is one value at most positions and however many
-     * were written at a position inside a sequence.
+     * The values read at {@code path} off what a row wrote, which is one value at most positions and
+     * however many were written at a position inside a sequence.
      *
-     * <p>Empty where none readable is there, and never null: a caller asking what is covered at a
-     * position is answered with what was written, and a list of none is nothing written there —
-     * which an empty list is.
+     * <p>Read at the path and not written at it. Where a row puts a value and where a reading names
+     * one part at a sum every case of which spreads a declaration: the name is readable at the sum
+     * and a row writes one of the cases, so a walk asking where a value is written reaches nothing
+     * at a name every reading of the model may use.
+     *
+     * <p>{@link WalkResult.Reached} holding none where the walk was taken and no value stands
+     * there, and {@link WalkResult.CouldNotWalk} where it could not be taken at all. A caller
+     * asking what is covered at a position is answered with what was written, and a list of none is
+     * nothing written there — which the walk not having been made is not.
      *
      * <p>The one walk into a row's values, done with the declared types beside them. A field of a
      * record is reached through the names the record is written under: {@code data SlotN = Slot} is
@@ -91,7 +97,7 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, RuleRead
      *
      * <p><b>On the way and not at the end.</b> What comes back is the value as the position wears
      * it, names and all. Which names the position itself is written under is what tells a class
-     * from another there ({@link Classifier#under}), so a walk that went on peeling would answer a
+     * from another there ({@link Classifier#inside}), so a walk that went on peeling would answer a
      * classifier with a value it no longer recognises — and the reading of what a position is would
      * have lost how it is written, one layer down from where this branch put it back.
      *
@@ -99,13 +105,17 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, RuleRead
      * there is nothing under it, but it is also not a chain that leads nowhere: it is the reason
      * this position has no value, and it says that itself.
      *
-     * <p>Which leaves nothing for the walk's own answer, and only that: a record that does not hold
-     * the field named next, or a position whose type is not a record at all. The path and the type
-     * disagree, and no observation says why because nothing went wrong with one.
+     * <p>Which leaves nothing for the walk's own answer, and only that: the standing type and value
+     * cannot take the step named next. At a field that is the reading not exposing the name at this
+     * position, or a value that is not the construction the reading says stands there. Neither is
+     * something an observation did, and no observation says why because nothing went wrong with one.
      */
-    List<ObservedValue> valuesAt(List<ObservedValue> inputs, TermPath path) {
-        List<Occurrence> found = occurrencesAt(inputs, path);
-        return found == null ? null : found.stream().map(Occurrence::value).toList();
+    WalkResult<List<ObservedValue>> valuesAt(List<ObservedValue> inputs, TermPath path) {
+        return switch (occurrencesAt(inputs, path)) {
+            case WalkResult.Reached(List<Occurrence> found) ->
+                    WalkResult.reached(found.stream().map(Occurrence::value).toList());
+            case WalkResult.CouldNotWalk<List<Occurrence>> _ -> WalkResult.couldNotWalk();
+        };
     }
 
     /**
@@ -127,6 +137,9 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, RuleRead
 
         public Occurrence {
             at = Map.copyOf(at);
+            // An occurrence is a value the walk arrived at. Where none did, the walk says so with
+            // its own answer and hands back no occurrences at all.
+            Objects.requireNonNull(value, "an occurrence is a value standing at the path");
         }
 
         /**
@@ -163,10 +176,10 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, RuleRead
      * candidate this package composed are both read at these positions, and both have to be read
      * the way a written row is or the classes they land in are two readings rather than one.
      */
-    List<Occurrence> occurrencesAt(List<ObservedValue> inputs, TermPath path) {
+    WalkResult<List<Occurrence>> occurrencesAt(List<ObservedValue> inputs, TermPath path) {
         int at = indexOf(path);
         if (at < 0 || at >= inputs.size()) {
-            return null;
+            return WalkResult.couldNotWalk();
         }
         List<Standing> standing = List.of(new Standing(inputs.get(at), types.get(at),
                 TermPath.of(path.head()), Map.of()));
@@ -185,23 +198,24 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, RuleRead
             // as one flag for the whole walk, what survived was answered with and whatever could
             // not be reached was left out with nothing saying so.
             if (took != standing.size()) {
-                return null;
+                return WalkResult.couldNotWalk();
             }
             standing = next;
         }
         // Nothing here is a row that wrote no element, which is a reading that arrived: a step that
-        // could not be taken has already answered null above. Answered alike, a row writing the
-        // empty list would be reported as one nothing could be read from.
-        return standing.stream().map(each -> new Occurrence(each.at(), each.value())).toList();
+        // could not be taken has already said so above. Answered alike, a row writing the empty
+        // list would be reported as one nothing could be read from.
+        return WalkResult.reached(
+                standing.stream().map(each -> new Occurrence(each.at(), each.value())).toList());
     }
 
     /**
      * What the declarations put where a value at {@code path} is written, or null where a value is
      * not written there at all.
      *
-     * <p>The same walk {@link #occurrencesAt} takes, with the values left out. A position's type is
-     * a fact about the declarations and a row is not needed to ask it — which is what a caller
-     * composing a value at a position wants, since there is no row yet.
+     * <p>The path read as where a new value goes, and not the walk {@link #occurrencesAt} takes. A
+     * position's type is a fact about the declarations and a row is not needed to ask it — which is
+     * what a caller composing a value at a position wants, since there is no row yet.
      *
      * <p><b>For composing a value and for nothing else.</b> This walk stops where a value is built,
      * so a sum whose cases share a spread answers nothing here — right for a caller writing a value
@@ -209,11 +223,10 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, RuleRead
      * has an owner ({@link souther.compiler.inputs.Quantities#ordersOf}), and it is asked of the
      * reading of the input rather than worked out from what this returns.
      *
-     * <p><b>Here because the walk is here.</b> How a step of a path moves the type is one rule with
-     * several cases — a field is reached through the names its record is written under, an element
-     * is what a sequence holds, a refinement is the position read as one of its cases — and written
-     * a second time for a caller that only wanted the type, the two would agree until one of them
-     * learned a step the other did not.
+     * <p>Which is why reading a row takes its own steps rather than these. The two relations a path
+     * step stands for — where a written value has a part, and what a value standing here may be read
+     * as — are one answer at a record and part at that sum, and a walk over an observation that took
+     * these would reach nothing at every name a model reads through a sum.
      *
      * <p>Null where the path and the declarations disagree, and null for a path this behavior has no
      * parameter for. Neither is a position with a type nothing could name: they are paths that name
@@ -238,16 +251,22 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, RuleRead
      * The type one step of a written value reaches from {@code from}, or null where a value written
      * here is at no such place.
      *
-     * <p>Exhaustive over {@link TermPath.Step}, with no {@code default}, and the one place a step
-     * into what a row wrote is turned into a type. A step added later stops this compiling rather
-     * than arriving as a walk that quietly takes it one way here and another way where a row is
-     * read.
+     * <p>Exhaustive over {@link TermPath.Step}, with no {@code default}. A step added later stops
+     * this compiling, and stops {@link Standing#step} compiling as well, so neither relation is left
+     * taking a new step by a rule the other one wrote.
      *
      * <p>A field is where a value written here put one, which is a field of the record it was
      * written as. A name every case of a sum spreads is somewhere else: a row writes one of the
      * cases, so what stands at that name is under whichever case was written and nothing stands at
      * the name itself. What is readable off such a value is a question with an owner
      * ({@link ReadableFields}), and it is asked of the reading rather than worked out from this.
+     *
+     * <p><b>Answered for whoever writes a value, and for nobody else.</b> Reading a row is the other
+     * relation and takes its own steps ({@link Standing#step}), which is not a duplicate of this:
+     * the two are one answer at a record and part at a sum whose cases share a spread. Where they
+     * agree, each is written down on its own rather than one being read out of the other, so a
+     * reader that means to move one is not moving both. The one caller is
+     * {@link #typeAtWrittenPath}, and it is watched.
      */
     static Type stepWrittenValue(TermPath.Step step, Type from, Symbols symbols) {
         TypeView view = TypeView.of(from, symbols);
@@ -270,49 +289,58 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, RuleRead
     }
 
     /**
-     * The value at {@code path}, or null where there is not one readable value there.
-     *
-     * <p>For a position one value stands at. A position inside a sequence has as many as were
-     * written, and answering a caller that wants one with the first of them would report what is
-     * covered off an element it chose — so such a position answers null here and {@link #valuesAt}
-     * is what reads it.
-     *
-     * <p><b>Null runs three answers together, and a caller that has to tell them apart asks
-     * {@link #occurrencesAt}.</b> The walk could not be taken, or it was taken and the row stands
-     * nowhere here — the empty list, an element of nothing or a position under a case the row is
-     * not at — or several values stand and none of them is the one. What is covered and what a
-     * measurement is short of are different answers about a row, and only that one keeps them.
-     */
-    public ObservedValue valueAt(List<ObservedValue> inputs, TermPath path) {
-        List<ObservedValue> values = valuesAt(inputs, path);
-        return values != null && values.size() == 1 ? values.get(0) : null;
-    }
-
-    /**
-     * One value on the way down a path, with the type the declaration puts there.
+     * One observed value on the way down a path, with the type the reading exposes at that position.
      *
      * <p>A list of these and not one, because a step into what a sequence holds turns one value
      * into as many as it holds. Everything else keeps the count it had.
+     *
+     * <p><b>How an observed value is read, which is not where a written one has its parts.</b> The
+     * steps here are this walk's own and none of them is taken by asking
+     * {@link BehaviorInputs#stepWrittenValue}. A field every case of a sum spreads is where the two
+     * relations part: it is readable at every value of the sum and a row writes one of the cases, so
+     * a walk taking the written relation reached nothing at a name every reading of the model uses.
+     *
+     * <p>The steps beside a field come to one answer under both today, and each says so on its own:
+     * what this walk admits at an element and at a narrowing is written down where the walk is
+     * tested and what the written relation lands on is written down where that is, rather than
+     * either being read out of the other. Nothing holds the two together, deliberately — the day
+     * one of them means to move, the other has to go on saying what it said.
      */
     private record Standing(ObservedValue value, Type type, TermPath reached,
                             Map<TermPath, Integer> at) {
 
-        /** Takes {@code step}, adding what stands below. False where it could not be taken. */
+        /**
+         * Takes {@code step}, adding what stands below. False where this type and value cannot take
+         * it.
+         *
+         * <p>False and standing nowhere are two answers. False is a step this walk cannot take at
+         * all — the reading does not expose the name here, or what stands here is not the
+         * construction the reading says does — and adding nothing is a step taken by a value that
+         * turns out to stand nowhere below it: the empty list at an element, a case the row is not
+         * at under a refinement. A caller reads the first as a walk it could not make and the
+         * second as a row that is somewhere else.
+         */
         boolean step(TermPath.Step step, Symbols symbols, List<Standing> out) {
             if (value.unread() != null) {
                 out.add(this);
                 return true;
             }
             TypeView view = TypeView.of(type, symbols);
-            ObservedValue here = Classifier.inside(
-                    view.wrappers().stream().map(TypeOps.Layer::named).toList(), value);
+            ObservedValue here = Classifier.inside(view.wrappers(), value);
             if (here.unread() != null) {
                 out.add(new Standing(here, type, reached, at));
                 return true;
             }
             switch (step) {
+                // Two things and in this order: the reading says whether the name may be read at
+                // this position, and the value in hand says what is there. A concrete case carries
+                // its own fields as well as the ones it spreads, so a walk that took the name off
+                // the value it happens to hold would read `method.cardNumber` on the rows that are
+                // cards and refuse it on the rest — a readability decided per row, which is not
+                // something the model states. The name is admitted by what every value of the
+                // position carries, and then the case is where it is taken from.
                 case TermPath.Step.Field named -> {
-                    Type next = stepWrittenValue(step, type, symbols);
+                    Type next = ReadableFields.at(view.shape(), named.name());
                     if (next == null || !(here instanceof ObservedValue.Constructed made)) {
                         return false;
                     }
@@ -327,7 +355,8 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, RuleRead
                 // and what a class comes to over them is the caller's to decide. A list holding
                 // none is a step taken: the walk arrived and the row wrote nothing there.
                 case TermPath.Step.Element _ -> {
-                    Type element = stepWrittenValue(step, type, symbols);
+                    Type element = view.shape() instanceof Shape.Sequence sequence
+                            ? sequence.element() : null;
                     if (element == null || !(here instanceof ObservedValue.Sequence written)) {
                         return false;
                     }
@@ -345,8 +374,17 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, RuleRead
                 // same answer a row writing the empty list gives at an element, and not the answer
                 // a row nothing could read gives. What refuses the step is the type and the path
                 // disagreeing about what is at this position, which is nothing about the row.
+                // And the position it narrows to is where a case's own field becomes readable: a
+                // path that names the case may read what only that case declares, which is the
+                // model saying so rather than a row happening to be one.
                 case TermPath.Step.Refine refine -> {
-                    Type narrowed = stepWrittenValue(step, type, symbols);
+                    Type narrowed = switch (refine.refinement()) {
+                        case Refinement.SumCase one -> view.shape() instanceof Shape.Sum
+                                ? Type.ref(one.leaf()) : null;
+                        case Refinement.Presence presence ->
+                                !(view.shape() instanceof Shape.Optional optional) ? null
+                                        : presence.present() ? optional.element() : view.declared();
+                    };
                     if (narrowed == null) {
                         return false;
                     }

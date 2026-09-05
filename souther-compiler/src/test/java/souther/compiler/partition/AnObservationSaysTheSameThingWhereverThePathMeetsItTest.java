@@ -90,7 +90,6 @@ class AnObservationSaysTheSameThingWhereverThePathMeetsItTest {
                 .filter(b -> b.name().equals("book")).findFirst().orElseThrow();
         Core body = checked.behaviorBodies().get("book");
         CoverageSites.Plan plan = checked.plan();
-        List<String> parameters = spec.params().stream().map(Hir.Param::name).toList();
         InputDomain read = InputDomain.of(spec, sigs.get("book"), rules,
                 souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         Partitions.Partitioning partitioning = Partitions.withThresholds(
@@ -211,8 +210,8 @@ class AnObservationSaysTheSameThingWhereverThePathMeetsItTest {
     /**
      * What the boundary's caller sees, which is why this changes nothing for it.
      *
-     * <p>{@code valueAt} already hands back a stopped observation where the path ends on one — the
-     * loop runs out of fields and returns what it is holding — so a caller that asks it for a number
+     * <p>The walk already hands back a stopped observation where the path ends on one — the loop
+     * runs out of fields and returns what it is holding — so a caller that asks it for a number
      * already meets one and reads it as no number. Keeping the same value from one field earlier
      * gives that caller a value it already handles rather than a new one.
      */
@@ -221,12 +220,22 @@ class AnObservationSaysTheSameThingWhereverThePathMeetsItTest {
         Read read = read();
 
         assertInstanceOf(ObservedValue.Truncated.class,
-                read.subject().inputs().valueAt(givingInterval(read, intervalHolding(read,
-                        new ObservedValue.Truncated())).inputs(), position(read)),
+                theOneValueAt(read, givingInterval(read, intervalHolding(read,
+                        new ObservedValue.Truncated())).inputs()),
                 "the limit was reached at the position");
         assertInstanceOf(ObservedValue.Truncated.class,
-                read.subject().inputs().valueAt(
-                        givingInterval(read, new ObservedValue.Truncated()).inputs(), position(read)),
+                theOneValueAt(read,
+                        givingInterval(read, new ObservedValue.Truncated()).inputs()),
                 "the limit was reached one field above the position");
+    }
+
+    /** The value the walk to the position came to, which the model under test writes one of. */
+    private static ObservedValue theOneValueAt(Read read, List<ObservedValue> inputs) {
+        if (read.subject().inputs().valuesAt(inputs, position(read))
+                instanceof WalkResult.Reached(List<ObservedValue> values)
+                && values.size() == 1) {
+            return values.getFirst();
+        }
+        throw new AssertionError("one value stands at " + position(read));
     }
 }

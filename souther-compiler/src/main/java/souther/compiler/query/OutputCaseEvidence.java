@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.observe.MeasureReason;
 import souther.compiler.types.TypeSymbol;
 
 import java.util.List;
@@ -59,14 +60,24 @@ public record OutputCaseEvidence(Set<TypeSymbol> declared, Measure<Cases> cases)
 
     /** No row names this behavior, so nothing was established about its cases either way. */
     public enum NoRows implements NotMeasuredReason {
-        NO_ROWS
+        NO_ROWS;
+
+        @Override
+        public MeasureReason.About about() {
+            return MeasureReason.About.THE_BEHAVIOR;
+        }
     }
 
     /** Why a behavior's output cases have no numbers. */
     public enum NotASum implements NotApplicableReason {
         /** The output is one data rather than a sum, so there is no case to cover and no row can
          *  fail to cover it. */
-        NOT_A_SUM
+        NOT_A_SUM;
+
+        @Override
+        public MeasureReason.About about() {
+            return MeasureReason.About.THE_BEHAVIOR;
+        }
     }
 
     public OutputCaseEvidence {

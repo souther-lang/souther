@@ -23,6 +23,6 @@ public enum Stage {
     COMPARED;
 
     public boolean reached(Stage at) {
-        return ordinal() >= at.ordinal();
+        return compareTo(at) >= 0;
     }
 }

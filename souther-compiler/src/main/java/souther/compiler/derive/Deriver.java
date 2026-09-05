@@ -68,7 +68,7 @@ public final class Deriver {
         // the decoder and the encoder each read the value under a name of their own, so each owns
         // the bindings it writes rather than sharing the declaration's
         BindingOwner declared = new BindingOwner.OfData(d.declares());
-        Hir.DecoderDef decoder = deriveDecoder(d, shapes, symbols,
+        Hir.DecoderDef decoder = deriveDecoder(d, shapes,
                 new Hir.Binders(new BindingOwner.Synthesized(declared,
                         BindingOwner.Pass.DERIVER, 0)));
         Hir.EncoderDef encoder = deriveEncoder(d, shapes,
@@ -80,7 +80,7 @@ public final class Deriver {
     // --- decoder derivation ---
 
     private static Hir.DecoderDef deriveDecoder(Hir.Data d, Map<String, CodecShape> shapes,
-                                               Symbols symbols, Hir.Binders binders) {
+                                               Hir.Binders binders) {
         SourcePos pos = d.pos();
         Hir.Name self = Hir.Name.resolved(d.declares(), pos);
         // only an explicit newtype `data X = Y` is bare; a braced record is always an object, even

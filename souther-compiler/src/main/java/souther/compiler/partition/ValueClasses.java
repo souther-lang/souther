@@ -1,8 +1,8 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.Shape;
 import souther.compiler.check.Symbols;
-import souther.compiler.check.TypeOps;
 import souther.compiler.check.TypeView;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.Type;
@@ -35,7 +35,7 @@ final class ValueClasses {
      */
     static PartitionClass classAt(Value value, TypeView view, List<TypeSymbol> worn,
                                   RuleReadingSource ruleSource) {
-        FixtureTemplate bare = written(value, view.declared(), ruleSource.symbols());
+        FixtureTemplate bare = written(value, view.shape());
         if (bare == null) {
             throw new IllegalStateException(
                     "the reading of `" + Type.show(view.declared()) + "` states a distinction at a"
@@ -45,7 +45,7 @@ final class ValueClasses {
         Recognition is = Recognition.Under.of(worn,
                 new Recognition.AtAValue(value,
                         placeOf(value, view.declared(), ruleSource.symbols())));
-        FixtureTemplate stands = Witnesses.wrapped(view.declared(), bare, ruleSource);
+        FixtureTemplate stands = WornNames.under(view.wrappers(), bare, ruleSource);
         return (stands == null
                 // A name the position wears that nothing here writes. The class is the position's
                 // either way and a row already sitting in it still covers it; what is absent is the
@@ -97,17 +97,18 @@ final class ValueClasses {
     /**
      * The value as a row writes it, or null where this does not write values of that kind.
      *
-     * <p>Which of {@code Int} and {@code Decimal} a number is written as is the position's own type
-     * to say. The two are never compared with each other (E1319), so a position is written about in
-     * one of them and never in both.
+     * <p>Which of {@code Int} and {@code Decimal} a number is written as is what the position is
+     * with its names off, which the reading of it already says. The two are never compared with each
+     * other (E1319), so a position is written about in one of them and never in both.
      */
-    private static FixtureTemplate written(Value value, Type type, Symbols symbols) {
+    private static FixtureTemplate written(Value value, Shape shape) {
         return switch (value) {
             case Value.Text text -> FixtureTemplate.string(text.value());
             case Value.Truth truth -> FixtureTemplate.bool(truth.value());
-            case Value.Number number -> TypeOps.numericBase(type, symbols) == Type.DECIMAL
-                    ? FixtureTemplate.decimal(number.value())
-                    : whole(number.value());
+            case Value.Number number ->
+                    shape instanceof Shape.Scalar scalar && scalar.prim() == Type.Prim.DECIMAL
+                            ? FixtureTemplate.decimal(number.value())
+                            : whole(number.value());
             case Value.Case _ -> null;
         };
     }

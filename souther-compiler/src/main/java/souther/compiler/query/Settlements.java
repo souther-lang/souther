@@ -213,7 +213,7 @@ public record Settlements(List<OfferItem> requested,
             Adequacy.Filling filling = offering.searched().get(behavior);
             OneBehavior read = OneBehavior.of(db, module, behavior, filling,
                     sigs == null ? null : sigs.get(behavior), building, trials,
-                    offering.request().boundaries(), declaredReadings);
+                    declaredReadings);
             if (read == null) {
                 continue;   // nothing here can read a row of it, which its rows are told below
             }
@@ -319,7 +319,7 @@ public record Settlements(List<OfferItem> requested,
          */
         static OneBehavior of(Db db, String module, String behavior, Adequacy.Filling filling,
                               Sig sig, BoundaryValues building,
-                              souther.compiler.execute.RowTrials trials, boolean boundaries,
+                              souther.compiler.execute.RowTrials trials,
                               Map<BorderObligationPoint, Map<String, List<BorderAssessment>>>
                                       declared) {
             // What a row of this behavior is measured against, asked of the store rather than

@@ -11,7 +11,6 @@ import souther.compiler.values.ConjoinedAdmissibleValues;
 import java.util.Map;
 import java.util.Optional;
 import java.util.SequencedMap;
-import java.util.Set;
 
 /**
  * What the rules say, in each of the languages this reading has for saying it.
@@ -56,21 +55,34 @@ import java.util.Set;
  * happened to ask had nothing to say.
  */
 public record ConstraintState<A>(NumericDomain<A> numbers, PredicateFacts<A> facts,
-                                 ConjoinedAdmissibleValues<A> values, OrderedIntervals<A> ordered,
-                                 boolean shown) {
+                                 Confinement.Conjoined<A> confinement, boolean shown) {
 
     /** Nothing taken in, so nothing ruled out. */
     public static <A> ConstraintState<A> top() {
         return new ConstraintState<>(NumericDomain.top(), PredicateFacts.none(),
-                ConjoinedAdmissibleValues.top(), OrderedIntervals.top(), false);
+                Confinement.Conjoined.top(), false);
+    }
+
+    /**
+     * Which values the positions may take, for a reader that needs the sets themselves.
+     *
+     * <p>Not a way to the answer this record gives. What a position admits is a question the values
+     * answer; whether anything satisfies the rules is {@link #isBottom}, and a reader assembling
+     * that out of the parts is the reading this question came apart along.
+     */
+    public ConjoinedAdmissibleValues<A> values() {
+        return confinement.values();
     }
 
     /**
      * Whether nothing satisfies what has been taken in.
      *
-     * <p>Every domain, because each of them can hold the whole state's contradiction on its own: what
-     * one of them cannot express it leaves alone, so a contradiction found anywhere is a
-     * contradiction, and one found nowhere is only what these readings were able to show.
+     * <p>A contradiction found anywhere is a contradiction, and one found nowhere is only what these
+     * readings were able to show. What a domain cannot express it leaves alone, so each of them may
+     * hold one on its own — but two of them holding halves of one is not something either can find,
+     * and where that is what happens the two are one component ({@link Confinement}) rather than two
+     * arms of this. A set of values and a range on an order are such a pair, and reading them as two
+     * arms is what left a declaration whose strings and whose ends share no value accepted.
      *
      * <p>And {@code shown}, which is a caller having shown it by an argument none of the domains
      * makes: a condition no case of what it is written over satisfies is one nothing enters, and
@@ -80,8 +92,7 @@ public record ConstraintState<A>(NumericDomain<A> numbers, PredicateFacts<A> fac
      * first domain added without touching the second would put them out of agreement.
      */
     public boolean isBottom() {
-        return shown || numbers.isBottom() || facts.isBottom() || values.isBottom()
-                || ordered.isBottom();
+        return shown || numbers.isBottom() || facts.isBottom() || confinement.holdsNothing();
     }
 
     /**
@@ -94,7 +105,7 @@ public record ConstraintState<A>(NumericDomain<A> numbers, PredicateFacts<A> fac
      * reading this question came apart along.
      */
     ConstraintState<A> shownToHoldNothing() {
-        return shown ? this : new ConstraintState<>(numbers, facts, values, ordered, true);
+        return shown ? this : new ConstraintState<>(numbers, facts, confinement, true);
     }
 
     /**
@@ -122,15 +133,35 @@ public record ConstraintState<A>(NumericDomain<A> numbers, PredicateFacts<A> fac
         // the alternatives may fail at different positions — and the particular proof is particular
         // by naming a place. Written without one, the sentence read off it would name whatever place
         // the reader happened to be at, which is the declaration's own value.
-        Set<A> empty = ordered.holdingNothing();
+        //
+        // And the set of values and the range sharing none, which is the same kind of proof about
+        // the pair rather than about one of them. Written only where the pair is what holds nothing:
+        // a state the numbers refuse is refused by the numbers, whatever the sets and the ranges
+        // leave beside them.
+        Confinement.Admission<A> shown = confinement.admission();
+        Emptiness said = switch (shown.by()) {
+            case ORDER -> new Emptiness.EmptyOrderedInterval();
+            case SET_AND_RANGE -> new Emptiness.NoAllowedValueInRange();
+            case NOTHING_SHOWN, VALUES, RULES_TOGETHER -> null;
+        };
+        if (said == null) {
+            return Optional.ofNullable(why);
+        }
         for (Map.Entry<A, Emptiness.AtAField.Where> each : positions.entrySet()) {
-            if (empty.contains(each.getKey())) {
-                why = Emptiness.preferred(why, new Emptiness.AtAField(each.getValue(),
-                        new Emptiness.EmptyOrderedInterval()));
-                break;
+            if (shown.at().contains(each.getKey())) {
+                return Optional.of(Emptiness.preferred(why,
+                        new Emptiness.AtAField(each.getValue(), said)));
             }
         }
-        return Optional.ofNullable(why);
+        // No position to name, which is what a choice refused at two of them leaves: each of them
+        // holds values some alternative stands at, so what was shown is about the whole product.
+        //
+        // Only where what was shown is true of the pair rather than of one position. A range with
+        // nothing in it is a position's own answer and is said of that position or not at all —
+        // written without one, the sentence read off it would name whatever place the reader
+        // happened to be at, which is the declaration's own value.
+        return Optional.of(shown.by() == Confinement.EmptyBy.SET_AND_RANGE
+                ? Emptiness.preferred(why, said) : why);
     }
 
     /**
@@ -163,7 +194,7 @@ public record ConstraintState<A>(NumericDomain<A> numbers, PredicateFacts<A> fac
      */
     public ConstraintState<A> meet(ConstraintState<A> other) {
         return new ConstraintState<>(numbers.meet(other.numbers), facts.meet(other.facts),
-                values.meet(other.values), ordered.meet(other.ordered), shown || other.shown);
+                confinement.meet(other.confinement), shown || other.shown);
     }
 
     /**
@@ -193,17 +224,17 @@ public record ConstraintState<A>(NumericDomain<A> numbers, PredicateFacts<A> fac
         // The fold in `over` cannot fire: `naming` refuses a second subject at a name some other
         // subject already has, so no two atoms of this state reach one name to be added together.
         return new ConstraintState<>(numbers.over(naming::apply), facts.renamed(naming::apply),
-                values.renamed(naming::apply), ordered.renamed(naming::apply), shown);
+                confinement.renamed(naming::apply), shown);
     }
 
     /** This, with {@code f rel 0} taken as holding. */
     public ConstraintState<A> taking(LinearForm<A> f, Rel rel, Map<A, Granularity> kinds) {
-        return new ConstraintState<>(numbers.assume(f, rel, kinds), facts, values, ordered, shown);
+        return new ConstraintState<>(numbers.assume(f, rel, kinds), facts, confinement, shown);
     }
 
     /** This, with the predicate {@code key} taken as holding, or as failing. */
     ConstraintState<A> taking(A key, boolean positive) {
-        return new ConstraintState<>(numbers, facts.assume(key, positive), values, ordered, shown);
+        return new ConstraintState<>(numbers, facts.assume(key, positive), confinement, shown);
     }
 
     /**
@@ -223,26 +254,9 @@ public record ConstraintState<A>(NumericDomain<A> numbers, PredicateFacts<A> fac
      * conjunctions firing on a side that read nothing, and lifting it is about which rules went
      * unread rather than about how the alternatives are held.
      */
-    ConstraintState<A> takingValuesRead(AdmissibleValues<A> read,
-                                        souther.compiler.values.Allowance<A> sets) {
-        // The allowance the reading was worked out under, and not a fresh one. What this state
-        // holds is that reading, and what a later reader builds out of it is more of the same
-        // answer at the same positions — given an allowance of its own, a position would be allowed
-        // its machine again for every phase that touched it, and the bound would be on a phase
-        // rather than on what the model is finally told.
-        // Said once, and what stands here until it is said is what nothing read leaves. Saying it
-        // twice would keep the second reading and drop the first without a word, which is the one
-        // way this can be got wrong now that it cannot combine two of them. An assertion because a
-        // throw would be caught by the fail-open around the reading and leave it silently dropped.
-        assert !values.hasReadings()
-                : "the values of a state are read once, and these were read over " + values;
-        // The reading met with what nothing read leaves, and then held as a conjunction of one.
-        // Met and not assigned, which is not the same answer, and the difference is a reading of one
-        // declaration's clauses — so it is worked out here and the conjunction takes what it comes
-        // to. Written the other way round, a factor would be a reading nobody had met with top.
-        return new ConstraintState<>(numbers, facts,
-                ConjoinedAdmissibleValues.of(AdmissibleValues.<A>top().meet(read, sets), sets),
-                ordered, shown);
+    ConstraintState<A> takingRead(Confinement.Worked<A> read,
+                                  souther.compiler.values.Allowance<A> sets) {
+        return new ConstraintState<>(numbers, facts, confinement.taking(read, sets), shown);
     }
 
     /**
@@ -254,12 +268,20 @@ public record ConstraintState<A>(NumericDomain<A> numbers, PredicateFacts<A> fac
      * that is charged, and the states are taken under it before they are met.
      */
     public ConstraintState<A> under(souther.compiler.values.Allowance<A> sets) {
-        return new ConstraintState<>(numbers, facts, values.under(sets), ordered, shown);
+        return new ConstraintState<>(numbers, facts,
+                confinement.withValues(confinement.values().under(sets)), shown);
     }
 
-    /** This, with {@code bounded} taken as holding of the positions it bounds. */
-    ConstraintState<A> taking(OrderedIntervals<A> bounded) {
-        return new ConstraintState<>(numbers, facts, values, ordered.meet(bounded), shown);
+    /**
+     * This, with {@code bounded} taken as holding of the positions it bounds.
+     *
+     * @param on what each of those positions is ordered by, which is what a range and a set of
+     *           values are put together over. Handed in rather than worked out here: the carrier
+     *           was settled where the clauses were read, and a table built again would be a second
+     *           answer to a question already asked
+     */
+    ConstraintState<A> taking(OrderedIntervals<A> bounded, Map<A, Carrier> on) {
+        return new ConstraintState<>(numbers, facts, confinement.taking(bounded, on), shown);
     }
 
     /**

@@ -22,6 +22,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.SequencedSet;
 import java.util.Set;
 
 /**
@@ -70,7 +71,7 @@ public final class DataChecker {
 
     private static void collectConstChecks(Hir.Expr e, Symbols symbols, List<ConstCheck> out) {
         if (e instanceof Hir.NewData nd
-                && nd.typeName().answered() instanceof Hir.Name.Denoting built
+                && nd.typeName() instanceof Hir.Name.Denoting built
                 && built.type() instanceof TypeSymbol.AtModule constructed
                 && symbols.declaredNode(constructed) instanceof Hir.Data nt
                 && nt.newtype() && isInvariantBearing(constructed, symbols)) {
@@ -203,7 +204,7 @@ public final class DataChecker {
                 // it compares against a limit rather than setting one.
                 // A construction naming nothing builds no type to record; it is reported where the
                 // name is written, and the fields written under it are still walked.
-                if (nd.typeName().answered() instanceof Hir.Name.Denoting built) {
+                if (nd.typeName() instanceof Hir.Name.Denoting built) {
                     Map<TypeSymbol, String> side =
                             built.type() instanceof TypeSymbol.AtModule made && nd.wasCarried(made)
                                     ? out.carried() : out.originated();
@@ -338,7 +339,7 @@ public final class DataChecker {
      * against. Reported here rather than left to the walks, which would recurse until the stack ran
      * out — codec derivation runs before this check and stops at the repeat for the same reason. */
     private static List<String> sumCycle(TypeSymbol target, Symbols symbols,
-                                         LinkedHashSet<TypeSymbol> path) {
+                                         SequencedSet<TypeSymbol> path) {
         if (!(symbols.declaredNode(
                 path.isEmpty() ? target : last(path)) instanceof Hir.SumData s)) {
             return null;
@@ -346,7 +347,7 @@ public final class DataChecker {
         for (Hir.Name caseName : s.cases()) {
             // A case naming nothing is no step of a cycle, and it is reported on the declaration
             // that writes it — which may be another module's, and not one this check was handed.
-            if (!(caseName.answered() instanceof Hir.Name.Denoting names)) {
+            if (!(caseName instanceof Hir.Name.Denoting names)) {
                 continue;
             }
             if (target.equals(names.type())) {
@@ -369,7 +370,7 @@ public final class DataChecker {
         return null;
     }
 
-    private static TypeSymbol last(LinkedHashSet<TypeSymbol> path) {
+    private static TypeSymbol last(SequencedSet<TypeSymbol> path) {
         TypeSymbol out = null;
         for (TypeSymbol t : path) {
             out = t;
@@ -480,7 +481,7 @@ public final class DataChecker {
         for (UninhabitableTypes.UninhabitableGroup group : groups) {
             Hir.Def at = symbols.declaredNode(group.reportedAt());
             found.add(CompileException.of(told(Diagnostic.at(at.pos()), at.name(),
-                    new Emptiness.AtAField.Where.TheValueItself(), group.why(),
+                    new Emptiness.AtAField.Where.TheValueItself(), false, group.why(),
                     lacks.get(group.reportedAt()) == 1).build()));
         }
         return found;
@@ -507,14 +508,17 @@ public final class DataChecker {
      * the switch as a list of sentences anybody has seen.
      *
      * @param path where in the declaration the proof so far has reached
+     * @param placed whether the proof named that place or the caller assumed it. A proof that names
+     *               none was shown of the whole value and not of a position in it, and a sentence
+     *               that filled the place in would name whatever the reader happened to be at
      * @param alone whether the declaration this is said at has no other lack reported of it, which
      *              is what a suggestion has to be true of
      */
     private static Diagnostic.Builder told(Diagnostic.Builder at, String data,
-                                           Emptiness.AtAField.Where path, Emptiness why,
-                                           boolean alone) {
+                                           Emptiness.AtAField.Where path, boolean placed,
+                                           Emptiness why, boolean alone) {
         return switch (why) {
-            case Emptiness.AtAField it -> told(at, data, it.where(), it.under(), alone);
+            case Emptiness.AtAField it -> told(at, data, it.where(), true, it.under(), alone);
             case Emptiness.NoBaseInComponent it -> {
                 Diagnostic.Builder said = at.say(new DataMessage.DataCannotBeConstructed(data));
                 yield alone ? suggested(said, data, it.through()) : said;
@@ -524,6 +528,13 @@ public final class DataChecker {
             case Emptiness.EmptyOrderedInterval _ ->
                     at.say(new DataMessage.NothingIsLeftForThatPositionToHold(
                             data, written(path)));
+            // With a place only where the proof named one. Where the alternatives are refused at
+            // different positions there is none, and the sentence about a position would name one
+            // the rules are fine with — so what is said there is that the rules contradict, which
+            // is what this reading could show and no more.
+            case Emptiness.NoAllowedValueInRange _ -> placed
+                    ? at.say(new DataMessage.NoValueItsRulesAllowIsInThatRange(data, written(path)))
+                    : at.say(new DataMessage.ItsRulesCannotAllHold(data));
             case Emptiness.SetRequiresTooManyDistinctValues it ->
                     at.say(new DataMessage.ASetCannotBeFilledFromItsElement(
                             data, written(path), it.available()));
@@ -634,10 +645,6 @@ public final class DataChecker {
         checkEncoder(derived.encoder(), ctx);
     }
 
-    private static Scope fieldScope(CheckContext ctx) {
-        return fieldScope(ctx.data().declares(), ctx.data(), ctx.symbols());
-    }
-
     /**
      * The bindings a declaration's own invariant reads: its fields, each as the binding it is.
      *
@@ -649,7 +656,7 @@ public final class DataChecker {
     static Scope fieldScope(TypeSymbol.AtModule declared, Hir.Data data, Symbols symbols) {
         Map<String, Type> types = TypeOps.fieldTypes(data, symbols);
         Map<BindingId, Scope.Binding> bindings = new LinkedHashMap<>();
-        TypeOps.fieldBindings(declared, data, symbols).forEach((name, binding) ->
+        TypeOps.fieldBindings(declared, symbols).forEach((name, binding) ->
                 bindings.put(binding, new Scope.Binding(name, types.get(name))));
         return Scope.of(bindings);
     }
@@ -859,7 +866,7 @@ public final class DataChecker {
                                                  SourcePos pos, CheckContext ctx) {
         Map<String, Type> shared =
                 TypeView.of(Type.ref(sum.declares()), ctx.symbols()).shape() instanceof Shape.Sum s
-                        ? ReadableFields.of(s).fields() : Map.of();
+                        ? ReadableFields.of(s).declaredFields() : Map.of();
         if (shared.isEmpty()) {
             throw CompileException.of(Diagnostic.at(pos)
                     .say(new DataMessage.SpreadOfASumWhoseCasesShareNothing(name, Type.show(bound)))

@@ -94,7 +94,8 @@ class WhoMayReadWhatAStringPredicateMeansTest {
             READS,
             READS + IN_A_DESCRIPTOR,
             READS + "#statedByChecked(Lsouther/compiler/core/Core;"
-                    + "Lsouther/compiler/check/Symbols;)L" + OWNER + "$Stated;",
+                    + "Lsouther/compiler/check/Symbols;Lsouther/compiler/check/Terms;"
+                    + "Lsouther/compiler/check/Denotations;)L" + OWNER + "$Stated;",
             READS + "$Reading",
             READS + "$Reading$Accepting",
             READS + "$Reading$Accepting#accepts()Lsouther/compiler/regex/PatternSyntax;",

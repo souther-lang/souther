@@ -86,7 +86,7 @@ class CompileNamingAnExpressionTest {
         return MODULE.formatted(target, target, body);
     }
 
-    private record Row(String expression, String target) {
+    record Row(String expression, String target) {
 
         @Override
         public String toString() {

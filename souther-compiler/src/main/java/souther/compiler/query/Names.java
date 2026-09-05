@@ -1448,6 +1448,8 @@ public final class Names {
     public record Cycles() implements Key<Cycles.Of> {
 
         /**
+         * The cycles the module references close, and who is caught in them.
+         *
          * @param reported the error for each module a cycle was closed at — one per cycle, on the
          *                 source that wrote the reference that closes it
          * @param members every module taking part in one, which is more: the error belongs to one

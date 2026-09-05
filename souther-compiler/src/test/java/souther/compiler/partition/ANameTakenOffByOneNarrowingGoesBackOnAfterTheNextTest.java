@@ -3,17 +3,18 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.ast.Hir;
+import souther.compiler.check.DeclaredBounds;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
-import souther.compiler.check.TypeOps;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
 import souther.compiler.query.Shapes;
+import souther.compiler.types.TypeSymbol;
 
 import java.util.List;
 import java.util.Map;
@@ -38,6 +39,11 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
  * out wrong for another reason.
  */
 class ANameTakenOffByOneNarrowingGoesBackOnAfterTheNextTest {
+
+    /** The rules asking a collection to hold one and capping it in no way. */
+    private static final ConstructionPlan.HowManyItHolds ONE_AT_LEAST =
+            (_, _) -> new DeclaredBounds.CountRange(1, Integer.MAX_VALUE);
+
 
     /** A case of a sum that is a newtype over an optional: the name is uncovered by the case and
      *  taken off again by the presence. */
@@ -112,7 +118,7 @@ class ANameTakenOffByOneNarrowingGoesBackOnAfterTheNextTest {
         ConstructionPlan plan = assertInstanceOf(ConstructionPlan.Result.Planned.class,
                 ConstructionPlan.of(read.sig().inputTypes().get(0),
                         TermPath.of(read.parameter()), read.rules().symbols(), Set.of(),
-                        axis.requiring(cls), (_, _) -> 1),
+                        axis.requiring(cls), ONE_AT_LEAST),
                 "nothing here asks one position to be two things").plan();
 
         return names(under(plan.root(), axis.path().refine(cls.selects())));
@@ -131,13 +137,13 @@ class ANameTakenOffByOneNarrowingGoesBackOnAfterTheNextTest {
     }
 
     private static List<String> names(ConstructionPlan.Node node) {
-        List<TypeOps.Layer> worn = switch (node) {
+        List<TypeSymbol> worn = switch (node) {
             case ConstructionPlan.Slot slot -> slot.worn();
             case ConstructionPlan.Exact exact -> exact.worn();
             case null -> throw new AssertionError("the plan builds nothing at that position");
             default -> throw new AssertionError("not a position a value is put at: " + node);
         };
-        return worn.stream().map(each -> each.named().name()).toList();
+        return worn.stream().map(TypeSymbol::name).toList();
     }
 
     private record Read(String parameter, Sig sig, RuleReadingSource rules, InputDomain domain) {}

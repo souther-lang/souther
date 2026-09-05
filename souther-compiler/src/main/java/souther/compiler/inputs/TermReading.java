@@ -7,6 +7,8 @@ import souther.compiler.numeric.Place;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.semantics.TakenAs;
 
+import java.util.Objects;
+
 import souther.compiler.inputs.NumericTerm.Reading;
 
 /**
@@ -41,12 +43,11 @@ final class TermReading {
     static Reading at(TermOrders on, ObservedValue at) {
         NumericTerm.FromOnePosition term = on.term().atOnePosition();
         Carrier observed = on.observed();
-        // Nothing arrived, which is the walk saying it has no value here rather than an observation
-        // saying it could not keep one. Named apart, because the reader that words an observation's
-        // code says what an observation did — and here there was none.
-        if (at == null) {
-            return new Reading.NoValue();
-        }
+        // A value or nothing at all, and nothing at all is not one of the answers here. Whether a
+        // walk arrived and what it found are the caller's to have settled before a term is asked
+        // for a number; answered with a reading, this would be where a place nobody looked at comes
+        // back as a place holding no number, which is what having no value here means.
+        Objects.requireNonNull(at, "a term is read at a value the walk came to");
         Membership.Incomplete unread = Membership.unread(at);
         if (unread != null) {
             return new Reading.Missing(unread.code());
@@ -82,19 +83,13 @@ final class TermReading {
      */
     static Reading over(TermOrders on, java.util.List<ObservedValue> values) {
         NumericTerm.TakenOver term = (NumericTerm.TakenOver) on.term();
-        // Nothing to read, which a caller that could not walk to the run answers with. The absence
-        // a walk answers with and not the values being no number of this term: said as the second,
-        // a run this compiler could not reach comes out as the model putting the row elsewhere.
-        if (values == null) {
-            return new Reading.NoValue();
-        }
+        // The values of a run the walk came to, and every one of them a value. A run this compiler
+        // could not reach has none of these and is not a run of none, so the caller settles that
+        // before asking a term for a number -- given nothing here instead, a run nobody walked to
+        // would come out as the model having written an empty one.
+        Objects.requireNonNull(values, "a term is read over the values a walk came to");
         for (ObservedValue each : values) {
-            // An element the walk arrived at nothing for, which is not an observation of one. Said
-            // apart for the reason the one value a place holds is, since a total over a run is over
-            // whatever the run holds and one of them being nothing is not a limit having fired.
-            if (each == null) {
-                return new Reading.NoValue();
-            }
+            Objects.requireNonNull(each, "every value of a run the walk came to is a value");
             Membership.Incomplete unread = Membership.unread(each);
             if (unread != null) {
                 return new Reading.Missing(unread.code());
@@ -197,9 +192,6 @@ final class TermReading {
         }
         java.math.BigDecimal total = java.math.BigDecimal.ZERO;
         for (ObservedValue each : values) {
-            if (each == null) {
-                return new Reading.NoValue();
-            }
             Membership.Incomplete unread = Membership.unread(each);
             if (unread != null) {
                 return new Reading.Missing(unread.code());

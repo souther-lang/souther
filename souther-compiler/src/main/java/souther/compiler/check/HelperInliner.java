@@ -54,14 +54,14 @@ public final class HelperInliner {
      *
      * <p>Not final: a recursive helper's own body is expanded against a table narrowed by its
      * parameters ({@link #inlineRecursiveBody}), and what that narrows is what a call reaches — never
-     * what recurses, which {@link #recursive} settled over the table as it was built.
+     * what recurses, which {@link #recursiveInReach} settled over the table as it was built.
      */
     private HelperTable table;
     /**
      * The behaviors a body expanded here may name, with how many inputs each takes — the module's
      * own callable ones and the ones it borrows (spec {@code [#calling-a-behavior]}).
      *
-     * <p>Apart from {@link #helpers} because a behavior is never expanded: what stands behind its
+     * <p>Apart from {@link #helpersOf} because a behavior is never expanded: what stands behind its
      * name may be a Java implementation, so a body that reached past it to the {@code let} would be
      * a second answer to the same name. All this holds is what reifying the name needs, which is its
      * arity; the query layer works out which behaviors are here, since which of them may be named is
@@ -344,6 +344,21 @@ public final class HelperInliner {
      */
     private final java.util.SequencedSet<ReachName.Declaration> leftStanding = new java.util.LinkedHashSet<>();
 
+    /**
+     * What each expansion being asked about has left standing, innermost last.
+     *
+     * <p>Beside {@link #leftStanding} and not read off it. That set answers for every tree this
+     * inliner was driven over, which is what a module has to emit; a reading holding one tree needs
+     * the calls standing in that tree, and the two are the same set only where an inliner expanded
+     * one thing. Written here as the decision is made, for the same reason the other is.
+     *
+     * <p>A list because one asked expansion can run inside another — a declaration's clauses are
+     * expanded one at a time inside the expansion of the declaration — and a call standing in the
+     * inner tree stands in the outer one, which holds it.
+     */
+    private final java.util.List<java.util.SequencedSet<ReachName.Declaration>> standingHere =
+            new java.util.ArrayList<>();
+
     /** Bindings holding the same elements as another binding, and bindings holding elements made
      *  from another's. Written where an expansion removes the operation that says so. */
     private final ElementProvenance.Builder provenance = new ElementProvenance.Builder();
@@ -620,7 +635,7 @@ public final class HelperInliner {
      * declaration: a binding holding a lambda is applied by the expression and reaches nothing.
      */
     private static ReachName.Declaration calledHelper(Stdlib stdlib, Hir.Apply call) {
-        if (!(call.answered() instanceof Hir.Var.Denoting callee)) {
+        if (!(call.function() instanceof Hir.Var.Denoting callee)) {
             return null;
         }
         Stdlib.Rewrite rewrite = rewriteTaken(stdlib, call);
@@ -724,7 +739,7 @@ public final class HelperInliner {
      * boundary is read in is what answers for it.
      */
     private Hir.RetType arrivesAs(Hir.Expr arg) {
-        if (!(arg instanceof Hir.Var v) || !(v.answered() instanceof Hir.Var.Denoting named)) {
+        if (!(arg instanceof Hir.Var.Denoting named)) {
             return null;
         }
         Hir.FnDef is = expands(named);
@@ -1035,6 +1050,34 @@ public final class HelperInliner {
     }
 
     /**
+     * The same, answering with what this one expansion left standing as well as with what it
+     * produced.
+     *
+     * <p>For a reader that has to tell a call the expansion meant to leave from one it was supposed
+     * to remove. Both are a helper applied and the finished tree does not say which, so the answer
+     * is taken where it is made rather than worked out again from the tree
+     * ({@link CallsLeftStanding}).
+     */
+    Expansion<Hir.Expr> expanding(Hir.Expr e, BindingOwner into) {
+        return expanding(() -> inline(e, into));
+    }
+
+    /**
+     * What one run of {@code expansion} left standing, for a driver expanding something this class
+     * has no single entry point for — the several clauses of one declaration, expanded one after
+     * another into the tree the declaration becomes.
+     */
+    <T> Expansion<T> expanding(java.util.function.Supplier<T> expansion) {
+        java.util.SequencedSet<ReachName.Declaration> asked = new java.util.LinkedHashSet<>();
+        standingHere.add(asked);
+        try {
+            return new Expansion<>(expansion.get(), asked);
+        } finally {
+            standingHere.remove(standingHere.size() - 1);
+        }
+    }
+
+    /**
      * Runs {@code expansion} as one writing into {@code into}.
      *
      * <p>The writing is a value and it is made whole: nothing it holds is left from the writing
@@ -1276,6 +1319,9 @@ public final class HelperInliner {
             // The requirement this expansion just made: the call stays a call, so a method for what
             // it reaches has to be emitted wherever this tree ends up.
             leftStanding.add(reaches);
+            for (java.util.SequencedSet<ReachName.Declaration> asked : standingHere) {
+                asked.add(reaches);
+            }
         }
         if (helper == null || standing) {
             // builtin, injected behavior, a function-typed parameter, or a recursive helper —
@@ -1603,7 +1649,7 @@ public final class HelperInliner {
      * {@code ()}, and there is no block taking no parameter to expand it to.
      */
     private OptionalInt declarationArity(Hir.Var name) {
-        if (!(name.answered() instanceof Hir.Var.Denoting v)) {
+        if (!(name instanceof Hir.Var.Denoting v)) {
             return OptionalInt.empty();   // it stands for no declaration to take anything
         }
         int arity = switch (v.denotes()) {
@@ -1652,7 +1698,7 @@ public final class HelperInliner {
             int k = next();
             return inline(etaExpand(v, arity.getAsInt(), i -> "$v" + k + "_" + i));
         }
-        if (!(v.answered() instanceof Hir.Var.Denoting named)
+        if (!(v instanceof Hir.Var.Denoting named)
                 || !(named.denotes() instanceof ValueName.Helper)) {
             return v;
         }
@@ -1809,8 +1855,7 @@ public final class HelperInliner {
         Integer idx = table.library().theWalk().equals(call.answered().denotes())
                 ? BLOCK_ARG_OF_THE_WALK : null;
         if (idx == null || idx >= call.args().size()
-                || !(call.args().get(idx) instanceof Hir.Var v)
-                || !(v.answered() instanceof Hir.Var.Denoting named)) {
+                || !(call.args().get(idx) instanceof Hir.Var.Denoting named)) {
             return call;
         }
         Hir.FnDef helper = expands(named);
@@ -1818,7 +1863,7 @@ public final class HelperInliner {
             return call;   // a bare name that stands for no body is left for the type checker to report
         }
         int k = next();
-        Hir.Block block = etaExpand(v, helper.params().size(), i -> "$b" + k + "_" + i);
+        Hir.Block block = etaExpand(named, helper.params().size(), i -> "$b" + k + "_" + i);
         List<Hir.Expr> args = new ArrayList<>(call.args());
         args.set(idx, block);
         return call.withArgs(args);
@@ -1905,10 +1950,6 @@ public final class HelperInliner {
                     new ReachName.InScope(new ValueName.Local(binder.name(), binder.id())));
         }
 
-        /** What stands here reaches. */
-        ValueName denotes() {
-            return reachedAs.denotes();
-        }
     }
 
     /**
@@ -1935,7 +1976,7 @@ public final class HelperInliner {
          * <p>A prelude helper is copied with the call site stamped over it, so a type error inside its
          * body points at the user's call — {@code filter(xs, x -> x * 2)} — rather than at a line of
          * {@code souther.list} the user never wrote. A module-own helper, and a lambda given to a fn
-         * parameter, keep the positions their bodies have ({@link HelperInliner#keepsItsPositions}).
+         * parameter, keep the positions their bodies have.
          * The caller's argument expressions are spliced in separately and keep their own either way.
          */
         SourcePos at(SourcePos own) {
@@ -2218,7 +2259,7 @@ public final class HelperInliner {
      * comes out as far as its spelling is long.
      */
     private Hir.Var renameVar(Hir.Var name, Renaming renaming) {
-        if (!(name.answered() instanceof Hir.Var.Denoting v)) {
+        if (!(name instanceof Hir.Var.Denoting v)) {
             return name;   // it names nothing, so there is nothing to rename it to
         }
         Substituted stands = renaming.substituted(v.denotes());
@@ -2251,7 +2292,7 @@ public final class HelperInliner {
      * no exception.
      */
     private Hir.FnDef valueSpread(Hir.Var name) {
-        if (!(name.answered() instanceof Hir.Var.Denoting spread)
+        if (!(name instanceof Hir.Var.Denoting spread)
                 || !(spread.denotes() instanceof ValueName.Helper)) {
             return null;
         }

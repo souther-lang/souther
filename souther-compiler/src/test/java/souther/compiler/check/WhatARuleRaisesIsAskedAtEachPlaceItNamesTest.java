@@ -2,7 +2,6 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.ast.Hir;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
 import souther.compiler.query.Scopes;
@@ -134,10 +133,9 @@ class WhatARuleRaisesIsAskedAtEachPlaceItNamesTest {
         Symbols symbols = Scopes.derived(compilation.db(), module).value();
         assertNotNull(symbols);
         TypeSymbol.AtModule named = TypeSymbols.declared(new TypeKey(module, "Span"));
-        Hir.Data data = (Hir.Data) symbols.declaredNode(named.key());
-        assertNotNull(data, "no `Span` declared");
+        assertNotNull(symbols.declaredNode(named.key()), "no `Span` declared");
         Collection<Required> every = FieldDomains
-                .of(named, data, RuleReadings.of(compilation, module),
+                .of(named, RuleReadings.of(compilation, module),
                         ReadAs.THE_COMPILATION_DOES).required().values();
         assertEquals(1, every.size(), "one clause, so one answer about what it raises");
         return every.iterator().next();

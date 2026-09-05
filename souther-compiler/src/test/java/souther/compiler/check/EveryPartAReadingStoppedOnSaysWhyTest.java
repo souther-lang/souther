@@ -2,7 +2,6 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.ast.Hir;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Scopes;
 import souther.compiler.types.TypeKey;
@@ -82,23 +81,33 @@ class EveryPartAReadingStoppedOnSaysWhyTest {
             """;
 
     /**
-     * A clause about a position none of the readings knows.
+     * A rule a helper states about a field of the value it was handed, which no reading takes in.
      *
-     * <p>The invariant is a call, and what it comes to is a rule about a field of the value the
-     * helper was handed. The readings here are filed under the positions they recognise, and that
-     * field is not one of them — so the rule is claimed by none of them, and none of them has
-     * anything to say about why.
+     * <p>The clause is a call, and what it comes to is a rule about {@code range.max}. That the
+     * rule reaches through a helper decides nothing: the reading goes inside the binding the
+     * expansion made, so it names the same position and says the same thing about it as the rule
+     * written out (ADR-0106).
      */
-    private static final String A_RULE_NO_READING_CLAIMS = """
+    private static final String A_RULE_THROUGH_A_HELPER = """
             module demo
 
-            data Range = { min: Int, max: Int }
+            data Range = { min: String, max: String }
 
             data N = { range: Range }
                 invariant valid(range)
 
-            let valid (r: Range) : Bool = r.max >= 0
-            """;
+            let valid (r: Range) : Bool = UNREAD_MAX
+            """.replace("UNREAD_MAX", souther.compiler.ARuleNoReadingTakesIn.about("r.max"));
+
+    /** The same rule written where the clause is, which is what the one above is held to. */
+    private static final String THE_SAME_RULE_WRITTEN_OUT = """
+            module demo
+
+            data Range = { min: String, max: String }
+
+            data N = { range: Range }
+                invariant UNREAD_MAX
+            """.replace("UNREAD_MAX", souther.compiler.ARuleNoReadingTakesIn.about("range.max"));
 
     /** What became of every question of every rule that nothing answered. */
     private static Map<String, String> whyStanding(FieldDomains read) {
@@ -114,17 +123,21 @@ class EveryPartAReadingStoppedOnSaysWhyTest {
     }
 
     /**
-     * A question no reading claimed says so, and does not borrow a reading's account.
+     * A question a helper's rule leaves standing is the reading's, and it is the same question the
+     * rule written out leaves.
      *
-     * <p>The other two arms are one reading's own words for where it gave up. A question standing
-     * because nobody took the rule in has no such words behind it — answered with them, an author
-     * is told which reader fell short of their clause, and the reader named is one that never held
-     * it and has no word for such a rule at all.
+     * <p>Every arm names a reading, because a rule that reaches a question reaches the readings —
+     * one of them adopts it or one of them records where it gave up. A helper is no exception: the
+     * expansion binds the argument and the reading goes inside the binding, so the position the
+     * rule names and the account left at it do not turn on which of the two spellings an author
+     * wrote.
      */
     @Test
-    void aQuestionNoReadingClaimedNamesNoReading() {
-        assertEquals(Map.of("invariant N #1 at range.max", "NothingTookItIn"),
-                whyStanding(read(A_RULE_NO_READING_CLAIMS)));
+    void aQuestionAHelpersRuleLeavesIsTheSameOneTheRuleWrittenOutLeaves() {
+        Map<String, String> throughAHelper = whyStanding(read(A_RULE_THROUGH_A_HELPER));
+
+        assertEquals(Map.of("invariant N #1 at range.max", "TheValueReadingSays"), throughAHelper);
+        assertEquals(whyStanding(read(THE_SAME_RULE_WRITTEN_OUT)), throughAHelper);
     }
 
     /** Everything the reading of ends was stopped by, per question it left standing. */
@@ -174,7 +187,6 @@ class EveryPartAReadingStoppedOnSaysWhyTest {
         Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
         TypeSymbol.AtModule name = TypeSymbols.declared(new TypeKey(symbols.module(), "N"));
         return FieldDomains.of(name,
-                (Hir.Data) symbols.declaredNode(name.key()),
                 RuleReadings.of(compilation, "demo"),
                 souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
     }

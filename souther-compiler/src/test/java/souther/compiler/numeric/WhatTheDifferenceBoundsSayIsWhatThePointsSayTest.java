@@ -174,14 +174,14 @@ class WhatTheDifferenceBoundsSayIsWhatThePointsSayTest {
     private static List<Written> aSystem(Random dice) {
         List<Written> out = new ArrayList<>();
         for (String position : POSITIONS) {
-            out.add(new Written(Map.of(position, Rational.of(-LOW == 0 ? 1 : 1)),
+            out.add(new Written(Map.of(position, Rational.ONE),
                     Rational.of(-LOW), Rel.GE));
             out.add(new Written(Map.of(position, Rational.ONE), Rational.of(-HIGH), Rel.LE));
         }
         int howMany = 2 + dice.nextInt(4);
         for (int i = 0; i < howMany; i++) {
             String one = POSITIONS.get(dice.nextInt(POSITIONS.size()));
-            long threshold = LOW + dice.nextInt(HIGH - LOW + 1);
+            long threshold = LOW + (long) dice.nextInt(HIGH - LOW + 1);
             boolean strict = dice.nextBoolean();
             if (dice.nextBoolean()) {
                 Rel rel = dice.nextBoolean()

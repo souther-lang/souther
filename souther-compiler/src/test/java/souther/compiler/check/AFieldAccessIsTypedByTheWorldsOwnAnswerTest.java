@@ -61,7 +61,7 @@ class AFieldAccessIsTypedByTheWorldsOwnAnswerTest {
     /** What the check settled, which is what an accepted program's readers are handed. */
     @Test
     void aFieldIsWhatTheCheckSettledItHolds() {
-        Type taken = new DeclaredTypeEvidence(symbols, checked(), values)
+        Type taken = new DeclaredTypeEvidence(reading(checked()), values)
                 .declaredTypeOf(bodyOf("taken"));
         assertEquals("Line", assertInstanceOf(Type.Ref.class, taken).name().name(),
                 "`sample.line` is declared to hold a `Line`");
@@ -78,7 +78,7 @@ class AFieldAccessIsTypedByTheWorldsOwnAnswerTest {
     @Test
     void andNotWhatTheDeclarationsWouldSayBesideIt() {
         FieldTypes saysAString = _ -> Map.of("line", Type.STRING);
-        Type taken = new DeclaredTypeEvidence(symbols, saysAString, values)
+        Type taken = new DeclaredTypeEvidence(reading(saysAString), values)
                 .declaredTypeOf(bodyOf("taken"));
         assertEquals(Type.STRING, taken,
                 "the walk read the declarations rather than the world it was handed");
@@ -118,7 +118,7 @@ class AFieldAccessIsTypedByTheWorldsOwnAnswerTest {
 
     /** The declaration {@code Order}, as the reading of this module names it. */
     private TypeSymbol orderOf() {
-        Type sample = new DeclaredTypeEvidence(symbols, checked(), values)
+        Type sample = new DeclaredTypeEvidence(reading(checked()), values)
                 .declaredTypeOf(bodyOf("sample"));
         return assertInstanceOf(Type.Ref.class, sample).name();
     }
@@ -149,8 +149,15 @@ class AFieldAccessIsTypedByTheWorldsOwnAnswerTest {
         assertEquals(Map.of(), c.db().ask(new Shapes.ValueShapes("demo")).value(),
                 "the clause did not elaborate, so the check settled nothing about `Bad`");
 
-        assertEquals(Type.INT, new ResolvedFieldTypes(scope).field(bad, "n"),
+        assertEquals(Type.INT,
+                new FieldRead(scope, new ResolvedFieldTypes(scope), FieldRead.Unreadable.REFUSED)
+                        .of(Type.ref(bad), "n"),
                 "and what the declaration denotes is still there to be read");
+    }
+
+    /** The reading of a {@code .} this walk is handed, in {@code world}. */
+    private FieldRead reading(FieldTypes world) {
+        return new FieldRead(symbols, world, FieldRead.Unreadable.REFUSED);
     }
 
     private FieldTypes checked() {

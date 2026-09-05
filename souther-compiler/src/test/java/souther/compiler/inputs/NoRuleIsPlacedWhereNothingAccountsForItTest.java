@@ -1,5 +1,6 @@
 package souther.compiler.inputs;
 
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.ast.Hir;
@@ -7,14 +8,13 @@ import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
-import souther.compiler.conformance.ConformanceCorpus;
+import souther.compiler.conformance.RepositoryModels;
+import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
 import souther.compiler.query.Shapes;
 
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -38,6 +38,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * and decides what a reader should be told about it. So a shorter list is a failure as much as a
  * longer one.
  */
+@Tag("population")
 class NoRuleIsPlacedWhereNothingAccountsForItTest {
 
     /**
@@ -181,57 +182,36 @@ class NoRuleIsPlacedWhereNothingAccountsForItTest {
             behavior atTheSum : (q: Q) -> Ok
             """;
 
-    /** Every corpus this repository carries, as the files each is compiled from. */
-    private static final List<List<String>> CORPORA = List.of(
-            List.of("souther-bench/src/main/resources/souther/bench/corpus/crm/crm.sou",
-                    "souther-bench/src/main/resources/souther/bench/corpus/crm/pipeline.sou",
-                    "souther-bench/src/main/resources/souther/bench/corpus/crm/quoting.sou"),
-            List.of("souther-bench/src/main/resources/souther/bench/corpus/issuetracker/issues.sou"),
-            List.of("souther-bench/src/main/resources/souther/bench/corpus/runtime/runtime.sou"));
+    /**
+     * The models asked about here: what the repository carries, and one this class writes.
+     *
+     * <p>The written one crosses a name through a sum, which the corpora do not, and the questions
+     * below are about every model that reaches them either way. Answered once for the class, as the
+     * repository's are, because each question here asks about all of them.
+     */
+    private static final List<Compilation> ASKED_ABOUT = askedAbout();
+
+    private static List<Compilation> askedAbout() {
+        List<Compilation> out = new ArrayList<>(RepositoryModels.all());
+        Compilation crossed = Compilation.ofSources(List.of(NAMES_THROUGH_A_SUM), ModulePath.EMPTY);
+        crossed.answerEverything();
+        out.add(crossed);
+        return List.copyOf(out);
+    }
 
     /** The reading of every behavior of every model this repository carries. */
-    private static List<InputDomain> everyReading() throws Exception {
+    private static List<InputDomain> everyReading() {
         List<InputDomain> out = new ArrayList<>();
-        for (ConformanceCorpus corpus : ConformanceCorpus.all()) {
-            readings(corpus.analyse().compilation(), out);
-        }
-        Compilation crossed = Compilation.ofSources(List.of(NAMES_THROUGH_A_SUM),
-                souther.compiler.meta.ModulePath.EMPTY);
-        crossed.answerEverything();
-        readings(crossed, out);
-        Path root = souther.test.RepositoryLayout.ofWorkingDirectory().root();
-        for (List<String> corpus : CORPORA) {
-            List<String> sources = new ArrayList<>();
-            for (String each : corpus) {
-                sources.add(Files.readString(root.resolve(each)));
-            }
-            Compilation compilation =
-                    Compilation.ofSources(sources, souther.compiler.meta.ModulePath.EMPTY);
-            compilation.answerEverything();
+        for (Compilation compilation : ASKED_ABOUT) {
             readings(compilation, out);
         }
         return out;
     }
 
     /** The rules of every value every reading of this repository's models opens. */
-    private static List<PlacedRules> everyValueRead() throws Exception {
+    private static List<PlacedRules> everyValueRead() {
         List<PlacedRules> out = new ArrayList<>();
-        for (ConformanceCorpus corpus : ConformanceCorpus.all()) {
-            valuesRead(corpus.analyse().compilation(), out);
-        }
-        Compilation crossed = Compilation.ofSources(List.of(NAMES_THROUGH_A_SUM),
-                souther.compiler.meta.ModulePath.EMPTY);
-        crossed.answerEverything();
-        valuesRead(crossed, out);
-        Path root = souther.test.RepositoryLayout.ofWorkingDirectory().root();
-        for (List<String> corpus : CORPORA) {
-            List<String> sources = new ArrayList<>();
-            for (String each : corpus) {
-                sources.add(Files.readString(root.resolve(each)));
-            }
-            Compilation compilation =
-                    Compilation.ofSources(sources, souther.compiler.meta.ModulePath.EMPTY);
-            compilation.answerEverything();
+        for (Compilation compilation : ASKED_ABOUT) {
             valuesRead(compilation, out);
         }
         return out;

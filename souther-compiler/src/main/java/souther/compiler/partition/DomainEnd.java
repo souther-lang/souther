@@ -96,6 +96,14 @@ public final class DomainEnd {
         return attribution;
     }
 
+    /** Which end this is and where it leaves off, which is what a message naming one has to say.
+     *  The attribution is not here: it is what a reading answered, and a message about the end
+     *  reaching somewhere it should not is not about who took it in. */
+    @Override
+    public String toString() {
+        return side + " at " + bound;
+    }
+
     /** Where {@code end} is, or null where there is no end that way. */
     public static Bound boundOf(DomainEnd end) {
         return end == null ? null : end.bound();

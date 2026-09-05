@@ -29,8 +29,13 @@ import java.util.List;
  * <p>The count saturates at one past the limit it was asked about. Past that the number is not
  * wanted — what is asked of it is whether the limit is exceeded — and a conjunction of choices
  * leaves the range of a count long before it leaves the range of what an author can write.
+ *
+ * <p>A binding neither adds nor multiplies: what a clause under one comes to is what the clause
+ * comes to. So this carries no environment and its scope leaves what it was given
+ * ({@link ClauseScope#unchanged}) — the count is over the shape, and a shape that composes nothing
+ * costs nothing of its own.
  */
-final class ExpansionCost implements ClauseReading<Long> {
+final class ExpansionCost implements ClauseReading<Long, Void> {
 
     /** One past the limit, which is where the arithmetic stops.
      *
@@ -54,7 +59,7 @@ final class ExpansionCost implements ClauseReading<Long> {
         ExpansionCost counting = new ExpansionCost(limit);
         long cost = counting.nothingSaid();
         for (Core clause : clauses) {
-            cost = counting.both(cost, counting.read(clause, true));
+            cost = counting.both(cost, counting.read(clause, true, null, ClauseScope.unchanged()));
         }
         return cost;
     }
@@ -73,7 +78,7 @@ final class ExpansionCost implements ClauseReading<Long> {
      * leaves come out costing nothing and be admitted under any budget.
      */
     @Override
-    public Long leaf(Core e, boolean positive) {
+    public Long leaf(Core e, boolean positive, Void at) {
         return 1L;
     }
 

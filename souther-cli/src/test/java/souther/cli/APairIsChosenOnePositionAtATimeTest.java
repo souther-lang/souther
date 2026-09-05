@@ -128,7 +128,7 @@ class APairIsChosenOnePositionAtATimeTest {
         }
         String rows = out.toString(StandardCharsets.UTF_8);
 
-        assertTrue(rows.contains("the search stopped before reaching it"),
+        assertTrue(rows.contains("the search left something untried"),
                 () -> "it ran out of assignments to compose:\n" + rows);
         assertFalse(rows.contains("every value tried was refused"),
                 () -> "and it did not try them all:\n" + rows);
@@ -174,7 +174,7 @@ class APairIsChosenOnePositionAtATimeTest {
 
         assertTrue(rows.contains("every value tried was refused"),
                 () -> "256 assignments, all composed and all refused:\n" + rows);
-        assertFalse(rows.contains("the search stopped before reaching it"),
+        assertFalse(rows.contains("the search left something untried"),
                 () -> "and none of them was left untried:\n" + rows);
     }
 

@@ -2,9 +2,11 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.ast.Hir;
+import souther.compiler.core.Core;
+import souther.compiler.diag.SourcePos;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Scopes;
+import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeSymbols;
@@ -162,30 +164,129 @@ class AChoiceIsDecidedByEveryClauseAndAnsweredByItsOwnTest {
     private static final FactSubject UNREAD = FactSubject.of(NAMES.written("unread"));
 
     /**
-     * An unread alternative widens what a branch constrained, and not what a dead branch inside it
-     * settled.
+     * What a rule is answerable for says which choice left the constraint open.
      *
-     * <p>The account's copy of the rule the values join by: a position a dead branch settled holds
-     * an answer — the choice imposes nothing there — and a further alternative, read or not,
-     * imposes nothing extra either ({@code Adoption.either} draws the same line). Written over the
-     * copy's mentions instead, the account held a reason at a settled position that no output
-     * happens to show today, which is a lie waiting for its first reader.
+     * <p>What an author is sent to is this choice, which is what offered the alternative nothing
+     * could read: a leaf under the branch that was read is a clause nothing complained of. The
+     * position's own account is not this and is somewhere else — it says the position is open and
+     * says nothing about what anybody wrote, since every rule reaching it is in it.
+     *
+     * <p>And an unread alternative widens what a branch constrained, and not what a dead branch
+     * inside it settled: a position a dead branch settled holds an answer, so the choice imposes
+     * nothing there and a further alternative, read or not, imposes nothing extra either
+     * ({@code Adoption.either} draws the same line). Asked over what the branch mentions instead,
+     * an author would be sent to a choice about a position that is answered.
      */
     @Test
-    void anUnreadAlternativeWidensAConstraintAndNotAnAnswer() {
-        StatedByClauses.Part read = new StatedByClauses.Part(
+    void whatLeftTheConstraintOpenIsTheChoiceItWasOffered() {
+        ChoiceId choice = new ChoiceId();
+
+        assertEquals(java.util.Set.of(new RuleShortfall(CONSTRAINED,
+                        UnreadReason.ALTERNATIVE_NOT_READ,
+                        new RuleShortfall.Site.AtAChoice(choice))),
+                theBranchRead(java.util.Set.of())
+                        .either(choice, theBranchNothingRead(java.util.Set.of()))
+                        .ruleShortfalls(),
+                "an author is sent to the choice that offered the alternative, and to nothing"
+                        + " about the position the branch settled");
+    }
+
+    /**
+     * A shortfall the other branch holds as well is not what this choice left open.
+     *
+     * <p>A conjunction distributing over a choice puts what a rule was short of outside it into
+     * both branches, where it stands whichever way this choice goes. Read as the unread branch's
+     * own account, the alternative an author still has to answer would say nothing — and would say
+     * it once the shortfall standing beside it was answered, which is one round later.
+     */
+    @Test
+    void aShortfallBothBranchesHoldIsNotWhatTheChoiceLeftOpen() {
+        RuleShortfall brought = new RuleShortfall(CONSTRAINED, UnreadReason.ALTERNATIVE_NOT_READ,
+                new RuleShortfall.Site.AtAChoice(new ChoiceId()));
+        ChoiceId choice = new ChoiceId();
+
+        assertEquals(java.util.Set.of(brought, new RuleShortfall(CONSTRAINED,
+                        UnreadReason.ALTERNATIVE_NOT_READ,
+                        new RuleShortfall.Site.AtAChoice(choice))),
+                theBranchRead(java.util.Set.of(brought))
+                        .either(choice, theBranchNothingRead(java.util.Set.of(brought)))
+                        .ruleShortfalls(),
+                "what stands whichever way the choice goes does not account for its alternative"
+                        + " going unread");
+    }
+
+    /** And one only the unread branch holds does account for it. */
+    @Test
+    void aShortfallOnlyTheUnreadBranchHoldsAnswersForThePosition() {
+        RuleShortfall inside = new RuleShortfall(CONSTRAINED, UnreadReason.ALTERNATIVE_NOT_READ,
+                new RuleShortfall.Site.AtAChoice(new ChoiceId()));
+
+        assertEquals(java.util.Set.of(inside),
+                theBranchRead(java.util.Set.of())
+                        .either(new ChoiceId(), theBranchNothingRead(java.util.Set.of(inside)))
+                        .ruleShortfalls(),
+                "answering it settles the position through this branch, which takes the choice's"
+                        + " shortfall with it");
+    }
+
+    /**
+     * And which of the two is not asked of where the shortfall was written.
+     *
+     * <p>A form is one thing an author can lift and a choice is another, and neither tells whether
+     * lifting it is what would leave the branch readable. Asked of the site instead, a site added
+     * later would have this answer written for it a second time.
+     */
+    @Test
+    void andWhichOfTheTwoIsNotAskedOfWhereItWasWritten() {
+        RuleShortfall form = new RuleShortfall(CONSTRAINED, UnreadReason.FORM_NOT_READ,
+                new RuleShortfall.Site.AtALeaf(new Core.Bool(true, Type.BOOL, new SourcePos(1, 1))));
+
+        assertEquals(java.util.Set.of(form),
+                theBranchRead(java.util.Set.of())
+                        .either(new ChoiceId(), theBranchNothingRead(java.util.Set.of(form)))
+                        .ruleShortfalls(),
+                "a form only the unread branch holds accounts for the position");
+        ChoiceId choice = new ChoiceId();
+        assertEquals(java.util.Set.of(form, new RuleShortfall(CONSTRAINED,
+                        UnreadReason.ALTERNATIVE_NOT_READ,
+                        new RuleShortfall.Site.AtAChoice(choice))),
+                theBranchRead(java.util.Set.of(form))
+                        .either(choice, theBranchNothingRead(java.util.Set.of(form)))
+                        .ruleShortfalls(),
+                "and the same form standing in both branches does not");
+    }
+
+    /** A branch that was read, constraining one position and settling another. */
+    private static StatedByClauses.Part theBranchRead(java.util.Set<RuleShortfall> shortfalls) {
+        return new StatedByClauses.Part(
                 new Adoption<>(java.util.Set.of(CONSTRAINED), java.util.Set.of(SETTLED),
                         java.util.Set.of(), false),
-                Adoption.nothing(), Map.of());
-        StatedByClauses.Part unread = new StatedByClauses.Part(
+                Adoption.nothing(), Map.of(), java.util.Set.of(), shortfalls);
+    }
+
+    /** And the alternative beside it that nothing could read. */
+    private static StatedByClauses.Part theBranchNothingRead(
+            java.util.Set<RuleShortfall> shortfalls) {
+        return new StatedByClauses.Part(
                 new Adoption<>(java.util.Set.of(), java.util.Set.of(), java.util.Set.of(UNREAD),
                         true),
-                Adoption.nothing(), Map.of(UNREAD, List.of(UnreadReason.FORM_NOT_READ)));
+                Adoption.nothing(), Map.of(), java.util.Set.of(), shortfalls);
+    }
 
-        assertEquals(Map.of(UNREAD, List.of(UnreadReason.FORM_NOT_READ),
-                        CONSTRAINED, List.of(UnreadReason.ALTERNATIVE_NOT_READ)),
-                read.either(unread).standing(),
-                "the constraint is left open and the answer stands");
+    /** And two choices leaving one position open are two things an author can look at. */
+    @Test
+    void twoChoicesLeavingOnePositionOpenAreTwo() {
+        ChoiceId one = new ChoiceId();
+        ChoiceId other = new ChoiceId();
+
+        assertEquals(2, java.util.Set.of(
+                        new RuleShortfall(CONSTRAINED, UnreadReason.ALTERNATIVE_NOT_READ,
+                                new RuleShortfall.Site.AtAChoice(one)),
+                        new RuleShortfall(CONSTRAINED, UnreadReason.ALTERNATIVE_NOT_READ,
+                                new RuleShortfall.Site.AtAChoice(other))).size(),
+                "the position is open twice and there are two clauses to look at; held as reasons"
+                        + " at the position they were one, and which of them a reader was sent to"
+                        + " was whichever the walk met first");
     }
 
     /**
@@ -199,16 +300,30 @@ class AChoiceIsDecidedByEveryClauseAndAnsweredByItsOwnTest {
      */
     @Test
     void aFateAggregatesTheSameWhicheverOccurrenceComesFirst() {
+        // Two of the same half, which is where an order could reach the answer. A pair of
+        // shortfalls held in the order the copies were met would come out one way round from one
+        // side and the other way round from the other, and the aggregate of a branch would be a
+        // fact about which copy was settled first.
         Settlement.Sided one = new Settlement.Sided(
-                souther.compiler.values.Emptiness.UNDECIDED,
-                Map.of(UNREAD, List.of(UnreadReason.PATTERN_TOO_COSTLY)), java.util.Set.of());
+                Confinement.Admission.left(souther.compiler.values.Emptiness.UNDECIDED), Map.of(),
+                java.util.Set.of(new souther.compiler.values.Unbuilt.RuleShortfall<>(UNREAD,
+                        aPattern("a{300}"), UnreadReason.PATTERN_TOO_COSTLY)),
+                java.util.Set.of());
         Settlement.Sided other = new Settlement.Sided(
-                souther.compiler.values.Emptiness.UNDECIDED,
-                Map.of(UNREAD, List.of(UnreadReason.EXACT_VALUES_TOO_COSTLY)),
+                Confinement.Admission.left(souther.compiler.values.Emptiness.UNDECIDED), Map.of(),
+                java.util.Set.of(new souther.compiler.values.Unbuilt.RuleShortfall<>(UNREAD,
+                        aPattern("b{300}"), UnreadReason.PATTERN_TOO_COSTLY)),
                 java.util.Set.of());
 
         assertEquals(one.alsoSeen(other), other.alsoSeen(one),
                 "one branch, one aggregate, whichever copy was settled first");
+    }
+
+    /** The pattern a rule would have this compiler build, as a plan. */
+    private static souther.compiler.regex.PatternPlan aPattern(String regex) {
+        return souther.compiler.regex.PatternPlan.of(
+                ((souther.compiler.regex.PatternRead.Read)
+                        souther.compiler.regex.PatternParser.read(regex)).syntax());
     }
 
     /** Every question of every rule that nothing answered, and what stopped this reading of it. */
@@ -236,7 +351,6 @@ class AChoiceIsDecidedByEveryClauseAndAnsweredByItsOwnTest {
         Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
         TypeSymbol.AtModule at = TypeSymbols.declared(new TypeKey(symbols.module(), name));
         return FieldDomains.of(at,
-                (Hir.Data) symbols.declaredNode(at.key()),
                 RuleReadings.of(compilation, "demo"),
                 souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
     }

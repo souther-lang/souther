@@ -63,7 +63,8 @@ public final class RecordedRow {
     /**
      * Two handles are the same row where they are of one enumeration and one written row.
      *
-     * <p>A fresh handle is made every time an enumeration is read, and {@link #alsoBy} makes its own
+     * <p>A fresh handle is made every time an enumeration is read, and {@link StandinEntry#alsoBy}
+     * makes its own
      * — a caller keying a map on what {@code rows()} answered and then looking a row of
      * {@code alsoBy()} up in it is the correlation that javadoc invites, and by identity it would
      * miss every time.

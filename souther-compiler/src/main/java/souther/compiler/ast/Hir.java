@@ -182,7 +182,7 @@ public interface Hir {
      * runs; every name-bearing position in this tree carries one of these, so no later pass decides
      * for itself what a spelling means or whether a qualified one is allowed here (issue #177).
      *
-     * <p>A check reads {@link #denotes()}, which every name the pass answered carries. A name
+     * <p>A check reads {@link Denoting#type()}, which every name the pass answered carries. A name
      * nothing declares is reported where it is written and is {@link Unanswered} from there on,
      * which the check over its declaration is what settles ({@code Names.Unbuilt}): the pass does
      * not stop, so an author is told about every unknown name at once and the definitions beside it
@@ -203,7 +203,7 @@ public interface Hir {
          * {@code pos} is what a complaint about it points at. The spelling is the declaration's own,
          * which is what a reference internal to a module reaches it by. */
         static Name resolved(TypeSymbol denotes, SourcePos pos) {
-            return new Denoting(WrittenName.synthetic(denotes.name(), pos), denotes);
+            return new Name.Denoting(WrittenName.synthetic(denotes.name(), pos), denotes);
         }
 
         /**
@@ -214,7 +214,7 @@ public interface Hir {
          * write. What it denotes is the same either way.
          */
         static Name reached(TypeReachName.Written type, SourcePos pos) {
-            return new Denoting(WrittenName.synthetic(type.rendered(), pos), type.denotes());
+            return new Name.Denoting(WrittenName.synthetic(type.rendered(), pos), type.denotes());
         }
 
         /** The bare name this reaches its declaration by, whatever the source spelled. */
@@ -223,6 +223,7 @@ public interface Hir {
         }
 
         /** Where the name is written, or where a synthesized one is anchored. */
+        @Override
         default SourcePos pos() {
             return name().pos();
         }
@@ -235,13 +236,13 @@ public interface Hir {
          * narrowing to the two forms, and says what it does with an {@link Unanswered} name where it
          * makes that choice.
          */
-        default Denoting answered() {
-            return this instanceof Denoting denoting ? denoting : null;
+        default Name.Denoting answered() {
+            return this instanceof Name.Denoting denoting ? denoting : null;
         }
 
         /** The same name, read and found to name nothing. */
         default Name unanswered() {
-            return new Unanswered(name());
+            return new Name.Unanswered(name());
         }
 
         /**
@@ -496,6 +497,7 @@ public interface Hir {
         }
 
         /** Where the entry is written. */
+        @Override
         public SourcePos pos() {
             return written.pos();
         }
@@ -517,6 +519,7 @@ public interface Hir {
             return written().canonical();
         }
 
+        @Override
         SourcePos pos();
     }
 
@@ -568,6 +571,7 @@ public interface Hir {
         }
 
         /** Where the name is written. */
+        @Override
         public SourcePos pos() {
             return written.pos();
         }
@@ -896,6 +900,7 @@ public interface Hir {
             return written().authored() ? written().pos() : null;
         }
 
+        @Override
         SourcePos pos();
     }
 
@@ -985,6 +990,7 @@ public interface Hir {
         }
 
         /** Where the name is written. */
+        @Override
         public SourcePos pos() {
             return written.pos();
         }
@@ -1184,6 +1190,7 @@ public interface Hir {
         }
 
         /** Where the field name is written. */
+        @Override
         public SourcePos pos() {
             return written.pos();
         }
@@ -1359,11 +1366,12 @@ public interface Hir {
             return binder.name();
         }
 
-        /** The type the source wrote on this binding, or null when it wrote none. An annotation is an
-         * ordinary type (a function type belongs only in a helper's parameter), so this is the one
-         * place that narrows {@code declaredType}, and a carrier from inlining never reads as one. */
+        /** The type the source wrote on this binding, or null when it wrote none. What the source
+         * wrote and what a later pass put there are both held in {@code declaredType}, and
+         * {@code annotated} is what tells them apart: a carrier from inlining is not an annotation
+         * and is not answered here. */
         public RetType annotation() {
-            return annotated && declaredType instanceof RetType rt ? rt : null;
+            return annotated ? declaredType : null;
         }
     }
 
@@ -1822,7 +1830,7 @@ public interface Hir {
         /** The same, off an occurrence already read: a name standing as an expression over exactly
          * the characters that spell it — every one but a name the author parenthesized. */
         static Var denoting(WrittenName written, ReachName reachedAs) {
-            return new Denoting(written, reachedAs, written.region());
+            return new Var.Denoting(written, reachedAs, written.region());
         }
 
         /**
@@ -1835,7 +1843,7 @@ public interface Hir {
          * replaced was read over.
          */
         static Var respelled(String spelling, ReachName reachedAs, SourcePos pos, Region region) {
-            return new Denoting(WrittenName.synthetic(spelling, pos), reachedAs, region);
+            return new Var.Denoting(WrittenName.synthetic(spelling, pos), reachedAs, region);
         }
 
         /**
@@ -1848,7 +1856,7 @@ public interface Hir {
         static Var local(Binder binder, SourcePos pos) {
             ValueName.Local local = new ValueName.Local(binder.name(), binder.id());
             WrittenName written = WrittenName.synthetic(binder.name(), pos);
-            return new Denoting(written, new ReachName.InScope(local), written.region());
+            return new Var.Denoting(written, new ReachName.InScope(local), written.region());
         }
 
         /** The bare name this reaches its declaration by, whatever the source spelled. */
@@ -1857,6 +1865,7 @@ public interface Hir {
         }
 
         /** Where the name is written. */
+        @Override
         default SourcePos pos() {
             return written().pos();
         }
@@ -1874,8 +1883,8 @@ public interface Hir {
          * so a reader arrives at it through this projection or through narrowing to the two forms,
          * and says what it does with an {@link Unanswered} name where it makes that choice.
          */
-        default Denoting answered() {
-            return this instanceof Denoting denoting ? denoting : null;
+        default Var.Denoting answered() {
+            return this instanceof Var.Denoting denoting ? denoting : null;
         }
 
         /** Whether this name denotes nothing — read by resolution, and reported where it was
@@ -1895,20 +1904,20 @@ public interface Hir {
          * {@link Unanswered}.
          */
         default Var denoting(ReachName reachedAs) {
-            return new Denoting(written(), reachedAs, region());
+            return new Var.Denoting(written(), reachedAs, region());
         }
 
         /** The same name, over {@code region} — whichever of the two it is. */
         default Var over(Region region) {
             return switch (this) {
-                case Denoting d -> new Denoting(d.written(), d.reachedAs(), region);
-                case Unanswered u -> new Unanswered(u.written(), region);
+                case Var.Denoting d -> new Var.Denoting(d.written(), d.reachedAs(), region);
+                case Var.Unanswered u -> new Var.Unanswered(u.written(), region);
             };
         }
 
         /** The same name, read and found to name nothing. */
         default Var unanswered() {
-            return new Unanswered(written(), region());
+            return new Var.Unanswered(written(), region());
         }
 
         /**
@@ -1919,7 +1928,7 @@ public interface Hir {
          * Held as two, a pass could put one name's denotation next to another's route and nothing
          * would say so — and three passes did, replacing what a name meant and leaving the route it
          * was reached by. A denotation is changed by replacing the reference, which is
-         * {@link #withReachedAs}.
+         * {@link #denoting(WrittenName, ReachName)}.
          */
         record Denoting(WrittenName written, ReachName reachedAs, Region region) implements Var {
 

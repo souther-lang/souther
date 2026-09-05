@@ -109,7 +109,7 @@ public sealed interface NumericTerm permits NumericTerm.FromOnePosition, Numeric
      * <p>Not against the observed value, which would tell a string from a collection and leave the
      * one pair a reader might confuse undistinguished: a {@code List} and a {@code Set} are one
      * observation, and which of the two it was is the declared type's to say. So it is the declared
-     * type that is asked, and {@link #read} applies the account to the observation without asking
+     * type that is asked, and the reading applies the account to the observation without asking
      * again.
      */
     final class TakenOf implements FromOnePosition {
@@ -404,7 +404,15 @@ public sealed interface NumericTerm permits NumericTerm.FromOnePosition, Numeric
         };
     }
 
-    /** The count at a value, keeping why there is none where there is none. */
+    /**
+     * The count at a value, keeping why there is none where there is none.
+     *
+     * <p><b>At a value, which a reading of one always has.</b> Whether a walk arrived and what it
+     * found are settled before a term is asked, so nothing here stands for a place nobody reached
+     * or a position a row wrote nothing at — those are said where they happen, in the words their
+     * own layer has for them. An arm for them here would be a word that means none of them and
+     * takes all of them, which is what a reader downstream then has to unpick.
+     */
     sealed interface Reading {
 
         record Number(Place value) implements Reading {}
@@ -414,22 +422,11 @@ public sealed interface NumericTerm permits NumericTerm.FromOnePosition, Numeric
          *
          * <p>What {@link Incompleteness.Code} names is what an observation met, so only an
          * observation may put one here. A walk that arrived at no value at all has met nothing and
-         * says {@link NoValue}: given a code instead, the nearest one is borrowed, and a reader
+         * never reaches this type: given a code instead, the nearest one is borrowed, and a reader
          * downstream that words a code as what an observation did then says an observation did
          * something that never happened.
          */
         record Missing(Incompleteness.Code code) implements Reading {}
-
-        /**
-         * The walk answered with no value here, which is not an observation of one.
-         *
-         * <p>Apart from {@link Missing} because what a reader may do with it is not the same. A
-         * value the observation shortened is a value that exists and this compiler declined to
-         * keep; nothing arriving is this compiler unable to walk to a place, or a place that holds
-         * nothing under the reading being tried. Neither says anything about the number, and only
-         * the first is something a wider budget would have kept.
-         */
-        record NoValue() implements Reading {}
 
         /** The value was read and this term is not a number of it. An answer about the value and not
          * about the observation: a {@code Text} where a number was expected is a class nothing holds,

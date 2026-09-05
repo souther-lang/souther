@@ -55,8 +55,8 @@ public final class ComparisonEmissionSite implements RunSite {
     @Override
     public boolean equals(Object other) {
         return this == other
-                || other instanceof ComparisonEmissionSite that
-                        && raw == that.raw && numbering.equals(that.numbering);
+                || (other instanceof ComparisonEmissionSite that
+                        && raw == that.raw && numbering.equals(that.numbering));
     }
 
     @Override

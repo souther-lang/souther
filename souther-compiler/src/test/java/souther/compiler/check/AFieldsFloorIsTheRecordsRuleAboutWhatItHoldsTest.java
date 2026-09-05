@@ -1,7 +1,6 @@
 package souther.compiler.check;
 
 import souther.compiler.query.Scopes;
-import souther.compiler.ast.Hir;
 import souther.compiler.numeric.Count;
 import souther.compiler.query.Compilation;
 import souther.compiler.types.TypeKey;
@@ -39,9 +38,8 @@ class AFieldsFloorIsTheRecordsRuleAboutWhatItHoldsTest {
         Symbols symbols = Scopes.derived(compilation.db(), module).value();
         assertNotNull(symbols, "the model did not compile");
         TypeSymbol.AtModule named = TypeSymbols.declared(new TypeKey(module, type));
-        Hir.Data data = (Hir.Data) symbols.declaredNode(named.key());
-        assertNotNull(data, "no `" + type + "` in " + module);
-        return FieldDomains.of(named, data, RuleReadings.of(compilation, module),
+        assertNotNull(symbols.declaredNode(named.key()), "no `" + type + "` in " + module);
+        return FieldDomains.of(named, RuleReadings.of(compilation, module),
                 souther.compiler.query.ReadAs.THE_COMPILATION_DOES, settled);
     }
 

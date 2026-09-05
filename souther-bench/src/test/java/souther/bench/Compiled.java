@@ -195,8 +195,21 @@ final class Compiled {
 
     /** Everything every compiled class of every module does. */
     static List<Site> sites() throws IOException {
+        return sitesIn(Reactor.classes());
+    }
+
+    /**
+     * The same of the classes named, beside {@link #invocationsIn} and for the same reason.
+     *
+     * <p>Which classes are read and what is read of them are two things, and a rule that fixed both
+     * could only ever be asked about the repository as it stands. A check of what this reading
+     * <em>does</em> — that a call two methods away is still a call, that a switch over a sum names
+     * its cases — has to be able to hand it code written to be read, and a copy of the walk written
+     * for that would be a check of the copy.
+     */
+    static List<Site> sitesIn(List<Path> classes) throws IOException {
         List<Site> found = new ArrayList<>();
-        for (Path each : Reactor.classes()) {
+        for (Path each : classes) {
             ClassModel model = ClassFile.of().parse(Files.readAllBytes(each));
             String from = named(model.thisClass().asInternalName());
             for (var method : model.methods()) {

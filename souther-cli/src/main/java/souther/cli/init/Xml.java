@@ -184,10 +184,10 @@ final class Xml {
                     return found;
                 }
                 if (open.equals(path)) {
-                    found.add(xml.substring(starts.get(starts.size() - 1), lt));
+                    found.add(xml.substring(starts.getLast(), lt));
                 }
-                open.remove(open.size() - 1);
-                starts.remove(starts.size() - 1);
+                open.removeLast();
+                starts.removeLast();
             } else if (!tag.endsWith("/")) {
                 open.add(nameOf(tag));
                 starts.add(gt + 1);
@@ -255,7 +255,7 @@ final class Xml {
      * having been pasted in.
      */
     static String unitOf(String xml) {
-        for (String line : xml.split("\n")) {
+        for (String line : xml.lines().toList()) {
             String stripped = line.stripLeading();
             if (stripped.startsWith("<") && !stripped.startsWith("<?") && stripped.length()
                     < line.length()) {

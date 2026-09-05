@@ -222,7 +222,7 @@ sealed interface Doc {
      * This document laid out at the given target {@code width} (columns): the text, and what the
      * layout decided on the way to it.
      *
-     * <p>A decision is taken once, where the outer walk reaches the group. {@link #fits} walks ahead
+     * <p>A decision is taken once, where the outer walk reaches the group. The fitting walk goes ahead
      * over groups it is only measuring and takes none, so what comes back is what was laid out
      * rather than what was considered.
      *

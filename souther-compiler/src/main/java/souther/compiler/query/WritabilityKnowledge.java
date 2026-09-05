@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.partition.CompositionBudget;
+import souther.compiler.partition.CompositionRepertoire;
 import souther.compiler.publish.CanonicalSelection;
 import souther.compiler.publish.PublicationOrders;
 
@@ -89,18 +90,26 @@ public sealed interface WritabilityKnowledge {
         public static Prevented of(Collection<EstablishmentGap> gaps) {
             Set<Incompleteness.Code> observed = EnumSet.noneOf(Incompleteness.Code.class);
             Set<CompositionBudget> budgets = EnumSet.noneOf(CompositionBudget.class);
+            // Beside the figures and not among them. Two composings that came to nothing for two
+            // kinds of reason are one composing gap, which is what a reader of a gap is told; what
+            // each of them would take to close stays its own, and a fold that put them in one set
+            // would have to lose one of the two.
+            Set<CompositionRepertoire> repertoires = EnumSet.noneOf(CompositionRepertoire.class);
             for (EstablishmentGap each : gaps) {
                 switch (each) {
                     case EstablishmentGap.Observation it -> observed.addAll(it.causes().written());
-                    case EstablishmentGap.Composition it -> budgets.addAll(it.budgets().written());
+                    case EstablishmentGap.Composition it -> {
+                        budgets.addAll(it.budgets().written());
+                        repertoires.addAll(it.repertoires().written());
+                    }
                 }
             }
             List<EstablishmentGap> kinds = new ArrayList<>();
             if (!observed.isEmpty()) {
                 kinds.add(EstablishmentGap.Observation.of(observed));
             }
-            if (!budgets.isEmpty()) {
-                kinds.add(EstablishmentGap.Composition.of(budgets));
+            if (!budgets.isEmpty() || !repertoires.isEmpty()) {
+                kinds.add(EstablishmentGap.Composition.of(budgets, repertoires));
             }
             return new Prevented(PublicationOrders.ESTABLISHMENT_GAPS.keep(kinds));
         }
@@ -131,13 +140,14 @@ public sealed interface WritabilityKnowledge {
             return new Established(evidence);
         }
         // Asked of the outcome's own case and never of the reason inside it: a search that came
-        // back with nothing has already lost which budget it was, so a reader rebuilding that from
-        // the word left over is rebuilding what the word does not hold.
+        // back with nothing has already lost what it fell short by, so a reader rebuilding that
+        // from the word left over is rebuilding what the word does not hold.
         //
         // Exhaustive, so that an outcome added is classified here rather than falling to the last
-        // arm. Which of the five this is decides nothing on its own — what decides is whether it is
-        // one a budget of this compiler's stopped, and that is a question the outcomes answer by
-        // implementing {@link ItemAssessment.Attempt.Prevented} or not.
+        // arm. Which of them this is decides nothing on its own — what decides is whether it is one
+        // this compiler fell short on, by a figure or by writing some of a population, and that is
+        // a question the outcomes answer by implementing {@link ItemAssessment.Attempt.Prevented}
+        // or not.
         //
         // Over every search of the point and not one of them. A point is searched once per reading
         // of its line, two readings can have been stopped by two different figures, and what a

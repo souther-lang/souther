@@ -5,6 +5,7 @@ import souther.compiler.diag.Citation;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.RunSensitivity;
 import souther.compiler.partition.CompositionBudget;
+import souther.compiler.partition.CompositionRepertoire;
 import souther.compiler.partition.ReadingGap;
 import souther.compiler.query.EstablishmentGap;
 import souther.compiler.query.ItemAssessment;
@@ -115,7 +116,7 @@ public final class PublicationOrders {
             .comparing((PublishedAt each) -> each.source().value())
             .thenComparingInt(PublishedAt::line)
             .thenComparingInt(PublishedAt::column)
-            .thenComparing(PublicationOrders::whereRank)
+            .thenComparingInt(PublicationOrders::whereRank)
             .thenComparing(PublicationOrders::declarationOf);
 
     private static int whereRank(PublishedAt place) {
@@ -202,7 +203,9 @@ public final class PublicationOrders {
      * code is that code, so the two orders agreeing is not something to keep in step — there is one
      * order, and this is it with the one reason that is no observation's put after them. A walk
      * that reached no value is last for the same reason the codes are in the order they are: it is
-     * the furthest from an answer.
+     * the furthest from an answer. The two that never reached a value to begin with follow it, a
+     * step further out again — a position that was read and holds nothing is nearer a number than a
+     * position nothing arrived at, and a walk that was refused is nearer than a row that never came.
      */
     public static final CanonicalSelection.Order<ReadingGap> READING_GAPS =
             CanonicalSelection.Order.overValues(everyReadingGap());
@@ -213,6 +216,8 @@ public final class PublicationOrders {
             out.add(ReadingGap.of(code));
         }
         out.add(ReadingGap.NO_VALUE);
+        out.add(ReadingGap.COULD_NOT_WALK);
+        out.add(ReadingGap.COULD_NOT_READ_ROW);
         return out;
     }
 
@@ -232,7 +237,7 @@ public final class PublicationOrders {
                     CompositionBudget.PAIRINGS_BUILT_AT_ONCE,
                     CompositionBudget.ELEMENTS_A_TOTAL_IS_SPREAD_OVER,
                     CompositionBudget.SHAPES_OF_A_TOTAL_OFFERED,
-                    CompositionBudget.DECOMPOSITIONS_OF_A_TOTAL_OFFERED,
+                    CompositionBudget.WAYS_DOWN_TO_A_TOTAL_TRIED,
                     CompositionBudget.VALUES_OF_AN_UNBOUNDED_PROGRESSION_TRIED,
                     CompositionBudget.PLACES_A_PAIR_IS_TRIED_AT,
                     CompositionBudget.VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT,
@@ -243,13 +248,25 @@ public final class PublicationOrders {
                     CompositionBudget.DEPTH_A_CONSTRUCTION_PLAN_DESCENDS));
 
     /**
+     * What this compiler writes some of rather than all of, in the order a reader meets them.
+     *
+     * <p>Its own order and not the figures'. Reaching a figure and writing some of a population are
+     * different things to be told — one is a number to raise and the other is work nobody has done
+     * — so an order over the two together would be arranging a sentence out of two vocabularies.
+     */
+    public static final CanonicalSelection.Order<CompositionRepertoire> COMPOSITION_REPERTOIRES =
+            CanonicalSelection.Order.overValues(
+                    List.of(CompositionRepertoire.WAYS_A_TOTAL_IS_SPREAD));
+
+    /**
      * What stopped this compiler showing a row can be written, by how far it had got.
      *
      * <p>A value that was built and did not come back whole is nearer an answer than one that was
      * never built, which is the order the reasons inside each of them are in as well.
      *
-     * <p>The arms and not what they hold. Which observation codes an arm says, and which budgets,
-     * are the orders above; said again here they would be a second order over kinds that have one.
+     * <p>The arms and not what they hold. Which observation codes an arm says, which figures and
+     * which populations, are the orders above; said again here they would be a second order over
+     * kinds that have one.
      */
     public static final CanonicalSelection.Order<EstablishmentGap> ESTABLISHMENT_GAPS =
             CanonicalSelection.Order.overFamilies(List.<Class<? extends EstablishmentGap>>of(
@@ -298,6 +315,7 @@ public final class PublicationOrders {
                 WeakeningWord.INPUT_CASES_UNREADABLE,
                 WeakeningWord.BORDER_VALUE_UNREADABLE,
                 WeakeningWord.BORDER_VALUE_ABSENT,
+                WeakeningWord.BORDER_OBSERVATION_UNAVAILABLE,
                 WeakeningWord.BODIES_NOT_ELABORATED,
                 WeakeningWord.BEHAVIOR_INPUT_NOT_READ,
                 WeakeningWord.BEHAVIOR_BOUNDARY_NOT_DERIVED,
@@ -389,4 +407,17 @@ public final class PublicationOrders {
                     ItemAssessment.WritabilityEvidence.Ground.THE_RULES_PROVE_IT,
                     ItemAssessment.WritabilityEvidence.Ground.A_ROW_IS_AT_IT,
                     ItemAssessment.WritabilityEvidence.Ground.A_VALUE_WAS_BUILT));
+
+    /**
+     * Why nothing was read against a point, over every reading of the line it is on.
+     *
+     * <p>What the run asked for before what one behavior turned out to have. A reader told that
+     * this build measured nothing has been told why every line of it says so, and what a single
+     * behavior has no rows for is the narrower fact under it.
+     */
+    public static final CanonicalSelection.Order<ItemAssessment.Coverage.NotAsked> UNASKED_REASONS =
+            CanonicalSelection.Order.overValues(List.of(
+                    ItemAssessment.Coverage.NotAsked.NOT_ASKED,
+                    ItemAssessment.Coverage.NotAsked.ARMS_NOT_ASKED,
+                    ItemAssessment.Coverage.NotAsked.NO_ROWS));
 }

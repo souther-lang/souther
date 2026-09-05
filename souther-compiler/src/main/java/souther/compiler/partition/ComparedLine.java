@@ -1,6 +1,5 @@
 package souther.compiler.partition;
 
-import souther.compiler.check.Carrier;
 import souther.compiler.check.Comparison;
 import souther.compiler.check.ComparisonClaim;
 import souther.compiler.inputs.ComparedNumber;
@@ -101,7 +100,6 @@ record ComparedLine(NumericTerm.FromOnePosition term, Place value,
         if (orders == null || orders.answered() == null || !orders.answered().counts()) {
             return null;
         }
-        Carrier carrier = orders.answered();
         Place value = Count.of(read.cut());
         return new ComparedLine(term, value, orders, read.claim());
     }

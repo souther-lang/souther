@@ -38,9 +38,34 @@ import java.util.List;
  * readings of the same declaration, and the two would answer a position differently while each
  * stayed sound. So this arrives from the query graph, and the analysis takes it.
  */
-public record ReadingPolicy(int dnfExpansionLimit, int scalePlacesLimit) {
+public final class ReadingPolicy {
 
-    public ReadingPolicy {
+    private final int dnfExpansionLimit;
+    private final int scalePlacesLimit;
+    /**
+     * The two figures a reading builds machines against, kept where nothing can reach them.
+     *
+     * <p>Not accessors, which is the whole of why this is not a record. What a reader needs is
+     * somewhere to charge what it builds, and every arrangement that makes when a question was
+     * asked no part of what it cost is inside {@link souther.compiler.values.Allowance} — handed
+     * the figure, a reader could make itself one allowance per question it happened to ask, and a
+     * position would be allowed its machine once for each of them. So what leaves this class is an
+     * allowance and never a budget.
+     */
+    private final souther.compiler.regex.PatternPlan.Budget admittedValues;
+    private final souther.compiler.regex.PatternPlan.Budget whatARuleLeaves;
+
+    public ReadingPolicy(int dnfExpansionLimit, int scalePlacesLimit,
+                         souther.compiler.regex.PatternPlan.Budget admittedValues,
+                         souther.compiler.regex.PatternPlan.Budget whatARuleLeaves) {
+        // A reading builds machines to say what a position admits and to hand each of its rules on
+        // as the set it leaves, and how much it may build for each is a resource bound like the two
+        // above. Held here rather than picked up where the building happens, so that what a
+        // declaration can be answered about exactly is the compilation's and not a constant
+        // whichever reader got there first reached for.
+        if (admittedValues == null || whatARuleLeaves == null) {
+            throw new IllegalArgumentException("a reading is allowed something to build with");
+        }
         // A guardrail is a positive number a count can be compared against, and a limit outside
         // that is one no reading is bounded by. Refused here rather than left to whoever writes it:
         // this is a resource bound, and a bound that admits everything is the absence of one.
@@ -56,6 +81,51 @@ public record ReadingPolicy(int dnfExpansionLimit, int scalePlacesLimit) {
                     "a scale is a count of places from the point, so a limit below nought bounds"
                             + " nothing: " + scalePlacesLimit);
         }
+        this.dnfExpansionLimit = dnfExpansionLimit;
+        this.scalePlacesLimit = scalePlacesLimit;
+        this.admittedValues = admittedValues;
+        this.whatARuleLeaves = whatARuleLeaves;
+    }
+
+    /** How many alternatives of one declaration a reading will hold apart. */
+    public int dnfExpansionLimit() {
+        return dnfExpansionLimit;
+    }
+
+    /** How far from the point a reading will lay a grid out. */
+    public int scalePlacesLimit() {
+        return scalePlacesLimit;
+    }
+
+    /**
+     * Two policies are the same policy where they allow the same things.
+     *
+     * <p>Written out because this is not a record, and it is not a record so that the figures stay
+     * in. What a reader compares two of these for is whether a declaration read under one would be
+     * read the same way under the other, which is what they allow and nothing about which object
+     * holds it.
+     */
+    @Override
+    public boolean equals(Object other) {
+        return this == other || (other instanceof ReadingPolicy it
+                && dnfExpansionLimit == it.dnfExpansionLimit
+                && scalePlacesLimit == it.scalePlacesLimit
+                && admittedValues.equals(it.admittedValues)
+                && whatARuleLeaves.equals(it.whatARuleLeaves));
+    }
+
+    @Override
+    public int hashCode() {
+        return java.util.Objects.hash(dnfExpansionLimit, scalePlacesLimit, admittedValues,
+                whatARuleLeaves);
+    }
+
+    @Override
+    public String toString() {
+        return "ReadingPolicy[dnfExpansionLimit=" + dnfExpansionLimit
+                + ", scalePlacesLimit=" + scalePlacesLimit
+                + ", admittedValues=" + admittedValues
+                + ", whatARuleLeaves=" + whatARuleLeaves + "]";
     }
 
     /**
@@ -89,5 +159,42 @@ public record ReadingPolicy(int dnfExpansionLimit, int scalePlacesLimit) {
     /** Whether a declaration that expands to {@code cost} alternatives may hold them apart. */
     boolean holdsApart(long cost) {
         return cost <= dnfExpansionLimit;
+    }
+
+    /**
+     * A fresh allowance for the positions of one answer, at what this compilation allows.
+     *
+     * <p>One answer, one of these. Asked twice while reading one declaration, a position would be
+     * allowed its machine once for each caller and what the two came to would be bought by nobody —
+     * so where a reading is made is where this is asked, and it is handed on from there.
+     *
+     * @param <A> what a position is called
+     */
+    public <A> souther.compiler.values.Allowance<A> allowanceForAdmittedValues() {
+        return souther.compiler.values.Allowance.of(admittedValues);
+    }
+
+    /**
+     * And one for handing each of a position's rules on as the set it leaves, beside the answer it
+     * is a projection of.
+     *
+     * <p>Apart from the answer's, because the two build different sets and only one of them is what
+     * the model is read to admit ({@link souther.compiler.regex.PatternPlan.Budget
+     * #OF_WHAT_A_RULE_LEAVES}). Spending the answer's on what a reader downstream was promised
+     * would let what a position admits turn on what somebody else asked for.
+     *
+     * <p>Beside {@code answers} and never on its own. What is built here is what each rule of a
+     * position leaves, which is a projection of what the position admits — so it uses the machines
+     * that answer already made, and it is not a second chance at the ones it could not. A position
+     * this reading is short of is one nothing here may answer about, which is the caller's to keep
+     * ({@code StatedByClauses}): given the position's rules all the same, the two allowances would
+     * be two readers of one model, and the wider of them would be answering for the model where
+     * the narrower had said it could not.
+     *
+     * @param <A> what a position is called
+     */
+    public <A> souther.compiler.values.Allowance<A> allowanceForWhatARuleLeaves(
+            souther.compiler.values.Allowance<A> answers) {
+        return souther.compiler.values.Allowance.besides(whatARuleLeaves, answers);
     }
 }

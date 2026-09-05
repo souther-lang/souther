@@ -37,8 +37,10 @@ import java.util.Map;
  * arithmetic of it comes to, so reading that expression is this walk's and no one else's
  * (ADR-0111).
  *
- * @param <A> what the caller calls an atom
- * @param <E> what the caller carries as it goes inside a binding
+ * <p>Two things are the caller's throughout, and every reading and every walk below is written over
+ * them: {@code A} is what the caller calls an atom, and {@code E} is what it carries as it goes
+ * inside a binding. Neither is declared here — this class holds no state — so each of
+ * {@link Reading} and the walks says them for itself.
  */
 public final class AffineForms {
 
@@ -71,6 +73,7 @@ public final class AffineForms {
         /** What {@code li}'s body is read in. The one place a binding is entered, so that what a
          *  name means is settled once and no reader interprets a binder for itself. */
         E inside(Core.LetIn li, E at);
+
 
         /**
          * The value {@code read}'s name denotes, where the name and that value are one value — or
@@ -384,6 +387,7 @@ public final class AffineForms {
             return of.inside(li, at);
         }
 
+
         @Override
         public ReadThrough<E> readThrough(Core.Read read, E at) {
             return of.readThrough(read, at);
@@ -435,48 +439,44 @@ public final class AffineForms {
      */
     private static <A, E> java.util.List<Standing<A, E>> standing(
             Core e, E at, Reading<A, E> reading, java.util.Set<BindingId> following) {
-        switch (e) {
+        return switch (e) {
             case Core.Read r -> {
                 ReadThrough<E> through = reading.readThrough(r, at);
                 if (through != null) {
                     if (through.value() == e || !following.add(r.binding())) {
-                        return java.util.List.of(new Standing<>(e, at, reading));
+                        yield java.util.List.of(new Standing<>(e, at, reading));
                     }
                     java.util.List<Standing<A, E>> denoted =
                             standing(through.value(), through.at(), reading, following);
                     following.remove(r.binding());
-                    return denoted;
+                    yield denoted;
                 }
                 java.util.List<ReadThrough<E>> alternatives = reading.alternativesOf(r, at);
                 if (alternatives == null || alternatives.isEmpty()
                         || !following.add(r.binding())) {
-                    return java.util.List.of(new Standing<>(e, at, reading));
+                    yield java.util.List.of(new Standing<>(e, at, reading));
                 }
                 java.util.List<Standing<A, E>> each = new java.util.ArrayList<>();
                 for (Standing<A, E> one : membersOf(alternatives, reading)) {
                     each.addAll(standing(one.value(), one.at(), one.reading(), following));
                 }
                 following.remove(r.binding());
-                return each;
+                yield each;
             }
-            case Core.LetIn li -> {
-                return standing(li.body(), reading.inside(li, at), reading, following);
-            }
+            case Core.LetIn li -> standing(li.body(), reading.inside(li, at), reading, following);
             case Core.FieldAccess _, Core.TupleGet _ -> {
                 java.util.List<Standing<A, E>> written = eliminated(e, at, reading, following);
                 if (written == null) {
-                    return java.util.List.of(new Standing<>(e, at, reading));
+                    yield java.util.List.of(new Standing<>(e, at, reading));
                 }
                 java.util.List<Standing<A, E>> each = new java.util.ArrayList<>();
                 for (Standing<A, E> one : written) {
                     each.addAll(standing(one.value(), one.at(), one.reading(), following));
                 }
-                return each;
+                yield each;
             }
-            default -> {
-                return java.util.List.of(new Standing<>(e, at, reading));
-            }
-        }
+            default -> java.util.List.of(new Standing<>(e, at, reading));
+        };
     }
 
     /**
@@ -506,12 +506,12 @@ public final class AffineForms {
      */
     private static <A, E> java.util.List<Standing<A, E>> eliminated(
             Core e, E at, Reading<A, E> reading, java.util.Set<BindingId> following) {
-        switch (e) {
+        return switch (e) {
             case Core.FieldAccess fa -> {
                 java.util.List<Standing<A, E>> out = new java.util.ArrayList<>();
                 for (Standing<A, E> target : standing(fa.target(), at, reading, following)) {
                     if (!(target.value() instanceof Core.Construct nd)) {
-                        return null;
+                        yield null;
                     }
                     Standing<A, E> given = null;
                     for (Core.FieldValue each : nd.values()) {
@@ -523,28 +523,26 @@ public final class AffineForms {
                         }
                     }
                     if (given == null) {
-                        return null;
+                        yield null;
                     }
                     out.add(given);
                 }
-                return out;
+                yield out;
             }
             case Core.TupleGet get -> {
                 java.util.List<Standing<A, E>> out = new java.util.ArrayList<>();
                 for (Standing<A, E> tuple : standing(get.tuple(), at, reading, following)) {
                     if (!(tuple.value() instanceof Core.Tuple written) || get.index() < 0
                             || get.index() >= written.elements().size()) {
-                        return null;
+                        yield null;
                     }
                     out.add(new Standing<>(written.elements().get(get.index()), tuple.at(),
                             tuple.reading()));
                 }
-                return out;
+                yield out;
             }
-            default -> {
-                return null;
-            }
-        }
+            default -> null;
+        };
     }
 
     /**
@@ -612,16 +610,17 @@ public final class AffineForms {
                     answered(e, at, reading, following, stopped);
             case Core.Call _ when formSaidOf(e) != null ->
                     answered(e, at, reading, following, stopped);
-            // A newtype's construction is the value it wraps. What makes it one is the declaration
-            // and never the shape, which is what `isSingleValueNewtype` is asked — a data of one
-            // field that is not a newtype wraps its value rather than being it, and its
-            // construction is a value of its own.
+            // A newtype's construction is the value it wraps. Whether the name is one is asked of
+            // the reading of the position, which says the names a value is written under: a
+            // newtype puts one there and a data of one field does not — that one wraps its value
+            // rather than being it, and its construction is a value of its own. Asked of the
+            // declarations again instead, this would be a second answer to how far a name reaches.
             // A carrier takes the same names off to find a value written down, and answers above
             // for `Yen(100)` before this is reached. The two agree where they overlap and are not
             // one rule: that one asks what a written value counts as and stops where nothing is
             // written, and this one asks what the arithmetic under the name comes to.
             case Core.Construct nd when !nd.values().isEmpty()
-                    && TypeOps.isSingleValueNewtype(Type.ref(nd.typeName()), reading.symbols()) ->
+                    && TypeView.of(Type.ref(nd.typeName()), reading.symbols()).isWrapped() ->
                     formOf(nd.values().get(0).value(), at, reading, following, stopped);
             // One arm, holding two proofs that this projection is the value it reads. The
             // structural one is asked first and is asked as whether it produced a successor rather

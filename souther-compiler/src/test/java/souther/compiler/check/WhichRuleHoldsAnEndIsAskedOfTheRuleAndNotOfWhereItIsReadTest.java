@@ -1,7 +1,6 @@
 package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
-import souther.compiler.ast.Hir;
 import souther.compiler.query.Compilation;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
@@ -47,8 +46,6 @@ class WhichRuleHoldsAnEndIsAskedOfTheRuleAndNotOfWhereItIsReadTest {
 
     private final RuleReadingSource rules = rules();
 
-    private final Symbols symbols = rules.symbols();
-
     private static RuleReadingSource rules() {
         Compilation compilation = Compilation.ofSource(SOURCE, "Main");
         compilation.answerEverything();
@@ -60,8 +57,7 @@ class WhichRuleHoldsAnEndIsAskedOfTheRuleAndNotOfWhereItIsReadTest {
     }
 
     private FieldDomains reading() {
-        Hir.Data data = (Hir.Data) symbols.declaredNode(named("Held"));
-        return FieldDomains.of(named("Held"), data, rules,
+        return FieldDomains.of(named("Held"), rules,
                 souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
     }
 

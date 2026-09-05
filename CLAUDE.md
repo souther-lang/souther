@@ -6,7 +6,18 @@ Build from the reactor root. Never `-pl`, never `clean`, never `CI=1` or
 `-Plint`.
 
     mvn -o test -Dtest=<Class> -Dsurefire.failIfNoSpecifiedTests=false   # iterating
-    mvn -o test                                                          # before pushing
+    mvn -o test                                                          # the module
+    mvn -o test -Dgroups=population -Dtest.excluded.groups=              # the population alone
+
+`mvn -o test` leaves out the tests tagged `population` — the ones whose subjects
+are the models this repository carries rather than a source written to ask one
+question. The nightly runs them over `develop` and `main`, and nothing a change
+waits on does. The third line is the only way to ask for them here, and needs
+both properties. Naming a class with `-Dtest=` runs it whatever it is tagged.
+
+Forks are capped rather than taken as a share of the machine, so a run leaves
+the machine usable for whatever else is on it. `-DforkCount=N` overrides the
+cap; CI passes the number its runner has.
 
 Add `-Dmaven.compiler.useIncrementalCompilation=false` for a mutation or a probe
 — 21s to 5s, because one changed file otherwise sends the whole module to javac.
@@ -17,10 +28,11 @@ the edit changes a signature or a compile-time constant.
 
 ## Commit hook
 
-`.githooks/pre-commit` runs Checkstyle's `UnusedImports` over the staged Java
-files and refuses the commit on a finding. It is the cheap half of what CI's
-Error Prone run says, moved to where the import was written. A clone turns it on
-once:
+`.githooks/pre-commit` runs Checkstyle over the staged Java files and refuses the
+commit on a finding. Every rule it runs is one CI already fails on — the ones
+whose question needs a parse tree and nothing more, listed in
+`config/checkstyle.xml`. It is the cheap half of what CI's Error Prone run says,
+moved to where the code was written. A clone turns it on once:
 
     git config core.hooksPath .githooks
 

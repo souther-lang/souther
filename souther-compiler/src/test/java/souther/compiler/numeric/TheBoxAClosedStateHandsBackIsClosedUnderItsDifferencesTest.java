@@ -187,7 +187,7 @@ class TheBoxAClosedStateHandsBackIsClosedUnderItsDifferencesTest {
         }
         int howMany = 2 + dice.nextInt(4);
         for (int i = 0; i < howMany; i++) {
-            long threshold = -4 + dice.nextInt(9);
+            long threshold = -4L + dice.nextInt(9);
             boolean strict = dice.nextBoolean();
             Rel rel = strict ? Rel.LT : Rel.LE;
             switch (dice.nextInt(3)) {

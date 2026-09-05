@@ -5,10 +5,11 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.partition.CompositionBudget;
 import souther.compiler.query.EstablishmentGap;
-import souther.compiler.query.NothingWasAsked;
+import souther.compiler.query.ItemAssessment;
 import souther.compiler.query.ObligationCoverage;
 import souther.compiler.query.ObligationDisposition;
 import souther.compiler.query.ReadingReasons;
+import souther.compiler.query.UnaskedReasons;
 import souther.compiler.query.WeakeningSet;
 import souther.compiler.query.WritabilityKnowledge;
 
@@ -143,7 +144,7 @@ class EveryWayTheVerdictStaysOpenNamesSomethingTest {
                         ReadingReasons.of(List.of())));
         out.put("NothingWasRead",
                 new ObligationDisposition.Uncertainty.WhetherARowIsThere.NothingWasRead(
-                        NothingWasAsked.NOT_ASKED));
+                        UnaskedReasons.of(ItemAssessment.Coverage.NotAsked.NOT_ASKED)));
         out.put("Stopped[observation of a value a limit shortened]",
                 stopped(EstablishmentGap.Observation.of(
                         Set.of(Incompleteness.Code.VALUE_TRUNCATED))));
@@ -157,7 +158,8 @@ class EveryWayTheVerdictStaysOpenNamesSomethingTest {
                         Incompleteness.Code.VALUE_TRUNCATED,
                         Incompleteness.Code.VALUE_UNREADABLE))));
         out.put("Stopped[nothing composed]",
-                stopped(EstablishmentGap.Composition.of(Set.of(CompositionBudget.values()[0]))));
+                stopped(EstablishmentGap.Composition.of(
+                        Set.of(CompositionBudget.ELEMENTS_A_PROPOSAL_HOLDS))));
         out.put("NothingShowedIt",
                 new ObligationDisposition.Uncertainty.WhetherARowCanBeWritten.NothingShowedIt());
         return out;

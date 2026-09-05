@@ -635,7 +635,7 @@ class CompileExampleGenerateTest {
 
         assertFalse(left.isEmpty(), "nothing builds, so something is left");
         for (Generator.UnresolvedCombination each : left) {
-            assertEquals(Generator.UnresolvedCombination.Reason.SEARCH_LIMIT, each.reason(),
+            assertEquals(Generator.UnresolvedCombination.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED, each.reason(),
                     each.toString());
             assertTrue(each.subject().startsWith("request.flag="),
                     "and it is still about the combination: " + each.subject());
@@ -910,7 +910,7 @@ class CompileExampleGenerateTest {
      * {@code lo} set to a value of the class it already stood in.
      *
      * <p>Which says less than the value it was written from. A reader is told to write
-     * {@code Request &#123;...mid, lo = Amount(51)&#125;} where {@code mid} covers the class, and
+     * {@code Request {...mid, lo = Amount(51)}} where {@code mid} covers the class, and
      * has to compare two numbers against a range to see the spread changes nothing.
      */
     @Test
@@ -927,7 +927,7 @@ class CompileExampleGenerateTest {
      *
      * <p>The spread is what says the row is a value the reader recognises with something changed.
      * Where the row changes the whole record, the value it spreads contributes nothing to what is
-     * built — {@code Request &#123;...mid, hi = Amount(0), lo = Amount(0)&#125;} names {@code mid}
+     * built — {@code Request {...mid, hi = Amount(0), lo = Amount(0)}} names {@code mid}
      * and keeps none of it — and a reader comparing the row against the file finds every field
      * different.
      *

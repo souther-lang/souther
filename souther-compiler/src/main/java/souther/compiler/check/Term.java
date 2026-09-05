@@ -67,8 +67,6 @@ final class Term {
         CHOICE(Payload.none()),
         /** A closure, over the number of parameters it binds and its body. */
         CLOSURE(Payload.of(Integer.class)),
-        /** A value bound and a body read under it. */
-        LET(Payload.none()),
         /** A construction, over the values its fields are given in declaration order. */
         BUILT(Payload.of(Built.class)),
         /** A call, over its arguments. */
@@ -542,7 +540,6 @@ final class Term {
             case PART -> sb.append(parts.get(0).rendered()).append('.').append(of);
             case CHOICE -> joined(sb.append("if("), ", ").append(')');
             case CLOSURE -> joined(sb.append("\\").append(of).append('('), ", ").append(')');
-            case LET -> joined(sb.append("let("), ", ").append(')');
             case BUILT -> {
                 Built built = (Built) of;
                 sb.append(built.type()).append('{');
@@ -783,10 +780,6 @@ final class Term {
 
         Term closure(int params, Term body) {
             return of(Shape.CLOSURE, params, List.of(body));
-        }
-
-        Term let(Term value, Term body) {
-            return of(Shape.LET, null, List.of(value, body));
         }
 
         /** A construction, over what each field is given in declaration order. */

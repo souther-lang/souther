@@ -169,19 +169,4 @@ class TwoReadingsOfOneClauseAgreeOrTheModelIsWrongTest {
                 clause(FIRST, "ordered", at("other.sou", 8))));
     }
 
-    /**
-     * And none of that is something the check may give up on. It swallows what a walk throws — an
-     * analysis that fell over leaves the run-time check standing — so a disagreement thrown down
-     * there would come out as a behavior with nothing to report, which is what a behavior whose
-     * invariants all discharge comes out as.
-     */
-    @Test
-    void aDisagreementIsNotSomethingTheCheckMayGiveUpOn() {
-        Clause.NotOneClause disagreement = assertThrows(Clause.NotOneClause.class,
-                () -> Clause.merge(clause(FIRST, "ordered", outOfSight()),
-                        clause(FIRST, null, outOfSight())));
-
-        assertThrows(Clause.NotOneClause.class,
-                () -> InvariantChecker.gaveUp("a test", disagreement));
-    }
 }

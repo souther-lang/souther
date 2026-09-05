@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.observe.MeasureReason;
 import souther.compiler.partition.ClosureGap;
 import souther.compiler.partition.MeasureClosure;
 
@@ -57,12 +58,22 @@ public final class PartitionDerivation {
         public String name() {
             return WORD;
         }
+
+        @Override
+        public MeasureReason.About about() {
+            return MeasureReason.About.THE_BEHAVIOR;
+        }
     }
 
     /** This behavior has no positions for the measure to be about — a {@code >->} composition,
      *  which is measured at its stages. */
     public enum NoSubject implements NotApplicableReason {
-        NO_SUBJECT
+        NO_SUBJECT;
+
+        @Override
+        public MeasureReason.About about() {
+            return MeasureReason.About.THE_BEHAVIOR;
+        }
     }
 
     /**
@@ -74,7 +85,12 @@ public final class PartitionDerivation {
      * and, since #953, said beside the gaps that make it true rather than on its own.
      */
     public enum TheReadingDidNotRunOut implements FailureReason {
-        THE_READING_DID_NOT_RUN_OUT
+        THE_READING_DID_NOT_RUN_OUT;
+
+        @Override
+        public MeasureReason.About about() {
+            return MeasureReason.About.THE_BEHAVIOR;
+        }
     }
 
     /** What a behavior measured at its stages rather than at itself comes to. */

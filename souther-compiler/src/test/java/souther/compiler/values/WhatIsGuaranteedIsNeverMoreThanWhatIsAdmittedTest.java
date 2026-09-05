@@ -40,7 +40,7 @@ class WhatIsGuaranteedIsNeverMoreThanWhatIsAdmittedTest {
      * set here is values written out, so nothing is built and no allowance is spent — a composer
      * shared between two of these is spending nothing either of them would have wanted.
      */
-    private static final Allowance<String> SETS = Allowance.ofAdmittedValues();
+    private static final Allowance<String> SETS = AsACompilationAllows.forAdmittedValues();
 
     private static AdmissibleValues<String> says(String atom, Value value) {
         return AdmissibleValues.at(atom, ValueSet.just(value));

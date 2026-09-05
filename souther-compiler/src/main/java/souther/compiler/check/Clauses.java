@@ -31,45 +31,43 @@ import java.util.Set;
 final class Clauses {
 
     private final Symbols symbols;
-    private final AnalysisInvariants inTheAnalysisRepresentation;
+    private final ExpandedClauseLookup expandedClauses;
     private final Map<Hir.Data, Map<String, Type>> fields = new HashMap<>();
     private final Map<TypeSymbol.AtModule, Map<String, BindingId>> bindings =
             new HashMap<>();
     /** Remembered per declaration, not per clause: a clause an include brings in is one expression
      * reached under two names, and what it types to is read against the fields of the one asking. */
     private final Map<TypeSymbol, Map<Hir.Expr, TypedClause>> typed = new HashMap<>();
-    private final Map<TypeSymbol.AtModule, List<Hir.InvariantClause>> effective = new HashMap<>();
+    private final Map<TypeSymbol.AtModule, ExpandedRules> effective = new HashMap<>();
     /** Which of a declaration's own fields each typed clause reads — what a construction has to have
      * filled for the clause to be read at all. */
     private final Map<Core, Set<BindingId>> readsFields = new IdentityHashMap<>();
 
     /**
-     * @param inTheAnalysisRepresentation the clauses of the module being checked, in the
-     *        representation the discharge rules are written at ({@link InliningPolicy#DISCHARGE}). A
-     *        type another module declares is not among them and its clauses are read off its
-     *        declaration, in the settled representation that travels with it (spec
-     *        §invariant-discharge-representation). That is what an imported clause's analysis
-     *        representation is, and it is where one falls outside the fragment this can discharge
-     *        against: an operation the settled form expanded is no longer written as the operation
-     *        a rule is about.
+     * @param expandedClauses where a declaration's clauses are answered from, in the
+     *        representation the discharge rules are written at ({@link InliningPolicy#DISCHARGE}).
+     *        Asked by the declaration's address and answered by the module that wrote it, wherever
+     *        that was: a type this module declares and one it imports are read alike, because what
+     *        a clause is read as is what its own module expanded (spec
+     *        §invariant-discharge-representation).
      */
     Clauses(Symbols symbols,
-            AnalysisInvariants inTheAnalysisRepresentation) {
+            ExpandedClauseLookup expandedClauses) {
         this.symbols = symbols;
-        this.inTheAnalysisRepresentation = inTheAnalysisRepresentation;
+        this.expandedClauses = expandedClauses;
     }
 
     /** The representation this reads a declaration's clauses in, for a reader that has to hand it
      *  on rather than ask for one of its own. */
-    AnalysisInvariants analysisRepresentation() {
-        return inTheAnalysisRepresentation;
+    ExpandedClauseLookup expandedClauses() {
+        return expandedClauses;
     }
 
-    /** Every invariant that applies to {@code named}, each in the analysis representation where this
-     * module declares it. */
-    List<Hir.InvariantClause> of(TypeSymbol.AtModule named, Hir.Data data) {
+    /** Every rule that applies to {@code named}, in the expanded representation, with whether every
+     * one of them was reached. */
+    ExpandedRules of(TypeSymbol.AtModule named, Hir.Data data) {
         return effective.computeIfAbsent(named, name ->
-                TypeOps.analysisInvariants(name, data, symbols, inTheAnalysisRepresentation));
+                TypeOps.expandedInvariants(name, data, symbols, expandedClauses));
     }
 
     private final Map<TypeSymbol.AtModule, List<TypeOps.Declared>> declaredClauses =
@@ -89,7 +87,7 @@ final class Clauses {
      * them answer alike.
      */
     Map<String, BindingId> bindingsOf(TypeSymbol.AtModule named, Hir.Data data) {
-        return bindings.computeIfAbsent(named, name -> TypeOps.fieldBindings(name, data, symbols));
+        return bindings.computeIfAbsent(named, name -> TypeOps.fieldBindings(name, symbols));
     }
 
     /**
@@ -101,22 +99,13 @@ final class Clauses {
      * not, and it never was — the elaborator does not answer null of its own accord, so every one of
      * those was an exception caught here and dropped.
      */
-    TypedClause typed(Hir.Expr clause, TypeSymbol.AtModule named, Hir.Data data) {
+    TypedClause typed(ClauseAsExpanded clause, TypeSymbol.AtModule named, Hir.Data data) {
         return typed.computeIfAbsent(named, _ -> new IdentityHashMap<>())
-                .computeIfAbsent(clause, written -> {
-                    try {
-                        return new TypedClause.Typed(Elaborator.elaborate(written,
+                .computeIfAbsent(clause.read(), _ -> SecondaryClauseReading.of(clause,
+                        () -> new SecondaryClauseReading.Over(
                                 DataChecker.fieldScope(named, data, symbols),
-                                CheckContext.of(symbols).forData(data).forDischarge(),
-                                Type.BOOL));
-                    } catch (RuntimeException why) {
-                        // Recorded rather than dropped. Measured over the whole suite, every null
-                        // this used to answer was one of these — the elaborator never answers null
-                        // of its own accord — so what was being lost was the whole of it.
-                        InvariantChecker.gaveUp("typing a clause of " + named, why);
-                        return new TypedClause.Stopped();
-                    }
-                });
+                                CheckContext.of(symbols).forData(data).forDischarge()),
+                        "typing a clause of " + named));
     }
 
     /**
@@ -127,7 +116,8 @@ final class Clauses {
      * that is not there, and the clause is left to the run-time check rather than read against
      * nothing.
      */
-    Core statedAt(Hir.Expr clause, TypeSymbol.AtModule named, Hir.Data data, Map<BindingId, Core> given) {
+    Core statedAt(ClauseAsExpanded clause, TypeSymbol.AtModule named, Hir.Data data,
+                  Map<BindingId, Core> given) {
         // Fail-open: a clause with no form leaves its run-time check standing, whichever way the
         // form went missing. Which of the two it was matters to a reader that publishes a sentence
         // about the clause, and this is not one.
@@ -151,7 +141,7 @@ final class Clauses {
         List<Stated> stated = new ArrayList<>();
         List<RuleRef.Invariant> lost = new ArrayList<>();
         for (TypeOps.Declared inv : declared(named, data)) {
-            Core one = statedAt(inv.clause().expr(), named, data, given);
+            Core one = statedAt(inv.asExpanded(), named, data, given);
             if (one != null) {
                 stated.add(new Stated(Clause.of(inv), one));
             } else {
@@ -204,8 +194,7 @@ final class Clauses {
 
     /** Every clause of {@code named}, each with the declaration that wrote it. */
     List<TypeOps.Declared> declared(TypeSymbol.AtModule named, Hir.Data data) {
-        return declaredClauses.computeIfAbsent(named, name ->
-                TypeOps.declaredForAnalysis(name, data, symbols, inTheAnalysisRepresentation));
+        return declaredClauses.computeIfAbsent(named, name -> of(name, data).reached());
     }
 
     /** Which of {@code data}'s own fields {@code clause} reads, remembered: a clause is read at every

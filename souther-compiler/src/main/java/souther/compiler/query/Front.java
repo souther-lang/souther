@@ -147,12 +147,22 @@ public final class Front {
          * what a scale the reading cannot read as one number already gets — which side of nought it
          * is on, and no grid.
          *
+         * <p>And the two figures a reading builds machines against: what a position's answer may
+         * cost, and what handing each of its rules on as the set it leaves may cost. What each of
+         * them bounds is written where it is declared
+         * ({@link souther.compiler.regex.PatternPlan.Budget#OF_ADMITTED_VALUES},
+         * {@link souther.compiler.regex.PatternPlan.Budget#OF_WHAT_A_RULE_LEAVES}); what is settled
+         * here is that a compilation grants them, so that no reader anywhere makes itself an
+         * allowance at the moment it wants a machine.
+         *
          * <p>Held here rather than beside the policy it makes, so that reading a declaration cannot
          * reach it: what governs a reading is handed to it, and a default it could pick up is a
          * default two readings of one declaration can differ by.
          */
         static final souther.compiler.check.ReadingPolicy STANDARD =
-                new souther.compiler.check.ReadingPolicy(64, 1000);
+                new souther.compiler.check.ReadingPolicy(64, 1000,
+                        souther.compiler.regex.PatternPlan.Budget.OF_ADMITTED_VALUES,
+                        souther.compiler.regex.PatternPlan.Budget.OF_WHAT_A_RULE_LEAVES);
     }
 
     /**
@@ -222,6 +232,8 @@ public final class Front {
     public record Layout() implements Key<Layout.Of> {
 
         /**
+         * Which source each module and each of its example files is written in.
+         *
          * @param idOfModule the source each module was declared in
          * @param exampleFilesOf the {@code examples for} sources contributing to each module
          * @param exampleFileTargets the module each {@code examples for} source names, by source id
@@ -231,7 +243,7 @@ public final class Front {
                          Map<SourceId, String> exampleFileTargets) {}
 
         @Override
-        public Answer<Of> compute(Db db) {
+        public Answer<Layout.Of> compute(Db db) {
             List<SourceId> ids = db.ask(new Ids()).value();
             if (ids == null) {
                 return Answer.absent();
@@ -252,7 +264,7 @@ public final class Front {
                 }
                 idOfModule.putIfAbsent(m.name(), id);
             }
-            return Answer.of(new Of(Ordered.map(idOfModule), Ordered.map(exampleFilesOf),
+            return Answer.of(new Layout.Of(Ordered.map(idOfModule), Ordered.map(exampleFilesOf),
                     Ordered.map(exampleFileTargets)));
         }
     }
@@ -451,6 +463,9 @@ public final class Front {
         }
 
         /**
+         * The modules this compilation can see, and the ones it can see are there and will not
+         * read.
+         *
          * @param modules the ones this compilation may read declarations from
          * @param refused the ones it will not, and knows are there all the same — a module that
          *        took a name no module may take, and one this compiler cannot read what it
@@ -462,11 +477,11 @@ public final class Front {
         public record Of(Map<String, OnThePath> modules, Set<String> refused) {}
 
         @Override
-        public Answer<Of> compute(Db db) {
+        public Answer<FromPath.Of> compute(Db db) {
             Layout.Of layout = db.ask(new Layout()).value();
             ModulePath path = db.ask(new Path()).value();
             if (layout == null || path == null) {
-                return Answer.of(new Of(Map.of(), Set.of()));
+                return Answer.of(new FromPath.Of(Map.of(), Set.of()));
             }
             // Read the graph, work out where each of its modules is reached from, and only then say
             // anything. Each of the three needs the one before it finished: a module is read once
@@ -569,7 +584,7 @@ public final class Front {
             }
             SequencedSet<String> notRead = new LinkedHashSet<>(refused.keySet());
             notRead.addAll(unreadable.keySet());
-            return Answer.of(new Of(Ordered.map(found), Ordered.set(notRead)), reports);
+            return Answer.of(new FromPath.Of(Ordered.map(found), Ordered.set(notRead)), reports);
         }
     }
 

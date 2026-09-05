@@ -66,7 +66,7 @@ public final class FieldDomains {
      */
     public static final FieldDomains NONE =
             new FieldDomains(Map.of(), Map.of(), Map.of(), Map.of(), Set.of(), List.of(), List.of(),
-                    List.of(), List.of(), PartsLeftOut.NONE, Map.of(),
+                    List.of(), List.of(), List.of(), PartsLeftOut.NONE, Map.of(),
                     Map.of(), Map.of(), new ReadingEvidence(), Map.of(),
                     Map.of(RuleKey.THE_VALUE, Set.of(new RulesMissed.NoReadingWasMade())), Set.of(),
                     NOTHING_NAMED,
@@ -86,6 +86,16 @@ public final class FieldDomains {
     private final List<WithoutAnEnd> withoutAnEnd;
     /** The conjuncts whose quantity is over one number — see {@link #aboutOneCoordinate}. */
     private final List<AboutOneCoordinate> aboutOneCoordinate;
+    /**
+     * The conjuncts stating a rule about the strings at one number.
+     *
+     * <p>Beside the list above and read by one question of the two that one answers. Both say which
+     * number a conjunct is written about, and only the first are candidates for working out which
+     * conjuncts account for where the values stop — a candidate that placed no end turns that
+     * working out on for every conjunct about the number, and each of those readings reads the
+     * declaration again. A conjunct stating a run states its own ends and needs no such attribution.
+     */
+    private final List<AboutOneCoordinate> aboutTheStrings;
     /**
      * Which conjunct this reading was asked to leave out, so that a reading standing in for a
      * counterfactual is not asked one of its own.
@@ -177,6 +187,7 @@ public final class FieldDomains {
                          Set<RuleKey> notSeparatedByName,
                          List<InvariantChecker.Direct> directs, List<NoLine> noLines,
                          List<WithoutAnEnd> withoutAnEnd, List<AboutOneCoordinate> aboutOneCoordinate,
+                         List<AboutOneCoordinate> aboutTheStrings,
                          PartsLeftOut withoutParts,
                          Map<RuleRef, Required> raised,
                          Map<RuleRef, Map<Core, Required>> raisedByPart,
@@ -200,6 +211,7 @@ public final class FieldDomains {
         this.noLines = noLines;
         this.withoutAnEnd = List.copyOf(withoutAnEnd);
         this.aboutOneCoordinate = List.copyOf(aboutOneCoordinate);
+        this.aboutTheStrings = List.copyOf(aboutTheStrings);
         this.withoutParts = withoutParts;
         this.raised = raised;
         this.raisedByPart = raisedByPart;
@@ -284,11 +296,19 @@ public final class FieldDomains {
         return READINGS.get();
     }
 
-    /** What {@code data}, declared as {@code named}, leaves its fields able to hold. */
-    public static FieldDomains of(TypeSymbol.AtModule named, Hir.Data data, RuleReadingSource source,
+    /**
+     * What the record declared as {@code named} leaves its fields able to hold.
+     *
+     * <p>The declaration is read here rather than handed in. What is written about a record's
+     * fields is this reading's question, so the body it is written on is this reading's to fetch —
+     * a caller made to fetch one has a declaration in its hands for a question that was never its
+     * own, and can read the record's structure back out of it.
+     */
+    public static FieldDomains of(TypeSymbol.AtModule named, RuleReadingSource source,
                                   ReadingPolicy policy) {
-        return of(named, data, source, policy, Map.of());
+        return of(named, source, policy, Map.of());
     }
+
 
     /**
      * The same, with some fields already settled at a value.
@@ -298,10 +318,16 @@ public final class FieldDomains {
      * not read off {@code endsAt}'s own range — which still runs from 1 — but off what is left of it
      * once the other end is fixed, which is 1440 and nothing else.
      */
-    public static FieldDomains of(TypeSymbol.AtModule named, Hir.Data data, RuleReadingSource source,
+    public static FieldDomains of(TypeSymbol.AtModule named, RuleReadingSource source,
                                   ReadingPolicy policy, Map<RuleKey, Count> settled) {
-        return of(named, data, source, policy, atValues(settled),
-                InvariantChecker.Reach.EVERYTHING);
+        // A name declaring no record leaves nothing about fields it has not got, which is what
+        // nothing written comes to here. The same answer the other readers of a declaration give
+        // when handed such a name, because it is the same fact about the name rather than three
+        // opinions about the caller.
+        return source.symbols().declaredNode(named.key()) instanceof Hir.Data data
+                ? of(named, data, source, policy, atValues(settled),
+                        InvariantChecker.Reach.EVERYTHING)
+                : NONE;
     }
 
     /** Settlings written as names, read as what stands at each. What a caller naming a place means
@@ -395,8 +421,7 @@ public final class FieldDomains {
                 if (made.gaveUp()) {
                     why.add(UnreadReason.EXACT_VALUES_TOO_COSTLY);
                 }
-                separated = separated
-                        && (values.isBottom() || values.projectionExactAt(name));
+                separated = separated && values.projectionExactAt(name);
                 // Every one of them. Two subjects of one name are two ways the same rules were
                 // filed, and a rule filed under one of them is not the rule filed under the other:
                 // an ordering the interval algebra knows the place by and a pattern the values
@@ -445,6 +470,7 @@ public final class FieldDomains {
         return new FieldDomains(Map.copyOf(out), Map.copyOf(holds), Map.copyOf(admitted),
                 Map.copyOf(unread), Set.copyOf(notSeparated), seeded.reading().directs(), seeded.reading().noLines(),
                 seeded.reading().withoutAnEnd(), seeded.reading().aboutOneCoordinate(),
+                seeded.reading().aboutTheStrings(),
                 reach.withoutParts(),
                 seeded.reading().raised(), seeded.reading().raisedByPart(),
                 seeded.reading().standing(), seeded.took(),
@@ -579,11 +605,10 @@ public final class FieldDomains {
      * <p>One per name the rule writes, since a rule relating two coordinates is filed under
      * neither of them alone.
      *
-     * @param path     what the value's rules call where the coordinate sits
-     * @param measured whether the end was to be on a count taken of what stands at the name rather
-     *                 than on the value there. One name carries both — a {@code String} bounded on
-     *                 its length has an end on the count and values of its own — and a rule stopped
-     *                 at one of them is no account of the other
+     * @param at   where the coordinate sits, and which of the numbers there the end was to be on.
+     *             One name carries both — a {@code String} bounded on its length has an end on the
+     *             count and values of its own — and a rule stopped at one of them is no account of
+     *             the other, so the two travel together
      * @param from the rule that says where the values stop, which is what a reader is sent to look
      *             at
      * @param part which conjunct of it this is. A rule is read a conjunct at a time and a reason
@@ -989,7 +1014,7 @@ public final class FieldDomains {
         // one conjunct is not an account of the conjunct written beside it.
         if (took.anyLeftStanding(rule, named)) {
             return new RuleAccounting.Outcome.Unaccounted(
-                    stoppedBy(rule, named));
+                    stoppedBy(rule, at, named));
         }
         // The reading that turns this clause into where the values stop, said by the end it placed.
         if (directs.stream()
@@ -1001,7 +1026,7 @@ public final class FieldDomains {
         if (took.tookIn(rule, named)) {
             return new RuleAccounting.Outcome.Accounted(RuleAccounting.Reader.THE_VALUE_READING);
         }
-        return new RuleAccounting.Outcome.Unaccounted(stoppedBy(rule, named));
+        return new RuleAccounting.Outcome.Unaccounted(stoppedBy(rule, at, named));
     }
 
     /**
@@ -1012,20 +1037,77 @@ public final class FieldDomains {
      * there is named beside a limit that belongs to its neighbour, which is the misattribution the
      * whole accounting is asked per rule to avoid.
      *
-     * <p>A form this reading has no word for where it recorded nothing of the rule there. What
-     * reaches here is a rule no reading took in, so this reading was short of it however little it
-     * wrote down — and an empty answer would say a question stands with nothing behind it. Not the
-     * name's reasons: those belong to whichever rule left them.
+     * <p>Not the name's other reasons: those belong to whichever rule left them, and a rule answered
+     * from the name is named beside a limit that is its neighbour's.
+     *
+     * <p><b>The name is asked one thing, and it is whether the answer accounts for the question.</b>
+     * An allowance run down by everything a position admits is a fact about the answer and not about
+     * any rule that paid into it ({@link UnreadReason.About#THE_ANSWER}), and
+     * {@link ReadingEvidence#stoppedBy} refuses such a reason rather than filing it under a rule. So
+     * a question standing for that reason has nothing under its rule by construction, and that is
+     * what tells it from the accounting coming apart.
+     *
+     * <p>Asked as itself and not as "not about a rule". A reason is about a rule, about the answer,
+     * or about neither, and the third is a reading that never reached the position — which accounts
+     * for nothing, as its name says. Written as the complement of the first, one of those at the
+     * name would stand in for an account that is not there.
      */
-    private RuleAccounting.Why stoppedBy(RuleRef rule, List<FactSubject> named) {
-        List<UnreadReason> why = took.stoppedBy(rule, named);
-        // Nothing recorded, so nothing is answerable for it. A rule reaches the readings that
-        // recognise the names it writes, and one about a name none of them knows — a field
-        // of a value a helper reads, reached through the call — is claimed by none of them and
-        // gave none of them anything to write down. Named as the value reading's, an author is
-        // sent to a reader that never held their clause.
-        return why.isEmpty() ? new RuleAccounting.Why.NothingTookItIn()
-                : new RuleAccounting.Why.TheValueReadingSays(why);
+    private RuleAccounting.Why stoppedBy(RuleRef rule, RuleKey at, List<FactSubject> named) {
+        // What a rule is answerable for, as the facts it is answerable for. Asked for the reasons
+        // alone here, the written places they were decided at would be gone one call before the
+        // account that names the rule, and two facts about two clauses would arrive as one.
+        Set<RuleShortfall> why = took.stoppedBy(rule, named);
+        if (!why.isEmpty()) {
+            return new RuleAccounting.Why.TheValueReadingSays(why);
+        }
+        if (unreadByName.getOrDefault(at, List.of()).stream()
+                .noneMatch(FieldDomains::standsInForARulesOwnAccount)) {
+            throw new AStandingQuestionWithNoAccount(rule, named);
+        }
+        return new RuleAccounting.Why.NothingTookItIn();
+    }
+
+    /**
+     * Whether {@code why} accounts for a question a rule left standing, in place of the rule's own
+     * account of it.
+     *
+     * <p>Named and asked once, because it is the whole of the refusal above: written inline as a
+     * test of the shape a reason is not, a reason of the third kind stood in for an account that is
+     * not there. Its three answers are the three kinds a reason is about, so a reason added to any
+     * of them is decided here rather than by where it happens to be written.
+     *
+     * <p>A reason about the answer does stand in: an allowance run down by everything a position
+     * admits is a fact about what the rules come to and about none of them, so no rule is answerable
+     * for it and none is filed. A reason about a rule does not — it is filed under its rule and
+     * reached before this. A reason about neither accounts for nothing, which is what it says: the
+     * reading never got to the position.
+     */
+    static boolean standsInForARulesOwnAccount(UnreadReason why) {
+        return switch (why.about()) {
+            case THE_ANSWER -> true;
+            case A_RULE, NEITHER -> false;
+        };
+    }
+
+    /**
+     * A question left standing that neither a rule nor the answer has an account of.
+     *
+     * <p>Two walks and one clause. A rule reaches this reading, which either adopts it or records
+     * where it gave up; a question stands where nothing adopted it. So a question standing with no
+     * account under the rule and none at the name either is the two coming apart — the rule was met
+     * by the walk that asks and by nothing that reads.
+     *
+     * <p>Not an ordinary limit, so not swallowed. Answered as one, an author is told that this
+     * compiler has no word for their rule, which is a sentence about their model printed because two
+     * of this compiler's accounts disagreed.
+     */
+    static final class AStandingQuestionWithNoAccount extends TheCheckDisagreesWithItself {
+
+        private static final long serialVersionUID = 1L;
+
+        AStandingQuestionWithNoAccount(RuleRef rule, List<FactSubject> named) {
+            super("a question stands that nothing accounts for: " + rule + " at " + named);
+        }
     }
 
     /** Every subject the place at {@code path} answers to. */
@@ -1051,12 +1133,31 @@ public final class FieldDomains {
      *
      */
     public List<Placed> placed() {
-        List<Placed> out = new ArrayList<>(directs.stream()
-                .map(each -> new Placed(each.at(), each.from(),
-                        each.bound().lower(), each.bound().end(), each.conjunct()))
-                .toList());
+        List<Placed> out = new ArrayList<>(stated());
         out.addAll(movedEnds());
         return List.copyOf(out);
+    }
+
+    /**
+     * The ends the conjuncts state, each against the conjunct that states it.
+     *
+     * <p>Apart from {@link #movedEnds}, and the difference is where the answer comes from. An end
+     * here is in the conjunct: an ordering places one, and a rule about the strings at a position
+     * leaves them running from one place to another. Those are read off the rule alone, so which
+     * conjunct they belong to needs no working out. What the other list holds is the ends the rules
+     * leave together, attributed by asking what they would leave without each conjunct.
+     *
+     * <p>For a reader that has its own way to the first kind and wants only what that way cannot
+     * see. A newtype's own comparisons are read off the clauses as they are written
+     * ({@link DeclaredBounds#of}), and a rule stating no comparison is invisible there — so such a
+     * reader takes these and drops what it already has, which two ends at one value with one rule
+     * behind them come to anyway ({@link DeclaredBounds.End#tighter}).
+     */
+    public List<Placed> stated() {
+        return directs.stream()
+                .map(each -> new Placed(each.at(), each.from(),
+                        each.bound().lower(), each.bound().end(), each.conjunct()))
+                .toList();
     }
 
     /**
@@ -1251,6 +1352,11 @@ public final class FieldDomains {
         Set<NumberAt<RuleKey>> out = new java.util.LinkedHashSet<>();
         directs.forEach(each -> out.add(each.at()));
         aboutOneCoordinate.forEach(each -> out.add(each.at()));
+        // And the numbers a rule about the strings is written about. Which number such a rule is
+        // about is settled by the call it is written as, so it is here whatever the reading made of
+        // the strings — a reader choosing which of a position's numbers it is measured at wants
+        // every rule written about one, and a rule read no further than the call is one of them.
+        aboutTheStrings.forEach(each -> out.add(each.at()));
         return java.util.Collections.unmodifiableSet(out);
     }
 
@@ -1512,6 +1618,7 @@ public final class FieldDomains {
                 };
                 case RulesMissed.ClauseNotTyped _, RulesMissed.ClauseLost _,
                      RulesMissed.PositionNotOpened _, RulesMissed.ClauseNotAsked _,
+                     RulesMissed.ClausesNotExpanded _,
                      RulesMissed.NoReadingWasMade _, RulesMissed.ReadingFellOver _ -> false;
             };
             if (!afford) {

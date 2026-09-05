@@ -299,18 +299,18 @@ class ARowIsComposedForAPointOnATotalTest {
             }
             ItemAssessment at = border.at(PointRole.ON);
             if (at instanceof ItemAssessment.Owed owed
-                    && owed.searches().only() instanceof ItemAssessment.Attempt.Stopped why) {
-                said.add(why.why().reason().toString());
-                budgets.add(why.stoppedBy().budgets().written());
+                    && owed.searches().only() instanceof ItemAssessment.Attempt.Unexhausted some) {
+                said.add(some.why().reason().toString());
+                budgets.add(some.notAllOf().written());
             }
         }
 
-        assertEquals(List.of("SEARCH_LIMIT"), said,
-                "two of the decompositions were made and the rest were not, so what a reader is"
-                        + " told is that this stopped");
-        assertEquals(List.of(List.of(CompositionBudget.DECOMPOSITIONS_OF_A_TOTAL_OFFERED)), budgets,
-                "and which figure of this compiler's decided it, which is the half of the answer"
-                        + " that says what would have to give for the point to be settled");
+        assertEquals(List.of("THE_SEARCH_LEFT_SOMETHING_UNTRIED"), said,
+                "two of the ways it may be spread were made and the rest were not, so what a reader"
+                        + " is told is that this did not look at everything");
+        assertEquals(List.of(List.of(CompositionRepertoire.WAYS_A_TOTAL_IS_SPREAD)), budgets,
+                "and what it writes some of, which is the half of the answer that says what would"
+                        + " have to give for the point to be settled — and it is not a number");
         assertEquals(List.of(), otherThanTheAnswer(MODEL + "\nexample noShapeOfferedReachesIt\n"
                         + "    | (Two { xs = [Awkward(2), Awkward(5)] }) -> " + WHATEVER + "\n"),
                 "and the row an author writes for it is one the model holds, which is why the other"

@@ -163,10 +163,14 @@ class InvariantCapabilitiesTest {
      * the clause.
      *
      * <p>Conjuncts are split from what the author wrote, so {@code a && b} inside a helper is not two
-     * of them. The clause is the call, which the check names as a term — and what matters here is
-     * that {@code 1 >= 0} inside the helper does not come back as a clause holding of every value.
-     * A reading that took the settled half for the whole would say no guard is needed for a rule
-     * that plainly needs one.
+     * of them. The clause is the call, and what matters here is that {@code 1 >= 0} inside the
+     * helper does not come back as a clause holding of every value. A reading that took the settled
+     * half for the whole would say no guard is needed for a rule that plainly needs one.
+     *
+     * <p>Both routes, because the rule the helper states is read as the rule it is: the domain
+     * reasons over {@code n >= 0} as a bound on the value, and the check names the call as a term
+     * that a guard may state. The clause still needs one of them, which is the whole of what is
+     * being held.
      */
     @Test
     void aConjunctionAHelperBringsDoesNotSettleFromOneHalf() {
@@ -177,8 +181,9 @@ class InvariantCapabilitiesTest {
                     invariant nonNegative(value)
                 """, "Money");
         assertEquals(1, clauses.size(), "one conjunct, because the author wrote one");
-        assertEquals(routed(new StaticRoute.AsATerm()), read(clauses, 0),
-                "the clause is the call, and a guard stating the same thing discharges it");
+        assertEquals(routed(new StaticRoute.AsABound(), new StaticRoute.AsATerm()),
+                read(clauses, 0),
+                "the rule the helper states is a bound, and the call is a term a guard may state");
     }
 
     /**

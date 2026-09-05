@@ -113,7 +113,7 @@ class WhatWentUnreadIsWrittenInOneOrderHoweverItWasMetTest {
     @Test
     void twoEntriesOneOrderCannotTellApartAreRefused() {
         CanonicalArrangement.Order<String> blind =
-                CanonicalArrangement.Order.by((one, two) -> 0);
+                CanonicalArrangement.Order.by((_, _) -> 0);
 
         assertEquals(List.of("a", "a"), blind.arrange(List.of("a", "a")).written(),
                 "two entries a document writes alike are two entries");

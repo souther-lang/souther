@@ -583,7 +583,7 @@ public final class InputDomain {
                     next.add(under);
                     continue;
                 }
-                PlacementOutcome.Reason why = whyNothingAt(at, step);
+                PlacementOutcome.Reason why = whyNothingAt(at);
                 if (why != null) {
                     otherwise.add(new PlacementOutcome.Unresolved(why));
                 } else {
@@ -614,7 +614,7 @@ public final class InputDomain {
      * with the language about what may be written — which is not a limitation an author can be told
      * about, and not something to hand on as one.
      */
-    private PlacementOutcome.Reason whyNothingAt(TermPath at, String step) {
+    private PlacementOutcome.Reason whyNothingAt(TermPath at) {
         Position position = byPath.get(at);
         if (position != null
                 && position.structure() instanceof StructuralInspection.Retained retained
@@ -697,7 +697,7 @@ public final class InputDomain {
             // language reads a value.
             case TermPath.Step.Field field -> under instanceof StructuralInspection.Decomposed made
                     ? made.under().get(field.name())
-                    : ReadableFields.of(shape).fields().get(field.name());
+                    : ReadableFields.of(shape).declaredFields().get(field.name());
             case TermPath.Step.Element _ -> under instanceof StructuralInspection.Retained on
                     && on.continuation() instanceof StructuralInspection.Continuation.Elements held
                     ? held.element() : null;
@@ -1001,7 +1001,7 @@ public final class InputDomain {
      * reached without one.
      */
     private static List<String> sharedAt(ReadablePosition input) {
-        return List.copyOf(ReadableFields.of(input.shape()).fields().keySet());
+        return List.copyOf(ReadableFields.of(input.shape()).declaredFields().keySet());
     }
 
     /**
@@ -1113,7 +1113,7 @@ public final class InputDomain {
                     walkBranch(branch, placed.root(), path, ancestry, source, policy, found, roots,
                             visited, handoffs, observed, reaching,
                             new RootOpening.Refined(placed.root(), crossing), account,
-                            reach.into(path.refine(branch.refinement()), stopped), stopped);
+                            reach.into(path.refine(branch.refinement()), stopped));
                     crossed(observed, crossing, found, before);
                 }
             }
@@ -1238,7 +1238,7 @@ public final class InputDomain {
                                    java.util.Set<Type> visited, RuleHandoffs handoffs,
                                    NameReach.Observed observed, PlacedRules.Reaching crossing,
                                    RootOpening opening,
-                                   Gathered account, Reach reach, boolean stopped) {
+                                   Gathered account, Reach reach) {
         // <b>A descent that costs no level stops only where it returns to a value it has already
         // been at without a step into one.</b> That is the whole of the rule, and what it is keyed
         // on is the value reached and never the narrowing taken: a narrowing is an edge and the
@@ -1318,9 +1318,9 @@ public final class InputDomain {
         // carrier first, every rule anybody ever wrote about the length of a string would have
         // become a rule about the string.
         DeclaredBounds.Bounds ofType = taken == null ? null
-                : DeclaredBounds.of(type, source, Carrier.WHOLE, taken);
+                : DeclaredBounds.of(view, source, Carrier.WHOLE, taken);
         DeclaredBounds.Bounds valueOfType = carried == null ? null
-                : DeclaredBounds.of(type, source, carried, null);
+                : DeclaredBounds.of(view, source, carried, null);
         // Rules about both coordinates and nothing here to choose between. Said before they are
         // dropped and from the list that still holds them, because this is the one place that knows
         // which rules they were — recovered afterwards from a position with no axis, the finding
@@ -1352,14 +1352,18 @@ public final class InputDomain {
         // are written cannot see: no comparison places them, and where they are is in what the
         // other rules leave.
         List<FieldDomains.Placed> moved = placed.movedAtTheValue();
-        // Three sources and not two: what the type's own clauses wrote, what a conjunct of them
-        // moved, and what the value this position sits in placed. Each is ends of one coordinate
-        // and they are intersected, every rule that put an end where it is kept.
+        // Four sources and not two: what the type's own comparisons wrote, what its conjuncts state
+        // that no comparison says — a rule about the strings at a position leaves them running
+        // between two places and orders nothing — what a conjunct of them moved, and what the value
+        // this position sits in placed. Each is ends of one coordinate and they are intersected,
+        // every rule that put an end where it is kept.
         NumberAt.OfWhatNumber kind = bySize ? answeredBy(taken) : ITS_OWN_VALUE;
         Carrier on = bySize ? Carrier.WHOLE : carried;
         DeclaredBounds.Bounds own = !bySize && carried == null ? null
                 : DeclaredBounds.and(
-                        DeclaredBounds.and(bySize ? ofType : valueOfType,
+                        DeclaredBounds.and(
+                                DeclaredBounds.and(bySize ? ofType : valueOfType,
+                                        DeclaredBounds.placed(placed.statedAtTheValue(), kind, on)),
                                 DeclaredBounds.placed(moved, kind, on)),
                         DeclaredBounds.placed(stated, kind, on));
         // A value whose rules contradict has no positions to cover: every edge of every field of it
@@ -1398,7 +1402,7 @@ public final class InputDomain {
         List<StandingQuestion> open = new ArrayList<>(noLine.unclassified());
         open.addAll(exact);
 
-        ReadingResult reading = crossed(declared, view, admissible, admitted, source, noLine, open,
+        ReadingResult reading = crossed(declared, view, admissible, admitted, source, noLine,
                 nothingExists, type);
         return new ReadPosition(path, view, term, admissible, own, projected,
                 // Where the position actually stops, which the ends as written do not say: a clause
@@ -1444,7 +1448,7 @@ public final class InputDomain {
     private static ReadingResult crossed(List<Case> declared, TypeView view,
                                          NumericDomain.Bounds admissible, AdmissibleSet admitted,
                                          RuleReadingSource source,
-                                         RulesWithNoLine found, List<StandingQuestion> open,
+                                         RulesWithNoLine found,
                                          boolean nothingExists, Type type) {
         BlockReason.AboutThePosition unreadable = Distinctions.unreadableAt(view);
         if (unreadable != null) {
@@ -1629,8 +1633,13 @@ public final class InputDomain {
                                                      RulesWithNoLine.Gathered found) {
         List<StandingQuestion> out = new ArrayList<>();
         for (PlacedRules.RuleUnclassifiedAt each : placed.unclassified(path)) {
-            found.asked(StandingQuestion.BoundaryUndetermined.of(each.rule(), each.cited(),
-                    FilingCoordinate.at(path), each.at().why()));
+            // One question per thing that stopped it. A published question carries one reason, and
+            // a classification can have been stopped by more than one — a clause read a branch at a
+            // time is stopped by whatever stopped each branch — so they are asked as the several
+            // questions they are rather than one of them standing for the rest.
+            each.at().why().forEach(why ->
+                    found.asked(StandingQuestion.BoundaryUndetermined.of(each.rule(), each.cited(),
+                            FilingCoordinate.at(path), why)));
         }
         for (souther.compiler.check.RuleAccounting.Unanswered each : placed.unanswered(path)) {
             out.add(StandingQuestion.Exact.of(each.rule(), each.cited(),

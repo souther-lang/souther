@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.ast.Hir;
+import souther.compiler.check.DeclaredBounds;
 import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
@@ -41,6 +42,16 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * and nothing unresolved.
  */
 class APlanSaysWhereItStoppedShortOfWhatTheValueHasTest {
+
+    /** The rules counting nothing, which is what every model here leaves them saying. */
+    private static final ConstructionPlan.HowManyItHolds ANY =
+            (_, _) -> new DeclaredBounds.CountRange(0, Integer.MAX_VALUE);
+
+    /** The rules leaving a collection holding none, which is the model settling that nothing can be
+     *  placed inside one. */
+    private static final ConstructionPlan.HowManyItHolds NONE_OF_THEM =
+            (_, _) -> new DeclaredBounds.CountRange(0, 0);
+
 
     /**
      * Eight records each holding the next, which is one more than the figure allows.
@@ -150,7 +161,7 @@ class APlanSaysWhereItStoppedShortOfWhatTheValueHasTest {
         TermPath deeper = down(9);
 
         ConstructionPlan.Result asked = ConstructionPlan.of(typeOf(DEEP), TermPath.of("query"),
-                symbolsOf(DEEP), Set.of(deeper), Requirements.NONE, (_, _) -> 0);
+                symbolsOf(DEEP), Set.of(deeper), Requirements.NONE, ANY);
 
         assertEquals(Set.of(CompositionBudget.DEPTH_A_CONSTRUCTION_PLAN_DESCENDS),
                 assertInstanceOf(ConstructionPlan.Result.Beyond.class, asked,
@@ -174,12 +185,65 @@ class APlanSaysWhereItStoppedShortOfWhatTheValueHasTest {
         ConstructionPlan.Result asked = ConstructionPlan.of(typeOf(DEEP), TermPath.of("query"),
                 symbolsOf(DEEP), Set.of(),
                 Requirements.NONE.and(down(9), Refinement.of(new Case.Presence(true))),
-                (_, _) -> 0);
+                ANY);
 
         assertEquals(Set.of(CompositionBudget.DEPTH_A_CONSTRUCTION_PLAN_DESCENDS),
                 assertInstanceOf(ConstructionPlan.Result.Beyond.class, asked,
                         "the caller stated something of a position this plan never reached").by(),
                 "and it says which figure put the position out of reach");
+    }
+
+    /**
+     * A demand under a collection the rules leave no room in is the model's answer, and the figure
+     * below it is not named.
+     *
+     * <p>Both are true of this plan at once: the list holds nothing, and what the caller asked for
+     * is deeper than the descent goes. Which is the ordinary way for them to meet — a demand this
+     * compiler cannot reach is a demand it has not shown anything about, and the rules have already
+     * settled it above. Named as the figure, an author would raise it and be told the list still
+     * holds nothing.
+     */
+    @Test
+    void aDemandUnderACollectionWithNoRoomIsTheModelsAnswerAndNotTheFigure() {
+        ConstructionPlan.Result asked = ConstructionPlan.of(typeOf(TREE), TermPath.of("query"),
+                symbolsOf(TREE), Set.of(insideTheTree(6)), Requirements.NONE, NONE_OF_THEM);
+
+        ConstructionPlan.ModelRefusal.NoRoom why = assertInstanceOf(
+                ConstructionPlan.ModelRefusal.NoRoom.class,
+                assertInstanceOf(ConstructionPlan.Result.Refused.class, asked,
+                        "the rules leave the list nothing, which they say whatever this compiler"
+                                + " went on to read").why(),
+                "and it is the collection that has no room");
+        assertEquals(1, why.needed(),
+                "one is what the list would have to hold for the value to be placed in it");
+        assertEquals(0, why.holds().most(), "and none is what the rules leave room for");
+    }
+
+    /**
+     * The same demand where the rules leave room is the figure, and nothing about the model.
+     *
+     * <p>The control of the one above, and the half that says the refusal is not being read off the
+     * demand. Only the count the rules leave differs between the two.
+     */
+    @Test
+    void theSameDemandWhereThereIsRoomIsTheFigure() {
+        ConstructionPlan.Result asked = ConstructionPlan.of(typeOf(TREE), TermPath.of("query"),
+                symbolsOf(TREE), Set.of(insideTheTree(6)), Requirements.NONE, ANY);
+
+        assertEquals(Set.of(CompositionBudget.DEPTH_A_CONSTRUCTION_PLAN_DESCENDS),
+                assertInstanceOf(ConstructionPlan.Result.Beyond.class, asked,
+                        "nothing the rules say stops this, so what is in the way is the figure")
+                        .by(),
+                "and it says which figure put the position out of reach");
+    }
+
+    /** A position {@code deep} lists down the tree, which is deeper than the descent goes. */
+    private static TermPath insideTheTree(int deep) {
+        TermPath at = TermPath.of("query").then("tree");
+        for (int each = 0; each < deep; each++) {
+            at = at.then("kids").element();
+        }
+        return at;
     }
 
     /**
@@ -193,7 +257,7 @@ class APlanSaysWhereItStoppedShortOfWhatTheValueHasTest {
         TermPath inside = down(8);
 
         ConstructionPlan.Result asked = ConstructionPlan.of(typeOf(DEEP), TermPath.of("query"),
-                symbolsOf(DEEP), Set.of(inside), Requirements.NONE, (_, _) -> 0);
+                symbolsOf(DEEP), Set.of(inside), Requirements.NONE, ANY);
 
         ConstructionPlan plan = assertInstanceOf(ConstructionPlan.Result.Planned.class, asked,
                 "the position is one this plans at").plan();
@@ -288,7 +352,7 @@ class APlanSaysWhereItStoppedShortOfWhatTheValueHasTest {
                                             Requirements additional) {
         return assertInstanceOf(ConstructionPlan.Result.Planned.class,
                 ConstructionPlan.of(typeOf(source), TermPath.of("query"), symbolsOf(source),
-                        decided, additional, (_, _) -> 0),
+                        decided, additional, ANY),
                 "nothing here asks one position to be two things").plan();
     }
 

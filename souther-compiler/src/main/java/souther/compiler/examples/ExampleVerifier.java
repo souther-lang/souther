@@ -1720,8 +1720,7 @@ public final class ExampleVerifier {
      */
     private TypeSymbol caseWritten(FixtureReader fixtures, Hir.Expr fixture, Type position) {
         try {
-            return fixtures.caseUnder(TypeView.of(position, symbols).wrappers().stream()
-                    .map(TypeOps.Layer::named).toList(), fixture);
+            return fixtures.caseUnder(TypeView.of(position, symbols).wrappers(), fixture);
         } catch (RuntimeException e) {
             if (overspending(e) != null) {
                 throw e;   // the row's budget is gone; it is not a form that could not be read
@@ -1994,7 +1993,7 @@ public final class ExampleVerifier {
      *
      * <p>What a stand-in answers and nothing more. Making it something the behavior can be constructed
      * with is a fact about the loader the implementation comes from, so it is the answerer's
-     * ({@link Answerer#applying}) — and reading a row's fakes is the same reading whoever that is.
+     * ({@link Answerer.Answer.Something#applying}) — and reading a row's fakes is the same reading whoever that is.
      */
     private StoodInFor readStandIn(FixtureReader fixtures, String target,
                                    BehaviorRequirement req, Hir.ExampleRow row) {

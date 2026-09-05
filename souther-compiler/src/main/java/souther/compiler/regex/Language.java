@@ -29,10 +29,10 @@ public final class Language {
     /**
      * The one machine that accepts these strings, which is what everything here is read off.
      *
-     * <p>Canonical, and that is the type's invariant rather than a thing a caller arranges. Every
-     * way to a language ends in {@link Automaton#canonical}, so two of these hold the same table
-     * exactly when they hold the same strings — and the questions below are a look at what is in
-     * front of them rather than a search nobody counted.
+     * <p>Canonical, and stopping on nothing but strings. Both are the type's invariant rather than
+     * things a caller arranges, and every way to a language goes through {@link #canonical} — so
+     * two of these hold the same table exactly when they hold the same strings, and the questions
+     * below are a look at what is in front of them rather than a search nobody counted.
      */
     private final Automaton machine;
 
@@ -44,23 +44,101 @@ public final class Language {
     }
 
     /**
-     * The same language, where making it canonical is within what {@code meter} allows.
+     * The strings {@code made} stops on, where making the one machine for them is within what
+     * {@code meter} allows.
      *
      * <p>Null and never a machine short of canonical. What is being decided is whether this
      * compiler can afford to answer exactly, and a half-made answer handed out is one whose next
      * question does the rest of the work somewhere nobody is counting.
+     *
+     * <p><b>The sequences no string is read as are taken out here, and nowhere else.</b> A machine
+     * steps over what a matcher reads, and a high surrogate followed by a low one is one symbol
+     * rather than two — so there are sequences of symbols no string is written as, and a complement
+     * holds them like anything else. Left in, two machines telling each other apart only over those
+     * would be two languages holding the same strings and comparing unequal, and a machine holding
+     * nothing but them would say it holds something. Every question below would then be about
+     * sequences where the type says it is about strings, and each of its callers would have to know
+     * that and take them out for itself — which is the reading of one thing in two places this file
+     * exists to stop.
+     *
+     * <p>Skipped where it can change nothing, which is asked of the one machine and not of the
+     * steps it is written with. A canonical machine is complete, so every one of them has a step
+     * over a high surrogate and having one says nothing; what says something is whether such a step
+     * leads anywhere a walk that then reads a low surrogate may stop. A pattern naming no surrogate
+     * leads to the state nothing stops at, and nothing is built for it.
+     *
+     * <p>Which is why the one machine is made first and made again only where the answer is yes.
+     * Asked of what came in, the walk would have to follow the steps that cost no symbol, and what
+     * it is looking for is two symbols in turn.
      */
-    private static Language canonical(Automaton made, Meter meter) {
+    static Language canonical(Automaton made, Meter meter) {
         if (made == null) {
             return null;
         }
         Automaton one = made.canonical(meter);
-        return one == null ? null : new Language(one);
+        if (one == null) {
+            return null;
+        }
+        if (!one.mayStopHavingReadALoneSurrogatePair()) {
+            return new Language(one);
+        }
+        Automaton held = one.and(RuntimeOrder.READS_ONLY_STRINGS, meter);
+        Automaton settled = held == null ? null : held.canonical(meter);
+        return settled == null ? null : new Language(settled);
     }
 
     /** Whether the whole of {@code value} is in it. A walk over the value, which builds nothing. */
     public boolean has(String value) {
         return machine.accepts(value);
+    }
+
+    /**
+     * Every string that comes before {@code than} on the strings' own order, or null past what
+     * {@code meter} allows.
+     *
+     * <p>The order the runtime makes and a model's {@code <} is, which is not the order the symbols
+     * of a machine are in — so this is built rather than read off an alphabet, and where it is built
+     * is {@link RuntimeOrder}. Metered like every other way to a language: what a caller is told
+     * past the allowance is that this was not made.
+     *
+     * <p>Here rather than in the layer that reasons about where a language stops, because a language
+     * is what this returns and a machine is what makes one. What such a caller does with it — meet
+     * it, take it away, ask whether two of them are one — is what a language already answers.
+     */
+    public static Language before(String than, Meter meter) {
+        return canonical(RuntimeOrder.before(than, meter), meter);
+    }
+
+    /** Every string there is, which is what a rule saying nothing leaves. */
+    public static final Language EVERY_STRING = new Language(RuntimeOrder.EVERY_STRING);
+
+    /**
+     * The strings {@code words} and no others, or null past what {@code meter} allows.
+     *
+     * <p>For a caller holding values a rule wrote out rather than a pattern. What they are is a set
+     * of strings like any other, and a reader asking where a rule's values stop has one question
+     * whichever way the rule named them — handed only the patterns, it would have to ask the values
+     * written out something else, and the two answers would be about the same strings.
+     */
+    public static Language ofWords(java.util.Collection<String> words, Meter meter) {
+        Automaton made = Automaton.ofWords(words, meter);
+        return made == null ? null : canonical(made, meter);
+    }
+
+    /**
+     * The least string it holds, or null where it holds none and where the ones it holds have no
+     * least among them.
+     *
+     * <p>Free, like everything else asked of one of these: read off the canonical machine, and
+     * nothing is built. The two nulls are one answer here because neither is a string — a caller
+     * telling them apart asks {@link #isEmpty}, which is free as well.
+     *
+     * <p>Not {@link #some}. That one answers with the shortest, which is a different string: a
+     * language of two-letter words holds no shorter one, and which of them comes first is what this
+     * is about.
+     */
+    public String least() {
+        return RuntimeOrder.leastOf(machine);
     }
 
     /** The strings both hold, or null where making them ran past what {@code meter} allows. */
@@ -93,11 +171,14 @@ public final class Language {
      *
      * <p>Asked of the strings and not of how it was written. {@code .*} is not everything — the
      * five line terminators are outside it — and a reader answering from the shape of a pattern
-     * would say it was. Read off the canonical machine, which for that language is the one state
-     * every string stops at.
+     * would say it was.
+     *
+     * <p>Which is the one machine every string stops at and not the one state every symbol does:
+     * the sequences no string is read as are not in any language here, so a language holding every
+     * string is a machine that turns those away and stops on the rest.
      */
     public boolean isEverything() {
-        return machine.holdsEverything();
+        return equals(EVERY_STRING);
     }
 
     /**

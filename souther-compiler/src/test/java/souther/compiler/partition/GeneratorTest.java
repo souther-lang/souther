@@ -107,7 +107,6 @@ class GeneratorTest {
         Hir.SpecBehavior spec = (Hir.SpecBehavior) prepared.behaviors().stream()
                 .filter(b -> b.name().equals(behavior)).findFirst().orElseThrow();
         Sig sig = sigs.get(behavior);
-        List<String> parameters = spec.params().stream().map(Hir.Param::name).toList();
         InputDomain domain = InputDomain.of(spec, sig, rules, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         Partitions.Partitioning partitioning = Partitions.of(spec.name(), domain, rules, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         return new Model(

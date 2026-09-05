@@ -390,7 +390,7 @@ public final class TypeOps {
     static List<TypeSymbol> caseNames(Hir.SumData sum) {
         List<TypeSymbol> names = new ArrayList<>();
         for (Hir.Name c : sum.cases()) {
-            if (c.answered() instanceof Hir.Name.Denoting named) {
+            if (c instanceof Hir.Name.Denoting named) {
                 names.add(named.type());
             }
         }
@@ -565,7 +565,7 @@ public final class TypeOps {
             // every position the value it produced flowed into.
             return true;
         }
-        if (from == Type.NOTHING) {
+        if (from instanceof Type.Nothing) {
             return true;   // the empty list's bottom element assigns into any element type (ADR-0028)
         }
         if (from instanceof Type.Never) {
@@ -732,12 +732,12 @@ public final class TypeOps {
         switch (param) {
             case Type.Var v -> {
                 Type bound = bindings.get(v.name());
-                if (bound == null || bound == Type.NOTHING) {
+                if (bound == null || bound instanceof Type.Nothing) {
                     // first sight, or widen an empty-collection bottom to a concrete element: an
                     // earlier `[]` / `Map.empty` argument bound NOTHING, and a later real element
                     // fixes it (ADR-0028). Order-independent, so insert(k, v, Map.empty) infers V.
                     bindings.put(v.name(), arg);
-                } else if (arg == Type.NOTHING) {
+                } else if (arg instanceof Type.Nothing) {
                     // the empty bottom absorbs into the concrete binding already learned
                 } else if (refusing && !assignable(arg, bound, symbols)
                         && !assignable(bound, arg, symbols)) {
@@ -942,18 +942,25 @@ public final class TypeOps {
      * that declares it, in the order that declaration writes them. An include brings a field in
      * without renumbering it, so the two passes agree however either of them reaches it.
      *
-     * <p>{@code declared} is which declaration this is, and is asked of the caller because
-     * {@code data} cannot say: a declaration carries the name it was written under and not the module
-     * that wrote it. Worked out here from that name it would be worked out against whoever is
-     * reading, and a reader of another module's declaration would bind its fields under its own name
-     * — a different binding for the same field, and the clauses carried in with the declaration
-     * resolve against nothing. A caller reading its own declaration passes {@link Symbols#own}; a
-     * caller reading one it reached passes the name it reached it by.
+     * <p>{@code declared} is which declaration this is, and is the caller's to name: a declaration
+     * carries the name it was written under and not the module that wrote it, so worked out here it
+     * would be worked out against whoever is reading, and a reader of another module's declaration
+     * would bind its fields under its own name — a different binding for the same field, and the
+     * clauses carried in with the declaration resolve against nothing. A caller reading its own
+     * declaration passes {@link Symbols#module}; a caller reading one it reached passes the name it
+     * reached it by.
+     *
+     * <p>The body under that name is read here. Naming which declaration this is and holding the
+     * declaration are two things, and only the first is the caller's: a caller made to fetch the
+     * body holds one for a question that was never its own, and can read the record's structure out
+     * of it. A name declaring no record binds no field.
      */
     public static Map<String, BindingId> fieldBindings(TypeSymbol.AtModule declared,
-                                                       Hir.Data data, Symbols symbols) {
+                                                       Symbols symbols) {
         Map<String, BindingId> bindings = new LinkedHashMap<>();
-        walkFields(data, declared, symbols, new LinkedHashSet<>(), bindings);
+        if (symbols.declaredNode(declared.key()) instanceof Hir.Data data) {
+            walkFields(data, declared, symbols, new LinkedHashSet<>(), bindings);
+        }
         return bindings;
     }
 
@@ -1036,7 +1043,7 @@ public final class TypeOps {
         // through spreads, holds no such field at all.
         Map<String, String> suppliedBy = new LinkedHashMap<>();
         for (Hir.Name inc : data.includes()) {
-            if (!(inc.answered() instanceof Hir.Name.Denoting names)) {
+            if (!(inc instanceof Hir.Name.Denoting names)) {
                 // Nothing declares it, which was reported where it is written. It brings in no
                 // fields, and complaining here that it is not a product data would be a second
                 // report about the one mistake.
@@ -1097,7 +1104,7 @@ public final class TypeOps {
      * not a product. Only {@link #fieldTypes} turns those into a diagnostic, and every declared data
      * goes through it; the readers asked about one field or one invariant answer for what they see. */
     private static Hir.Data spreadTarget(Hir.Name inc, Symbols symbols) {
-        return inc.answered() instanceof Hir.Name.Denoting named
+        return inc instanceof Hir.Name.Denoting named
                 && symbols.declaredNode(named.type()) instanceof Hir.Data d
                 ? d : null;
     }
@@ -1209,29 +1216,28 @@ public final class TypeOps {
      */
     public static List<Hir.InvariantClause> settledInvariants(Hir.Data data, Symbols symbols) {
         List<Hir.InvariantClause> invs = new ArrayList<>();
-        for (Declared one : declaredSettled(data, symbols)) {
-            invs.add(one.clause());
+        for (Hir.Name inc : data.includes()) {
+            Hir.Data spread = spreadTarget(inc, symbols);
+            if (spread != null) {
+                invs.addAll(settledInvariants(spread, symbols));
+            }
         }
+        invs.addAll(data.invariants());
         return invs;
     }
 
     /**
-     * The same clauses in the representation a static analysis reads: the language's own operations
-     * left standing ({@link InliningPolicy#DISCHARGE}).
+     * The same clauses in the representation a reading of rules takes, with whether every rule that
+     * applies was reached.
      *
-     * <p>Which representation is being read is in the name of the method and not in an argument a
-     * caller may leave out. A lookup that may answer nothing cannot be that argument: answering
-     * nothing and asking for the settled form are one value, so a reader that never got its
-     * representation would read the tree the backend emits from with nothing to say so.
+     * <p>Which representation is read is in the name and not in an argument a caller may pass. There
+     * is deliberately no way to ask this for the written tree: what a declaration's rules are in this
+     * representation comes from {@code form} and from nowhere else, and a walk that could be handed
+     * another source of clauses is a walk somebody can hand the wrong one.
      */
-    public static List<Hir.InvariantClause> analysisInvariants(
-            TypeSymbol.AtModule named, Hir.Data data, Symbols symbols,
-            AnalysisInvariants form) {
-        List<Hir.InvariantClause> invs = new ArrayList<>();
-        for (Declared one : declaredForAnalysis(named, data, symbols, form)) {
-            invs.add(one.clause());
-        }
-        return invs;
+    public static ExpandedRules expandedInvariants(
+            TypeSymbol.AtModule named, Hir.Data data, Symbols symbols, ExpandedClauseLookup form) {
+        return declaredExpanded(named, data, symbols, form);
     }
 
     /**
@@ -1250,58 +1256,82 @@ public final class TypeOps {
      * same thing in each.
      */
     public record Declared(TypeSymbol.AtModule declaredOn, int ordinal,
-                           Hir.InvariantClause clause) {}
+                           Hir.InvariantClause clause, CallsLeftStanding standing) {
 
-    /**
-     * The same clauses {@link #settledInvariants} answers, each with the declaration it was written
-     * on.
-     *
-     * <p>Flattening them loses which spread brought which, and what is reported of an unproven clause
-     * is the name the author wrote — so what is asked for here is the pair, and the flat list is
-     * taken from it rather than walked again.
-     */
-    public static List<Declared> declaredSettled(Hir.Data data, Symbols symbols) {
-        return declared(null, data, symbols, (_, on) -> on.invariants());
+        public Declared {
+            if (standing == null) {
+                throw new IllegalArgumentException("a clause says what its expansion left standing");
+            }
+        }
+
+        /** The clause as the reading takes it: the tree, and what the expansion that produced it
+         *  left standing. Handed on as one value, because the two are one fact about one tree and
+         *  a reader given them apart can be given them mismatched. */
+        ClauseAsExpanded asExpanded() {
+            return new ClauseAsExpanded(clause.expr(), standing);
+        }
     }
 
     /**
-     * The same in the representation a static analysis reads, which {@code form} answers for a
-     * declaration of its own module and which is the settled form for every other.
+     * The same in the representation a reading of rules takes, wherever the declaration was written.
      *
-     * <p>{@code named} is what the walk reached this declaration by, and a spread whose name is not a
-     * declaration's leaves it null — there is nothing to look the analysis form up under, and the
-     * clauses written on it are what there is.
+     * <p>Its own walk and not the settled one under an argument. Every clause here comes from
+     * {@code form}, asked by the declaration's address; there is no parameter through which a caller
+     * could offer clauses of its own, and so no way to ask for this representation and be given the
+     * written tree. The two walks say the same thing about spreads and differ in that one sentence,
+     * and that is the sentence the whole of #1312 was about — shared through a clause-source
+     * parameter, it is one edit away from being a choice again.
+     *
+     * <p>{@code named} is what the walk reached this declaration by. A spread whose name is not a
+     * module's declaration contributes nothing and costs nothing: no module wrote it, so there is no
+     * expansion of it to be short of.
      */
-    public static List<Declared> declaredForAnalysis(
-            TypeSymbol.AtModule named, Hir.Data data, Symbols symbols, AnalysisInvariants form) {
+    public static ExpandedRules declaredExpanded(
+            TypeSymbol.AtModule named, Hir.Data data, Symbols symbols, ExpandedClauseLookup form) {
         if (form == null) {
             throw new IllegalArgumentException(
-                    "reading a declaration's clauses as an analysis takes the representation it reads");
+                    "reading a declaration's clauses takes somewhere to read them from");
         }
-        return declared(named, data, symbols, form::clausesOf);
-    }
-
-    /** What a clause of a declaration is, in whichever representation {@code clauses} answers. Not
-     *  public: which representation is read is said by the method a caller names, and a caller able
-     *  to pass this could say one thing and read the other. */
-    private static List<Declared> declared(
-            TypeSymbol.AtModule named, Hir.Data data, Symbols symbols,
-            java.util.function.BiFunction<TypeSymbol.AtModule, Hir.Data,
-                    List<Hir.InvariantClause>> clauses) {
-        List<Declared> invs = new ArrayList<>();
+        ExpandedRules found = new ExpandedRules(List.of(), true);
         for (Hir.Name inc : data.includes()) {
             Hir.Data id = spreadTarget(inc, symbols);
             if (id != null) {
-                invs.addAll(declared(
+                found = found.and(declaredExpanded(
                         inc.answered().type() instanceof TypeSymbol.AtModule at ? at : null,
-                        id, symbols, clauses));
+                        id, symbols, form));
             }
         }
-        List<Hir.InvariantClause> wrote = clauses.apply(named, data);
-        for (int ordinal = 0; ordinal < wrote.size(); ordinal++) {
-            invs.add(new Declared(named, ordinal, wrote.get(ordinal)));
+        return found.and(ownClausesOf(named, form));
+    }
+
+    /**
+     * What {@code form} answers for {@code named} alone, as rules.
+     *
+     * <p>An answer this could not be given is carried as a rule not reached rather than as no rule.
+     * They are the same empty list and opposite facts: a declaration that states nothing holds every
+     * value its type does, and one whose clauses nobody worked out holds whatever its author wrote.
+     * A reading handed the second as the first says a position admits everything and says nothing
+     * about not having looked.
+     */
+    private static ExpandedRules ownClausesOf(TypeSymbol.AtModule named, ExpandedClauseLookup form) {
+        if (named == null) {
+            return new ExpandedRules(List.of(), true);
         }
-        return invs;
+        return switch (form.of(named.key())) {
+            case ExpandedClauseResult.Found(ExpandedClauses clauses) -> {
+                List<Declared> out = new ArrayList<>();
+                for (int ordinal = 0; ordinal < clauses.clauses().size(); ordinal++) {
+                    ExpandedClauses.Expanded each = clauses.clauses().get(ordinal);
+                    out.add(new Declared(named, ordinal, each.clause(), each.standing()));
+                }
+                yield new ExpandedRules(out, true);
+            }
+            case ExpandedClauseResult.Unavailable _ -> new ExpandedRules(List.of(), false);
+            // Nothing declares one, so there is no rule of its to be short of. This is not the walk
+            // failing to reach something: it is a name no declaration answers, which every reader
+            // above has already had to deal with to have got here.
+            case ExpandedClauseResult.NotDeclared _ -> new ExpandedRules(List.of(), true);
+        };
     }
 
     /** The type a newtype wraps ({@code data X = Y} gives {@code Y}), or null when {@code name} is not
@@ -1715,26 +1745,23 @@ public final class TypeOps {
             case "Instant" -> Type.INSTANT;
             // 制約違反 is no longer a writable case: an invariant violation aborts (spec §algebraic-types,
             // §violation-destination).
-            case "List" -> Type.list(typeArg(ref, symbols, "list", 4, "List needs a type argument, e.g. List<Int>"));
+            case "List" -> Type.list(typeArg(ref, "list", 4));
             case "Set" -> {
                 // a set holds no duplicates, which is a question about equality of its elements
-                Type element = typeArg(ref, symbols, "set", 3,
-                        "Set needs a type argument, e.g. Set<String>");
-                requireEquality(element, ref, false,
-                        "a Set has no duplicate elements, and a function has no value to compare");
+                Type element = typeArg(ref, "set", 3);
+                requireEquality(element, ref, false);
                 yield Type.set(element);
             }
-            case "Option" -> Type.option(typeArg(ref, symbols, "option", 6, "Option needs a type argument"));
+            case "Option" -> Type.option(typeArg(ref, "option", 6));
             case "Map" -> {
                 // The key is not restricted here: a map that stays inside a behavior body renders
                 // nothing, so it may be keyed by any value (`List.groupBy` already builds such maps).
                 // What a key must satisfy is the boundary — see #isBoundaryMapKey, checked where a
                 // type is a data field or a behavior's input/output.
-                Type value = typeArg(ref, symbols, "map", 3, "Map needs a value type, e.g. Map<String, Int>");
+                Type value = typeArg(ref, "map", 3);
                 Type key = ref.tupleElems() == null
                         ? Type.STRING : resolveTerm(ref.tupleElems().get(0));
-                requireEquality(key, ref, true,
-                        "a Map finds a value by its key, and a function has no value to compare");
+                requireEquality(key, ref, true);
                 yield Type.map(key, value);
             }
             default -> {
@@ -1813,8 +1840,7 @@ public final class TypeOps {
     }
 
     /** Refuses a collection whose element or key a function makes uncomparable. */
-    private static void requireEquality(Type t, Reference at, boolean aMapKey,
-                                        String message) {
+    private static void requireEquality(Type t, Reference at, boolean aMapKey) {
         if (!supportsEquality(t)) {
             throw CompileException.of(Diagnostic.at(at.pos())
                     .say(aMapKey
@@ -1825,8 +1851,7 @@ public final class TypeOps {
     }
 
     /** The single type argument of a built-in constructor, or the error that says it is missing. */
-    private static Type typeArg(Reference ref, NameSense symbols, String key, int width,
-                                String message) {
+    private static Type typeArg(Reference ref, String key, int width) {
         if (ref.arg() == null) {
             throw CompileException.of(Diagnostic.at(ref.pos(), width)
                     .say(switch (key) {

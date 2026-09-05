@@ -103,7 +103,7 @@ final class GradleBuild {
      * plugin's {@code apply false} says nothing about this one.
      */
     private static boolean applies(String block) {
-        for (String line : block.split("\n")) {
+        for (String line : block.lines().toList()) {
             if (line.contains(BuildPlugins.GRADLE_ID)) {
                 return !APPLY_FALSE.matcher(line).find();
             }

@@ -20,6 +20,9 @@ final class Report {
         this.out = out;
     }
 
+    // Saying so to the check means `@FormatMethod`, which would put Error Prone's annotations on
+    // the compile path for one method of the benchmark harness.
+    @SuppressWarnings("AnnotateFormatMethod")
     void line(String format, Object... args) {
         out.println(String.format(Locale.ROOT, format, args));
     }

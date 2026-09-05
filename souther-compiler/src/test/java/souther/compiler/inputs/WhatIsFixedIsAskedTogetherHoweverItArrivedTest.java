@@ -363,15 +363,14 @@ class WhatIsFixedIsAskedTogetherHoweverItArrivedTest {
         souther.compiler.types.TypeSymbol.AtModule name =
                 souther.compiler.types.TypeSymbols.declared(
                 new souther.compiler.types.TypeKey(read.rules().symbols().module(), "P"));
-        Hir.Data data = (Hir.Data) read.rules().symbols().declaredNode(name.key());
         souther.compiler.check.FieldDomains whole = souther.compiler.check.FieldDomains.of(
-                name, data, read.rules(), ReadAs.THE_COMPILATION_DOES);
+                name, read.rules(), ReadAs.THE_COMPILATION_DOES);
 
         for (int at = 0; at <= 5; at++) {
             Map<souther.compiler.check.RuleKey, Count> settled =
                     Map.of(souther.compiler.check.RuleKey.of("x"), count(at));
             souther.compiler.check.FieldDomains readIn = souther.compiler.check.FieldDomains.of(
-                    name, data, read.rules(), ReadAs.THE_COMPILATION_DOES, settled);
+                    name, read.rules(), ReadAs.THE_COMPILATION_DOES, settled);
             souther.compiler.check.FieldDomains.Carried<String> taken = whole.given(Map.of(
                     souther.compiler.check.NumberAt
                             .valueOf(souther.compiler.check.RuleKey.of("x")), count(at)))

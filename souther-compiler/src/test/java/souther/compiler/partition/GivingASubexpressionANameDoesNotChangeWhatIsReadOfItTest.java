@@ -163,7 +163,6 @@ class GivingASubexpressionANameDoesNotChangeWhatIsReadOfItTest {
     /** And arithmetic over a position named first, which is what took the line away. */
     @Test
     void aNameGivenArithmeticOverAPositionIsThatArithmetic() {
-        Map<String, PartitionEvidence> measured = measured(MODEL, "example.named");
         // The pair says the two spellings agree; this says what they agree on is a line, so a
         // reading that lost it in both would not pass for agreement.
         assertFalse(linesOf(lines(MODEL, "example.named").get("overOnePosition")).isEmpty(),
