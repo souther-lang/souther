@@ -51,7 +51,7 @@ class APositionARuleWasNotReadAtDoesNotReadAsOneEveryRuleWasReadAtTest {
     @Test
     void aReadingThatStoppedIsCarriedByThePositionItStoppedAt() throws Exception {
         TreeSet<String> met = new TreeSet<>();
-        for (InputDomain read : everyReading()) {
+        for (InputDomain read : EVERY_READING) {
             for (Position each : read.positions()) {
                 if (each.rulesWithoutALine().stream()
                         .noneMatch(one -> one.why() instanceof BlockReason.RuleReadingStopped)) {
@@ -72,7 +72,7 @@ class APositionARuleWasNotReadAtDoesNotReadAsOneEveryRuleWasReadAtTest {
     @Test
     void andSoIsOneWhoseRuleNothingClassified() throws Exception {
         TreeSet<String> met = new TreeSet<>();
-        for (InputDomain read : everyReading()) {
+        for (InputDomain read : EVERY_READING) {
             for (Position each : read.positions()) {
                 if (each.unansweredQuestions().stream()
                         .noneMatch(StandingQuestion.Unclassified.class::isInstance)) {
@@ -120,13 +120,21 @@ class APositionARuleWasNotReadAtDoesNotReadAsOneEveryRuleWasReadAtTest {
                 () -> "and nothing is short of the position's rules: " + at.reading());
     }
 
-    /** The reading of every behavior of every model this repository carries. */
+    /**
+     * The reading of every behavior of every model this repository carries.
+     *
+     * <p>Read once for the class, as the models are compiled once for the JVM: two questions here
+     * walk the same readings and neither changes one, so reading them per question is the same
+     * work over — and reading the population is most of what this class costs.
+     */
+    private static final List<InputDomain> EVERY_READING = everyReading();
+
     private static List<InputDomain> everyReading() {
         List<InputDomain> out = new ArrayList<>();
         for (Compilation compilation : RepositoryModels.all()) {
             readings(compilation, out);
         }
-        return out;
+        return List.copyOf(out);
     }
 
     private static void readings(Compilation compilation, List<InputDomain> out) {

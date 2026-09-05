@@ -89,14 +89,24 @@ class WhatARuleCostsDoesNotTurnOnWhereItIsWrittenTest {
     /** The same three rules in every order, and one answer between them. */
     @Test
     void everyOrderOfTheSameRulesLeavesTheSameAnswer() {
-        AdmissibleSet first = admitted(RULES, ORDERS.get(0));
+        AdmissibleSet first = sameInEveryOrder(RULES);
 
-        for (List<Integer> order : ORDERS) {
-            assertEquals(first, admitted(RULES, order),
-                    "the values and the account of them, written as " + order);
-        }
         assertEquals(AdmissibleSet.READ_IN_FULL, first.completeness(),
                 "and every one of them is read in full, since no product of patterns is built");
+    }
+
+    /** What {@code rules} admit, which every order of them comes to. Each order is read once:
+     *  reading it is building two machines, and the first order read twice is one machine too many. */
+    private static AdmissibleSet sameInEveryOrder(List<String> rules) {
+        AdmissibleSet first = null;
+        for (List<Integer> order : ORDERS) {
+            AdmissibleSet each = admitted(rules, order);
+            if (first == null) {
+                first = each;
+            }
+            assertEquals(first, each, "the values and the account of them, written as " + order);
+        }
+        return first;
     }
 
     /**
@@ -113,12 +123,8 @@ class WhatARuleCostsDoesNotTurnOnWhereItIsWrittenTest {
      */
     @Test
     void theSameHoldsWhereEveryRuleIsAPattern() {
-        AdmissibleSet first = admitted(ALL_PATTERNS, ORDERS.get(0));
+        AdmissibleSet first = sameInEveryOrder(ALL_PATTERNS);
 
-        for (List<Integer> order : ORDERS) {
-            assertEquals(first, admitted(ALL_PATTERNS, order),
-                    "the values and the account of them, written as " + order);
-        }
         assertEquals(AdmissibleSet.READ_IN_FULL, first.completeness(),
                 "and the small one is met first, so nothing large is built");
     }
