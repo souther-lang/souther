@@ -192,28 +192,36 @@ public final class StandingAtAPoint {
 
         @Override
         public WalkResult<ObservationAtPoint> at(TermPath path) {
-            if (!(where.occurrencesAt(observedInputs.inputs(), path)
-                    instanceof WalkResult.Reached(List<BehaviorInputs.Occurrence> values))) {
+            // Over the arms, so that a walk coming to answer a third way is one this has to be
+            // taught about rather than one quietly read as a walk that could not be made.
+            return switch (where.occurrencesAt(observedInputs.inputs(), path)) {
                 // The walk and the type disagree, which is the quantity's to report.
-                return WalkResult.couldNotWalk();
-            }
+                case WalkResult.CouldNotWalk<List<BehaviorInputs.Occurrence>> _ ->
+                        WalkResult.couldNotWalk();
+                case WalkResult.Reached(List<BehaviorInputs.Occurrence> values) ->
+                        WalkResult.reached(standingAmong(values));
+            };
+        }
+
+        /** Which of the row's answers this reading gets at a position the walk arrived at. */
+        private ObservationAtPoint standingAmong(List<BehaviorInputs.Occurrence> values) {
             if (values.isEmpty()) {
                 // The row wrote no element here, which is a row that was read. What that leaves a
                 // quantity is the quantity's to say, and it says it where it knows what the
                 // position is worth to the number it is reading.
-                return WalkResult.reached(ObservationAtPoint.WROTE_NOTHING);
+                return ObservationAtPoint.WROTE_NOTHING;
             }
             for (BehaviorInputs.Occurrence each : values) {
                 each.at().forEach((step, ordinal) -> held.merge(step, ordinal + 1, Math::max));
             }
             for (BehaviorInputs.Occurrence each : values) {
                 if (agrees(each)) {
-                    return WalkResult.reached(new ObservationAtPoint.Value(each.value()));
+                    return new ObservationAtPoint.Value(each.value());
                 }
             }
             // No value here under this reading. Not a stop: the reading names an element this
             // position does not have, and another reading is where its values are.
-            return WalkResult.reached(ObservationAtPoint.ANOTHER_READING);
+            return ObservationAtPoint.ANOTHER_READING;
         }
 
         /**
@@ -244,7 +252,6 @@ public final class StandingAtAPoint {
             }
             return true;
         }
-
     }
 
     /**

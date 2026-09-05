@@ -13,8 +13,10 @@ import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.ObservedValue;
 
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -100,12 +102,40 @@ class APositionARowWroteNothingAtAnswersForTheRowTest {
                 "and the same of a pair whose ends were both stopped");
     }
 
+    /**
+     * And it asks every term it has, the answer being settled or not.
+     *
+     * <p>Asking is how the measure finds out how many elements each of the line's positions holds,
+     * and that is what says how many readings of the row there are to try — so a quantity that
+     * stopped asking as soon as it knew its answer would be deciding which readings the row gets.
+     * The two are one call, and this is what keeps the second whole while the first short-circuits.
+     *
+     * <p>Held of the row's own answer because that is the one that settles a form outright. The
+     * reasons do not: a term that came to nothing goes on to the next term already.
+     */
+    @Test
+    void aFormAsksEveryTermThoughOneOfThemSettlesTheRow() {
+        Set<TermPath> asked = new LinkedHashSet<>();
+
+        form(AT_THE_EMPTY, AT_THE_STOPPED).standsAt(AT_A_HUNDRED, oneOfEach(asked));
+
+        assertEquals(Set.of(NOTHING_WRITTEN, STOPPED), asked,
+                "both positions were asked, so what each holds is known to whoever enumerates the"
+                        + " readings");
+    }
+
     /** A row that wrote nothing at one position and a value the limits stopped at the other. */
     private static BorderQuantity.Observation oneOfEach() {
+        return oneOfEach(new LinkedHashSet<>());
+    }
+
+    /** The same, recording every position it was asked about. */
+    private static BorderQuantity.Observation oneOfEach(Set<TermPath> asked) {
         return new BorderQuantity.Observation() {
 
             @Override
             public WalkResult<ObservationAtPoint> at(TermPath path) {
+                asked.add(path);
                 return WalkResult.reached(NOTHING_WRITTEN.equals(path)
                         ? ObservationAtPoint.WROTE_NOTHING
                         : new ObservationAtPoint.Value(new ObservedValue.Truncated()));

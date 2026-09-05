@@ -2,6 +2,8 @@ package souther.compiler.partition;
 
 import souther.compiler.observe.ObservedValue;
 
+import java.util.Objects;
+
 /**
  * What a row holds at one position, where the walk to that position was taken.
  *
@@ -17,8 +19,19 @@ import souther.compiler.observe.ObservedValue;
  */
 public sealed interface ObservationAtPoint {
 
-    /** One value of the row stands here. */
-    record Value(ObservedValue value) implements ObservationAtPoint { }
+    /**
+     * One value of the row stands here.
+     *
+     * <p>Which there is one of. The arms beside this one are what a position with no value of the
+     * row at it says, so an emptiness held in here would be a fourth answer that none of them names
+     * and every reader would have to guess at.
+     */
+    record Value(ObservedValue value) implements ObservationAtPoint {
+
+        public Value {
+            Objects.requireNonNull(value, "a value standing at a position is a value");
+        }
+    }
 
     /** The row wrote nothing at this position, so nothing of it stands anywhere below. */
     record WroteNothing() implements ObservationAtPoint { }

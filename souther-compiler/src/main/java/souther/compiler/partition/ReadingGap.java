@@ -51,8 +51,8 @@ public sealed interface ReadingGap {
         }
     }
 
-    /** The walk arrived at the position and no value of the row stands there, so there was none to
-     *  observe. */
+    /** The walk arrived at the position and no value of the row stands there under the reading
+     *  being tried, so there was none to observe. */
     record NoValue() implements ReadingGap {
 
         /** Nothing was compared against a figure: the walk met no value, and it meets none however

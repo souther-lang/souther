@@ -2869,48 +2869,56 @@ public final class Generator {
         List<souther.compiler.observe.ObservedValue> row = new ArrayList<>(
                 java.util.Collections.nCopies(subject.parameters().size(), null));
         row.set(parameter, observed);
-        if (!(subject.inputs().valuesAt(row, target.term().subjectPath())
-                instanceof WalkResult.Reached(List<souther.compiler.observe.ObservedValue> values))) {
-            return new RealizationReadback.CouldNotTell(new ReadbackGap.WalkAndTypeDisagree());
-        }
-        if (values.isEmpty()) {
-            return new RealizationReadback.CouldNotTell(new ReadbackGap.NoValueAtThePosition());
-        }
-        // What the number is of, asked the way the term's own reader asks it. A number one position
-        // answers is read at each value standing there, and a row stands at a point where one of its
-        // readings does; a number over a run is read of all of them at once, since that is what the
-        // walk was given and any one of them is not it.
-        Set<Incompleteness.Code> unread = EnumSet.noneOf(Incompleteness.Code.class);
-        boolean stands = switch (target) {
-            case RealizationTarget.AtOnePosition _ -> {
-                boolean any = false;
-                for (souther.compiler.observe.ObservedValue value : values) {
-                    switch (on.read(value)) {
-                        case NumericTerm.Reading.Number number ->
-                                any |= number.value().compareTo(at) == 0;
-                        case NumericTerm.Reading.Missing missing -> unread.add(missing.code());
-                        case NumericTerm.Reading.NotNumber _ -> { }
+        // Over the arms, so a walk that comes to answer a third way is one this is taught about
+        // rather than one read as the walk and the type disagreeing.
+        return switch (subject.inputs().valuesAt(row, target.term().subjectPath())) {
+            case WalkResult.CouldNotWalk<List<souther.compiler.observe.ObservedValue>> _ ->
+                    new RealizationReadback.CouldNotTell(new ReadbackGap.WalkAndTypeDisagree());
+            case WalkResult.Reached(List<souther.compiler.observe.ObservedValue> values) -> {
+                if (values.isEmpty()) {
+                    yield new RealizationReadback.CouldNotTell(
+                            new ReadbackGap.NoValueAtThePosition());
+                }
+                // What the number is of, asked the way the term's own reader asks it. A number one
+                // position answers is read at each value standing there, and a row stands at a
+                // point where one of its readings does; a number over a run is read of all of them
+                // at once, since that is what the walk was given and any one of them is not it.
+                Set<Incompleteness.Code> unread = EnumSet.noneOf(Incompleteness.Code.class);
+                boolean stands = switch (target) {
+                    case RealizationTarget.AtOnePosition _ -> {
+                        boolean any = false;
+                        for (souther.compiler.observe.ObservedValue value : values) {
+                            switch (on.read(value)) {
+                                case NumericTerm.Reading.Number number ->
+                                        any |= number.value().compareTo(at) == 0;
+                                case NumericTerm.Reading.Missing missing ->
+                                        unread.add(missing.code());
+                                case NumericTerm.Reading.NotNumber _ -> { }
+                            }
+                        }
+                        yield any;
                     }
+                    case RealizationTarget.OverARun _ -> switch (on.readOver(values)) {
+                        case NumericTerm.Reading.Number number ->
+                                number.value().compareTo(at) == 0;
+                        case NumericTerm.Reading.Missing missing -> {
+                            unread.add(missing.code());
+                            yield false;
+                        }
+                        case NumericTerm.Reading.NotNumber _ -> false;
+                    };
+                };
+                if (stands) {
+                    yield new RealizationReadback.AtRequestedPlace();
                 }
-                yield any;
+                if (!unread.isEmpty()) {
+                    yield new RealizationReadback.CouldNotTell(
+                            new ReadbackGap.Observation(unread));
+                }
+                yield new RealizationReadback.Elsewhere("it was composed to put " + target.term()
+                        + " at " + at + " and does not stand there");
             }
-            case RealizationTarget.OverARun _ -> switch (on.readOver(values)) {
-                case NumericTerm.Reading.Number number -> number.value().compareTo(at) == 0;
-                case NumericTerm.Reading.Missing missing -> {
-                    unread.add(missing.code());
-                    yield false;
-                }
-                case NumericTerm.Reading.NotNumber _ -> false;
-            };
         };
-        if (stands) {
-            return new RealizationReadback.AtRequestedPlace();
-        }
-        if (!unread.isEmpty()) {
-            return new RealizationReadback.CouldNotTell(new ReadbackGap.Observation(unread));
-        }
-        return new RealizationReadback.Elsewhere("it was composed to put " + target.term()
-                + " at " + at + " and does not stand there");
     }
 
     /**

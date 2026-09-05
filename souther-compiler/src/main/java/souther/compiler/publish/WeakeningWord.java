@@ -48,13 +48,16 @@ public enum WeakeningWord {
      * A row's value at one border was never looked at: the walk to the position could not be taken,
      * or no row came back to walk.
      *
-     * <p>One word for the two, because what a reader does about them is the same. Both are this
-     * compiler unable to look rather than the model putting a value elsewhere, and a wider budget
-     * changes neither — which is the whole of what this vocabulary sorts on. Which of the two it
+     * <p>One word for the two, because what a reader does about them is the same: both are this
+     * compiler unable to look rather than the model putting a value elsewhere. Which of the two it
      * was is said by the reading's own reason underneath, and the sentence the document writes is
      * chosen from that; a second word here would be that taxonomy kept in two places, free to drift
-     * apart. They part when their weakening does: when a run, a budget or the order over these
-     * comes to treat one differently from the other.
+     * apart. They part when what a reader does about them parts.
+     *
+     * <p>Which is the grouping this vocabulary is for, and not a finer claim about the reasons
+     * under a word. {@link #BORDER_VALUE_UNREADABLE} covers an observation a wider run would have
+     * kept and one it would meet again, and covers them as one word for the same reason: the code
+     * travels underneath. A word here says what happened at the coarseness a reader acts on.
      */
     BORDER_OBSERVATION_UNAVAILABLE,
 
