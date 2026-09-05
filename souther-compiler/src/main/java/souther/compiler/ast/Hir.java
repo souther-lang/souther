@@ -168,6 +168,11 @@ public interface Hir {
             this.owner = owner;
         }
 
+        /** What the bindings this mints belong to. */
+        public BindingOwner owner() {
+            return owner;
+        }
+
         /** A binding nothing else has, under this pass's owner. A pass writes its own names, so
          * none of them is a name the author wrote. */
         public Binder binder(String name, SourcePos pos) {

@@ -9,6 +9,8 @@ import souther.compiler.ast.StructuralCost;
 import souther.compiler.ast.WrittenName;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
+import souther.compiler.types.EtaOrigin;
+import souther.compiler.types.ExpansionSite;
 import souther.compiler.types.Type;
 import souther.compiler.types.ReachName;
 import souther.compiler.types.ValueName;
@@ -117,9 +119,19 @@ public final class HelperInliner {
      * Held together they are made whole and dropped whole: what a writing holds is the writing's, and
      * a writing that did not finish takes it with it.
      *
-     * @param into the body being written, which the bindings an expansion introduces belong under
-     * @param binders the minter for those bindings — an expansion writes names no source wrote, so
-     *                they belong to this writing rather than to the definition whose text it splices
+     * @param destination the body being written into, which is where this pass's own names are
+     *                    numbered. One body however deep the expansions inside it go: what a fresh
+     *                    spelling has to be is unlike every other name in the body it is written
+     *                    into, and how far in it stands is no part of that
+     * @param enclosing which copy is being written, which is what the bindings an expansion
+     *                  introduces belong under. A helper expanded into a body writes its copy under
+     *                  the body; a call inside that helper writes its copy under the first copy, so
+     *                  one helper expanded at two places holds two of everything inside it. The
+     *                  destination is the same for both and cannot tell them apart, which is what
+     *                  made this a second component rather than a reading of the first
+     * @param binders the minter for this pass's own names — an expansion writes names no source
+     *                wrote, so they belong to this writing rather than to the definition whose text
+     *                it splices
      * @param dependencies which bindings the {@code depends on} parameters of a behavior's
      *                     {@code let} are; empty while writing anything else, because only a
      *                     behavior's {@code let} has them (spec §depends-on)
@@ -129,16 +141,51 @@ public final class HelperInliner {
      *                      — and inside the writing because a lambda is in scope for as long as the
      *                      body holding it is being written and not one call longer
      */
-    private record Writing(BindingOwner into, Hir.Binders binders, Set<BindingId> dependencies,
+    private record Writing(BindingOwner destination, BindingOwner enclosing, Hir.Binders binders,
+                           Set<BindingId> dependencies,
                            Map<BindingId, ScopedLambda> scopedLambdas) {
 
         Writing(BindingOwner into, Hir.Binders binders, Set<BindingId> dependencies) {
-            this(into, binders, dependencies, new HashMap<>());
+            this(into, into, binders, dependencies, new HashMap<>());
+        }
+
+        /**
+         * The same writing, one copy deeper.
+         *
+         * <p>Everything but which copy is being written stays: the body is the same body, the names
+         * this pass mints are numbered among the same ones, what the behavior depends on is still
+         * what it depends on, and a lambda in scope outside the call is in scope inside it. What
+         * changes is what the bindings written from here belong under.
+         *
+         * <p>Not a writing of its own. One started here would number this pass's names from zero
+         * again and would begin with no lambda in scope, so a function handed to the call would stop
+         * being reachable from inside the body it was handed to.
+         */
+        Writing inside(BindingOwner copy) {
+            return new Writing(destination, copy, binders, dependencies, scopedLambdas);
         }
     }
 
     /** The writing in force, or null outside one. Nothing public reads it without starting one. */
     private Writing writing;
+
+    /**
+     * {@code work} done with the bindings it writes belonging to {@code copy}.
+     *
+     * <p>Not a writing of its own ({@link Writing#inside}). What is being written into has not
+     * changed and neither has what is in scope; what has changed is which copy the names written
+     * from here belong to.
+     */
+    private Hir.Expr insideThisCopy(BindingOwner copy,
+                                    java.util.function.Supplier<Hir.Expr> work) {
+        Writing outer = writing;
+        writing = outer.inside(copy);
+        try {
+            return work.get();
+        } finally {
+            writing = outer;
+        }
+    }
 
     /**
      * A lambda reached by a binding, and where the author wrote it.
@@ -1095,10 +1142,12 @@ public final class HelperInliner {
         // Numbered among what this pass has written into that body, so a second writing into it — a
         // second clause of one invariant, a second argument of one helper — writes bindings of its
         // own rather than the first one's over again.
-        writing = new Writing(into,
-                new Hir.Binders(new BindingOwner.Synthesized(into, BindingOwner.Pass.INLINER,
-                        written.merge(into, 1, Integer::sum) - 1)),
-                dependencies);
+        BindingOwner mine = new BindingOwner.Synthesized(into, BindingOwner.Pass.INLINER,
+                written.merge(into, 1, Integer::sum) - 1);
+        // The writing is what places the copies, so it is what they are written under. Rooted at
+        // the body instead, two writings into one body would place one call's copy in one spot
+        // twice — the body cannot tell them apart, and which writing this is is exactly what does.
+        writing = new Writing(into, mine, new Hir.Binders(mine), dependencies, new HashMap<>());
         try {
             return expansion.get();
         } finally {
@@ -1145,7 +1194,7 @@ public final class HelperInliner {
 
     /** The next number this pass has for the body it is writing into. */
     private int next() {
-        return written.merge(writing.into(), 1, Integer::sum) - 1;
+        return written.merge(writing.destination(), 1, Integer::sum) - 1;
     }
 
 
@@ -1202,8 +1251,12 @@ public final class HelperInliner {
                     given.add(new Hir.Given(g.declaredType(), inline(g.value()), g.applied(),
                             g.arrivesAs()));
                 }
+                // Walked with this expansion as the copy being written: a call the body still holds
+                // is one this expansion made, not one the body around it made.
                 yield new Hir.Expansion(ex.callee(), ex.application(), bound, given,
-                        ex.declaredReturn(), inline(ex.body()), ex.pos(), ex.region());
+                        ex.declaredReturn(),
+                        insideThisCopy(ex.application(), () -> inline(ex.body())),
+                        ex.pos(), ex.region());
             }
             case Hir.LetIn li -> {
                 // What the value turns out to be is what decides this, so it is worked out first: a
@@ -1346,7 +1399,8 @@ public final class HelperInliner {
         // declared return is carried on, and every binding copied out of the callee's body.
         // One minter, so no two of them are the same binding, and a reader can ask of any of
         // them which call it came from.
-        BindingOwner mine = new BindingOwner.Expansion(writing.into(), callee.denotes(), next());
+        BindingOwner mine =
+                new BindingOwner.Expansion(writing.enclosing(), callee.denotes(), siteOf(call));
         Hir.Binders ours = new Hir.Binders(mine);
         // What the callee's signature leaves open, this call decides. Its variables are
         // instantiated once, here, over the whole signature at once — so a variable it wrote
@@ -1377,7 +1431,11 @@ public final class HelperInliner {
         Renaming renaming = new Renaming(arguments.subst(), copy,
                 declaring == null ? null : call.pos().standingInFor(declaring),
                 declaring == null ? null : standingIn(call.region(), declaring));
-        Hir.Expr body = inline(rename(helper.writtenBody(), renaming));   // expand nested helpers too
+        // The nested helpers too, and written under this copy: a call inside the callee's body
+        // belongs to the copy of that body it stands in, so a helper expanded at two places holds
+        // two of everything inside it. The body being written into is the same for both and cannot
+        // tell them apart.
+        Hir.Expr body = insideThisCopy(mine, () -> inline(rename(helper.writtenBody(), renaming)));
         List<Hir.Bound> bound = new ArrayList<>(arguments.bound());
         // A scoped lambda the body still names was passed rather than applied, so nothing
         // reduced it and the name would stand for nothing. It is bound to what it names, which
@@ -1607,6 +1665,53 @@ public final class HelperInliner {
             d.hint(new HelperMessage.WriteTheCallThisWay(rawCall.written(), shape));
         }
         return CompileException.of(d.build());
+    }
+
+    /**
+     * Which application {@code call} is, as what its bindings belong to is named by.
+     *
+     * <p>Two answers, because an application here is one of two things. The source wrote one, and it
+     * carries which one it is. Or this pass wrote it, expanding a name used as a value into the
+     * block that applies it — and then it is named by the reference that made it necessary, which
+     * was there before the block was.
+     *
+     * <p><b>Exhaustive, and a shape it does not answer for stops the run.</b> Every application this
+     * expands is one of the two; a third would be an application some pass composed and handed here
+     * without saying what caused it, which is an expansion nothing could tell from its neighbour.
+     * Answered with a count of what came before it instead, the answer would be a fact about the
+     * walk — and the walk differs between the tree a backend emits and the tree an analysis reads.
+     */
+    private static ExpansionSite siteOf(Hir.Apply call) {
+        if (call.construct().isWritten()) {
+            return new ExpansionSite.Written(call.construct());
+        }
+        if (call.function() instanceof Hir.Var function) {
+            return new ExpansionSite.Eta(etaOf(function));
+        }
+        throw new IllegalStateException(
+                "an application no source wrote and no name was expanded into: " + call);
+    }
+
+    /**
+     * What made the block a name used as a value stands for necessary.
+     *
+     * <p>Told by what the reference reaches and not by how it is spelled. A pass may respell a name
+     * the author wrote — a helper of another module is written qualified in a body carried out of
+     * it — so a spelling that is the pass's says nothing about whose reference it is, and asking
+     * that question is what would put the two respelled ones on the wrong side.
+     */
+    private static EtaOrigin etaOf(Hir.Var function) {
+        if (function instanceof Hir.Var.Denoting named
+                && named.reachedAs() instanceof ReachName.InScope in
+                && in.denotes() instanceof ValueName.Local local) {
+            return new EtaOrigin.Bound(local.id());
+        }
+        if (function.origin() == null) {
+            throw new IllegalStateException(
+                    "a name no source wrote, reaching a declaration, expanded as a value: "
+                            + function.name());
+        }
+        return new EtaOrigin.Declaration(function.origin());
     }
 
     /**
@@ -1883,16 +1988,76 @@ public final class HelperInliner {
 
         private final Map<BindingId, BindingId> mine = new HashMap<>();
 
+        /** Which owner in the body being copied became which here. */
+        private final Map<BindingOwner, BindingOwner> owners = new HashMap<>();
+
+        /** The minter for each of those, so a copy's bindings are numbered among that copy's. */
+        private final Map<BindingOwner, Hir.Binders> minters = new HashMap<>();
+
         /**
          * Every binding the body introduces, given one of this copy's, before any of it is written.
          *
          * <p>Assigned in one pass so that a binder and the names that read it are moved together
          * whatever order the copy is written in: a read met before its binder would otherwise be
          * left on the original while the binder moved, and the two would no longer be one binding.
+         *
+         * <p><b>And the owners are moved with them.</b> A body already holding expansions is copied
+         * whole — a helper whose own calls were spliced in before it was reached — so the bindings
+         * inside those expansions belong to owners of their own. Given this copy's root owner
+         * outright, every one of them would land under it, and two of the callee's own expansions
+         * would write into one place. What is kept is the shape: the root becomes this copy's root,
+         * and an owner under it becomes the same owner under what its own owner became.
+         *
+         * @param binders the minter for this copy's root, which is the expansion's own — an
+         *                expansion has already written its arguments from it, and the body's direct
+         *                bindings are numbered after those rather than over them
          */
         private Copy(Hir.Expr body, Hir.Binders binders) {
+            this.root = binders.owner();
+            minters.put(root, binders);
             eachBinder(body, binder ->
-                    mine.put(binder.id(), binders.binder(binder.name(), binder.pos()).id()));
+                    mine.put(binder.id(),
+                            mintedFor(binder.id().owner()).binder(binder.name(), binder.pos())
+                                    .id()));
+        }
+
+        private final BindingOwner root;
+
+        /**
+         * This copy's owner for one the body has.
+         *
+         * <p>The one place an owner is moved, so that what a binding belongs to and what an
+         * expansion node says it wrote are the same answer. Worked out twice, the two would agree
+         * until one of them learned a shape the other did not.
+         *
+         * <p>The shape is kept and the bottom is replaced. Whatever the body's own bindings belong
+         * to becomes this copy's root; an expansion written under that becomes the same expansion
+         * under what its own owner became. So a helper whose calls were spliced in before it was
+         * reached keeps the tree of copies it holds, one deeper, rather than having all of it land
+         * in one place.
+         */
+        BindingOwner ownerOf(BindingOwner original) {
+            BindingOwner moved = owners.get(original);
+            if (moved != null) {
+                return moved;
+            }
+            BindingOwner made = switch (original) {
+                case BindingOwner.Expansion it ->
+                        new BindingOwner.Expansion(ownerOf(it.within()), it.expanded(), it.at());
+                case BindingOwner.Synthesized it ->
+                        new BindingOwner.Synthesized(ownerOf(it.within()), it.pass(), it.ordinal());
+                // The body's own. What it was called where it was written says nothing here: the
+                // copy is this expansion's, so what its bindings belong to is this expansion.
+                default -> root;
+            };
+            owners.put(original, made);
+            return made;
+        }
+
+        /** The minter for what {@code original} became, one per owner so that two copies of one
+         *  expansion number their bindings apart. */
+        private Hir.Binders mintedFor(BindingOwner original) {
+            return minters.computeIfAbsent(ownerOf(original), Hir.Binders::new);
         }
 
         /** Which of the body's bindings became which of this copy's, for a reader whose question is
@@ -2144,7 +2309,11 @@ public final class HelperInliner {
                             rename(g.value(), renaming), g.applied(),
                             g.arrivesAs()));
                 }
-                yield new Hir.Expansion(ex.callee(), ex.application(), bound, given,
+                // What this copy of the expansion wrote, from the one place an owner is moved. Kept
+                // as it was, the two copies of one already-expanded body would say they wrote into
+                // the same place while their bindings had gone to two.
+                yield new Hir.Expansion(ex.callee(),
+                        renaming.copy().ownerOf(ex.application()), bound, given,
                         ex.declaredReturn(), rename(ex.body(), renaming),
                         renaming.at(ex.pos()), renaming.over(ex.region()));
             }
