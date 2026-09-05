@@ -106,15 +106,15 @@ final class ReadingEvidence {
      * whole what stopped it at a position is asking about the position and hearing whichever rule
      * reached it.
      *
-     * <p><b>What the reading wrote down, and not what it answers when asked about a position.</b>
-     * {@link AdmissibleValues#standing} is the record: a part this reading gave up on, at each
-     * position that part named. {@link AdmissibleValues#whyUnread} is a reading of that record
-     * against the set the alternatives arrived at, and it answers a different question — whether
-     * the set at a position is as narrow as the rules leave it. The two part company exactly where
-     * a choice covers a position: the set is exact and nothing is answerable for it, and the rule
-     * is still one nobody took in. Asked through the second, a rule left standing under alternatives
-     * that cover it came back with no reason at all, and an accounting with the decision from one
-     * question and the reason from the other has a seam to fill.
+     * <p><b>What the reading wrote down where it wrote it, and never a position's answer read
+     * back.</b> What arrives is a {@link RuleShortfall}, made where the reading still had the
+     * written place in hand. {@link AdmissibleValues#standing} answers for the position and is
+     * deliberately not the source of this: it holds the reasons of every rule that reached the
+     * place and names none of them, so an account built out of it is a list of reasons and no
+     * clause. {@link AdmissibleValues#whyUnread} reads that record against the set the alternatives
+     * arrived at and answers a third question — whether the set at a position is as narrow as the
+     * rules leave it — and parts company with both exactly where a choice covers a position: the
+     * set is exact and nothing is answerable for it, and the rule is still one nobody took in.
      *
      * <p><b>And only what a rule is answerable for.</b> Everything filed here is filed under a rule,
      * so a reason about no rule may not arrive: an allowance run down by everything a position

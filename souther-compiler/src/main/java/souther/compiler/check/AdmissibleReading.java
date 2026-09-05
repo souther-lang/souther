@@ -14,6 +14,7 @@ import souther.compiler.values.ValueSet;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -311,13 +312,20 @@ final class AdmissibleReading implements ClauseReading<PlannedValues<FactSubject
     private PlannedValues<FactSubject> asking(Core e, FactSubject position,
                                               AdmittedPlan.Pattern plan) {
         asked.computeIfAbsent(e, _ -> new LinkedHashSet<>())
-                .add(new AskedAt(position, plan.plan(), e));
+                .add(new AskedAt(position, plan.plan(), new RuleShortfall.Site.AtALeaf(e)));
         return PlannedValues.at(position, plan);
     }
 
-    /** What was asked for at {@code e}, as it was asked. */
+    /**
+     * What was asked for at {@code e}, as it was asked and in the order it was.
+     *
+     * <p>A set of facts and no order of anybody's, kept in the order they were met all the same:
+     * what is made out of these is published through a projection that reads the order it is given,
+     * so a copy free to reorder would have one compiler publish two documents of one source.
+     */
     Set<AskedAt> askedAt(Core e) {
-        return Set.copyOf(asked.getOrDefault(e, Set.of()));
+        return Collections.unmodifiableSet(
+                new LinkedHashSet<>(asked.getOrDefault(e, Set.of())));
     }
 
     /**
@@ -328,11 +336,16 @@ final class AdmissibleReading implements ClauseReading<PlannedValues<FactSubject
      * .RuleShortfall}) and are what routes it back here; the third is the written place it is then
      * answerable at. Two clauses writing one pattern about one position ask for one machine and are
      * two of these, which is two rules answerable for one refusal.
+     *
+     * <p>The place is held as the site it will be filed under, so that what makes two of these one
+     * is what makes two facts one. Held as the node instead, the record would compare it as a
+     * value — two clauses of one shape at one source position are equal nodes — and the pair of
+     * them would arrive here as one, while the site they file under tells them apart.
      */
-    record AskedAt(FactSubject position, PatternPlan plan, Core node) {
+    record AskedAt(FactSubject position, PatternPlan plan, RuleShortfall.Site site) {
 
         AskedAt {
-            if (position == null || plan == null || node == null) {
+            if (position == null || plan == null || site == null) {
                 throw new IllegalArgumentException(
                         "a machine is asked for by a clause, for a position");
             }

@@ -76,8 +76,7 @@ sealed interface StatedByClauses {
         @Override
         public StatedByClauses from(Core e) {
             Map<Core, Part> out = new java.util.IdentityHashMap<>(parts);
-            out.put(e, new Part(byValues, byOrder, values.standing(), strings, asked,
-                    ruleShortfalls));
+            out.put(e, new Part(byValues, byOrder, strings, asked, ruleShortfalls));
             return new Said(values, ordered, byValues, byOrder, strings, asked, ruleShortfalls,
                     out);
         }
@@ -91,13 +90,13 @@ sealed interface StatedByClauses {
      * that decision never reached — so it answers about a branch the declaration has already
      * dropped, and it pays to find out.
      *
-     * <p>What is here is what a reader of the account needs of a part: which positions each
-     * language took it in at, and what it wrote down about the ones it could not. What the part
-     * finally admits is not among them — that is the whole value's answer and belongs to the whole.
+     * <p>What is here is what a reader of the account needs of a part, and every one of them is a
+     * fact about this written part: how each language took it in, what it says about the strings,
+     * which machines it asked for, and what a rule of it is answerable for. What the part finally
+     * admits is not among them — that is the whole value's answer and belongs to the whole, and so
+     * is what a position was left holding, which is kept once by the carrier that answers for the
+     * position and copied nowhere.
      *
-     * @param standing what this part's reading recorded about positions it was short of. A
-     *                 position's own account, which is why it holds every reason there is; an
-     *                 account of a rule is not sifted out of it and is {@code ruleShortfalls}
      * @param aboutStrings what this part states about the strings at each position it states a rule
      *                     about. The position is here whether or not the rule was read, because
      *                     which of a position's numbers a rule is written about is settled by the
@@ -105,8 +104,8 @@ sealed interface StatedByClauses {
      *                     read has none
      * @param ruleShortfalls what a rule is answerable for, each saying the written place the
      *                       reading decided it at. Made where the decision was made and never read
-     *                       back out of {@code standing}: a place holds the reasons of every rule
-     *                       that reached it and names none of them.
+     *                       back out of what a position was left holding: a place holds the reasons
+     *                       of every rule that reached it and names none of them.
      *
      *                       <p>Its algebra is the branch's. A branch nobody can be in has none —
      *                       there is no clause for an author to look at. A branch beside a dead one
@@ -115,7 +114,6 @@ sealed interface StatedByClauses {
      *                       raised
      */
     record Part(Adoption<FactSubject> byValues, Adoption<FactSubject> byOrder,
-                Map<FactSubject, java.util.List<souther.compiler.values.UnreadReason>> standing,
                 Map<FactSubject, StringRestriction> aboutStrings,
                 Set<AdmissibleReading.AskedAt> asked,
                 Set<RuleShortfall> ruleShortfalls) {
@@ -132,7 +130,7 @@ sealed interface StatedByClauses {
             // refusal with nothing to be about.
             // And what a rule is answerable for goes with them, for the same reason: there is no
             // branch for an author to look at, so there is nothing for a shortfall to send them to.
-            return new Part(byValues.inADeadBranch(), byOrder.inADeadBranch(), Map.of(), Map.of(),
+            return new Part(byValues.inADeadBranch(), byOrder.inADeadBranch(), Map.of(),
                     asked, Set.of());
         }
 
@@ -141,47 +139,40 @@ sealed interface StatedByClauses {
             // The standing branch's own, and nothing from the other. What a rule of a branch
             // nothing satisfies is answerable for is not a rule of this declaration at all.
             return new Part(byValues.beside(gone.byValues()), byOrder.beside(gone.byOrder()),
-                    standing, aboutStrings, askedIn(asked, gone.asked()), ruleShortfalls);
+                    aboutStrings, askedIn(asked, gone.asked()), ruleShortfalls);
         }
 
         /** The same part of two branches, neither of which anybody can be in. */
         Part bothDead(Part other) {
             return new Part(byValues.bothDead(other.byValues()),
-                    byOrder.bothDead(other.byOrder()), Map.of(), Map.of(),
+                    byOrder.bothDead(other.byOrder()), Map.of(),
                     askedIn(asked, other.asked()), Set.of());
         }
 
         /** The same part of two branches somebody can be in, under the choice between them. */
         Part either(ChoiceId choice, Part other) {
-            Map<FactSubject, java.util.List<souther.compiler.values.UnreadReason>> why =
-                    ReadByClauses.alsoSaying(standing, other.standing());
-            // What an unread alternative does to the reasons is the vocabulary's rule, stated once
-            // ({@code UnreadReason.leftOpen}); which positions it happens to is this carrier's.
-            // What this side's copy reached — not what it settled: a position a dead branch
+            // What a rule is answerable for is said of the choice, beside it and never out of it.
+            // What happened is that this choice offered an alternative nothing could read, so an
+            // author is sent to the choice — filed at a leaf under the branch that was read, they
+            // would be sent to a clause nothing complained of. Made here, where the choice is: what
+            // a position was left holding is the position's and names no choice.
+            //
+            // Over what this side's copy reached — not what it settled: a position a dead branch
             // settled is an answer, and an unread alternative widens a constraint, not an answer
             // ({@link Adoption#either} makes the same distinction).
-            //
-            // And what a rule is answerable for is said of the choice, beside it and never out of
-            // it. What happened is that this choice offered an alternative nothing could read, so
-            // an author is sent to the choice — filed at a leaf under the branch that was read,
-            // they would be sent to a clause nothing complained of. Made here, where the choice is,
-            // rather than found in the reasons above: those are the place's and name no choice.
             Set<RuleShortfall> shortfalls = new LinkedHashSet<>(ruleShortfalls);
             shortfalls.addAll(other.ruleShortfalls());
             if (other.byValues().dropped()) {
-                why = souther.compiler.values.UnreadReason.leftOpen(why, reachedBy(byValues()));
                 leftOpenBy(choice, reachedBy(byValues()), other.ruleShortfalls(), ruleShortfalls,
                         shortfalls);
             }
             if (byValues().dropped()) {
-                why = souther.compiler.values.UnreadReason.leftOpen(why,
-                        reachedBy(other.byValues()));
                 leftOpenBy(choice, reachedBy(other.byValues()), ruleShortfalls,
                         other.ruleShortfalls(), shortfalls);
             }
             return new Part(byValues.either(other.byValues()), byOrder.either(other.byOrder()),
-                    why, StringRestriction.over(aboutStrings, other.aboutStrings(), false),
-                    askedIn(asked, other.asked()), Set.copyOf(shortfalls));
+                    StringRestriction.over(aboutStrings, other.aboutStrings(), false),
+                    askedIn(asked, other.asked()), held(shortfalls));
         }
 
         /**
@@ -448,7 +439,7 @@ sealed interface StatedByClauses {
                     // And what a rule of this leaf is answerable for, asked of the reading that
                     // decided it and written down where it decided. Read off what the leaf leaves
                     // the positions instead, this would be a list of reasons and no clause.
-                    Set.copyOf(values.shortfallsAt(e)),
+                    held(values.shortfallsAt(e)),
                     Map.of());
         }
 
@@ -841,15 +832,12 @@ sealed interface StatedByClauses {
             read.parts().forEach((each, part) -> parts.put(each, new Part(
                     part.byValues().unbuiltAt(known.unbuilt()),
                     part.byOrder().unbuiltAt(known.unbuilt()),
-                    // What the answer was short of, to every part of the branch, because every one
-                    // of them waited on it. What a pattern asked for goes to the part that asked
-                    // and to no other: distributed by the place, a rule that named it was handed a
-                    // limit its neighbour reached.
-                    ReadByClauses.alsoSaying(part.standing(),
-                            routed(known.ruleShortfalls(), part, known.answerStanding())),
                     part.aboutStrings(), part.asked(),
-                    // And the same refusal said as what a rule is answerable for, at the clause
-                    // that asked for the machine rather than at the place it was built for.
+                    // What a machine was refused for, said as what a rule is answerable for, at
+                    // the clause that asked for it rather than at the place it was built for. What
+                    // the answer itself was short of is not here: that holds of everything waiting
+                    // on the position and is the position's own, kept by the carrier that answers
+                    // for the position.
                     shortOf(part.ruleShortfalls(),
                             askedFor(known.ruleShortfalls(), part.asked())))));
             return new Said(read.values().alsoStanding(known.asPositionStanding()), read.ordered(),
@@ -860,32 +848,6 @@ sealed interface StatedByClauses {
                     shortOf(read.ruleShortfalls(),
                             askedFor(known.ruleShortfalls(), read.asked())),
                     parts);
-        }
-
-        /**
-         * What a branch's probe found, as much of it as is this part's.
-         *
-         * <p>The answer's half to every part, because every one of them waited on the answer. The
-         * other half by whether this part asked for the machine that was refused — which is a thing
-         * the shortfall says, and not a thing the position it happened at can say. Every rule
-         * reaching a position pays into one allowance, so a place has as many claimants as it has
-         * rules and names none of them.
-         */
-        private static Map<FactSubject, java.util.List<souther.compiler.values.UnreadReason>>
-                routed(java.util.Set<souther.compiler.values.Unbuilt
-                        .RuleShortfall<FactSubject>> shortfalls,
-                       Part part,
-                       Map<FactSubject,
-                               java.util.List<souther.compiler.values.UnreadReason>> answered) {
-            Map<FactSubject, java.util.List<souther.compiler.values.UnreadReason>> out =
-                    new java.util.LinkedHashMap<>(answered);
-            shortfalls.stream()
-                    .filter(each -> part.asked().contains(
-                            new souther.compiler.values.PlannedValues.Asked<>(
-                                    each.at(), each.asked())))
-                    .forEach(each -> out.merge(each.at(), java.util.List.of(each.why()),
-                            ReadByClauses::alsoSaying));
-            return out;
         }
 
         /**
@@ -986,9 +948,8 @@ sealed interface StatedByClauses {
         Set<RuleShortfall> out = new LinkedHashSet<>();
         refused.forEach(each -> asked.stream()
                 .filter(one -> one.position().equals(each.at()) && one.plan().equals(each.asked()))
-                .forEach(one -> out.add(new RuleShortfall(each.at(), each.why(),
-                        new RuleShortfall.Site.AtALeaf(one.node())))));
-        return Collections.unmodifiableSet(out);
+                .forEach(one -> out.add(new RuleShortfall(each.at(), each.why(), one.site()))));
+        return held(out);
     }
 
     /** What either of two readings asked a machine for, which is what both of them asked for. */
@@ -1016,7 +977,21 @@ sealed interface StatedByClauses {
         }
         Set<RuleShortfall> out = new LinkedHashSet<>(these);
         out.addAll(those);
-        return Collections.unmodifiableSet(out);
+        return held(out);
+    }
+
+    /**
+     * These facts, as a value nobody can add to.
+     *
+     * <p>The one way one of these sets is finished, and it keeps the order the facts were met in.
+     * That order is no part of what the set means — which written place a reader is sent to first is
+     * the source's to say and is settled where a document is written — but a projection out of the
+     * set does read it ({@code RuleAccounting.Why}), and a copy that reordered would have the same
+     * compiler over the same source publish two documents. {@code Set.copyOf} is such a copy: it
+     * salts the iteration order per run.
+     */
+    private static Set<RuleShortfall> held(java.util.Collection<RuleShortfall> these) {
+        return Collections.unmodifiableSet(new LinkedHashSet<>(these));
     }
 
     /** The parts of two readings held together, each of them still the part it was. */

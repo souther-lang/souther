@@ -64,15 +64,15 @@ class WhoMayMakeARuleShortfallTest {
             "souther/compiler/check/StatedByClauses$Part -> " + OWNER + "#<init>");
 
     /**
-     * And every class that settles the place one is filed at.
+     * And every class that settles the place one is filed at, which is fewer.
      *
-     * <p>The same two, and no third: a site made anywhere else is one this compiler chose rather
-     * than one an author wrote. A leaf is settled where the node is being read; a choice is settled
+     * <p>A leaf is settled where the node is being read, and nowhere after: a reading that met a
+     * clause holds the place it met, and what is decided later about that clause is filed at the
+     * place it was handed rather than at one made again from a node in hand. A choice is settled
      * where the branches are joined, which is the only place the choice an author wrote is known.
      */
     private static final List<String> MAKING_A_SITE = List.of(
             "souther/compiler/check/AdmissibleReading -> " + A_LEAF + "#<init>",
-            "souther/compiler/check/StatedByClauses -> " + A_LEAF + "#<init>",
             "souther/compiler/check/StatedByClauses$Part -> " + A_CHOICE + "#<init>");
 
     @Test

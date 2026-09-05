@@ -164,60 +164,31 @@ class AChoiceIsDecidedByEveryClauseAndAnsweredByItsOwnTest {
     private static final FactSubject UNREAD = FactSubject.of(NAMES.written("unread"));
 
     /**
-     * An unread alternative widens what a branch constrained, and not what a dead branch inside it
-     * settled.
+     * What a rule is answerable for says which choice left the constraint open.
      *
-     * <p>The account's copy of the rule the values join by: a position a dead branch settled holds
-     * an answer — the choice imposes nothing there — and a further alternative, read or not,
-     * imposes nothing extra either ({@code Adoption.either} draws the same line). Written over the
-     * copy's mentions instead, the account held a reason at a settled position that no output
-     * happens to show today, which is a lie waiting for its first reader.
-     */
-    @Test
-    void anUnreadAlternativeWidensAConstraintAndNotAnAnswer() {
-        StatedByClauses.Part read = new StatedByClauses.Part(
-                new Adoption<>(java.util.Set.of(CONSTRAINED), java.util.Set.of(SETTLED),
-                        java.util.Set.of(), false),
-                Adoption.nothing(), Map.of(), Map.of(), java.util.Set.of(), java.util.Set.of());
-        StatedByClauses.Part unread = new StatedByClauses.Part(
-                new Adoption<>(java.util.Set.of(), java.util.Set.of(), java.util.Set.of(UNREAD),
-                        true),
-                Adoption.nothing(), Map.of(UNREAD, List.of(UnreadReason.FORM_NOT_READ)), Map.of(),
-                java.util.Set.of(), java.util.Set.of());
-        ChoiceId choice = new ChoiceId();
-
-        assertEquals(Map.of(UNREAD, List.of(UnreadReason.FORM_NOT_READ),
-                        CONSTRAINED, List.of(UnreadReason.ALTERNATIVE_NOT_READ)),
-                read.either(choice, unread).standing(),
-                "the constraint is left open and the answer stands");
-    }
-
-    /**
-     * And what a rule is answerable for says which choice left it open.
+     * <p>What an author is sent to is this choice, which is what offered the alternative nothing
+     * could read: a leaf under the branch that was read is a clause nothing complained of. The
+     * position's own account is not this and is somewhere else — it says the position is open and
+     * says nothing about what anybody wrote, since every rule reaching it is in it.
      *
-     * <p>The place's own account above says the position is open and says nothing about what
-     * anybody wrote — every rule reaching it is in that map. What an author is sent to is this
-     * choice, which is what offered the alternative nothing could read: a leaf under the branch
-     * that was read is a clause nothing complained of.
+     * <p>And an unread alternative widens what a branch constrained, and not what a dead branch
+     * inside it settled: a position a dead branch settled holds an answer, so the choice imposes
+     * nothing there and a further alternative, read or not, imposes nothing extra either
+     * ({@code Adoption.either} draws the same line). Asked over what the branch mentions instead,
+     * an author would be sent to a choice about a position that is answered.
      */
     @Test
     void whatLeftTheConstraintOpenIsTheChoiceItWasOffered() {
-        StatedByClauses.Part read = new StatedByClauses.Part(
-                new Adoption<>(java.util.Set.of(CONSTRAINED), java.util.Set.of(SETTLED),
-                        java.util.Set.of(), false),
-                Adoption.nothing(), Map.of(), Map.of(), java.util.Set.of(), java.util.Set.of());
-        StatedByClauses.Part unread = new StatedByClauses.Part(
-                new Adoption<>(java.util.Set.of(), java.util.Set.of(), java.util.Set.of(UNREAD),
-                        true),
-                Adoption.nothing(), Map.of(UNREAD, List.of(UnreadReason.FORM_NOT_READ)), Map.of(),
-                java.util.Set.of(), java.util.Set.of());
         ChoiceId choice = new ChoiceId();
 
         assertEquals(java.util.Set.of(new RuleShortfall(CONSTRAINED,
                         UnreadReason.ALTERNATIVE_NOT_READ,
                         new RuleShortfall.Site.AtAChoice(choice))),
-                read.either(choice, unread).ruleShortfalls(),
-                "an author is sent to the choice that offered the alternative");
+                theBranchRead(java.util.Set.of())
+                        .either(choice, theBranchNothingRead(java.util.Set.of()))
+                        .ruleShortfalls(),
+                "an author is sent to the choice that offered the alternative, and to nothing"
+                        + " about the position the branch settled");
     }
 
     /**
@@ -290,7 +261,7 @@ class AChoiceIsDecidedByEveryClauseAndAnsweredByItsOwnTest {
         return new StatedByClauses.Part(
                 new Adoption<>(java.util.Set.of(CONSTRAINED), java.util.Set.of(SETTLED),
                         java.util.Set.of(), false),
-                Adoption.nothing(), Map.of(), Map.of(), java.util.Set.of(), shortfalls);
+                Adoption.nothing(), Map.of(), java.util.Set.of(), shortfalls);
     }
 
     /** And the alternative beside it that nothing could read. */
@@ -299,8 +270,7 @@ class AChoiceIsDecidedByEveryClauseAndAnsweredByItsOwnTest {
         return new StatedByClauses.Part(
                 new Adoption<>(java.util.Set.of(), java.util.Set.of(), java.util.Set.of(UNREAD),
                         true),
-                Adoption.nothing(), Map.of(UNREAD, List.of(UnreadReason.FORM_NOT_READ)), Map.of(),
-                java.util.Set.of(), shortfalls);
+                Adoption.nothing(), Map.of(), java.util.Set.of(), shortfalls);
     }
 
     /** And two choices leaving one position open are two things an author can look at. */

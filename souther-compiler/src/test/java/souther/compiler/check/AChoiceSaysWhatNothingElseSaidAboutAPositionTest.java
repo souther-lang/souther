@@ -82,6 +82,18 @@ class AChoiceSaysWhatNothingElseSaidAboutAPositionTest {
                 invariant r = (b == "A" || b == "B") || UNREAD_A
             """.replace("UNREAD_A", souther.compiler.ARuleNoReadingTakesIn.about("a"));
 
+    /**
+     * Eight clauses about one position that nothing reads, written along one line.
+     *
+     * <p>Enough of them that an order arrived at by hashing would be some other order.
+     */
+    private static final String EIGHT_FORMS_NOTHING_READS = """
+            module demo
+
+            data N = { a: String }
+                invariant r = U && U && U && U && U && U && U && U
+            """.replace("U", souther.compiler.ARuleNoReadingTakesIn.about("a"));
+
     /** Where nothing else said anything about the position, the choice says it. */
     @Test
     void aChoiceIsAnswerableWhereItsUnreadAlternativeSaidNothing() {
@@ -131,6 +143,31 @@ class AChoiceSaysWhatNothingElseSaidAboutAPositionTest {
         assertEquals(sitesFor(THE_SAME_THROUGH_ONE_MORE_BRACKET, "b").size(),
                 sitesFor(THE_SAME_BRACKETED_THE_OTHER_WAY, "b").size(),
                 "and has the same number of things to look at");
+    }
+
+    /**
+     * And the facts come out in the order they were met, whatever order that is.
+     *
+     * <p>No order is claimed of them: which written place a reader is sent to first is the source's
+     * to say, and a set of facts says nothing about it. What is held here is that the order does not
+     * come from somewhere else — a projection out of this set is published, so a copy free to
+     * arrange them by hash would have one compiler over one source publish two documents, and which
+     * one an author saw would be the run they happened to make.
+     *
+     * <p>Eight of them because a copy that reorders may leave two or three where they were.
+     */
+    @Test
+    void theFactsComeOutInTheOrderTheyWereMet() {
+        List<Integer> columns = new java.util.ArrayList<>();
+        shortfallsAt(EIGHT_FORMS_NOTHING_READS, "a").forEach(each -> {
+            if (each.site() instanceof RuleShortfall.Site.AtALeaf leaf) {
+                columns.add(leaf.node().pos().column());
+            }
+        });
+
+        assertEquals(8, columns.size(), "one for each clause nothing reads");
+        assertEquals(columns.stream().sorted().toList(), columns,
+                "they were met along the line, and nothing between there and here rearranged them");
     }
 
     /** What a rule of the declaration is answerable for at {@code field}. */
