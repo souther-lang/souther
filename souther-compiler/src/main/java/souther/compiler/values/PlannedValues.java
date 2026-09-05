@@ -460,6 +460,58 @@ public sealed interface PlannedValues<A> {
         };
     }
 
+    /**
+     * The machines this reading asks for.
+     *
+     * <p>What a refusal is answered from. A machine is made under a position's allowance, where
+     * every rule reaching the position has paid in, so which reading asked for the one that was
+     * refused is a question the far end cannot answer — and this is what a reading holds so that it
+     * can be answered here instead of guessed from which positions somebody named.
+     *
+     * <p>The patterns and not the places they were written. A machine is the pattern's, so a
+     * reading that asked for one is one that asked for that pattern, and two readings asking for
+     * the same pattern are two answerable for one refusal — which is what writing the same clause
+     * twice comes to and is not something to tell apart here.
+     */
+    default Set<Asked<A>> asked() {
+        Settled<A> it = settled();
+        Set<Asked<A>> out = new LinkedHashSet<>();
+        it.perPosition().forEach((atom, plan) -> asked(out, atom, plan));
+        switch (it.held()) {
+            case PlannedHeld.Nothing<A> _ -> { }
+            case PlannedHeld.Alternatives<A> boxes -> boxes.boxes().forEach(box ->
+                    box.at().forEach((atom, plan) -> asked(out, atom, plan)));
+        }
+        return out;
+    }
+
+    private static <A> void asked(Set<Asked<A>> out, A atom, AdmittedPlan plan) {
+        plan.asked().forEach(each -> out.add(new Asked<>(atom, each)));
+    }
+
+    /**
+     * One machine a reading asked for, and the position it was asked for.
+     *
+     * <p>Both, because a refusal is about both. A machine is the pattern's, so the same pattern
+     * written into two rules is one machine that both asked for; an allowance is the position's, so
+     * a machine refused while one position was worked out is nothing another position's rules
+     * asked. Keyed by the pattern alone, a rule that wrote that pattern about one position was
+     * handed a refusal that happened at another — the same shape as answering from the place, one
+     * axis over.
+     *
+     * @param at the position whose answer the machine was being built for
+     * @param plan the pattern whose machine it is
+     */
+    record Asked<A>(A at, souther.compiler.regex.PatternPlan plan) {
+
+        public Asked {
+            if (at == null || plan == null) {
+                throw new IllegalArgumentException(
+                        "a machine is asked for by a pattern, for a position");
+            }
+        }
+    }
+
     private static <A> Realized<A> resolved(Settled<A> of, Allowance<A> by) {
         Unbuilt<A> gaveUp = new Unbuilt<>();
         Map<A, ValueSet> perPosition = realized(of.perPosition(), by, gaveUp);

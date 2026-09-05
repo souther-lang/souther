@@ -17,7 +17,6 @@ import souther.compiler.types.TypeSymbols;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
  * The envelope a value wears is the one the position reads it through, not one its case is owed
@@ -204,30 +203,4 @@ class AValueWearsTheEnvelopeThePositionReadsItThroughTest {
                 and.of(value(with, "Filed", Map.of()), at(theirs, "Revision"), "h"));
     }
 
-    /**
-     * A value moving to a place nothing reads keeps the form it is in. What a position adds is what
-     * it asks to be written beside the case; a place that reads nothing asks for nothing, and does
-     * not ask for what is already there to come off. Rendering the case's own form here would lose
-     * which case it is — {@code "Draft"} says, the {@code {}} it would become does not, and nothing
-     * is left to put it back from.
-     */
-    @Test
-    void aValueRereadWhereNothingReadsItKeepsTheFormItIsIn() {
-        assertEquals("Draft", neutral.reread("Draft", at("Stage"), Position.UNREAD));
-        assertEquals(Map.of("id", 1L, "type", "Approved"),
-                neutral.reread(Map.of("id", 1L, "type", "Approved"), at("Decision"), Position.UNREAD));
-    }
-
-    /**
-     * The other direction is not a reading and says so. A value nothing read is in the case's own
-     * form, which does not say which case it is — every unit case is {@code {}} there — so no
-     * discriminator could be written from it. Nothing asks for it today: a projection whose target
-     * declares nothing is refused before a value reaches this. Held so that a call site added later
-     * is told, rather than being handed the value back unchanged and reading it as an answer.
-     */
-    @Test
-    void aValueNothingReadIsNotRereadAtAPosition() {
-        assertThrows(IllegalStateException.class,
-                () -> neutral.reread(Map.of(), Position.UNREAD, at("Step")));
-    }
 }

@@ -5,6 +5,7 @@ import souther.compiler.ast.Hir;
 import souther.compiler.ast.WrittenName;
 import souther.compiler.check.BindingEvidence;
 import souther.compiler.check.DeclaredTypeEvidence;
+import souther.compiler.check.FieldRead;
 import souther.compiler.check.ResolvedFieldTypes;
 import souther.compiler.check.Sig;
 import souther.compiler.check.DerivedSymbols;
@@ -22,7 +23,6 @@ import souther.compiler.types.BindingId;
 import souther.compiler.types.ValueName;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSpelling;
-import souther.compiler.types.TypeSymbol;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -153,7 +153,7 @@ public final class SemanticSnapshot {
      * the resolved module here.
      */
     private DeclaredTypeEvidence declarations() {
-        return new DeclaredTypeEvidence(symbols, fields(), Map.of());
+        return new DeclaredTypeEvidence(fieldRead(), Map.of());
     }
 
     /**
@@ -345,16 +345,33 @@ public final class SemanticSnapshot {
     }
 
     /**
-     * The fields a value of {@code held} has, each with what it is declared to be.
+     * The names a {@code .} written on a value of {@code held} may take, each with what it holds.
+     *
+     * <p>The same reading a field access is typed by, so what an author is offered here is what the
+     * compiler will accept: a record's own fields, a name every case of a sum spreads, a newtype's
+     * {@code value} and nothing of what it wraps. Answered from the layout of the declaration the
+     * type names instead, a sum would offer nothing while the language reads its shared names on
+     * every value of it.
      *
      * <p>Asked of what a declaration holds at this revision, which is the reading an editor is owed:
      * a module still being typed has no checked answer about a value of it, and a reader looking at
-     * a name in it is owed what its declarations denote now. What a newtype has, what a spread
-     * brings in, what is not a declared type at all — none of that is decided here.
+     * a name in it is owed what its declarations denote now.
      */
     public Map<String, Type> fieldsOf(TypeFact held) {
-        return held.type() instanceof Type.Ref(TypeSymbol owner)
-                ? fields().of(owner) : Map.of();
+        return fieldRead().at(held.type());
+    }
+
+    /**
+     * What a {@code .} may name, as the text stands.
+     *
+     * <p>The same reading the compiler types a field access by, in the world an editor reads: a
+     * declaration that does not read yet — one name written twice, a spread of something that is no
+     * product — makes nothing readable rather than being refused here. What is wrong with it is
+     * reported where the module is checked, and an author who is being told that already is not
+     * also told that the buffer cannot answer what may follow a {@code .}.
+     */
+    private FieldRead fieldRead() {
+        return new FieldRead(symbols, fields(), FieldRead.Unreadable.MAKES_NOTHING_READABLE);
     }
 
     /** What a declaration holds, as the text has resolved it so far. */
@@ -388,7 +405,7 @@ public final class SemanticSnapshot {
             return null;
         }
         Map<BindingId, BindingEvidence> parameters = parametersOfEveryBehavior();
-        return new DeclaredTypeEvidence(symbols, fields(), values.value(), parameters)
+        return new DeclaredTypeEvidence(fieldRead(), values.value(), parameters)
                 .declaredTypeOf(e, new HashSet<>(), new HashMap<>(parameters));
     }
 

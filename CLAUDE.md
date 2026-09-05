@@ -7,13 +7,13 @@ Build from the reactor root. Never `-pl`, never `clean`, never `CI=1` or
 
     mvn -o test -Dtest=<Class> -Dsurefire.failIfNoSpecifiedTests=false   # iterating
     mvn -o test                                                          # the module
-    mvn -o test -Dtest.excluded.groups=                                  # and the population
+    mvn -o test -Dgroups=population -Dtest.excluded.groups=              # the population alone
 
 `mvn -o test` leaves out the tests tagged `population` — the ones whose subjects
 are the models this repository carries rather than a source written to ask one
-question. They are what the merge into develop and the nightly run, and the
-third line above is how to run them here. Naming a class with `-Dtest=` runs it
-whatever it is tagged, so iterating on one of them needs nothing extra.
+question. The nightly runs them over `develop` and `main`, and nothing a change
+waits on does. The third line is the only way to ask for them here, and needs
+both properties. Naming a class with `-Dtest=` runs it whatever it is tagged.
 
 Forks are capped rather than taken as a share of the machine, so a run leaves
 the machine usable for whatever else is on it. `-DforkCount=N` overrides the
