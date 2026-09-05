@@ -263,7 +263,7 @@ public final class SetDivisions {
                     new BlockReason.BehaviorDistinctionsTooCostly()));
             return;
         }
-        divided.add(new PartitionEvidence.BySet(new SetDivision(each.term(),
+        divided.add(new PartitionEvidence.BySet(new SetStatement(each.term(),
                 built.of(each.whenTrue()), built.of(each.whenFalse()), each.states(), each.by())));
     }
 }

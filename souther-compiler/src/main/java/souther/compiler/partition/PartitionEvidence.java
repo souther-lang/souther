@@ -3,12 +3,20 @@ package souther.compiler.partition;
 import souther.compiler.inputs.NumericTerm;
 
 /**
- * One thing the rules say about how a position's values are divided, as the reading of them met it.
+ * One thing a rule of the model states about a position's values, which this stage owes an answer
+ * about.
  *
  * <p>Three variants of one kind and not three kinds. A rule either says where a run of values ends
  * and the next begins, or puts one value in a class of its own, or tells a set of values from the
- * rest — and all three are the reading of the rules arriving at something to divide a position by. A
- * reader wanting all of what was said about a position wants all of them, which is one list.
+ * rest — and all three are the reading of the rules arriving at something a position may be divided
+ * by. A reader wanting all of what was said about a position wants all of them, which is one list.
+ *
+ * <p><b>What a rule states, and not what it was found to do.</b> One of these divides the position
+ * wherever the position holds values on both sides of what it says, and that is a fact about the
+ * position's own values rather than about the rule — so it is settled where they are known, and
+ * what became of each of these is one of the answers this stage gives ({@link EvidenceAccount}).
+ * Named for the dividing, the type would promise of every value it holds a thing that is true of
+ * some, and the readings that make them have no way to tell which.
  *
  * <p>So the list of these is what a reading answers with, and the projections below are read off it.
  *
@@ -85,16 +93,16 @@ public sealed interface PartitionEvidence {
      * of anything. Read as a line it would be a cut at a value the model never named, and read as a
      * single value it would be one value standing for a set.
      */
-    record BySet(SetDivision division) implements PartitionEvidence {
+    record BySet(SetStatement states) implements PartitionEvidence {
 
         @Override
         public NumericTerm.FromOnePosition at() {
-            return division.term();
+            return states.term();
         }
 
         @Override
         public PredicateOrigin by() {
-            return division.origin();
+            return states.origin();
         }
     }
 
@@ -120,9 +128,9 @@ public sealed interface PartitionEvidence {
                 .map(each -> ((Singles) each).point()).toList();
     }
 
-    /** The sets told from the rest among {@code evidence}, likewise. */
-    static java.util.List<SetDivision> divisionsIn(java.util.List<PartitionEvidence> evidence) {
+    /** What the rules state as sets among {@code evidence}, likewise. */
+    static java.util.List<SetStatement> statementsIn(java.util.List<PartitionEvidence> evidence) {
         return evidence.stream().filter(BySet.class::isInstance)
-                .map(each -> ((BySet) each).division()).toList();
+                .map(each -> ((BySet) each).states()).toList();
     }
 }

@@ -109,7 +109,7 @@ final class Classing {
      */
     private static AsASet asASet(PartitionEvidence evidence, Carrier carrier) {
         return switch (evidence) {
-            case PartitionEvidence.BySet(SetDivision it) ->
+            case PartitionEvidence.BySet(SetStatement it) ->
                     new AsASet(it.whenTrue(), it.whenFalse(), it.statement());
             case PartitionEvidence.Singles(GuardThresholds.Guards.Singled it) -> {
                 if (!(carrier instanceof Carrier.Text) || !(it.value() instanceof Text text)) {
@@ -143,12 +143,19 @@ final class Classing {
      * the first answer, a rule that states no distinction would close a denominator, which is what
      * a distinction gone missing does and this is the opposite of that.
      *
+     * @param dividing      the rules the classes were made out of, which is this answer's and not
+     *                      a caller's to work out again. Recovered by taking the rules that make
+     *                      none away from everything that arrived, a caller is answering the same
+     *                      question a second time — and the day the two subtract differently, the
+     *                      classes are composed from one population and recorded as composed from
+     *                      another
      * @param doesNotDivide the rules that make no class here, each with what it came to. Reported,
      *                      and nothing waits on them
      */
-    record Result(Classed classed, List<Told> doesNotDivide) {
+    record Result(Classed classed, List<PartitionEvidence> dividing, List<Told> doesNotDivide) {
 
         Result {
+            dividing = List.copyOf(dividing);
             doesNotDivide = List.copyOf(doesNotDivide);
         }
     }
@@ -217,16 +224,26 @@ final class Classing {
         List<PartitionEvidence> active = new ArrayList<>();
         List<Told> doesNotDivide = new ArrayList<>();
         for (PartitionEvidence each : mine) {
-            AsASet asASet = asASet(each, carrier);
-            if (asASet == null) {
-                active.add(each);   // an order's rule, whose values are the intervals' business
+            // Only a rule read as a set of the strings is asked. A line and a value singled out are
+            // settled where they were read — the reader that makes one has already held it to what
+            // the position may take — and what a rule of the strings names is every string there
+            // is, which is the one thing this position's own values have still to be met with.
+            //
+            // Asked of all of them, a value singled out of a string would buy machines out of the
+            // allowance for what a behavior tells apart, and a model that only writes equalities
+            // could lose its classes to a limit meant for something else.
+            if (!(each instanceof PartitionEvidence.BySet set)) {
+                active.add(each);
                 continue;
             }
-            Boolean divides = tellsApart(term, admits, asASet, allowance);
+            Boolean divides = tellsApart(term, admits,
+                    new AsASet(set.states().whenTrue(), set.states().whenFalse(),
+                            set.states().statement()),
+                    allowance);
             if (divides == null) {
                 return new Result(
                         new Classed.NotComposed(new BlockReason.BehaviorDistinctionsTooCostly()),
-                        List.of());
+                        List.of(), List.of());
             }
             if (divides) {
                 active.add(each);
@@ -238,15 +255,16 @@ final class Classing {
         // however the rules beside it are written, and what stopped it is a fact about that rule
         // rather than about what the position's rules come to together.
         if (!blocked.isEmpty()) {
-            return new Result(new Classed.NotComposed(blocked.get(0).why()), doesNotDivide);
+            return new Result(new Classed.NotComposed(blocked.get(0).why()), active,
+                    doesNotDivide);
         }
         switch (vocabularyOf(active, carrier)) {
             case ON_AN_ORDER -> {
-                return new Result(new Classed.OnTheOrder(), doesNotDivide);
+                return new Result(new Classed.OnTheOrder(), active, doesNotDivide);
             }
             case NOT_ONE -> {
                 return new Result(new Classed.NotComposed(new BlockReason.ClassesNotComposed()),
-                        doesNotDivide);
+                        active, doesNotDivide);
             }
             default -> { }
         }
@@ -256,13 +274,13 @@ final class Classing {
         if (cells == null) {
             return new Result(
                     new Classed.NotComposed(new BlockReason.BehaviorDistinctionsTooCostly()),
-                    doesNotDivide);
+                    active, doesNotDivide);
         }
         List<PartitionClass> out = new ArrayList<>();
         for (Cell cell : cells) {
             out.add(classOf(term, cell, writing).ofTheNumber(term));
         }
-        return new Result(new Classed.Composed(out), doesNotDivide);
+        return new Result(new Classed.Composed(out), active, doesNotDivide);
     }
 
     /**

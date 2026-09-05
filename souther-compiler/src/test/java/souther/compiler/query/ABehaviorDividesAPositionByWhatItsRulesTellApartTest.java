@@ -260,6 +260,43 @@ class ABehaviorDividesAPositionByWhatItsRulesTellApartTest {
                         + divided.rulesWithoutALine());
     }
 
+    /**
+     * A position the declarations already cut, divided by a rule about its strings, carries no cut.
+     *
+     * <p>A string is counted on an order and a literal is a place on it, so a bounded string beside
+     * a rule about its prefixes is a real pair and not a shape nobody writes. A cut is a place on
+     * that order and a class that is a set has no answer to where it lies — so an axis carrying
+     * both is one every line of which falls in no class, which its own constructor refuses.
+     *
+     * <p>Held here rather than at the composing answer because that answer says it already: what is
+     * being asked is whether the measure assembled from it kept the answer's word.
+     */
+    @Test
+    void aPositionWhoseClassesAreSetsCarriesNoCut() {
+        Partitions.Partitioning divided = partitioningOf("""
+                data Code = String
+                    invariant value >= "A"
+
+                behavior route : (code: Code) -> Where
+                let route (code) = {
+                    guard String.startsWith("JP", code.value) else Abroad
+                    Home
+                }
+                """);
+
+        for (Axis each : divided.axes()) {
+            if (each.classes().stream()
+                    .anyMatch(one -> one.recognises() instanceof Recognition.OfASet)) {
+                assertEquals(List.of(), each.cuts(),
+                        "a class that is a set has no place on the order for a cut to be at: "
+                                + each);
+            }
+        }
+        assertTrue(divided.axes().stream().anyMatch(each -> each.classes().stream()
+                        .anyMatch(one -> one.recognises() instanceof Recognition.OfASet)),
+                "and the rule does divide the position into sets: " + divided.axes());
+    }
+
     /** The one measure the model under test makes of its position. */
     private static Axis dividing(String behavior) {
         Partitions.Partitioning divided = partitioningOf(behavior);

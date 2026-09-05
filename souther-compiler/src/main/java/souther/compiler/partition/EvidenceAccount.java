@@ -64,6 +64,21 @@ final class EvidenceAccount {
          */
         record TheClassesWereNotComposed(NumericTerm.FromOnePosition at)
                 implements Disposition {}
+
+        /**
+         * The rule was read and tells none of this position's values from the others, so it made no
+         * class of it — and the rules beside it made theirs.
+         *
+         * <p>Its own answer beside {@link TheClassesWereNotComposed}, which says the position's
+         * rules are not all sayable as one list of classes. Here they were: what happened is that
+         * this one rule states no distinction of a position whose declarations rule out one of its
+         * sides, and the classes came out of the rest exactly as they would have without it.
+         *
+         * <p>Said as the other, the account would have a position with classes filed under a word
+         * for having none — which is the distinction the composing answer was split in two to keep,
+         * put back together one seam later.
+         */
+        record TheRuleDividedNothing(NumericTerm.FromOnePosition at) implements Disposition {}
     }
 
     /** One piece of evidence and what became of it, held together so that holding the stage to a

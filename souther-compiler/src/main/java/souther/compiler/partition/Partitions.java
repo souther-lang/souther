@@ -603,12 +603,12 @@ public final class Partitions {
             found.add(RuleWithoutALine.of(each.what().by().rule(), each.what().by().cited(),
                     new FilingCoordinate.AtPosition(term.position()), each.why()));
             account.disposedOf(each.what(),
-                    new EvidenceAccount.Disposition.TheClassesWereNotComposed(term));
+                    new EvidenceAccount.Disposition.TheRuleDividedNothing(term));
         }
-        List<PartitionEvidence> dividing = mine.stream()
-                .filter(each -> answered.doesNotDivide().stream()
-                        .noneMatch(one -> one.what().equals(each)))
-                .toList();
+        // The answer's own population, and not what is left after taking the rest away. Subtracted
+        // here, the same question is answered twice — and the day the two subtract differently the
+        // classes are composed out of one list and recorded as composed out of another.
+        List<PartitionEvidence> dividing = answered.dividing();
         // One switch and not three conditionals. What each answer means for the classes, for the
         // rules they were composed from and for whether the cuts stand is the answer's, said once;
         // read off it three times, each reading is a place to disagree about what the arm meant.
@@ -621,13 +621,13 @@ public final class Partitions {
             // them rather than beside them. Published as both, one distinction would be stated
             // twice in two algebras and every line would fall in no class ({@link Axis}).
             case Classing.Classed.Composed(List<PartitionClass> it) ->
-                    new Composition(it, composedFrom(mine), false, null);
+                    new Composition(it, composedFrom(dividing), false, null);
             // No classes and nothing they were composed from, and the cuts stand: they are
             // observations of their own rather than a projection of the classes.
             case Classing.Classed.NotComposed(var why) ->
                     new Composition(List.of(), List.of(), true, why);
         };
-        List<SetDivision> composing = PartitionEvidence.divisionsIn(dividing);
+        List<SetStatement> composing = PartitionEvidence.statementsIn(dividing);
         if (!composing.isEmpty()) {
             if (made.why() != null) {
                 // Into the gathering the whole stage answers with, and not a list of this method's
@@ -720,7 +720,15 @@ public final class Partitions {
                         within == null ? null : within.min(),
                         within == null ? null : within.max())),
                 made.divides(),
-                mergedPoints(merged(cutsOf(axis), reachable, carrier), points, carrier),
+                // Asked of the answer, as the branch above asks it. A cut is a place on the order
+                // the values are counted on, and a class that is a set has no answer to where it
+                // lies — so a position whose classes are sets carries none, and one that kept the
+                // cuts a declaration left would be an axis every line of which falls in no class
+                // ({@link Axis}). A bounded string with a rule about its prefixes is exactly that
+                // pair, and it is a model somebody writes.
+                made.keepsCuts()
+                        ? mergedPoints(merged(cutsOf(axis), reachable, carrier), points, carrier)
+                        : List.of(),
                 reachable.stream()
                         .map(each -> Parting.by(each.parts(), each.origin().authoredLine()))
                         .toList(),

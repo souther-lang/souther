@@ -149,8 +149,8 @@ public final class LinesWhereTheyFall {
             // The values are the position's own, so moving the division moves where it is measured
             // and nothing else. What each side holds was worked out where the rule was read, and a
             // filing that worked them out again would be a second answer about one rule.
-            case PartitionEvidence.BySet(SetDivision division) ->
-                    new PartitionEvidence.BySet(new SetDivision(here, division.whenTrue(),
+            case PartitionEvidence.BySet(SetStatement division) ->
+                    new PartitionEvidence.BySet(new SetStatement(here, division.whenTrue(),
                             division.whenFalse(), division.statement(), division.origin()));
         };
     }

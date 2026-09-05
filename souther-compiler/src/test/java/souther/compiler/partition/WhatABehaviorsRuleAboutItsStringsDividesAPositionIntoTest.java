@@ -50,7 +50,7 @@ class WhatABehaviorsRuleAboutItsStringsDividesAPositionIntoTest {
                 """);
 
         assertEquals(List.of(), read.blocked(), "the rule divides the position");
-        SetDivision only = divisionIn(read);
+        SetStatement only = divisionIn(read);
         assertEquals(new NumericTerm.ValueOf(souther.compiler.inputs.TermPath.of("code")),
                 only.term(), "the position the rule is written about");
         assertTrue(only.whenTrue().has(new Value.Text("JP-1")),
@@ -167,9 +167,9 @@ class WhatABehaviorsRuleAboutItsStringsDividesAPositionIntoTest {
     }
 
     /** The one division the model under test states. */
-    private static SetDivision divisionIn(SetDivisions.Read read) {
+    private static SetStatement divisionIn(SetDivisions.Read read) {
         assertEquals(1, read.divided().size(), "the model under test states one division");
-        return ((PartitionEvidence.BySet) read.divided().get(0)).division();
+        return ((PartitionEvidence.BySet) read.divided().get(0)).states();
     }
 
     private static SetDivisions.Read readingsOf(String behavior) {
