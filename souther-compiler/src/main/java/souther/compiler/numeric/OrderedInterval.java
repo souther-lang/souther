@@ -59,9 +59,10 @@ public record OrderedInterval(Endpoint low, Endpoint high) {
      * neither side holds — its ends are places on the order all the same, and nothing lies between
      * them.
      *
-     * <p>Whether an alternative is one anybody can take is not asked here. That is about a whole
-     * reading rather than about one position, and is answered where the readings are
-     * ({@link OrderedIntervals#bothDead}).
+     * <p>Whether an alternative is one anybody can take is not asked here, and not by
+     * {@link OrderedIntervals} either. That is about a whole reading of a clause, which is more than
+     * the ranges: it is settled where the languages a clause is read in are held together, and what
+     * reaches this is one position of a branch whose fate is known.
      */
     public OrderedInterval join(OrderedInterval other) {
         if (holdsNothing()) {

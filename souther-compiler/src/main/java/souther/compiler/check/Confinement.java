@@ -505,14 +505,17 @@ sealed interface Confinement<A> {
          * both were refused. Neither speaks for the other: alternatives refused at different
          * positions leave a choice no position is why, which is what the proof has to say.
          *
-         * <p>Each language is told that its branch is one nobody can take before it is asked what
-         * two such branches come to. Which of them showed it is not the question here — a branch
-         * the values refused is a branch the ranges are also nobody's, and a side left as it was
-         * would answer for a dead choice with the ends of a branch that stands.
+         * <p>Each language is asked what two dead branches leave it, and neither is asked whether
+         * they are dead — a language may be perfectly happy with a branch the other refused, and
+         * asked through the entry for a choice that stands it would answer for that branch with the
+         * ends it read. The two are not asked alike: the values are taken as leaving nothing first,
+         * which is what stops a position one alternative emptied from being named the reason a
+         * choice nobody can take is empty, and the ranges are not, because what they leave empty
+         * between two branches is already what every alternative leaves empty.
          */
         Planned<A> bothDead(Planned<A> other, Admission<A> shown) {
             return new Planned<>(values.leavingNothing().bothDead(other.values.leavingNothing()),
-                    ordered.leavingNothing().bothDead(other.ordered.leavingNothing()),
+                    ordered.bothDead(other.ordered),
                     Confinement.both(carriers, other.carriers), shown);
         }
 

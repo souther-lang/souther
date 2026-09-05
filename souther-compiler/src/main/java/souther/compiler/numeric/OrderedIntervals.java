@@ -136,14 +136,18 @@ public record OrderedIntervals<A>(Map<A, OrderedInterval> ranges, boolean nothin
      * positions in both. Where there are none, the choice still admits nothing and no position is at
      * fault, and that is said as itself.
      *
-     * <p>Which alternatives nobody can take is not decided here. That turns on what every language
-     * reading the clause left, and this is called with the answer already in hand — an assertion
-     * because a caller passing something else is this compiler disagreeing with itself rather than
-     * anything a model says.
+     * <p>This realises a decision rather than making one. Which alternatives nobody can take turns
+     * on what every language reading the clause left, and a branch these ranges are perfectly happy
+     * with is one the values may have refused — so what arrives here is each side already told that
+     * nothing satisfies it ({@link #leavingNothing}), and what is asked is what two such sides leave
+     * empty between them.
+     *
+     * <p>Told a side that stands, this would answer that a choice somebody can take admits nothing,
+     * which is the one direction a state deciding emptiness may not move in. What keeps that from
+     * arriving is where the telling is done and not a question asked here: a check beside the call
+     * that normalises the sides is a check of the line above it.
      */
     public OrderedIntervals<A> bothDead(OrderedIntervals<A> other) {
-        assert isBottom() && other.isBottom()
-                : "the ranges of a dead choice are the ranges of two dead alternatives";
         Map<A, OrderedInterval> both = new LinkedHashMap<>();
         for (A position : holdingNothing()) {
             if (other.holdingNothing().contains(position)) {
@@ -167,9 +171,10 @@ public record OrderedIntervals<A>(Map<A, OrderedInterval> ranges, boolean nothin
      *
      * <p>An assertion and not a branch, because a caller passing a side nobody can take is this
      * compiler disagreeing with itself rather than anything a model says. With assertions off the
-     * hull is taken over what the two spoke about, which admits every value either of them did and
-     * more — it loses what one side proved and invents no end, which is the direction this whole
-     * state is only ever allowed to move in.
+     * hull is taken over what the two spoke about, which admits everything either of them did: an
+     * empty range at a position both named contributes nothing to the hull, and a position only the
+     * live side named is left out and so left open. What is lost is what the dead side proved, and
+     * no end is invented — which is the direction this state is only ever allowed to move in.
      */
     public OrderedIntervals<A> joinLive(OrderedIntervals<A> other) {
         assert !isBottom() && !other.isBottom()
