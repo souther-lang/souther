@@ -160,7 +160,7 @@ class OneIdentityIsFoldedOnceAndKeepsEveryHandleTest {
                 RuleReasons.one(new BlockReason.UnreadComparisonForm()),
                 Optional.of(new BlockReason.RulesNotHandedOnAsSets())));
 
-        assertThrows(IllegalArgumentException.class, () -> one.mergedWith(other));
+        assertThrows(TwoAccountsOfOneQuestion.class, () -> one.mergedWith(other));
     }
 
     /** The same question, met where its position's answer was worked out. */

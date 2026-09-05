@@ -1,11 +1,5 @@
 package souther.compiler.inputs;
 
-<<<<<<< HEAD
-import java.util.List;
-=======
-import souther.compiler.diag.TheCompilerDisagreesWithItself;
->>>>>>> ab145e862 (Claim the author's order where the source was read, not where the words are)
-
 /**
  * Two readings of one question that disagree about what the author wrote it short of.
  *
