@@ -61,23 +61,7 @@ public sealed interface PlannedValues<A> {
             // {@link AdmissibleValues}, whose reasoning this is.
             Sameness<A> mine = held instanceof PlannedHeld.Alternatives<A> it
                     ? commonTo(it) : Sameness.discrete();
-            filedIn(mine, guaranteed.keySet(), tangled, widened);
-        }
-    }
-
-    /** Refuses an answer filed under a coordinate this reading does not answer in — see
-     *  {@link AdmissibleValues}. */
-    @SafeVarargs
-    private static <A> void filedIn(Sameness<A> mine, Set<Sameness.Block<A>>... these) {
-        for (Set<Sameness.Block<A>> blocks : these) {
-            for (Sameness.Block<A> block : blocks) {
-                Sameness.Block<A> here = mine.blockOf(block.members().iterator().next());
-                if (!block.equals(here)) {
-                    throw new IllegalArgumentException("an answer at " + block
-                            + " is filed under a coordinate this reading does not answer in,"
-                            + " which holds those positions as " + here);
-                }
-            }
+            mine.filing(guaranteed.keySet(), tangled, widened);
         }
     }
 

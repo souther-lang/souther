@@ -530,8 +530,20 @@ public final class DataChecker {
                 case Emptiness.NoAllowedValueInRange _ ->
                         at.say(new DataMessage.NoValueTheseAllowIsInTheRangeTheyShare(
                                 data, written(it.where())));
-                default -> at.say(new DataMessage.NoValueTheseCanAllHold(
-                        data, written(it.where())));
+                case Emptiness.NoCommonValueForEqualPositions _ ->
+                        at.say(new DataMessage.NoValueTheseCanAllHold(data, written(it.where())));
+                // Every other proof, named rather than gathered under a default: a proof added
+                // later is one somebody has to say what several places make of, and a default
+                // would hand it whichever of these two was written first. None of them reaches
+                // here today — a range is one position's own answer and the rest are about a
+                // declaration rather than a place — so what is said is the general form.
+                case Emptiness.ConflictingRules _, Emptiness.EmptyNumericInterval _,
+                     Emptiness.EmptyOrderedInterval _, Emptiness.NoAllowedCollectionSize _,
+                     Emptiness.SetRequiresTooManyDistinctValues _,
+                     Emptiness.NonEmptyCollectionWithNoElement _, Emptiness.AcrossEveryCase _,
+                     Emptiness.TheNameHasNone _, Emptiness.NoBaseInComponent _,
+                     Emptiness.AtAField _, Emptiness.AtEqualPositions _ ->
+                        at.say(new DataMessage.ItsRulesCannotAllHold(data));
             };
             case Emptiness.NoBaseInComponent it -> {
                 Diagnostic.Builder said = at.say(new DataMessage.DataCannotBeConstructed(data));

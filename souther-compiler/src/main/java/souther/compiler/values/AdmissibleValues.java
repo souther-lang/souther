@@ -569,35 +569,7 @@ public record AdmissibleValues<A>(Held<A> held, Map<A, ValueSet> perPosition,
         widened = Collections.unmodifiableSet(new LinkedHashSet<>(widened));
         Sameness<A> mine = held instanceof Held.Alternatives<A> it
                 ? it.commonSameness() : Sameness.discrete();
-        filedIn(mine, guaranteed.keySet(), tangled, widened);
-    }
-
-    /**
-     * Refuses an answer filed under a coordinate this reading does not answer in.
-     *
-     * <p>What a block holds is one value, and which positions are one value is the reading's own
-     * ({@link #sameness}). A conjunction leaves a coarser relation and a choice a finer one, so an
-     * operation has to say what each side's answers come to in the relation it leaves — and one
-     * that carries them across by hand is one somebody writes without carrying them.
-     *
-     * <p>Refused rather than moved. Two promises arriving at one block promise what both promise,
-     * which is a set somebody has to build and there is no allowance here; and an answer quietly
-     * refiled is a producer left wrong with nothing saying so. What it costs unrefused is that a
-     * reader asking about a position looks under the block it is on, finds nothing, and is told the
-     * reading promised nothing and widened nowhere.
-     */
-    @SafeVarargs
-    private static <A> void filedIn(Sameness<A> mine, Set<Sameness.Block<A>>... these) {
-        for (Set<Sameness.Block<A>> blocks : these) {
-            for (Sameness.Block<A> block : blocks) {
-                Sameness.Block<A> here = mine.blockOf(block.members().iterator().next());
-                if (!block.equals(here)) {
-                    throw new IllegalArgumentException("an answer at " + block
-                            + " is filed under a coordinate this reading does not answer in,"
-                            + " which holds those positions as " + here);
-                }
-            }
-        }
+        mine.filing(guaranteed.keySet(), tangled, widened);
     }
 
     /**

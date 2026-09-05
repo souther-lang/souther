@@ -94,6 +94,38 @@ public final class Sameness<A> {
     }
 
     /**
+     * Refuses an answer filed under a block this relation does not have.
+     *
+     * <p>What a block holds is one value, and which positions are one value is the reading's own.
+     * A conjunction leaves a coarser relation and a choice a finer one, so an operation has to say
+     * what each side's answers come to in the relation it leaves — and one that carries them across
+     * by hand is one somebody writes without carrying them.
+     *
+     * <p>Refused rather than moved. Two promises arriving at one block promise what both promise,
+     * which is a set somebody has to build and there is no allowance where a reading is made; and
+     * an answer quietly refiled is a producer left wrong with nothing saying so. What it costs
+     * unrefused is that a reader asking about a position looks under the block it is on, finds
+     * nothing, and is told the reading promised nothing and widened nowhere.
+     *
+     * <p>Here rather than in each reading. The two of them hold the same answers a step apart and
+     * share no type to say it once, so the rule written in both is the rule a third one is added
+     * without.
+     */
+    @SafeVarargs
+    public final void filing(Set<Block<A>>... these) {
+        for (Set<Block<A>> filed : these) {
+            for (Block<A> block : filed) {
+                Block<A> here = blockOf(block.members().iterator().next());
+                if (!block.equals(here)) {
+                    throw new IllegalArgumentException("an answer at " + block
+                            + " is filed under a coordinate this reading does not answer in,"
+                            + " which holds those positions as " + here);
+                }
+            }
+        }
+    }
+
+    /**
      * The block {@code position} is in, which is a block of one where nothing holds it with
      * anything.
      *
