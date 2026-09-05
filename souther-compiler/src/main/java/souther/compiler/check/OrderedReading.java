@@ -98,7 +98,11 @@ final class OrderedReading implements ClauseReading<OrderedIntervals<FactSubject
     }
 
     @Override
-    public OrderedIntervals<FactSubject> either(OrderedIntervals<FactSubject> one, OrderedIntervals<FactSubject> other) {
+    public OrderedIntervals<FactSubject> either(Core writtenAt,
+                                                OrderedIntervals<FactSubject> one,
+                                                OrderedIntervals<FactSubject> other) {
+        // Where two alternatives leave a position is this reading's rule and turns on nothing an
+        // author wrote, so the node the fold hands over is nothing this has a use for.
         return one.join(other);
     }
 

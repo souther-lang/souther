@@ -120,7 +120,11 @@ final class AdmissibleReading implements ClauseReading<PlannedValues<FactSubject
      * a model written two ways would be read two ways.
      */
     @Override
-    public PlannedValues<FactSubject> either(PlannedValues<FactSubject> one, PlannedValues<FactSubject> other) {
+    public PlannedValues<FactSubject> either(Core writtenAt, PlannedValues<FactSubject> one,
+                                             PlannedValues<FactSubject> other) {
+        // What two alternatives come to is this reading's rule and turns on nothing an author
+        // wrote. The node the fold hands over is for a reading with something to say about the
+        // choice itself, and this one has not.
         return alternatives == Alternatives.APART
                 ? one.joinApart(other) : one.join(other);
     }

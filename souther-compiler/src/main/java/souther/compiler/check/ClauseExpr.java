@@ -76,6 +76,18 @@ sealed interface ClauseExpr {
         public Joined {
             spelled = named(spelled);
         }
+
+        /**
+         * The connective itself, which is the innermost of what it is spelled as.
+         *
+         * <p>What an author wrote and where they wrote it, which is the operator: a reading with
+         * something to say about the choice sends a reader to the {@code ||}, not to the operand it
+         * happens to begin at. A denial carried down leaves the operator the author typed here and
+         * the {@code not} above it, and the operator is the innermost of the two.
+         */
+        Core of() {
+            return spelled.get(spelled.size() - 1);
+        }
     }
 
     /**

@@ -5,7 +5,7 @@ import souther.compiler.check.RuleCitation;
 import souther.compiler.check.RuleRef;
 
 import java.util.HashSet;
-import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -46,11 +46,20 @@ public sealed interface StandingQuestion {
      * without a published word reaching back into what a reading may record; which word a document
      * writes for one of these is {@link ReportedReason}'s.
      *
-     * <p>About the rule and never about the place. What is short is short of that rule — a reason
-     * about the position it stands at answers a different question and belongs to whoever asks that
-     * one.
+     * <p>Which rule raised the question is {@link #rule()}, and what is short is this. The two are
+     * different facts: a rule read from end to end whose position's values were never worked out
+     * leaves its question standing on a limit no rule is answerable for, so a list that promised a
+     * rule to name for each of these would have to invent one. What every entry does promise is
+     * that a reading fell short — a rule read to the end that draws no line leaves nothing standing
+     * and belongs to whoever asks about lines.
+     *
+     * <p><b>Two facts and not one sequence.</b> What the parts of the rule left is in the order
+     * they were written; what its position's answer was short of belongs to no part of the rule and
+     * has no place among them. {@link WhatAQuestionStandsOn} is what holds them apart, and the one
+     * order there is lives inside it — so nothing here can be read as a precedence between the two,
+     * because there is none to read.
      */
-    List<BlockReason.AboutARule> stopped();
+    WhatAQuestionStandsOn stopped();
 
     /**
      * Whether {@code measure} stays open while this stands.
@@ -128,16 +137,15 @@ public sealed interface StandingQuestion {
      * @param fact    which rule raised it and what it asks, which is what tells one question from
      *                another ({@link Fact})
      * @param cited   how a reader finds that rule
-     * @param stopped every reason it stands, in the order the author wrote the parts of the rule
-     *                that raised it. A question is answered when every part that asked it has been
-     *                read, so a part standing behind another is a second thing to lift; and the
-     *                order is part of what this says, so it is neither joined with another
-     *                reading's nor chosen between. Never empty: a question that nothing answered
-     *                was left standing by something, and an empty list would say a rule went
-     *                unaccounted for with nothing to act on
+     * @param stopped every reason it stands. A question is answered when every part that asked it
+     *                has been read, so a part standing behind another is a second thing to lift.
+     *                What the parts of the rule left keeps the order the author wrote them in and
+     *                is neither joined with another reading's nor chosen between; what its
+     *                position's answer was short of stands beside them under no order at all
+     *                ({@link WhatAQuestionStandsOn})
      */
     record Exact(Fact fact, Set<RuleCitation> cited,
-                 List<BlockReason.AboutARule> stopped) implements StandingQuestion {
+                 WhatAQuestionStandsOn stopped) implements StandingQuestion {
 
         public Exact {
             if (fact == null) {
@@ -149,16 +157,15 @@ public sealed interface StandingQuestion {
                 throw new IllegalArgumentException(
                         "a question names a rule a reader can be sent to");
             }
-            if (stopped == null || stopped.isEmpty()) {
+            if (stopped == null) {
                 throw new IllegalArgumentException(
                         "a question stands because something was short of it");
             }
-            stopped = List.copyOf(stopped);
         }
 
         /** One reader's account of it, as that reader produced it. */
         public static Exact of(RuleRef rule, RuleCitation cited, InputQuestion asks,
-                               List<BlockReason.AboutARule> stopped) {
+                               WhatAQuestionStandsOn stopped) {
             return new Exact(new Fact(rule, asks), Set.of(cited), stopped);
         }
 
@@ -178,11 +185,22 @@ public sealed interface StandingQuestion {
         }
 
         /**
-         * <p>What each account was short of is not accumulated and not chosen between. It is the
-         * author's order over the parts of the rule that raised the question, which is one answer
-         * about the model — so two accounts of one question that disagree about it are two accounts
-         * one of which is wrong, and taking either would publish a precedence nothing in the model
-         * decides.
+         * <p>What the parts of the rule left is the author's order over them, which is one answer
+         * about the model — so two accounts that disagree about it are two accounts one of which is
+         * wrong, and taking either would publish a precedence nothing in the model decides.
+         *
+         * <p><b>What the position's answer was short of is asked of neither.</b> It is a fact about
+         * what the rules of that position come to between them, so two accounts of one rule can
+         * honestly differ about it: a reading whose neighbours left the answer buildable met no
+         * such limit, and one reached where they did. Held to agreement, a model somebody could
+         * write refuses to compile because two readings of one rule found different things about a
+         * position neither of them is answerable for. So it is taken from whichever met it, and two
+         * that met different ones are disagreeing about the position and are refused there.
+         *
+         * <p>Compared as the two, and never as one sequence. A difference in the order across the
+         * halves is no disagreement about anything the model says — there is no order there — so a
+         * comparison of the joined lists would refuse a pair of accounts over a precedence neither
+         * of them claimed.
          */
         @Override
         public StandingQuestion mergedWith(StandingQuestion other) {
@@ -194,12 +212,21 @@ public sealed interface StandingQuestion {
                 throw new IllegalArgumentException("two accounts put together are of one question: "
                         + fact + " and " + it.fact);
             }
-            if (!stopped.equals(it.stopped)) {
+            if (!stopped.itsRuleLeft().equals(it.stopped.itsRuleLeft())) {
                 throw new TwoAccountsOfOneQuestion(fact, stopped, it.stopped);
             }
+            Optional<BlockReason.AnswerRealizationStopped> mine = stopped.itsPositionWasShortOf();
+            Optional<BlockReason.AnswerRealizationStopped> theirs =
+                    it.stopped.itsPositionWasShortOf();
+            if (mine.isPresent() && theirs.isPresent() && !mine.equals(theirs)) {
+                throw new TwoAccountsOfOneQuestion(fact, stopped, it.stopped);
+            }
+            Optional<BlockReason.AnswerRealizationStopped> answer =
+                    mine.isPresent() ? mine : theirs;
             Set<RuleCitation> both = new HashSet<>(cited);
             both.addAll(it.cited);
-            return new Exact(fact, both, stopped);
+            return new Exact(fact, both,
+                    new WhatAQuestionStandsOn(stopped.itsRuleLeft(), answer));
         }
 
         @Override
@@ -313,8 +340,8 @@ public sealed interface StandingQuestion {
 
         /** The one reason, as the list every one of these is read through. */
         @Override
-        public List<BlockReason.AboutARule> stopped() {
-            return List.of(filed.why());
+        public WhatAQuestionStandsOn stopped() {
+            return new WhatAQuestionStandsOn(RuleReasons.one(filed.why()), Optional.empty());
         }
 
         @Override
@@ -418,8 +445,8 @@ public sealed interface StandingQuestion {
         }
 
         @Override
-        public List<BlockReason.AboutARule> stopped() {
-            return List.of(filed.why());
+        public WhatAQuestionStandsOn stopped() {
+            return new WhatAQuestionStandsOn(RuleReasons.one(filed.why()), Optional.empty());
         }
 
         @Override

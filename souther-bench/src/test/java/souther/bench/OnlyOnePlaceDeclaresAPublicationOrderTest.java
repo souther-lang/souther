@@ -29,7 +29,10 @@ class OnlyOnePlaceDeclaresAPublicationOrderTest {
             "souther.compiler.publish.CanonicalArrangement$Order";
     private static final String AUTHORITY = "souther.compiler.publish.PublicationOrders";
     private static final String SOURCE_ORDERED = "souther.compiler.publish.SourceOrdered";
+    private static final String AUTHORED_ORDER = "souther.compiler.inputs.AuthoredOrder";
+    private static final String REASONS = "souther.compiler.inputs.RuleReasons";
     private static final String REPORT = "souther.compiler.report.";
+    private static final String PROJECTION = "souther.compiler.partition.ReportedReason";
 
     /**
      * Nothing but the one place makes an order.
@@ -95,22 +98,32 @@ class OnlyOnePlaceDeclaresAPublicationOrderTest {
     }
 
     /**
-     * A report says of no sequence that its order is the model's.
+     * Nothing downstream of a reading says a sequence is in the order the model has.
      *
-     * <p>The claim a {@link souther.compiler.publish.SourceOrdered} carries is that the order came
-     * from what somebody wrote, and by the time a plurality is at a report nothing left in it says
-     * where its order came from. Made there, the type would be a report calling whatever it was
-     * handed the author's order — which is the check that a plurality arrives having been answered
-     * for, passed by answering for it at the end.
+     * <p>The claim an {@link souther.compiler.inputs.AuthoredOrder} carries is that the order came
+     * from what somebody wrote, and it is the one place that claim is made. Nothing in a list says
+     * where its order came from, so a caller that never saw a clause is stating a fact about the
+     * model out of whatever it was handed — correctly for as long as one producer fills the list,
+     * and wrong the day a second one does with nothing in a position to notice.
+     *
+     * <p><b>Which callers, by what they have in hand rather than by name.</b> A reading of a clause
+     * has the source's order; a projection onto published words and a report that writes them have
+     * words. So the two downstream packages are named and everything else is left to whoever can
+     * say it — a producer added inside a reading is inside this without a line, and one added at a
+     * document fails.
+     *
+     * <p>{@link souther.compiler.publish.SourceOrdered} makes no claim of its own any more: it
+     * carries one of these across the crossing, so there is nothing at a report for this to permit
+     * or refuse.
      */
     @Test
-    void aReportSaysOfNoSequenceThatItsOrderIsTheModelsOwn() throws Exception {
+    void nothingThatHasOnlyWordsSaysASequenceIsInTheModelsOrder() throws Exception {
         List<String> claimed = new ArrayList<>();
         boolean reached = false;
         for (Compiled.Site site : Compiled.sites()) {
-            if (site.owner().equals(SOURCE_ORDERED) && site.member().equals("asWritten")) {
+            if (site.owner().equals(AUTHORED_ORDER) && site.member().equals("asWritten")) {
                 reached = true;
-                if (site.from().startsWith(REPORT)) {
+                if (site.from().startsWith(REPORT) || site.from().startsWith(PROJECTION)) {
                     claimed.add(site.at());
                 }
             }
@@ -120,7 +133,48 @@ class OnlyOnePlaceDeclaresAPublicationOrderTest {
                 "nothing anywhere says a sequence is in the order it was written, so this is"
                         + " passing for the wrong reason");
         assertEquals(List.of(), claimed,
-                "a report claims the model's order for a sequence it was handed, which is a claim"
-                        + " about something it cannot see");
+                "the model's order is claimed for a sequence by something holding published words,"
+                        + " which is a claim about what it cannot see");
+    }
+
+    /**
+     * And the claim is made in the one place that reads the places it is a claim about.
+     *
+     * <p>Narrower than the rule above, and for the same reason one step further in. What settles
+     * whether a sequence of reasons is in the author's order is where each of them stands, and the
+     * carrier that holds the places is what may answer: a caller with the reasons alone is holding
+     * the half that cannot say, and a caller that had them and let them go said it too late.
+     *
+     * <p>So a second maker is a second answer to one question, and the two would disagree the day
+     * one of them learned something. Which callers there may be is a list because there is one.
+     */
+    @Test
+    void theModelsOrderIsClaimedWhereThePlacesAreRead() throws Exception {
+        List<String> claiming = new ArrayList<>();
+        for (Compiled.Site site : Compiled.sites()) {
+            if (site.owner().equals(AUTHORED_ORDER) && site.member().equals("asWritten")
+                    && !claiming.contains(site.from())) {
+                claiming.add(site.from());
+            }
+        }
+
+        assertEquals(List.of(REASONS), claiming,
+                "a sequence is called the order somebody wrote it in somewhere that is not the"
+                        + " one place holding what they wrote");
+    }
+
+    /** And the crossing carries that claim rather than making a second one. */
+    @Test
+    void theCrossingIntoADocumentMakesNoClaimOfItsOwn() throws Exception {
+        List<String> made = new ArrayList<>();
+        for (Compiled.Site site : Compiled.sites()) {
+            if (site.owner().equals(SOURCE_ORDERED) && site.member().equals("asWritten")) {
+                made.add(site.at());
+            }
+        }
+
+        assertEquals(List.of(), made,
+                "a plurality is called the author's order where it crosses into a document, which"
+                        + " is the one place that has nothing left to see it by");
     }
 }

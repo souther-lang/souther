@@ -1,7 +1,5 @@
 package souther.compiler.inputs;
 
-import java.util.List;
-
 /**
  * Two readings of one question that disagree about what the author wrote it short of.
  *
@@ -20,8 +18,8 @@ public final class TwoAccountsOfOneQuestion extends IllegalStateException {
     private static final long serialVersionUID = 1L;
 
     public TwoAccountsOfOneQuestion(StandingQuestion.Exact.Fact question,
-                                    List<BlockReason.AboutARule> one,
-                                    List<BlockReason.AboutARule> other) {
+                                    WhatAQuestionStandsOn one,
+                                    WhatAQuestionStandsOn other) {
         super("two readings of " + question + " disagree about what the author wrote it short of: "
                 + one + " and " + other);
     }

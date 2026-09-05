@@ -814,7 +814,10 @@ class EverySchemaWordIsAccountedForTest {
                         souther.compiler.diag.Citation.of(
                                 new souther.compiler.diag.SourcePos(1, 1))),
                 about,
-                List.of(new souther.compiler.inputs.BlockReason.UnreadComparisonForm()));
+                new souther.compiler.inputs.WhatAQuestionStandsOn(
+                        souther.compiler.inputs.RuleReasons.one(
+                                new souther.compiler.inputs.BlockReason.UnreadComparisonForm()),
+                        java.util.Optional.empty()));
     }
 
     /**
@@ -1020,6 +1023,7 @@ class EverySchemaWordIsAccountedForTest {
         // `WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnce`. What decides them is which reasons
         // reach the surface, and a list of words here would say the same thing without saying why.
         held.add("/$defs/ruleStoppedReadingReason");
+        held.add("/$defs/answerRealizationStoppedReason");
         held.add("/$defs/notReadReason/anyOf/1");
         held.add("/$defs/behavior/properties/implementation");
         held.add("/$defs/partition/properties/axes/items/properties/read/properties/extent");
