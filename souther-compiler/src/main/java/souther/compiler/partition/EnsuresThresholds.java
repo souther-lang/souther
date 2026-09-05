@@ -5,7 +5,6 @@ import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.RuleRef;
 import souther.compiler.check.StatedContract;
-import souther.compiler.check.Symbols;
 import souther.compiler.core.Contract;
 import souther.compiler.core.Core;
 import souther.compiler.diag.Citation;
@@ -146,10 +145,24 @@ public final class EnsuresThresholds {
                     line++;
                     continue;
                 }
-                for (ClauseStatements.Statement each
-                        : ClauseStatements.of(conjunct.stated().orNull(), reads)) {
-                    if (each instanceof ClauseStatements.Statement.States states) {
-                        stated(states.stated(), rule, clause, line, read, states.reads(), drawn);
+                for (ClauseStatements.Statement each : ClauseStatements.of(
+                        conjunct.stated().orNull(), reads, read.symbols())) {
+                    switch (each) {
+                        case ClauseStatements.Statement.Compares it ->
+                                compared(it, rule, clause, line, read, drawn);
+                        // A form no reader of clauses reads. Which positions it is about is still
+                        // said, because a position left out of every answer is reported as one the
+                        // model draws no line through — and the model says otherwise in the rule
+                        // this stopped on. Answered here and not by whichever reader met it last:
+                        // the statement is nobody's, which is one fact about it and not one per
+                        // reader that turned it away.
+                        case ClauseStatements.Statement.NotRead it ->
+                                notRead(it, rule, clause, read, drawn);
+                        // Read by the reader that publishes what a rule tells apart
+                        // ({@link BehaviorSetStatements}), and a finding here would be this reader
+                        // saying it could not read a rule that was read.
+                        case ClauseStatements.Statement.TellsStringsApart _ -> { }
+                        case ClauseStatements.Statement.StatesNeither _ -> { }
                     }
                     line++;
                 }
@@ -165,39 +178,41 @@ public final class EnsuresThresholds {
                          RulesWithNoLine.Gathered noLine) {}
 
     /**
-     * What one thing a rule states comes to, where the reading of comparisons is concerned.
+     * A statement no reader of clauses reads, at every position it is about.
      *
-     * <p>Which things a rule states is {@link ClauseStatements}' answer and not this reader's: the
-     * predicates a clause states are read off the same statements, and two walks recognising the
-     * same {@code &&} are two places free to disagree about it.
+     * <p>The form it is written in is what stopped this — the one of the reasons that does not turn
+     * on what two sides name — and the positions the statement mentions are all there is to file it
+     * at. One answer at every one of them, and not a copy of a decision made elsewhere: nothing was
+     * read, so no place is one the rule is known to be about the values at, and the form is what
+     * each of them is left with.
+     */
+    private static void notRead(ClauseStatements.Statement.NotRead it,
+                                StatedContract.StatedRule rule, String clause,
+                                InputReading read, Drawn out) {
+        reportRuleWithoutLine(new RuleRef.Ensures(rule.id(), clause), it.stated(), rule.value(),
+                ComparisonAssessment.atEachOf(
+                        GuardThresholds.mentionedIn(it.stated(), it.reads(), read.symbols()).stream()
+                                .map(FilingCoordinate::at).toList(),
+                        new BlockReason.UnreadComparisonForm()),
+                out.noLine());
+    }
+
+    /**
+     * What one comparison a rule states comes to.
+     *
+     * <p>Which things a rule states, and which of them are comparisons, is
+     * {@link ClauseStatements}' answer and not this reader's. Asked here, the question every reader
+     * asks is "is this mine" and the only word it has for no is its own — which is how a rule read
+     * as a set of strings was also reported as a comparison this could not read.
      *
      * @param line which line of the clause this one is
      */
-    private static void stated(Core e, StatedContract.StatedRule rule, String clause, int line,
-                              InputReading read, InputReads reads,
-                              Drawn out) {
-        Symbols symbols = read.symbols();
-        // Anything not read as a comparison is a form this walk does not read. Which positions it is
-        // about is still
-        // said, because a position left out of every answer is reported as one the model draws no
-        // line through — and the model says otherwise in the rule this stopped on.
-        Comparison comparison = e instanceof Core.Binary binary
-                ? Comparison.of(binary).orElse(null) : null;
-        if (comparison == null) {
-            // A statement that is not a comparison was not assessed as one, so what stopped this
-            // is the form it is written in — the one of the reasons that does not turn on what two
-            // sides name — and the positions the walk met are all there is to file it at.
-            // One answer at every one of them, and not a copy of a decision made elsewhere: nothing
-            // here was read, so no place is one the rule is known to be about the values at, and
-            // the form is what each of them is left with.
-            reportRuleWithoutLine(new RuleRef.Ensures(rule.id(), clause), e, rule.value(),
-                    ComparisonAssessment.atEachOf(
-                            GuardThresholds.mentionedIn(e, reads, symbols).stream()
-                                    .map(FilingCoordinate::at).toList(),
-                            new BlockReason.UnreadComparisonForm()),
-                    out.noLine());
-            return;
-        }
+    private static void compared(ClauseStatements.Statement.Compares it,
+                                 StatedContract.StatedRule rule, String clause, int line,
+                                 InputReading read, Drawn out) {
+        Core e = it.stated();
+        InputReads reads = it.reads();
+        Comparison comparison = it.comparison();
         // What the comparison comes to is read the same way wherever a comparison is written, which
         // is what {@link ComparisonAssessment} is for: a clause and a guard over one arithmetic form
         // draw one line and raise one question, and neither is worked out beside the other.

@@ -68,6 +68,38 @@ class ABehaviorDividesAPositionByWhatItsRulesTellApartTest {
     }
 
     /**
+     * A rule a behavior states about itself divides the position, and is answered for once.
+     *
+     * <p>The two halves are one question. A clause stating such a rule is read by the reader that
+     * turns it into classes and passed over by the reader of comparisons, and if either half is
+     * wrong the document is wrong about a rule the author wrote: with no classes the position comes
+     * back undivided, and with a finding beside them the same statement is both a rule that was read
+     * and a comparison whose form could not be read.
+     *
+     * <p>Held end to end rather than at the reader, because neither reader can see the other's
+     * answer. Each is right on its own — one made the classes, the other met a form it does not
+     * read — and what they come to together is only visible where both have been published.
+     */
+    @Test
+    void aRuleAClauseStatesDividesThePositionAndIsAnsweredForOnce() {
+        Partitions.Partitioning divided = partitioningOf("""
+                behavior route : (code: String) -> Where
+                    ensures Home -> String.startsWith("JP", code)
+                let route (code) = Home
+                """);
+
+        assertEquals(2, divided.axes().stream()
+                        .flatMap(each -> each.classes().stream()).toList().size(),
+                "the clause divides the position into what it admits and what it leaves: "
+                        + divided.axes());
+        assertEquals(List.of(), divided.rulesWithoutALine().stream()
+                        .map(RuleWithoutALine::why)
+                        .filter(BlockReason.UnreadComparisonForm.class::isInstance).toList(),
+                "and no reader says it could not read the rule that was read: "
+                        + divided.rulesWithoutALine());
+    }
+
+    /**
      * Two rules about one position leave it divided into what they come to between them.
      *
      * <p>Not two divisions of it. A run satisfies each or does not, so the rows are owed one class

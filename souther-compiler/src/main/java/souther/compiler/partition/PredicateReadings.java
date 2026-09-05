@@ -129,9 +129,13 @@ record PredicateReadings(List<Reading> predicates) {
                     if (one == null) {
                         continue;
                     }
-                    for (ClauseStatements.Statement each : ClauseStatements.of(one, reads)) {
-                        if (each instanceof ClauseStatements.Statement.States states) {
-                            found(states.stated(), behavior, read, states.reads(), predicates);
+                    for (ClauseStatements.Statement each
+                            : ClauseStatements.of(one, reads, read.symbols())) {
+                        // The statements this reader owns, and nothing said about the rest. What a
+                        // statement of another kind came to is answered by the reader that owns it,
+                        // once.
+                        if (each instanceof ClauseStatements.Statement.TellsStringsApart it) {
+                            read(it.stated(), behavior, it.states(), it.reads(), predicates);
                         }
                     }
                 }
@@ -161,12 +165,25 @@ record PredicateReadings(List<Reading> predicates) {
         StringPredicates.Stated stated =
                 StringPredicates.statedBy(call, symbols, at -> reads.writtenStringOf(at, symbols));
         if (stated != null) {
-            out.add(new Reading(
-                    new PredicateOrigin(new RuleRef.Predicate(behavior, call.origin()),
-                            new PredicateOccurrence(out.size()),
-                            new RuleCitation.WrittenAt(Citation.of(call.pos()))),
-                    stated, reads));
+            read(call, behavior, stated, reads, out);
         }
+    }
+
+    /**
+     * One predicate as a reading of it, out of what it was already read to state.
+     *
+     * <p>Where the two walks meet. What a predicate means is read once — by the walk of the body
+     * here, and by the reading of a clause's statements for the other — and this turns that into a
+     * reading of the rule. Read again on the way in, the reading and what it is a reading of would
+     * be free to disagree about what the author wrote.
+     */
+    private static void read(Core.PreservedCall call, String behavior,
+                             StringPredicates.Stated states, InputReads reads, List<Reading> out) {
+        out.add(new Reading(
+                new PredicateOrigin(new RuleRef.Predicate(behavior, call.origin()),
+                        new PredicateOccurrence(out.size()),
+                        new RuleCitation.WrittenAt(Citation.of(call.pos()))),
+                states, reads));
     }
 
     /**
