@@ -154,8 +154,25 @@ public sealed interface Position permits ReadPosition {
      * <p>Kept because the two are different answers and saying so is what stops them being merged
      * again: a position can carry a partial reading here and no question standing there, and a test
      * that could not state the pair could not hold the difference.
+     *
+     * <p>Read off what the position admits, which carries both: the values its rules leave and how
+     * much of those rules a reading took in are one answer, and a position that kept only the
+     * second could not say what a behavior's rules have left to divide.
      */
-    AdmissibleSet.Completeness completeness();
+    default AdmissibleSet.Completeness completeness() {
+        return admitted().completeness();
+    }
+
+    /**
+     * What the position's own rules leave it, and how much of them was read.
+     *
+     * <p>Kept whole rather than as the completeness alone. What a behavior's rules divide is what
+     * the declarations left standing here — an invariant restricts and a behavior divides what is
+     * left — so a reader composing classes out of the strings rather than out of these would draw a
+     * class the position never holds a value in, and a rule the position rules out would come back
+     * dividing it.
+     */
+    AdmissibleSet admitted();
 
     /**
      * The questions the rules written about this position raise that nothing answered, each naming

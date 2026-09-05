@@ -183,7 +183,7 @@ final class Classing {
      *                here composes one
      */
     static Classed of(NumericTerm.FromOnePosition term, List<PartitionEvidence> mine,
-                      List<ClassingBlocker> blocked, Carrier carrier,
+                      List<ClassingBlocker> blocked, Carrier carrier, ValueSet admits,
                       Allowance<NumericTerm.FromOnePosition> allowance,
                       Function<Place, FixtureTemplate> writing) {
         // Asked before the vocabulary, and kept as it was said. A rule missing from the denominator
@@ -203,9 +203,16 @@ final class Classing {
         }
         List<AsASet> said = new ArrayList<>();
         mine.forEach(each -> said.add(asASet(each, carrier)));
-        List<Cell> cells = refined(term, said, allowance);
+        List<Cell> cells = refined(term, admits, said, allowance);
         if (cells == null) {
             return new Classed.NotComposed(new BlockReason.BehaviorDistinctionsTooCostly());
+        }
+        // A rule the position leaves nothing on one side of divides nothing here, however the
+        // strings fall. An invariant restricts and a behavior divides what is left, so the two
+        // sides of a rule can both hold strings and one of them hold no value this position may
+        // take — and a class published for it is one no run is ever counted at.
+        if (cells.size() < 2) {
+            return new Classed.NotComposed(new BlockReason.PredicateTellingNothingApart());
         }
         List<PartitionClass> out = new ArrayList<>();
         for (Cell cell : cells) {
@@ -235,10 +242,6 @@ final class Classing {
                         "a class of a position holds a value; an empty one is no class of it");
             }
             under = List.copyOf(under);
-            if (under.isEmpty()) {
-                throw new IllegalArgumentException(
-                        "a cell is what the rules of a position left, so some rule made it");
-            }
         }
 
         /** The same cell, with one more rule coming out {@code holding} and what that leaves. */
@@ -270,13 +273,15 @@ final class Classing {
      * and cells the meets got through before the allowance ran out are neither — read as the
      * position's classes, the values in the ones nobody finished would be owed no row at all.
      */
-    private static List<Cell> refined(NumericTerm.FromOnePosition term, List<AsASet> said,
+    private static List<Cell> refined(NumericTerm.FromOnePosition term, ValueSet admits,
+                                      List<AsASet> said,
                                       Allowance<NumericTerm.FromOnePosition> allowance) {
-        AsASet first = said.get(0);
+        // What the position holds, which is what the rules of a body divide. Started from the
+        // strings instead, a rule would divide values the declarations already refused and the
+        // position would come back with classes no run is ever in.
         List<Cell> cells = new ArrayList<>();
-        cells.add(new Cell(first.whenTrue(), List.of(new Answered(first.states(), true))));
-        cells.add(new Cell(first.whenFalse(), List.of(new Answered(first.states(), false))));
-        for (AsASet each : said.subList(1, said.size())) {
+        cells.add(new Cell(admits, List.of()));
+        for (AsASet each : said) {
             List<Cell> narrower = new ArrayList<>();
             for (Cell cell : cells) {
                 for (boolean holding : new boolean[] {true, false}) {

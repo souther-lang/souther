@@ -107,9 +107,16 @@ public final class LinesWhereTheyFall {
         for (ClassingBlocker each : blocked) {
             standingOf(inputs, each.at(), symbols, each.by()).all().forEach(at -> {
                 NumericTerm.FromOnePosition here = at.atOnePosition();
-                if (here != null) {
-                    outBlocked.add(each.measuredAt(here));
+                // Held to what the evidence beside it is held to. A destination no single position
+                // answers is this compiler contradicting the reading that produced the blocker, and
+                // dropped quietly it would take a position's denominator back to the rules that
+                // worked — which is the whole of what a blocker is for.
+                if (here == null) {
+                    throw new IllegalStateException(
+                            "`" + each.at() + "` is a distinction of a position and was filed at `"
+                                    + at + "`, which no single position answers");
                 }
+                outBlocked.add(each.measuredAt(here));
             });
         }
         for (LineDrawn each : between) {

@@ -87,21 +87,26 @@ class WhatABehaviorsRuleAboutItsStringsDividesAPositionIntoTest {
     /**
      * A rule every value satisfies divides nothing, and is said to.
      *
-     * <p>Every string begins with the empty one, so one side of this holds every value the position
-     * may hold and the other holds none. Published as a division, it would put a class in the
-     * denominator that no run is ever counted at, and every row would be owed one for it.
+     * <p>Every string begins with the empty one, so one side of this holds every string and the
+     * other holds none. What that comes to at the position is not this stage's answer: what a rule
+     * leaves is a set of every string there is, and what the position holds is what its
+     * declarations left it — so a side empty among the strings and a side empty at the position are
+     * two facts, and only the second says the position is undivided.
+     *
+     * <p>So the rule is read and handed on, and nothing here is held open by it. Judged here, this
+     * stage would be deciding a position's classes out of the strings, which is the authority it
+     * does not have.
      */
     @Test
-    void aRuleEveryValueSatisfiesDividesNothing() {
+    void aRuleEveryStringSatisfiesIsStillHandedOn() {
         SetDivisions.Read read = readingsOf("""
                 behavior f : (code: String) -> Answer
                 let f (code) = if String.startsWith("", code) then Yes else No
                 """);
 
-        assertEquals(List.of(), read.divided(), "the position is divided by nothing");
-        assertEquals(List.of(new BlockReason.PredicateTellingNothingApart()),
-                read.blocked().stream().map(ClassingBlocker::why).toList(),
-                "and the rule is answered for as one that tells nothing apart");
+        assertEquals(1, read.divided().size(), "the rule is read and handed on");
+        assertEquals(List.of(), read.blocked(),
+                "and nothing about the position's classes is held open by it");
     }
 
     /**

@@ -852,7 +852,7 @@ public final class InputDomain {
         return new ReadPosition(read.path(), read.view(), read.term(), read.numericDomain(),
                 read.ownEnds(), read.narrowedEnds(), read.rangeLeft(),
                 read.nothingExists(), read.projection(),
-                read.declared(), read.reading(), read.obligations(), read.completeness(),
+                read.declared(), read.reading(), read.obligations(), read.admitted(),
                 read.rulesWithoutALine(), read.unansweredQuestions(),
                 left, read.structure());
     }
@@ -1410,7 +1410,7 @@ public final class InputDomain {
                 // first value is 1, and a line drawn at the 0 is drawn at no value of it.
                 placed.leftAt(path, bySize ? answeredBy(taken) : ITS_OWN_VALUE), nothingExists,
                 placed.projection(path), declared, reading,
-                ObligationDomain.of(reading, declared), admitted.completeness(),
+                ObligationDomain.of(reading, declared), admitted,
                 withoutALine,
                 // What the rules of this position leave open. Asked of the accounting rather than
                 // read off the completeness beside it: one reading being short of a position's

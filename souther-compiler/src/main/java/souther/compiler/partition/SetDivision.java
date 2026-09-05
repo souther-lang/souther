@@ -42,12 +42,10 @@ public record SetDivision(NumericTerm.FromOnePosition term, ValueSet whenTrue, V
                     "a division of a position tells some values from the rest, and some rule said"
                             + " it");
         }
-        // A rule that tells nothing from anything divides nothing. Published as a division, it
-        // would put a class in the denominator that no value of the model is ever on one side of,
-        // and every run would be owed a row for it.
-        if (whenTrue.isEmpty() || whenFalse.isEmpty()) {
-            throw new IllegalArgumentException(
-                    "a rule that leaves one of its sides empty divides nothing: " + origin);
-        }
+        // Whether the two sides hold anything is not asked here, and cannot be. What a rule leaves
+        // is a set of every string there is; what the position holds is what its declarations left
+        // it — so a side inhabited among the strings can be empty at the position, and one empty
+        // among them cannot be inhabited there. Which of those a rule is, is a question about the
+        // position's values, and it is asked where they are known ({@link Classing}).
     }
 }

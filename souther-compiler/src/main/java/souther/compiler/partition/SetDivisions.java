@@ -6,6 +6,8 @@ import souther.compiler.check.PredicateStatement;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.StringPredicates;
 import souther.compiler.inputs.BlockReason;
+import souther.compiler.inputs.FilingCoordinate;
+import souther.compiler.inputs.RuleWithoutALine;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.PathResolution;
@@ -14,7 +16,6 @@ import souther.compiler.values.AdmittedPlan;
 import souther.compiler.values.Allowance;
 import souther.compiler.values.Realizations;
 import souther.compiler.values.Sameness;
-import souther.compiler.values.ValueSet;
 import souther.compiler.types.BindingId;
 
 import java.util.ArrayList;
@@ -65,20 +66,26 @@ public final class SetDivisions {
     /** What a behavior with no body to read comes to, which is no rules and nothing became of
      *  them. Not the same as a body that states none: there the walk ran and found nothing, and
      *  here there was nothing to walk. */
-    public static final Read NONE = new Read(List.of(), List.of());
+    public static final Read NONE = new Read(List.of(), List.of(), List.of());
 
     /**
      * What the rules came to.
      *
      * @param divided the positions divided, as evidence a partition reads like any other
-     * @param blocked the rules that would have divided a position and did not, which is what keeps
-     *                its classes from being composed out of the ones that worked
+     * @param blocked the distinctions of a position this compiler did not get, which is what keeps
+     *                its classes from being composed out of the ones it did
+     * @param saying  the rules that reached here and divide no position, which a reader is owed and
+     *                which hold nothing open. A rule about a value an operation made from a
+     *                position is one of these: it is about that value, and a denominator held open
+     *                by it would be held open by a rule that never reached the position
      */
-    public record Read(List<PartitionEvidence> divided, List<ClassingBlocker> blocked) {
+    public record Read(List<PartitionEvidence> divided, List<ClassingBlocker> blocked,
+                       List<RuleWithoutALine> saying) {
 
         public Read {
             divided = List.copyOf(divided);
             blocked = List.copyOf(blocked);
+            saying = List.copyOf(saying);
         }
     }
 
@@ -131,8 +138,18 @@ public final class SetDivisions {
                    Allowance<NumericTerm.FromOnePosition> allowance) {
         List<Asked> asked = new ArrayList<>();
         List<ClassingBlocker> blocked = new ArrayList<>();
+        List<RuleWithoutALine> saying = new ArrayList<>();
         for (PredicateReadings.Reading each : read.predicates()) {
-            ask(each, symbols, asked, blocked);
+            switch (ask(each, symbols)) {
+                case Outcome.OfADistinction(Asked it) -> asked.add(it);
+                case Outcome.NotGot(var at, var why) ->
+                        blocked.add(new ClassingBlocker(at, each.origin(), why));
+                case Outcome.SayingNothing(var at, var why) -> saying.add(
+                        RuleWithoutALine.of(each.origin().rule(), each.origin().cited(), at, why));
+                // Nothing places it, so there is nobody to say it to. Which is the answer the
+                // reading of a comparison gives the same shape, and not this walk being quiet.
+                case Outcome.Nowhere _ -> { }
+            }
         }
         // Every plan of a position, gathered before anything is built. A set written into two rules
         // is one plan and is charged once, which is what taking them as a group comes to.
@@ -150,49 +167,95 @@ public final class SetDivisions {
         for (Asked each : asked) {
             divide(each, answers.get(each.term()), divided, blocked);
         }
-        return new Read(divided, blocked);
+        return new Read(divided, blocked, saying);
     }
 
     /**
-     * One rule as the plans for its two sides, or as what became of it.
+     * What one rule of a body turned out to be, over the position it is about.
+     *
+     * <p><b>Named outcomes and not what a walk had left over.</b> Three things can be true of such a
+     * rule and they are not one another: it states a distinction of this position, it states one
+     * this compiler did not get, or it states nothing about this position at all. Only the second
+     * keeps a position's classes from being composed — the first is one of them, and the third is
+     * not about the position, so a denominator held open by it would be held open by a rule that
+     * never reached it.
+     *
+     * <p>Filled from the branches a reading fell through, the three were one list: everything that
+     * did not become a division kept the position's classes shut, and a rule read to the end that
+     * says nothing took its siblings down with it.
+     */
+    private sealed interface Outcome {
+
+        /** A distinction of the position, waiting on its group to be built. */
+        record OfADistinction(Asked asked) implements Outcome {}
+
+        /**
+         * A distinction of this position that this compiler did not get.
+         *
+         * <p>The one outcome that holds the position's classes shut. What is missing is one of the
+         * distinctions the classes would have been composed from, so a list composed without it is a
+         * denominator short of a class the model draws.
+         */
+        record NotGot(NumericTerm.FromOnePosition at,
+                      BlockReason.RuleWithoutLineReason why) implements Outcome {}
+
+        /**
+         * A rule of the model that divides no position here, and where to say so.
+         *
+         * <p>A reader is owed the sentence and the classes are not held open by it: a rule about a
+         * value an operation made from a position is about that value, and a rule read to the end
+         * that tells nothing apart has been read. Neither is a distinction gone missing.
+         */
+        record SayingNothing(FilingCoordinate at,
+                             BlockReason.RuleWithoutLineReason why) implements Outcome {}
+
+        /** And a rule about a value that came from no position the reading can name, which has
+         *  nowhere to be said. */
+        record Nowhere() implements Outcome {}
+    }
+
+    /**
+     * What {@code each} turned out to be.
      *
      * <p>Exhaustive with no {@code default}: an outcome the table of predicates learns is one
      * somebody decides about here rather than one that quietly takes its neighbour's answer.
      */
-    private static void ask(PredicateReadings.Reading each, Symbols symbols,
-                            List<Asked> asked, List<ClassingBlocker> blocked) {
+    private static Outcome ask(PredicateReadings.Reading each, Symbols symbols) {
         // Where the rule's subject stands, read where the rule stands. A subject no single position
         // answers is a rule about a value made from the position rather than about the position, and
-        // there is no denominator for it to divide.
+        // there is no denominator for it to divide — so a reader is told, at the position the value
+        // came from, and nothing there is held open.
         if (!(each.reads().pathOf(each.subject(), symbols) instanceof PathResolution.At at)) {
-            // Where the value it is about came from, which is not where it stands: a rule about
-            // what an operation made from a position divides no position, and the one the value
-            // came from is where a reader looks for what became of the rule.
-            if (each.reads().cameFrom(each.subject(), symbols)
-                    instanceof PathResolution.At(var from)) {
-                blocked.add(new ClassingBlocker(new NumericTerm.ValueOf(from), each.origin(),
-                        new BlockReason.RuleAboutADerivedValue()));
-            }
-            return;
+            return each.reads().cameFrom(each.subject(), symbols)
+                    instanceof PathResolution.At(var from)
+                    ? new Outcome.SayingNothing(FilingCoordinate.at(from),
+                            new BlockReason.RuleAboutADerivedValue())
+                    : new Outcome.Nowhere();
         }
         NumericTerm.FromOnePosition term = new NumericTerm.ValueOf(at.path());
-        switch (each.reading()) {
-            case StringPredicates.Reading.Accepting it -> asked.add(new Asked(each.origin(),
-                    each.statement(), term,
-                    new AdmittedPlan.Pattern(PatternPlan.of(it.accepts())),
-                    new AdmittedPlan.Pattern(PatternPlan.notMatching(it.accepts()))));
-            case StringPredicates.Reading.PatternNotRead it -> blocked.add(new ClassingBlocker(
-                    term, each.origin(), BlockReason.forAPatternNotRead(it.why())));
+        return switch (each.reading()) {
+            case StringPredicates.Reading.Accepting it ->
+                    new Outcome.OfADistinction(new Asked(each.origin(), each.statement(), term,
+                            new AdmittedPlan.Pattern(PatternPlan.of(it.accepts())),
+                            new AdmittedPlan.Pattern(PatternPlan.notMatching(it.accepts()))));
+            case StringPredicates.Reading.PatternNotRead it ->
+                    new Outcome.NotGot(term, BlockReason.forAPatternNotRead(it.why()));
             // A rule whose text this compiler did not work out is a rule it did not read. Said as
             // anything about the values, it would be a distinction reported as absent from the model
             // when what is absent is this compiler's reading of it.
-            case StringPredicates.Reading.WrittenArgumentNotKnown _ -> blocked.add(
-                    new ClassingBlocker(term, each.origin(),
-                            new BlockReason.UnreadValueRule()));
-        }
+            case StringPredicates.Reading.WrittenArgumentNotKnown _ ->
+                    new Outcome.NotGot(term, new BlockReason.UnreadValueRule());
+        };
     }
 
-    /** One rule as the division it came to, out of what its position's group was built to. */
+    /**
+     * One rule as the division it came to, out of what its position's group was built to.
+     *
+     * <p>Whether the two sides hold anything is not asked here. What a rule leaves is a set of every
+     * string there is, and what the position holds is what its declarations left it — so the two
+     * sides of a rule can be inhabited among the strings and one of them empty at the position. That
+     * is a question about the position's values and is asked where they are known.
+     */
     private static void divide(Asked each, Realizations answer,
                                List<PartitionEvidence> divided, List<ClassingBlocker> blocked) {
         if (!(answer instanceof Realizations.Exact built)) {
@@ -200,17 +263,7 @@ public final class SetDivisions {
                     new BlockReason.BehaviorDistinctionsTooCostly()));
             return;
         }
-        ValueSet whenTrue = built.of(each.whenTrue());
-        ValueSet whenFalse = built.of(each.whenFalse());
-        // A rule with nothing on one of its sides puts every value of the model on the other, which
-        // is the position undivided. Published, it would put a class in the denominator that no run
-        // is ever counted at and every row would be owed one for it.
-        if (whenTrue.isEmpty() || whenFalse.isEmpty()) {
-            blocked.add(new ClassingBlocker(each.term(), each.by(),
-                    new BlockReason.PredicateTellingNothingApart()));
-            return;
-        }
-        divided.add(new PartitionEvidence.BySet(new SetDivision(
-                each.term(), whenTrue, whenFalse, each.states(), each.by())));
+        divided.add(new PartitionEvidence.BySet(new SetDivision(each.term(),
+                built.of(each.whenTrue()), built.of(each.whenFalse()), each.states(), each.by())));
     }
 }
