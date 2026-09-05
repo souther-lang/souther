@@ -1,6 +1,5 @@
 package souther.compiler.check;
 
-import souther.compiler.numeric.OrderedIntervals;
 import souther.compiler.values.Emptiness;
 import souther.compiler.values.Realized;
 import souther.compiler.values.UnreadReason;
@@ -29,12 +28,17 @@ import java.util.Set;
  * so is every other component of a side ({@link Sided#alsoSeen}), so the order the copies are met
  * in, and how the conjunctions were bracketed, cannot reach the answer.
  *
- * @param made     the whole reading worked out, with what could not be built beside it
- * @param ordered  where every position stops, settled by the same work
- * @param outcomes the fate of both branches of every written choice, by its id
+ * @param confinement the whole reading worked out — what every position may hold and where its
+ *                    order stops — with what could not be built beside it
+ * @param outcomes    the fate of both branches of every written choice, by its id
  */
-record Settlement(Realized<FactSubject> made, OrderedIntervals<FactSubject> ordered,
+record Settlement(Confinement.Worked<FactSubject> confinement,
                   Map<ChoiceId, OfAChoice> outcomes) {
+
+    /** The values worked out, for a reader that asks what a position came to. */
+    Realized<FactSubject> made() {
+        return confinement.made();
+    }
 
     /** Both branches of one written choice, each aggregated over its occurrences. */
     record OfAChoice(Sided left, Sided right) {
@@ -66,13 +70,19 @@ record Settlement(Realized<FactSubject> made, OrderedIntervals<FactSubject> orde
      * ({@link #asPositionStanding()}) and is made where a position is being described; nothing
      * builds an account of a rule out of it, which is the direction the loss runs in.
      */
-    record Sided(Emptiness emptiness, Map<FactSubject, List<UnreadReason>> answerStanding,
+    record Sided(Confinement.Admission<FactSubject> shown,
+                 Map<FactSubject, List<UnreadReason>> answerStanding,
                  Set<souther.compiler.values.Unbuilt.RuleShortfall<FactSubject>> ruleShortfalls,
                  Set<FactSubject> unbuilt) {
 
+        /** Whether anything satisfies this branch, as far as its occurrences settled it. */
+        Emptiness emptiness() {
+            return shown.emptiness();
+        }
+
         /** A branch nobody has probed yet, which everything joins onto. */
-        static Sided settledAs(Emptiness emptiness) {
-            return new Sided(emptiness, Map.of(), Set.of(), Set.of());
+        static Sided settledAs(Confinement.Admission<FactSubject> shown) {
+            return new Sided(shown, Map.of(), Set.of(), Set.of());
         }
 
         /**
@@ -120,8 +130,14 @@ record Settlement(Realized<FactSubject> made, OrderedIntervals<FactSubject> orde
             Set<souther.compiler.values.Unbuilt.RuleShortfall<FactSubject>> asked =
                     new java.util.LinkedHashSet<>(ruleShortfalls);
             asked.addAll(other.ruleShortfalls());
-            return new Sided(emptiness.joined(other.emptiness()), why,
-                    java.util.Collections.unmodifiableSet(asked), gaveUp);
+            // And what showed the branch empty, where both occurrences of it are. Where they were
+            // shown by different things, or refused at different positions, neither speaks for the
+            // branch — which is the same rule a choice of two dead branches is under.
+            Emptiness said = emptiness().joined(other.emptiness());
+            Confinement.Admission<FactSubject> both = said == Emptiness.EMPTY
+                    ? Confinement.Admission.bothShown(shown, other.shown)
+                    : Confinement.Admission.left(said);
+            return new Sided(both, why, java.util.Collections.unmodifiableSet(asked), gaveUp);
         }
     }
 }

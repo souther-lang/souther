@@ -1,6 +1,5 @@
 package souther.compiler.check;
 
-import souther.compiler.numeric.OrderedIntervals;
 import souther.compiler.values.AdmissibleValues;
 
 import java.util.LinkedHashSet;
@@ -33,9 +32,14 @@ import java.util.Set;
  * ({@code OfAPart.aboutARule}, filled by routing a shortfall to the part that asked for the machine
  * it names), and there is nothing here that turns a place's reasons back into an account of a rule.
  */
-record ReadByClauses(AdmissibleValues<FactSubject> values, OrderedIntervals<FactSubject> ordered,
+record ReadByClauses(Confinement.Worked<FactSubject> confinement,
                      Adoption<FactSubject> byValues, Adoption<FactSubject> byOrder,
                      java.util.Map<souther.compiler.core.Core, OfAPart> parts) {
+
+    /** What every position of this reading may hold. */
+    AdmissibleValues<FactSubject> values() {
+        return confinement.values();
+    }
 
     /**
      * What one rule came to on its own tree, once every branch of the value is decided.
@@ -153,16 +157,6 @@ record ReadByClauses(AdmissibleValues<FactSubject> values, OrderedIntervals<Fact
             }
         });
         return out;
-    }
-
-    /**
-     * Whether nothing satisfies what has been read.
-     *
-     * <p>Either language, because each can hold the whole answer on its own: what one of them
-     * cannot express it leaves alone.
-     */
-    boolean holdsNothing() {
-        return values.isBottom() || ordered.isBottom();
     }
 
     /**

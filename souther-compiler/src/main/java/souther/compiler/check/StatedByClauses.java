@@ -59,8 +59,7 @@ sealed interface StatedByClauses {
      * <p>Everything a choice could settle has been settled: what is here is one reading and not a
      * question about which of two it turned out to be.
      */
-    record Said(souther.compiler.values.PlannedValues<FactSubject> values,
-                OrderedIntervals<FactSubject> ordered,
+    record Said(Confinement.Planned<FactSubject> confinement,
                 Adoption<FactSubject> byValues, Adoption<FactSubject> byOrder,
                 Map<FactSubject, StringRestriction> strings,
                 Set<AdmissibleReading.AskedAt> asked,
@@ -72,13 +71,17 @@ sealed interface StatedByClauses {
         // equal to — two conjuncts written the same way are two places in a clause — so the map is
         // one that compares by identity, and a copy of it would not be.
 
+        /** What the positions of this reading may hold, still as descriptions. */
+        souther.compiler.values.PlannedValues<FactSubject> values() {
+            return confinement.values();
+        }
+
         /** The same, remembering that it is what {@code e} came to. */
         @Override
         public StatedByClauses from(Core e) {
             Map<Core, Part> out = new java.util.IdentityHashMap<>(parts);
             out.put(e, new Part(byValues, byOrder, strings, asked, ruleShortfalls));
-            return new Said(values, ordered, byValues, byOrder, strings, asked, ruleShortfalls,
-                    out);
+            return new Said(confinement, byValues, byOrder, strings, asked, ruleShortfalls, out);
         }
     }
 
@@ -266,23 +269,23 @@ sealed interface StatedByClauses {
     }
 
     /** Nothing read, so nothing ruled out. */
-    static StatedByClauses top() {
-        return new Said(souther.compiler.values.PlannedValues.top(),
-                OrderedIntervals.top(),
+    static StatedByClauses top(Map<FactSubject, Carrier> carriers) {
+        return new Said(Confinement.Planned.top(carriers),
                 Adoption.nothing(), Adoption.nothing(), Map.of(), Set.of(), Set.of(), Map.of());
     }
 
     /**
      * Whether anything satisfies what has been read, as far as that is settled.
      *
-     * <p>Either language, because each can hold the whole answer on its own: what one of them
-     * cannot express it leaves alone. Where a language is settled that nothing satisfies it, that
-     * is the answer; where the values are a description nobody has built, the answer waits.
+     * <p>A choice is either of its branches; a reading is what its two languages leave between them,
+     * which is one answer and is {@link Confinement}'s. Asked of the languages one at a time, this
+     * said that something satisfies the rules whenever the language it happened to ask had nothing
+     * to say about them.
      */
     default Emptiness emptiness() {
         return switch (this) {
             case Choice it -> it.left().emptiness().joined(it.right().emptiness());
-            case Said it -> it.ordered().isBottom() ? Emptiness.EMPTY : it.values().emptiness();
+            case Said it -> it.confinement().admits();
         };
     }
 
@@ -325,7 +328,7 @@ sealed interface StatedByClauses {
     default StatedTogether.Said alone(
             Alternatives held, souther.compiler.values.Allowance<FactSubject> by) {
         return switch (this) {
-            case Said it -> new StatedTogether.Said(it.values(), it.ordered());
+            case Said it -> new StatedTogether.Said(it.confinement());
             case Choice it -> {
                 StatedTogether.Said one = it.left().alone(held, by);
                 StatedTogether.Said other = it.right().alone(held, by);
@@ -337,11 +340,8 @@ sealed interface StatedByClauses {
                 if (hereIsEmpty) {
                     yield other;
                 }
-                yield new StatedTogether.Said(
-                        held == Alternatives.APART
-                                ? one.values().joinApart(other.values())
-                                : one.values().join(other.values()),
-                        one.ordered().join(other.ordered()));
+                yield new StatedTogether.Said(one.confinement()
+                        .either(other.confinement(), held == Alternatives.APART));
             }
         };
     }
@@ -349,14 +349,13 @@ sealed interface StatedByClauses {
     /**
      * Whether something has already established that nobody can be in {@code branch}.
      *
-     * <p>Either language, because each can hold the whole answer on its own and what one of them
-     * cannot express it leaves alone. And established rather than worked out: an order is bottom or
-     * it is not, a description of values says so or waits, and where it waits this asks what was
-     * already built for the position rather than building it.
+     * <p>The two languages together ({@link Confinement}), and established rather than worked out:
+     * an order is bottom or it is not, a description of values says so or waits, and where it waits
+     * this asks what was already built for the position rather than building it.
      */
     private static boolean nobodyIsIn(StatedTogether.Said branch,
                                       souther.compiler.values.Allowance<FactSubject> by) {
-        return branch.ordered().isBottom() || branch.values().holdsNothingAsBuilt(by);
+        return branch.confinement().alreadyEstablished(by) == Emptiness.EMPTY;
     }
 
     /**
@@ -368,7 +367,7 @@ sealed interface StatedByClauses {
      */
     default StatedTogether together() {
         return switch (this) {
-            case Said it -> new StatedTogether.Said(it.values(), it.ordered());
+            case Said it -> new StatedTogether.Said(it.confinement());
             case Choice it -> new StatedTogether.Choice(it.id(),
                     it.left().together(), it.right().together());
         };
@@ -408,7 +407,13 @@ sealed interface StatedByClauses {
 
         @Override
         public StatedByClauses nothingSaid() {
-            return top();
+            return top(ordered.carriers());
+        }
+
+        /** Either reading holding, as each language says it and the whole is held. */
+        private Confinement.Planned<FactSubject> either(Confinement.Planned<FactSubject> one,
+                                                       Confinement.Planned<FactSubject> other) {
+            return one.either(other, alternatives == Alternatives.APART);
         }
 
         /**
@@ -425,7 +430,7 @@ sealed interface StatedByClauses {
             souther.compiler.values.PlannedValues<FactSubject> said = values.leaf(e, positive, at);
             OrderedIntervals<FactSubject> range = ordered.leaf(e, positive, at);
             Set<FactSubject> mentions = mentioned(e, at);
-            return new Said(said, range,
+            return new Said(new Confinement.Planned<>(said, range, ordered.carriers()),
                     // Each language says whether it gave up on the leaf. The reading of values
                     // carries it; the reading of order has nothing to hand back but its ranges, and
                     // a leaf it read leaves at least one.
@@ -493,8 +498,7 @@ sealed interface StatedByClauses {
             }
             Said here = (Said) one;
             Said there = (Said) other;
-            return new Said(here.values().meet(there.values()),
-                    here.ordered().meet(there.ordered()),
+            return new Said(here.confinement().meet(there.confinement()),
                     here.byValues().both(there.byValues()), here.byOrder().both(there.byOrder()),
                     StringRestriction.over(here.strings(), there.strings(), true),
                     askedIn(here.asked(), there.asked()),
@@ -604,7 +608,7 @@ sealed interface StatedByClauses {
                           souther.compiler.values.Allowance<FactSubject> by) {
             Map<ChoiceId, Settlement.OfAChoice> outcomes = new java.util.LinkedHashMap<>();
             StatedTogether.Said said = settling(read, by, outcomes);
-            return new Settlement(said.values().resolve(by), said.ordered(), outcomes);
+            return new Settlement(said.confinement().resolve(by), outcomes);
         }
 
         /** The same reading with every choice in it decided, each occurrence noting its fate. */
@@ -637,10 +641,8 @@ sealed interface StatedByClauses {
             if (here.emptiness() == Emptiness.EMPTY && there.emptiness() == Emptiness.EMPTY) {
                 // The rule for a choice nobody can take, named rather than arrived at: a join is
                 // what two branches somebody can take come to, and neither of these is one.
-                return new StatedTogether.Said(
-                        one.values().leavingNothing().bothDead(other.values().leavingNothing()),
-                        ordered.either(one.ordered().leavingNothing(),
-                                other.ordered().leavingNothing()));
+                return new StatedTogether.Said(one.confinement().bothDead(other.confinement(),
+                        Confinement.Admission.bothShown(here.shown(), there.shown())));
             }
             if (here.emptiness() == Emptiness.EMPTY) {
                 return keptTogether(other, there);
@@ -650,8 +652,7 @@ sealed interface StatedByClauses {
             }
             StatedTogether.Said left = keptTogether(one, here);
             StatedTogether.Said right = keptTogether(other, there);
-            return new StatedTogether.Said(values.either(left.values(), right.values()),
-                    ordered.either(left.ordered(), right.ordered()));
+            return new StatedTogether.Said(either(left.confinement(), right.confinement()));
         }
 
         /**
@@ -667,8 +668,8 @@ sealed interface StatedByClauses {
             if (known.emptiness() != Emptiness.UNDECIDED) {
                 return read;
             }
-            return new StatedTogether.Said(read.values().alsoStanding(known.asPositionStanding()),
-                    read.ordered());
+            return new StatedTogether.Said(
+                    read.confinement().alsoStanding(known.asPositionStanding()));
         }
 
         /**
@@ -686,17 +687,19 @@ sealed interface StatedByClauses {
          */
         private Settlement.Sided probed(StatedTogether.Said read,
                                         souther.compiler.values.Allowance<FactSubject> by) {
-            if (read.ordered().isBottom()) {
-                return Settlement.Sided.settledAs(Emptiness.EMPTY);
-            }
-            Emptiness said = read.values().emptiness();
-            if (said != Emptiness.UNDECIDED) {
+            Confinement.Admission<FactSubject> said = read.confinement().admission();
+            if (said.emptiness() != Emptiness.UNDECIDED) {
                 return Settlement.Sided.settledAs(said);
             }
-            souther.compiler.values.Realized<FactSubject> made = read.values().resolve(by);
-            if (made.emptiness() != Emptiness.UNDECIDED) {
-                return Settlement.Sided.settledAs(made.emptiness());
+            // Worked out, the descriptions become sets and every alternative can be asked where its
+            // positions stop — the same question, and a different answer for having been asked of
+            // what a pattern comes to.
+            Confinement.Worked<FactSubject> worked = read.confinement().resolve(by);
+            Confinement.Admission<FactSubject> admitted = worked.admission();
+            if (admitted.emptiness() != Emptiness.UNDECIDED) {
+                return Settlement.Sided.settledAs(admitted);
             }
+            souther.compiler.values.Realized<FactSubject> made = worked.made();
             // Kept as the two it is. What the answer was short of is a fact about the place and
             // holds of everything waiting on it; what a pattern asked for and was refused is a fact
             // about the pattern, and travels to whoever asked rather than to the place they asked
@@ -705,8 +708,8 @@ sealed interface StatedByClauses {
                     new java.util.LinkedHashMap<>();
             made.aboutTheAnswer().forEach(each -> answered.merge(each.at(),
                     java.util.List.of(each.why()), ReadByClauses::alsoSaying));
-            return new Settlement.Sided(Emptiness.UNDECIDED, answered, made.aboutARule(),
-                    made.unbuilt());
+            return new Settlement.Sided(Confinement.Admission.left(Emptiness.UNDECIDED), answered,
+                    made.aboutARule(), made.unbuilt());
         }
 
         /**
@@ -720,7 +723,8 @@ sealed interface StatedByClauses {
          */
         Account accountOf(StatedByClauses rule, Settlement made,
                           souther.compiler.values.Allowance<FactSubject> by) {
-            return new Account(narrowedBy(rule.alone(alternatives, by).values(), by),
+            return new Account(
+                    narrowedBy(rule.alone(alternatives, by).confinement().values(), by),
                     partsOf(accounted(rule, made.outcomes()), made));
         }
 
@@ -840,7 +844,7 @@ sealed interface StatedByClauses {
                     // for the position.
                     shortOf(part.ruleShortfalls(),
                             askedFor(known.ruleShortfalls(), part.asked())))));
-            return new Said(read.values().alsoStanding(known.asPositionStanding()), read.ordered(),
+            return new Said(read.confinement().alsoStanding(known.asPositionStanding()),
                     read.byValues().unbuiltAt(known.unbuilt()),
                     read.byOrder().unbuiltAt(known.unbuilt()),
                     read.strings(),
@@ -863,10 +867,9 @@ sealed interface StatedByClauses {
             return new Said(
                     // The rule for a choice nobody can take, named rather than arrived at: a join
                     // is what two branches somebody can take come to, and neither of these is one.
-                    here.values().leavingNothing()
-                            .bothDead(there.values().leavingNothing()),
-                    ordered.either(here.ordered().leavingNothing(),
-                            there.ordered().leavingNothing()),
+                    here.confinement().bothDead(there.confinement(),
+                            Confinement.Admission.bothShown(here.confinement().admission(),
+                                    there.confinement().admission())),
                     here.byValues().bothDead(there.byValues()),
                     here.byOrder().bothDead(there.byOrder()),
                     // And what either of them said about the strings goes with them. A run drawn
@@ -889,7 +892,7 @@ sealed interface StatedByClauses {
          * that is an answer only a reading that got to the end of the branch could give.
          */
         private Said beside(Said alive, Said gone) {
-            return new Said(alive.values(), alive.ordered(),
+            return new Said(alive.confinement(),
                     alive.byValues().beside(gone.byValues()),
                     alive.byOrder().beside(gone.byOrder()),
                     // The branch that stands, and what the other could not read is not its
@@ -921,8 +924,7 @@ sealed interface StatedByClauses {
                 Part.leftOpenBy(choice, Part.reachedBy(there.byValues()),
                         here.ruleShortfalls(), there.ruleShortfalls(), raised);
             }
-            return new Said(values.either(here.values(), there.values()),
-                    ordered.either(here.ordered(), there.ordered()),
+            return new Said(either(here.confinement(), there.confinement()),
                     here.byValues().either(there.byValues()),
                     here.byOrder().either(there.byOrder()),
                     StringRestriction.over(here.strings(), there.strings(), false),
@@ -1082,7 +1084,7 @@ sealed interface StatedByClauses {
          */
         Answered<K> resolve(Reading reader, souther.compiler.values.Allowance<FactSubject> by,
                             souther.compiler.values.Allowance<FactSubject> handingOn) {
-            StatedTogether whole = StatedTogether.top();
+            StatedTogether whole = StatedTogether.top(reader.ordered().carriers());
             for (StatedByClauses each : trees.values()) {
                 whole = whole.meet(each.together());
             }
@@ -1139,7 +1141,7 @@ sealed interface StatedByClauses {
             Map<K, ReadByClauses.OfARule> clauses = new LinkedHashMap<>();
             narrowed.forEach((key, these) -> clauses.put(key,
                     new ReadByClauses.OfARule(these, published.get(byClause.get(key)))));
-            ReadByClauses read = new ReadByClauses(made.made().values(), made.ordered(),
+            ReadByClauses read = new ReadByClauses(made.confinement(),
                     byValues, byOrder, published);
             Map<K, java.util.List<Map.Entry<Core, ReadByClauses.OfAPart>>> parts =
                     new java.util.LinkedHashMap<>();

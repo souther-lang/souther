@@ -481,7 +481,7 @@ public final class DataChecker {
         for (UninhabitableTypes.UninhabitableGroup group : groups) {
             Hir.Def at = symbols.declaredNode(group.reportedAt());
             found.add(CompileException.of(told(Diagnostic.at(at.pos()), at.name(),
-                    new Emptiness.AtAField.Where.TheValueItself(), group.why(),
+                    new Emptiness.AtAField.Where.TheValueItself(), false, group.why(),
                     lacks.get(group.reportedAt()) == 1).build()));
         }
         return found;
@@ -508,14 +508,17 @@ public final class DataChecker {
      * the switch as a list of sentences anybody has seen.
      *
      * @param path where in the declaration the proof so far has reached
+     * @param placed whether the proof named that place or the caller assumed it. A proof that names
+     *               none was shown of the whole value and not of a position in it, and a sentence
+     *               that filled the place in would name whatever the reader happened to be at
      * @param alone whether the declaration this is said at has no other lack reported of it, which
      *              is what a suggestion has to be true of
      */
     private static Diagnostic.Builder told(Diagnostic.Builder at, String data,
-                                           Emptiness.AtAField.Where path, Emptiness why,
-                                           boolean alone) {
+                                           Emptiness.AtAField.Where path, boolean placed,
+                                           Emptiness why, boolean alone) {
         return switch (why) {
-            case Emptiness.AtAField it -> told(at, data, it.where(), it.under(), alone);
+            case Emptiness.AtAField it -> told(at, data, it.where(), true, it.under(), alone);
             case Emptiness.NoBaseInComponent it -> {
                 Diagnostic.Builder said = at.say(new DataMessage.DataCannotBeConstructed(data));
                 yield alone ? suggested(said, data, it.through()) : said;
@@ -525,6 +528,13 @@ public final class DataChecker {
             case Emptiness.EmptyOrderedInterval _ ->
                     at.say(new DataMessage.NothingIsLeftForThatPositionToHold(
                             data, written(path)));
+            // With a place only where the proof named one. Where the alternatives are refused at
+            // different positions there is none, and the sentence about a position would name one
+            // the rules are fine with — so what is said there is that the rules contradict, which
+            // is what this reading could show and no more.
+            case Emptiness.NoAllowedValueInRange _ -> placed
+                    ? at.say(new DataMessage.NoValueItsRulesAllowIsInThatRange(data, written(path)))
+                    : at.say(new DataMessage.ItsRulesCannotAllHold(data));
             case Emptiness.SetRequiresTooManyDistinctValues it ->
                     at.say(new DataMessage.ASetCannotBeFilledFromItsElement(
                             data, written(path), it.available()));

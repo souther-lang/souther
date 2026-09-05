@@ -110,6 +110,20 @@ public final class PatternPlan {
          * <p>The same numbers as the two above, and a coincidence rather than a fact.
          */
         public static final Budget OF_AN_ORDERED_EXTENT = new Budget(50_000, 200_000);
+
+        /**
+         * What deciding whether a set of values and a range on an order share one is allowed to
+         * cost.
+         *
+         * <p>Its own, and here rather than out of what the position's answer is allowed, because
+         * this is what decides whether a declaration has a value. Spent from the position's
+         * allowance, the same rules would be decided differently depending on what the readings
+         * before them had already built — so a model would be accepted or refused by the order its
+         * clauses were walked in.
+         *
+         * <p>The same numbers as the rest, and a coincidence rather than a fact.
+         */
+        public static final Budget OF_WHAT_A_SET_AND_A_RANGE_SHARE = new Budget(50_000, 200_000);
     }
 
     /** What one step of a plan does. */

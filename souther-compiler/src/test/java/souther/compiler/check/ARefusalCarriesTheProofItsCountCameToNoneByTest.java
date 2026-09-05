@@ -74,6 +74,7 @@ class ARefusalCarriesTheProofItsCountCameToNoneByTest {
             case Emptiness.ConflictingRules _ -> "rules contradict";
             case Emptiness.EmptyNumericInterval _ -> "an empty range";
             case Emptiness.EmptyOrderedInterval _ -> "ends with nothing between them";
+            case Emptiness.NoAllowedValueInRange _ -> "no allowed value in the range";
             case Emptiness.SetRequiresTooManyDistinctValues it -> "a set over at most " + it.available();
             case Emptiness.NoAllowedCollectionSize _ -> "no size";
         };

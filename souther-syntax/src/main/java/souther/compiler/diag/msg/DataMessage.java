@@ -93,6 +93,19 @@ public sealed interface DataMessage extends Message {
     record NothingIsLeftForThatPositionToHold(String data, String at)
             implements DataMessage, Reported {}
 
+    /**
+     * The values one position is allowed and the range its order is left share none.
+     *
+     * <p>Beside {@link NothingIsLeftForThatPositionToHold} and not the same sentence. That one is a
+     * position the rules leave no value at all, which an author finds by reading the ends; here the
+     * ends hold values and the rules allow values and the two are apart, so a sentence about what
+     * the rules leave the position would send an author looking at either half and finding nothing
+     * wrong with it.
+     */
+    @Code(DiagnosticCode.E1013)
+    record NoValueItsRulesAllowIsInThatRange(String data, String at)
+            implements DataMessage, Reported {}
+
     /** A set is asked to hold more values that differ than there are of what it holds. */
     @Code(DiagnosticCode.E1013)
     record ASetCannotBeFilledFromItsElement(String data, String at, long available)

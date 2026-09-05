@@ -49,7 +49,7 @@ class ARenamingNamesTwoSubjectsTwoSubjectsTest {
     void eachSubjectIsHeldByOneDomainAlone() {
         ConstraintState<FactSubject> state = spread();
         assertTrue(state.facts().entails(ONLY_IN_FACTS, true));
-        assertFalse(state.ordered().at(ONLY_IN_FACTS).holdsNothing());
+        assertFalse(state.confinement().holdingNothing().contains(ONLY_IN_FACTS));
         assertEquals(ValueSet.ANY, state.values().at(ONLY_IN_ORDERED));
     }
 
@@ -70,7 +70,7 @@ class ARenamingNamesTwoSubjectsTwoSubjectsTest {
         ConstraintState<String> said = spread().renamed(InjectiveRenaming.of(apart::get));
 
         assertTrue(said.facts().entails("p.f", true));
-        assertTrue(said.ordered().at("p.o").holdsNothing());
+        assertTrue(said.confinement().holdingNothing().contains("p.o"));
         assertEquals(ValueSet.just(Value.text("A")), said.values().at("p.v"));
         assertEquals(Endpoint.inclusive(Count.of(3)),
                 said.numbers().boundsOf(LinearForm.<String>atom("p.n")).max());
@@ -115,8 +115,9 @@ class ARenamingNamesTwoSubjectsTwoSubjectsTest {
     void aSubjectHeldByTwoDomainsIsRenamedOnce() {
         ConstraintState<FactSubject> both = ConstraintState.<FactSubject>top()
                 .taking(ONLY_IN_FACTS, true)
-                .takingValuesRead(
-                        AdmissibleValues.at(ONLY_IN_FACTS, ValueSet.just(Value.text("A"))),
+                .takingRead(Confinement.Worked.of(
+                                AdmissibleValues.at(ONLY_IN_FACTS, ValueSet.just(Value.text("A"))),
+                                OrderedIntervals.top(), Map.of()),
                         souther.compiler.values.AsACompilationAllows.forAdmittedValues());
         java.util.concurrent.atomic.AtomicInteger asked = new java.util.concurrent.atomic.AtomicInteger();
 
@@ -131,11 +132,12 @@ class ARenamingNamesTwoSubjectsTwoSubjectsTest {
     private static ConstraintState<FactSubject> spread() {
         return ConstraintState.<FactSubject>top()
                 .taking(ONLY_IN_FACTS, true)
-                .taking(OrderedIntervals.at(ONLY_IN_ORDERED,
-                        new OrderedInterval(Endpoint.inclusive(Count.of(6)),
-                                Endpoint.inclusive(Count.of(2)))))
-                .takingValuesRead(
-                        AdmissibleValues.at(ONLY_IN_VALUES, ValueSet.just(Value.text("A"))),
+                .takingRead(Confinement.Worked.of(
+                                AdmissibleValues.at(ONLY_IN_VALUES, ValueSet.just(Value.text("A"))),
+                                OrderedIntervals.at(ONLY_IN_ORDERED, new OrderedInterval(
+                                        Endpoint.inclusive(Count.of(6)),
+                                        Endpoint.inclusive(Count.of(2)))),
+                                Map.of()),
                         souther.compiler.values.AsACompilationAllows.forAdmittedValues())
                 .taking(LinearForm.<FactSubject>atom(ONLY_IN_NUMBERS)
                                 .minus(LinearForm.<FactSubject>constant(BigDecimal.valueOf(3))),

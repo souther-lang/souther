@@ -84,6 +84,22 @@ public sealed interface Emptiness {
     record EmptyOrderedInterval() implements Emptiness {}
 
     /**
+     * The values a position is allowed and the range its order is left share none.
+     *
+     * <p>Three things are true and they are not the same fact: the set admits something, the range
+     * holds something, and nothing is in both. So this is not {@link EmptyOrderedInterval}, which is
+     * the range holding nothing whatever the values say, and not a reading that admits nothing
+     * either — it is what neither of them could say alone.
+     *
+     * <p>Written without a place where the alternatives are refused at different positions.
+     * {@code (x = "A", y = "B")} beside {@code (x = "C", y = "D")}, met with a rule allowing
+     * {@code x} up to {@code "A"} and {@code y} from {@code "D"}, leaves each position holding
+     * values some alternative stands at — so what was shown is about the whole product, and naming
+     * a position would name one the rules are fine with.
+     */
+    record NoAllowedValueInRange() implements Emptiness {}
+
+    /**
      * A set is asked to hold more values that differ than there are of what it holds.
      *
      * <p>One number and not two. What was compared is whether the rules admit any size this small,
@@ -238,7 +254,8 @@ public sealed interface Emptiness {
         return switch (this) {
             // The declaration's own rules. An empty interval is one of these and not a shape: it is
             // the rules contradicting, with the place and the reason filled in.
-            case ConflictingRules _, EmptyOrderedInterval _ -> Nearness.DIRECT;
+            case ConflictingRules _, EmptyOrderedInterval _, NoAllowedValueInRange _ ->
+                    Nearness.DIRECT;
             case EmptyNumericInterval _, SetRequiresTooManyDistinctValues _,
                  NoAllowedCollectionSize _ -> Nearness.STRUCTURAL;
             case TheNameHasNone _, NoBaseInComponent _ -> Nearness.PROPAGATED;

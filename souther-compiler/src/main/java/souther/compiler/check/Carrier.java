@@ -14,11 +14,18 @@ import souther.compiler.numeric.OrderedInterval;
 import souther.compiler.numeric.Times;
 import souther.compiler.numeric.Towards;
 import souther.compiler.observe.ObservedValue;
+import souther.compiler.regex.Language;
+import souther.compiler.regex.Meter;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
+import souther.compiler.values.Emptiness;
+import souther.compiler.values.Value;
+import souther.compiler.values.ValueSet;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 /**
  * An order a rule is read against and a value is written back at, and the only place either
@@ -723,14 +730,14 @@ public sealed interface Carrier {
      * range, so what a caller may say about an empty answer is that it composed nothing.
      */
     default Place somethingOtherThan(java.util.List<Place> singled, NumericDomain.Bounds within) {
-        java.util.List<Place> stepped = new java.util.ArrayList<>();
+        java.util.List<Place> stepped = new ArrayList<>();
         for (Place from : singled) {
             if (from instanceof Count count) {
                 stepped.add(count.plus(1));
                 stepped.add(count.minus(1));
             }
         }
-        java.util.List<Place> inside = new java.util.ArrayList<>();
+        java.util.List<Place> inside = new ArrayList<>();
         if (within != null) {
             for (Endpoint end : java.util.Arrays.asList(within.min(), within.max())) {
                 if (end != null && end.inclusive()) {
@@ -749,7 +756,7 @@ public sealed interface Carrier {
                 }
             }
         }
-        java.util.List<Place> tried = new java.util.ArrayList<>();
+        java.util.List<Place> tried = new ArrayList<>();
         if (spacing() == Granularity.DENSE) {
             tried.addAll(inside);
             tried.addAll(stepped);
@@ -774,6 +781,189 @@ public sealed interface Carrier {
             }
         }
         return null;
+    }
+
+    /**
+     * Whether any value this order holds inside {@code range} is one {@code set} admits.
+     *
+     * <p>The one place a set of values and a range on an order are put together. Each of them is
+     * read from the rules by a reading of its own, and neither has a word for what the other holds
+     * — a pattern names no ends and an ordering names no finite set — so what they have in common
+     * is a question about the order they are both about, and this is the order.
+     *
+     * <p><b>One position, and nothing about any other.</b> Which alternative of a reading survives
+     * is a question about a whole product and belongs to whoever holds the alternatives
+     * ({@link souther.compiler.values.AdmissibleValues#anyAlternativeAdmits}). What is answered here
+     * is one position's, so that a carrier added later answers what a carrier has to answer and not
+     * what a reading does.
+     *
+     * <p>{@link Emptiness#UNDECIDED} where this order cannot say. A pattern over a carrier that is
+     * not the strings is a set belonging to no position of this order rather than one this refuses,
+     * and a machine the allowance will not pay for is a question that waits — neither of them is a
+     * value being ruled out.
+     *
+     * @param meter what may be built to answer, where answering takes a machine
+     */
+    default Emptiness meets(ValueSet set, OrderedInterval range, Meter meter) {
+        if (range.holdsNothing()) {
+            return Emptiness.EMPTY;
+        }
+        return switch (set) {
+            case ValueSet.Finite it -> anyOf(it.values(), range);
+            // Every value of the order is admitted, and the range holds one.
+            case ValueSet.Cofinite it -> it.excluded().isEmpty()
+                    ? Emptiness.NONEMPTY : somethingNotExcluded(it.excluded(), range);
+            case ValueSet.Matching it -> this instanceof Text
+                    ? stringsInside(it.language(), range, meter) : Emptiness.UNDECIDED;
+        };
+    }
+
+    /** Whether one of {@code values} is inside {@code range}, undecided where a value of the set is
+     *  not one this order places at all. */
+    private Emptiness anyOf(java.util.Set<Value> values, OrderedInterval range) {
+        boolean placed = true;
+        for (Value each : values) {
+            Place at = placeOf(each);
+            if (at == null) {
+                placed = false;
+            } else if (range.admits(at)) {
+                return Emptiness.NONEMPTY;
+            }
+        }
+        return placed ? Emptiness.EMPTY : Emptiness.UNDECIDED;
+    }
+
+    /**
+     * Whether {@code range} holds a value none of {@code excluded} is.
+     *
+     * <p>Answered by taking the values the range holds, and only as many of them as could be
+     * excluded: a range holding more than that holds one of them whatever the exclusions are, and
+     * counting further would be enumerating an order to answer a question about a handful of values.
+     */
+    private Emptiness somethingNotExcluded(Set<Value> excluded, OrderedInterval range) {
+        List<Place> held = firstPlacesIn(range, excluded.size() + 1);
+        if (held == null) {
+            return Emptiness.NONEMPTY;
+        }
+        List<Place> away = new ArrayList<>(excluded.size());
+        excluded.forEach(each -> {
+            Place at = placeOf(each);
+            if (at != null) {
+                away.add(at);
+            }
+        });
+        for (Place each : held) {
+            if (away.stream().noneMatch(each::sameAs)) {
+                return Emptiness.NONEMPTY;
+            }
+        }
+        return Emptiness.EMPTY;
+    }
+
+    /**
+     * The first {@code atMost} places {@code range} holds, or null where it holds more than that.
+     *
+     * <p>Null is the range holding more and never this declining to look: what it answers is a
+     * question about how many, and a caller reads it as the range being wider than the values it
+     * was asked about.
+     */
+    private List<Place> firstPlacesIn(OrderedInterval range, int atMost) {
+        OrderedInterval held = extent().meet(range);
+        Endpoint low = held.low();
+        Endpoint high = held.high();
+        if (low == null || high == null) {
+            return null;
+        }
+        List<Place> out = new ArrayList<>();
+        if (this instanceof Text) {
+            souther.compiler.numeric.Text at = (souther.compiler.numeric.Text) low.at();
+            if (!low.inclusive()) {
+                at = at.justAbove();
+            }
+            while (Endpoint.someValueLiesBetween(Endpoint.inclusive(at), high)) {
+                if (out.size() == atMost) {
+                    return null;
+                }
+                out.add(at);
+                at = at.justAbove();
+            }
+            return out;
+        }
+        if (spacing() == Granularity.DENSE) {
+            // Between two places that are not one place there is always another, so a range holding
+            // few values is a range holding one: both ends at one place, and both of them its own.
+            return low.inclusive() && high.inclusive() && low.at().sameAs(high.at())
+                    ? List.of(low.at()) : null;
+        }
+        Count first = Count.number(low.at());
+        Count last = Count.number(high.at());
+        if (!low.inclusive()) {
+            first = first.plus(1);
+        }
+        if (!high.inclusive()) {
+            last = last.minus(1);
+        }
+        for (Count at = first; at.compareTo(last) <= 0; at = at.plus(1)) {
+            if (out.size() == atMost) {
+                return null;
+            }
+            out.add(at);
+        }
+        return out;
+    }
+
+    /**
+     * Whether any string {@code language} admits lies inside {@code range}.
+     *
+     * <p>The range said as the strings it holds, which is what makes this an answer about the
+     * strings rather than about the ends: a language is its strings, and two of them share a value
+     * or they do not. Said as a projection of the language onto the ends instead, a rule whose
+     * strings are not one stretch of the order would have no ends to be compared with.
+     */
+    private Emptiness stringsInside(Language language, OrderedInterval range, Meter meter) {
+        OrderedInterval held = extent().meet(range);
+        Language inside = language;
+        if (held.high() != null) {
+            souther.compiler.numeric.Text at =
+                    (souther.compiler.numeric.Text) held.high().at();
+            Language below = Language.before(
+                    held.high().inclusive() ? at.justAbove().at() : at.at(), meter);
+            inside = below == null ? null : inside.and(below, meter);
+        }
+        if (inside != null && held.low() != null) {
+            souther.compiler.numeric.Text at = (souther.compiler.numeric.Text) held.low().at();
+            Language under = Language.before(
+                    held.low().inclusive() ? at.at() : at.justAbove().at(), meter);
+            Language above = under == null ? null : under.not(meter);
+            inside = above == null ? null : inside.and(above, meter);
+        }
+        if (inside == null) {
+            return Emptiness.UNDECIDED;
+        }
+        return inside.isEmpty() ? Emptiness.EMPTY : Emptiness.NONEMPTY;
+    }
+
+    /**
+     * Where a written value sits on this order, or null where it is not a value of this order.
+     *
+     * <p>Beside {@link #placeOf(ObservedValue)} and not instead of it: that one places a value read
+     * back from a run, and this one places a value a rule named. What they have in common is the
+     * order, which is here, and what they differ in is where the value came from.
+     *
+     * <p>The temporal carriers place none. A date is ordered and has a count that stands for it, and
+     * a rule naming one reaches the reading of the order rather than the reading of values — so
+     * nothing ever asks this to place one, and answering would be a second way for a date to be
+     * written down.
+     */
+    private Place placeOf(Value value) {
+        return switch (this) {
+            case Whole _, Dense _ -> value instanceof Value.Number it
+                    ? onTheGrid(Count.of(it.value())) : null;
+            case Text _ -> value instanceof Value.Text it
+                    ? souther.compiler.numeric.Text.of(it.value()) : null;
+            case Ordinal it -> value instanceof Value.Case one ? it.at(one.data()) : null;
+            case Days _, Seconds _, SecondsOfDay _, Nanos _ -> null;
+        };
     }
 
     /**
