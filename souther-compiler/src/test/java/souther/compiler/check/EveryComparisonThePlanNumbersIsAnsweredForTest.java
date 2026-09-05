@@ -73,6 +73,6 @@ class EveryComparisonThePlanNumbersIsAnsweredForTest {
 
         assertTrue(gaveUp.stream().noneMatch(each -> "reachability".equals(each.where())),
                 () -> "the reading owes one answer per numbered comparison and said so: "
-                        + gaveUp.stream().map(each -> each.why().getMessage()).toList());
+                        + gaveUp.stream().map(each -> each.why().said()).toList());
     }
 }

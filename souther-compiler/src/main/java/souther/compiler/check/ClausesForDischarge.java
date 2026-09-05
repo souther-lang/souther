@@ -98,7 +98,8 @@ public final class ClausesForDischarge {
     public List<ClauseReading> conjunctsOf(Hir.Expr written, BindingOwner owner) {
         List<ClauseReading> out = new ArrayList<>();
         for (Hir.Expr each : ClauseHelpers.conjunctsOf(written)) {
-            out.add(new ClauseReading(each, expansion.inline(each, owner)));
+            Expansion<Hir.Expr> read = expansion.expanding(each, owner);
+            out.add(new ClauseReading(each, read.value(), CallsLeftStanding.of(read.standing())));
         }
         return out;
     }
@@ -109,8 +110,17 @@ public final class ClausesForDischarge {
      * <p>Where it is comes from what was written and from nothing else, so it is asked of this rather
      * than carried beside it: a position that can be passed is a position that can be passed wrongly,
      * and the one thing every reader of this got wrong was which tree they took it from.
+     *
+     * @param standing which calls the expansion that produced {@code read} left standing — the
+     *                 fourth of the facts this file exists to hand over together, and the one a
+     *                 reader looking at {@code read} alone cannot recover
      */
-    public record ClauseReading(Hir.Expr written, Hir.Expr read) {
+    public record ClauseReading(Hir.Expr written, Hir.Expr read, CallsLeftStanding standing) {
+
+        /** The tree and what its expansion left standing, which is what a reading of it takes. */
+        ClauseAsExpanded asExpanded() {
+            return new ClauseAsExpanded(read, standing);
+        }
 
         /** Where the author wrote it — the earliest position anything written carries. */
         public SourcePos at() {

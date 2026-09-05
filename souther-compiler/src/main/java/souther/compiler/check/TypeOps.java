@@ -1216,9 +1216,13 @@ public final class TypeOps {
      */
     public static List<Hir.InvariantClause> settledInvariants(Hir.Data data, Symbols symbols) {
         List<Hir.InvariantClause> invs = new ArrayList<>();
-        for (Declared one : declaredSettled(data, symbols)) {
-            invs.add(one.clause());
+        for (Hir.Name inc : data.includes()) {
+            Hir.Data spread = spreadTarget(inc, symbols);
+            if (spread != null) {
+                invs.addAll(settledInvariants(spread, symbols));
+            }
         }
+        invs.addAll(data.invariants());
         return invs;
     }
 
@@ -1252,18 +1256,20 @@ public final class TypeOps {
      * same thing in each.
      */
     public record Declared(TypeSymbol.AtModule declaredOn, int ordinal,
-                           Hir.InvariantClause clause) {}
+                           Hir.InvariantClause clause, CallsLeftStanding standing) {
 
-    /**
-     * The same clauses {@link #settledInvariants} answers, each with the declaration it was written
-     * on.
-     *
-     * <p>Flattening them loses which spread brought which, and what is reported of an unproven clause
-     * is the name the author wrote — so what is asked for here is the pair, and the flat list is
-     * taken from it rather than walked again.
-     */
-    public static List<Declared> declaredSettled(Hir.Data data, Symbols symbols) {
-        return declaredWritten(null, data, symbols);
+        public Declared {
+            if (standing == null) {
+                throw new IllegalArgumentException("a clause says what its expansion left standing");
+            }
+        }
+
+        /** The clause as the reading takes it: the tree, and what the expansion that produced it
+         *  left standing. Handed on as one value, because the two are one fact about one tree and
+         *  a reader given them apart can be given them mismatched. */
+        ClauseAsExpanded asExpanded() {
+            return new ClauseAsExpanded(clause.expr(), standing);
+        }
     }
 
     /**
@@ -1315,7 +1321,8 @@ public final class TypeOps {
             case ExpandedClauseResult.Found(ExpandedClauses clauses) -> {
                 List<Declared> out = new ArrayList<>();
                 for (int ordinal = 0; ordinal < clauses.clauses().size(); ordinal++) {
-                    out.add(new Declared(named, ordinal, clauses.clauses().get(ordinal)));
+                    ExpandedClauses.Expanded each = clauses.clauses().get(ordinal);
+                    out.add(new Declared(named, ordinal, each.clause(), each.standing()));
                 }
                 yield new ExpandedRules(out, true);
             }
@@ -1325,26 +1332,6 @@ public final class TypeOps {
             // above has already had to deal with to have got here.
             case ExpandedClauseResult.NotDeclared _ -> new ExpandedRules(List.of(), true);
         };
-    }
-
-    /** What a clause of a declaration is, as the declaration writes it. Its own walk, so the
-     *  representation a caller reads is the method it named and never an argument it passed. */
-    private static List<Declared> declaredWritten(TypeSymbol.AtModule named, Hir.Data data,
-                                                  Symbols symbols) {
-        List<Declared> invs = new ArrayList<>();
-        for (Hir.Name inc : data.includes()) {
-            Hir.Data id = spreadTarget(inc, symbols);
-            if (id != null) {
-                invs.addAll(declaredWritten(
-                        inc.answered().type() instanceof TypeSymbol.AtModule at ? at : null,
-                        id, symbols));
-            }
-        }
-        List<Hir.InvariantClause> wrote = data.invariants();
-        for (int ordinal = 0; ordinal < wrote.size(); ordinal++) {
-            invs.add(new Declared(named, ordinal, wrote.get(ordinal)));
-        }
-        return invs;
     }
 
     /** The type a newtype wraps ({@code data X = Y} gives {@code Y}), or null when {@code name} is not

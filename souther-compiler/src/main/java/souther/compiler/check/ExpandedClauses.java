@@ -31,15 +31,33 @@ import java.util.List;
 public final class ExpandedClauses {
 
     private final TypeKey declaration;
-    private final List<Hir.InvariantClause> clauses;
+    private final List<Expanded> clauses;
 
     /** Closed, for the reason written above. */
-    ExpandedClauses(TypeKey declaration, List<Hir.InvariantClause> clauses) {
+    ExpandedClauses(TypeKey declaration, List<Expanded> clauses) {
         if (declaration == null) {
             throw new IllegalArgumentException("expanded clauses are some declaration's");
         }
         this.declaration = declaration;
         this.clauses = List.copyOf(clauses);
+    }
+
+    /**
+     * One clause as its own expansion produced it.
+     *
+     * <p>Per clause and not per declaration, because that is what the answer is about: an expansion
+     * is run over one tree and leaves calls standing in that one. Held at the declaration's grain,
+     * a clause would be told that a call standing in a sibling stands in it — which is the same
+     * mistake as reading it off the inliner, one level down.
+     */
+    public record Expanded(Hir.InvariantClause clause, CallsLeftStanding standing) {
+
+        public Expanded {
+            if (clause == null || standing == null) {
+                throw new IllegalArgumentException(
+                        "an expanded clause is a tree and what its expansion left standing");
+            }
+        }
     }
 
     /**
@@ -60,8 +78,15 @@ public final class ExpandedClauses {
         return declaration;
     }
 
-    /** Its clauses, in the order they were written, empty where it wrote none. */
-    public List<Hir.InvariantClause> clauses() {
+    /**
+     * Its clauses, in the order they were written, empty where it wrote none — each with what the
+     * expansion that produced it left standing.
+     *
+     * <p>Not read off the tree. A helper applied in one of them is a call the expansion meant to
+     * leave or one it was supposed to remove, and the tree is the same either way; which it is was
+     * settled here and is carried rather than guessed at ({@link CallsLeftStanding}).
+     */
+    public List<Expanded> clauses() {
         return clauses;
     }
 
