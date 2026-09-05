@@ -1038,10 +1038,10 @@ public final class FieldDomains {
      * neighbour, which is the misattribution the whole accounting is asked per rule to avoid.
      *
      * <p><b>And what the name holds that no rule is answerable for, which is not a fallback.</b>
-     * An allowance run down by
-     * everything a position admits is a fact about the answer and not about any rule that paid into
-     * it ({@link UnreadReason.About#THE_ANSWER}), so {@link ReadingEvidence#stoppedBy} refuses such
-     * a reason rather than filing it under a rule and it is read off the name instead. It still
+     * An allowance run down by everything a position admits is a fact about the answer and not
+     * about any rule that paid into it ({@link UnreadReason.About#THE_ANSWER}), so
+     * {@link ReadingEvidence#stoppedBy} refuses such a reason rather than filing it under a rule
+     * and it is read off the name instead. It still
      * accounts for this question: the rule was read and the values its position may hold were not
      * worked out, so the question stands whatever else does. Taken only where the rule had nothing
      * of its own, a rule short in both ways went out short in one — an author rewrites the form and
@@ -1064,7 +1064,7 @@ public final class FieldDomains {
         // taken beside the rule's rather than where the rule has none of its own.
         Set<UnreadReason> answered = new LinkedHashSet<>();
         unreadByName.getOrDefault(at, List.of()).stream()
-                .filter(FieldDomains::standsInForARulesOwnAccount)
+                .filter(FieldDomains::standsBesideARulesOwnAccount)
                 .forEach(answered::add);
         if (why.isEmpty() && answered.isEmpty()) {
             throw new AStandingQuestionWithNoAccount(rule, named);
@@ -1089,7 +1089,7 @@ public final class FieldDomains {
      * about neither accounts for nothing, which is what it says: the reading never got to the
      * position, so there is no question of a rule there for it to be an account of.
      */
-    static boolean standsInForARulesOwnAccount(UnreadReason why) {
+    static boolean standsBesideARulesOwnAccount(UnreadReason why) {
         return switch (why.about()) {
             case THE_ANSWER -> true;
             case A_RULE, NEITHER -> false;

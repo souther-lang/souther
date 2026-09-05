@@ -88,7 +88,7 @@ final class ExpansionCost implements ClauseReading<Long, Void> {
     }
 
     @Override
-    public Long either(souther.compiler.core.Core writtenAt, Long one, Long other) {
+    public Long either(Core writtenAt, Long one, Long other) {
         return Math.min(ceiling, one + other);
     }
 }

@@ -74,7 +74,6 @@ import souther.compiler.publish.PublicationOrders;
 import souther.compiler.publish.PublishedAt;
 import souther.compiler.publish.PublishedIncompleteness;
 import souther.compiler.publish.PublishedOpening;
-import souther.compiler.publish.SourceOrdered;
 import souther.compiler.publish.WeakeningVocabulary;
 import souther.compiler.publish.WeakeningWord;
 import souther.compiler.partition.CompositionBudget;
@@ -2400,16 +2399,19 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         for (Adequacy.Finding f : behavior.findings()) {
             if (f.about() instanceof About.AQuestionNothingAnswered(var asked)
                     && mine.test(asked)) {
-                // The two said as two, in one sentence and joined by nothing that reads as an
-                // order. A reader is owed both and is owed no precedence between them.
-                List<String> said = new ArrayList<>(whyStanding(asked).written().stream()
-                        .map(AdequacyReport::whyUnread).toList());
-                whatItsPositionWasShortOf(asked).map(AdequacyReport::whyUnread)
-                        .ifPresent(said::add);
-                out.append(String.format("      %s not accounted for: %s — %s %s: %s%n",
+                // The two said as two. What the parts of the rule left is a list and reads as one;
+                // what the position's answer was short of is a clause of its own, because a
+                // reader running their eye down a list takes the entries in order and there is no
+                // order between the two. Written into the same list, the limit the rules ran into
+                // together would be the last thing the author wrote, and it is nothing they wrote.
+                out.append(String.format("      %s not accounted for: %s — %s %s: %s%s%n",
                         mark(f), cited(asked.cited(), names, declaredIn),
                         asked(asked.asked()), subjectOf(asked),
-                        String.join("; ", said)));
+                        whyStanding(asked).written().stream().map(AdequacyReport::whyUnread)
+                                .collect(Collectors.joining("; ")),
+                        whatItsPositionWasShortOf(asked).map(AdequacyReport::whyUnread)
+                                .map(each -> ", and the answer at its position: " + each)
+                                .orElse("")));
             }
         }
     }
@@ -2429,14 +2431,15 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * nothing reads comes before an allowance that ran out, or after it, and the model says
      * neither — what it would be saying is which of this compiler's stores a reason came out of.
      *
-     * <p>So this is a {@link SourceOrdered} and not an order of this compiler's: what is in it is
-     * the parts the author wrote, and a written order over those would answer by a precedence
-     * nothing in the model decides.
+     * <p>So what comes back says which of the two orders it is in. Parts an author wrote in one
+     * text are in the order they wrote them; parts written across texts are in no order of
+     * anybody's, because nothing an author did says which file comes first. A writer that wants to
+     * tell a reader the order is the model's has to look at which of the two it is holding.
      *
      * <p>Carried and not claimed here. What the order is is known where the reasons still are what
-     * a reading recorded; by the time they are words a document writes, nothing left can tell the
-     * author's order from a walk's, and a claim made here would be a claim about something this
-     * cannot see.
+     * a reading recorded, beside the places they stand on; by the time they are words a document
+     * writes, nothing left can tell the author's order from a walk's, and a claim made here would
+     * be a claim about something this cannot see.
      */
     private static ReportedReason.Published whyStanding(PartitionEvidence.Unanswered asked) {
         return ReportedReason.wordsFor(asked.stopped().itsRuleLeft());

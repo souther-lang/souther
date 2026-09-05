@@ -122,19 +122,9 @@ final class AdmissibleReading implements ClauseReading<PlannedValues<FactSubject
     @Override
     public PlannedValues<FactSubject> either(Core writtenAt, PlannedValues<FactSubject> one,
                                              PlannedValues<FactSubject> other) {
-        return joined(one, other);
-    }
-
-    /**
-     * The same join, for a caller with no {@code ||} in hand.
-     *
-     * <p>What two alternatives come to is this reading's rule and turns on nothing an author wrote,
-     * so the branches of a choice already settled are joined by it as the clause's own were. The
-     * node the fold hands over is for readings that have something to say about the choice, and
-     * this one has not.
-     */
-    PlannedValues<FactSubject> joined(PlannedValues<FactSubject> one,
-                                      PlannedValues<FactSubject> other) {
+        // What two alternatives come to is this reading's rule and turns on nothing an author
+        // wrote. The node the fold hands over is for a reading with something to say about the
+        // choice itself, and this one has not.
         return alternatives == Alternatives.APART
                 ? one.joinApart(other) : one.join(other);
     }

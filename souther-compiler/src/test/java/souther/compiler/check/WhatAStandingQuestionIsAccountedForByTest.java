@@ -287,7 +287,7 @@ class WhatAStandingQuestionIsAccountedForByTest {
     /** What the reasons that do, or do not, stand in for a rule's own account are about. */
     private static Set<UnreadReason.About> aboutWhat(boolean standingIn) {
         return Arrays.stream(UnreadReason.values())
-                .filter(each -> FieldDomains.standsInForARulesOwnAccount(each) == standingIn)
+                .filter(each -> FieldDomains.standsBesideARulesOwnAccount(each) == standingIn)
                 .map(UnreadReason::about)
                 .collect(Collectors.toCollection(LinkedHashSet::new));
     }

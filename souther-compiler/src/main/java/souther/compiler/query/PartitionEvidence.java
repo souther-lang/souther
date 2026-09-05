@@ -8,6 +8,7 @@ import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.FilingCoordinate;
 import souther.compiler.inputs.InputQuestion;
 import souther.compiler.inputs.StandingQuestion;
+import souther.compiler.inputs.WhatAQuestionStandsOn;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.MeasureReason;
 import souther.compiler.partition.ReportedReason;
@@ -187,7 +188,7 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
          * ({@link ReportedReason}) — projected here instead, a surface
          * that says more than the document does would have nothing left to say it from.
          */
-        public souther.compiler.inputs.WhatAQuestionStandsOn stopped() {
+        public WhatAQuestionStandsOn stopped() {
             return asked.stopped();
         }
 

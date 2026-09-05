@@ -6,6 +6,7 @@ import souther.compiler.check.RuleCitation;
 import souther.compiler.check.RuleRef;
 import souther.compiler.diag.Citation;
 import souther.compiler.diag.SourcePos;
+import souther.compiler.source.SourceId;
 import souther.compiler.types.CoverageConstruct;
 import souther.compiler.types.CoverageOrigin;
 
@@ -131,17 +132,41 @@ class OneIdentityIsFoldedOnceAndKeepsEveryHandleTest {
     }
 
     /**
-     * And where the answer's limit was met is not something two accounts can disagree about.
+     * And an account that met the answer's limit is not disagreeing with one that did not.
      *
-     * <p>The order the author wrote runs over the parts of the rule and stops there. A limit the
-     * position's answer ran into is no part of any of them, so it is held where nothing puts it
-     * among them — and two accounts of one question have nowhere to put it differently.
+     * <p>What the position's answer was short of is a fact about what the rules of that position
+     * come to between them, and the two accounts are of one rule. A reading whose neighbours left
+     * the answer buildable met no such limit and one reached where they did, and neither of them is
+     * wrong — so the question stands on what either met, and a model somebody could write does not
+     * refuse to compile because two readings of one rule found different things about a position
+     * neither is answerable for.
      */
     @Test
-    void whereTheAnswersLimitWasMetIsNoDisagreement() {
-        StandingQuestion both = asked(NAMED, standingOn()).mergedWith(asked(PLACED, standingOn()));
+    void anAccountThatMetTheAnswersLimitIsNotDisagreeingWithOneThatDidNot() {
+        StandingQuestion both = asked(NAMED, standingOn())
+                .mergedWith(asked(PLACED, itsRuleAlone()));
 
         assertEquals(Set.of(NAMED, PLACED), both.cited());
+        assertEquals(Optional.of(new BlockReason.ExactValuesTooCostly()),
+                both.stopped().itsPositionWasShortOf(),
+                "the question stands on it, and it was met once");
+    }
+
+    /** And two that met different limits are disagreeing about the position. */
+    @Test
+    void andTwoThatMetDifferentLimitsAreRefused() {
+        StandingQuestion one = asked(NAMED, standingOn());
+        StandingQuestion other = asked(PLACED, new WhatAQuestionStandsOn(
+                RuleReasons.one(new BlockReason.UnreadComparisonForm()),
+                Optional.of(new BlockReason.RulesNotHandedOnAsSets())));
+
+        assertThrows(IllegalArgumentException.class, () -> one.mergedWith(other));
+    }
+
+    /** The same question, met where its position's answer was worked out. */
+    private static WhatAQuestionStandsOn itsRuleAlone() {
+        return new WhatAQuestionStandsOn(
+                RuleReasons.one(new BlockReason.UnreadComparisonForm()), Optional.empty());
     }
 
     /** And a question that asks something is not an account of one that asks nothing. */
@@ -215,7 +240,8 @@ class OneIdentityIsFoldedOnceAndKeepsEveryHandleTest {
     private static WhatAQuestionStandsOn standingOn(BlockReason.RuleReadingStopped... these) {
         List<RuleReasons.Placed> written = new ArrayList<>();
         for (int i = 0; i < these.length; i++) {
-            written.add(new RuleReasons.Placed(new SourcePos(1, i + 1), these[i]));
+            written.add(new RuleReasons.Placed(
+                    new SourcePos(1, i + 1, new SourceId("one")), these[i]));
         }
         return new WhatAQuestionStandsOn(RuleReasons.from(written), Optional.empty());
     }

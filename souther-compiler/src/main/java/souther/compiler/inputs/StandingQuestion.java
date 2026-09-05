@@ -185,11 +185,17 @@ public sealed interface StandingQuestion {
         }
 
         /**
-         * <p>What each account was short of is not accumulated and not chosen between. What the
-         * parts of the rule left is the author's order over them, which is one answer about the
-         * model — so two accounts that disagree about it are two accounts one of which is wrong,
-         * and taking either would publish a precedence nothing in the model decides. What the
-         * position's answer was short of is one fact and two accounts either agree on it or do not.
+         * <p>What the parts of the rule left is the author's order over them, which is one answer
+         * about the model — so two accounts that disagree about it are two accounts one of which is
+         * wrong, and taking either would publish a precedence nothing in the model decides.
+         *
+         * <p><b>What the position's answer was short of is asked of neither.</b> It is a fact about
+         * what the rules of that position come to between them, so two accounts of one rule can
+         * honestly differ about it: a reading whose neighbours left the answer buildable met no
+         * such limit, and one reached where they did. Held to agreement, a model somebody could
+         * write refuses to compile because two readings of one rule found different things about a
+         * position neither of them is answerable for. So it is taken from whichever met it, and two
+         * that met different ones are disagreeing about the position and are refused there.
          *
          * <p>Compared as the two, and never as one sequence. A difference in the order across the
          * halves is no disagreement about anything the model says — there is no order there — so a
@@ -206,14 +212,21 @@ public sealed interface StandingQuestion {
                 throw new IllegalArgumentException("two accounts put together are of one question: "
                         + fact + " and " + it.fact);
             }
-            if (!stopped.itsRuleLeft().equals(it.stopped.itsRuleLeft())
-                    || !stopped.itsPositionWasShortOf()
-                            .equals(it.stopped.itsPositionWasShortOf())) {
+            if (!stopped.itsRuleLeft().equals(it.stopped.itsRuleLeft())) {
                 throw new TwoAccountsOfOneQuestion(fact, stopped, it.stopped);
             }
+            Optional<BlockReason.AnswerRealizationStopped> mine = stopped.itsPositionWasShortOf();
+            Optional<BlockReason.AnswerRealizationStopped> theirs =
+                    it.stopped.itsPositionWasShortOf();
+            if (mine.isPresent() && theirs.isPresent() && !mine.equals(theirs)) {
+                throw new TwoAccountsOfOneQuestion(fact, stopped, it.stopped);
+            }
+            Optional<BlockReason.AnswerRealizationStopped> answer =
+                    mine.isPresent() ? mine : theirs;
             Set<RuleCitation> both = new HashSet<>(cited);
             both.addAll(it.cited);
-            return new Exact(fact, both, stopped);
+            return new Exact(fact, both,
+                    new WhatAQuestionStandsOn(stopped.itsRuleLeft(), answer));
         }
 
         @Override

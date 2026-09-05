@@ -6,6 +6,7 @@ import souther.compiler.check.RuleCitation;
 import souther.compiler.check.RuleRef;
 import souther.compiler.diag.Citation;
 import souther.compiler.diag.SourcePos;
+import souther.compiler.source.SourceId;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.FilingCoordinate;
 import souther.compiler.inputs.RuleReasons;
@@ -222,7 +223,8 @@ class OneFactIsOneWeakeningHoweverItWasEvidencedTest {
                                                  BlockReason.RuleReadingStopped... stopped) {
         List<RuleReasons.Placed> written = new ArrayList<>();
         for (int i = 0; i < stopped.length; i++) {
-            written.add(new RuleReasons.Placed(new SourcePos(1, i + 1), stopped[i]));
+            written.add(new RuleReasons.Placed(
+                    new SourcePos(1, i + 1, new SourceId("one")), stopped[i]));
         }
         return of(new Weakening.ModelReadingIncomplete(ClosureGap.QuestionUnanswered.of(
                 StandingQuestion.Exact.of(comparison(), cited,

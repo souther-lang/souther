@@ -86,6 +86,28 @@ class OnlyPlacesOfOneTextPutReasonsInAnOrderTest {
                 "nothing an author did says which file comes first");
     }
 
+    /**
+     * And what comes out of two texts is the same whichever way round they were met.
+     *
+     * <p>Steady is what the entries there are, and all they are. Nothing an author did settles
+     * them, so what must not settle them either is which text this compiler was handed first —
+     * a document that came out one way on one run and the other way on the next would have a
+     * reader comparing two reports and finding a difference that is about neither model.
+     *
+     * <p>Which order it is, is not asked here. Any order that is the same twice will do, and
+     * pinning one would make a decision about a document out of a tie-break nobody reads.
+     */
+    @Test
+    void whatComesOutOfTwoTextsIsTheSameWhicheverWayRoundTheyWereMet() {
+        assertEquals(RuleReasons.from(List.of(
+                        new RuleReasons.Placed(new SourcePos(5, 1, ONE), FORM),
+                        new RuleReasons.Placed(new SourcePos(10, 1, ANOTHER), DOMAIN))).reasons(),
+                RuleReasons.from(List.of(
+                        new RuleReasons.Placed(new SourcePos(10, 1, ANOTHER), DOMAIN),
+                        new RuleReasons.Placed(new SourcePos(5, 1, ONE), FORM))).reasons(),
+                "which text was met first is a fact about this compiler and about no model");
+    }
+
     /** And one reason is in an order somebody wrote by there being nothing to order it against. */
     @Test
     void oneReasonIsAnOrderSomebodyWrote() {
