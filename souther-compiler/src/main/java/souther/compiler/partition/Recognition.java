@@ -5,6 +5,7 @@ import souther.compiler.inputs.NumericTerm;
 import souther.compiler.numeric.Place;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.values.Value;
+import souther.compiler.values.ValueSet;
 
 import java.util.List;
 
@@ -145,7 +146,7 @@ public sealed interface Recognition {
      * behavior tells apart need not be an interval of the order they are written on, so there is no
      * place a line could fall in this and it says so ({@link #answersAboutAPlace}).
      */
-    record OfASet(souther.compiler.values.ValueSet values) implements Recognition {
+    record OfASet(ValueSet values) implements Recognition {
 
         public OfASet {
             if (values == null) {

@@ -6,6 +6,9 @@ import souther.compiler.ast.WrittenName;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
+import souther.compiler.types.CoverageConstruct;
+import souther.compiler.types.CoverageOrigin;
+import souther.compiler.types.SourceReferenceOrigin;
 import souther.compiler.types.ReachName;
 import souther.compiler.types.ValueName;
 
@@ -358,10 +361,10 @@ class CompilePostfixApplicationTest {
     /** An application a source wrote, applying {@code applied} — as much of the reading as a
      *  question about what a report quotes needs. */
     private static Hir.Apply readApplying(WrittenName applied, SourcePos at) {
-        Ast.Expr callee = new Ast.Var(applied, applied.region());
+        Ast.Expr callee = new Ast.Var(applied, new SourceReferenceOrigin("m", 0),
+                applied.region());
         return Hir.Apply.read(new Ast.Apply(callee, java.util.List.of(),
-                        souther.compiler.types.CoverageOrigin.written("m", 0,
-                                souther.compiler.types.CoverageConstruct.CALL), at, null),
+                        CoverageOrigin.written("m", 0, CoverageConstruct.CALL), at, null),
                 new Hir.AppliedCallee(applied, callee.reportedAt()),
                 new Hir.Var.Unanswered(applied, applied.region()), java.util.List.of());
     }

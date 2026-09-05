@@ -5,6 +5,7 @@ import souther.compiler.diag.msg.Supporting;
 import souther.compiler.ast.Ast;
 import souther.compiler.types.CoverageConstruct;
 import souther.compiler.types.CoverageOrigin;
+import souther.compiler.types.SourceReferenceOrigin;
 import souther.compiler.ast.StructuralCost;
 import souther.compiler.ast.WrittenName;
 import souther.compiler.cst.CstLexer;
@@ -69,6 +70,14 @@ public final class AstBuilder {
      *  one's numbers turn on how many of the other stood before it. */
     private int ruleCounter = 0;
     /**
+     * How many references this source has been read to hold, which is what numbers the next one
+     * ({@link SourceReferenceOrigin}).
+     *
+     * <p>Its own counter, for the reason the block's is: a reference is not a construct, and one
+     * counter for both would make each one's numbers turn on how many of the other stood before it.
+     */
+    private int referenceCounter = 0;
+    /**
      * How many rows this source has been read to write for each behavior, which is what numbers the
      * next one ({@link RowIdentity.Unnamed}).
      *
@@ -124,6 +133,23 @@ public final class AstBuilder {
      *  number is: this is the one place reading the syntax, and a copy has to carry it. */
     private souther.compiler.types.RuleOrigin rule() {
         return souther.compiler.types.RuleOrigin.written(moduleName, ruleCounter++);
+    }
+
+    /**
+     * Which reference of this source the next one is.
+     *
+     * <p>Taken here for the reason the two above are: this is the one place reading the syntax, and
+     * everything below reads a tree where a name may have been respelled, copied into another
+     * module, or resolved to what it reaches. None of those tells one occurrence from another, and
+     * a reader that wanted to would have nothing left but where the characters are — which is where
+     * a complaint belongs and is not what a reference is.
+     *
+     * <p>A name a desugaring writes takes one too. It stands where the author wrote a form that
+     * holds it, so it is a reference of this source however it is spelled — and leaving it without
+     * one would make the field a question every reader has to ask before it may use it.
+     */
+    private SourceReferenceOrigin reference() {
+        return new SourceReferenceOrigin(moduleName, referenceCounter++);
     }
 
     // --- module ---
@@ -295,10 +321,10 @@ public final class AstBuilder {
     private Ast.Var behaviorNameAfter(SyntaxNode n, int from) {
         List<SyntaxElement> es = meaningful(n);
         if (from >= es.size() || !isToken(es.get(from), SyntaxKind.IDENT)) {
-            return Ast.Var.desugared("", pos(n));
+            return Ast.Var.desugared("", pos(n), reference());
         }
         int[] at = {from};
-        return Ast.Var.written(dottedName(es, at).name());
+        return Ast.Var.written(dottedName(es, at).name(), reference());
     }
 
     /** {@code ( args ) -> out} or {@code _ -> out}. A row with no {@code ARG_LIST} is the default. */
@@ -478,7 +504,7 @@ public final class AstBuilder {
                     // one ident past the keyword is the `on` of `depends on`, which lexes as an
                     // ordinary identifier and is no part of the list
                     for (Ast.Name dep : dottedNames(clause, 1)) {
-                        dependsOn.add(Ast.Var.written(dep.name()));
+                        dependsOn.add(Ast.Var.written(dep.name(), reference()));
                     }
                 } else if (clause.kind() == SyntaxKind.ENSURES_CLAUSE) {
                     // Reported at the name, which is what the rule is about — as a data's clause
@@ -509,7 +535,7 @@ public final class AstBuilder {
         }
         List<Ast.Var> stages = new ArrayList<>();
         for (SyntaxNode st : childNodes(pipe, SyntaxKind.STAGE)) {
-            stages.add(Ast.Var.written(qualifiedNameOf(st)));
+            stages.add(Ast.Var.written(qualifiedNameOf(st), reference()));
         }
         Ast.RetType declaredOut = pipe.child(SyntaxKind.RET_TYPE).map(this::retType).orElse(null);
         return new Ast.PipeBehavior(declared, stages, declaredOut, pos);
@@ -598,7 +624,8 @@ public final class AstBuilder {
                 // the author wrote, not the definition it sits in
                 SourcePos at = pos(pat);
                 // What the pattern lowers to holds the body, so it covers what the body covers.
-                body = bindPattern(pat, Ast.Var.desugared(params.get(i).name(), at), body, at,
+                body = bindPattern(pat, Ast.Var.desugared(params.get(i).name(), at, reference()),
+                        body, at,
                         body.region());
             }
         }
@@ -779,7 +806,7 @@ public final class AstBuilder {
     private Ast.Expr expr(SyntaxNode n) {
         return switch (n.kind()) {
             case LITERAL_EXPR -> literal(n);
-            case VAR_EXPR -> Ast.Var.written(nameOf(firstIdentToken(n)));
+            case VAR_EXPR -> Ast.Var.written(nameOf(firstIdentToken(n)), reference());
             case FIELD_ACCESS -> fieldAccess(n);
             case APPLY_EXPR -> apply(n);
             case BINARY_EXPR -> binary(n);
@@ -1015,7 +1042,8 @@ public final class AstBuilder {
         for (int i = pats.size() - 1; i >= 0; i--) {
             if (pats.get(i).kind() != SyntaxKind.PATTERN_NAME) {
                 SourcePos at = pos(pats.get(i));
-                body = bindPattern(pats.get(i), Ast.Var.desugared(params.get(i).name(), at), body,
+                body = bindPattern(pats.get(i),
+                        Ast.Var.desugared(params.get(i).name(), at, reference()), body,
                         at, bodyRegion);
             }
         }
@@ -1032,7 +1060,8 @@ public final class AstBuilder {
         String param = "$g" + (getterCounter++);
         // Both the getter and the read inside it are written over the `.field` that stands for
         // them: the parameter is a name nobody typed, and the characters here are the field's.
-        Ast.Expr body = new Ast.FieldAccess(Ast.Var.desugared(param, pos), nameOf(field),
+        Ast.Expr body = new Ast.FieldAccess(Ast.Var.desugared(param, pos, reference()),
+                nameOf(field),
                 posOf(field), region(n));
         return Ast.Block.desugared(List.of(param), body, rule(), pos, region(n));
     }
@@ -1050,10 +1079,10 @@ public final class AstBuilder {
             if (c.kind() == SyntaxKind.SPREAD_MEMBER) {
                 List<SyntaxToken> path = identTokens(c);
                 if (path.size() == 1) {
-                    spreads.add(Ast.Var.written(nameOf(path.get(0))));
+                    spreads.add(Ast.Var.written(nameOf(path.get(0)), reference()));
                 } else {
                     String bound = "$s" + (spreadCounter++);
-                    Ast.Expr value = Ast.Var.written(nameOf(path.get(0)));
+                    Ast.Expr value = Ast.Var.written(nameOf(path.get(0)), reference());
                     for (int i = 1; i < path.size(); i++) {
                         value = new Ast.FieldAccess(value, nameOf(path.get(i)),
                                 posOf(path.get(i)),
@@ -1063,13 +1092,14 @@ public final class AstBuilder {
                     pathValues.add(value);
                     // the path is bound just outside the construction, so this name is answered
                     // against that binding like any other the source wrote
-                    spreads.add(Ast.Var.desugared(bound, posOf(path.get(0))));
+                    spreads.add(Ast.Var.desugared(bound, posOf(path.get(0)), reference()));
                 }
             } else if (c.kind() == SyntaxKind.FIELD_INIT) {
                 WrittenName field = nameOf(firstIdentToken(c));
                 Optional<SyntaxNode> value = firstExprChildOpt(c);
                 // shorthand `field` means `field = field`, and the one name is both
-                Ast.Expr v = value.isPresent() ? expr(value.get()) : Ast.Var.written(field);
+                Ast.Expr v =
+                        value.isPresent() ? expr(value.get()) : Ast.Var.written(field, reference());
                 inits.add(new Ast.FieldInit(field, v));
             }
         }
@@ -1236,7 +1266,8 @@ public final class AstBuilder {
             }
             for (int k = fieldNames.size() - 1; k >= 0; k--) {
                 body = new Ast.LetIn(fieldVars.get(k),
-                        new Ast.FieldAccess(Ast.Var.desugared(whole, casePos), fieldNames.get(k),
+                        new Ast.FieldAccess(Ast.Var.desugared(whole, casePos, reference()),
+                                fieldNames.get(k),
                                 casePos),
                         body, casePos, bodyRegion);
             }
@@ -1251,8 +1282,9 @@ public final class AstBuilder {
             // Option's `Some` binds the unwrapped element already (codegen strips the wrapper), so its
             // first named layer opens that element directly — `Some(従業員ID(v))` binds v to whole.value.
             Ast.Expr target = isSome
-                    ? Ast.Var.desugared(whole, casePos)
-                    : new Ast.FieldAccess(Ast.Var.desugared(whole, casePos), "value", casePos);
+                    ? Ast.Var.desugared(whole, casePos, reference())
+                    : new Ast.FieldAccess(Ast.Var.desugared(whole, casePos, reference()), "value",
+                            casePos);
             for (int k = 0; k < unwrapNames.size() - 1; k++) {
                 target = new Ast.FieldAccess(target, "value", casePos);
             }
@@ -1462,7 +1494,8 @@ public final class AstBuilder {
                 Ast.Expr body = rest;
                 for (int i = elems.size() - 1; i >= 0; i--) {
                     body = bindPattern(elems.get(i),
-                            new Ast.TupleGet(Ast.Var.desugared(whole, pos), i, elems.size(), pos,
+                            new Ast.TupleGet(Ast.Var.desugared(whole, pos, reference()), i,
+                                    elems.size(), pos,
                                     null),
                             body, pos, held);
                 }
@@ -1470,7 +1503,8 @@ public final class AstBuilder {
             }
             case PATTERN_CTOR -> {
                 String whole = "$p" + (patternCounter++);
-                Ast.Expr inner = new Ast.FieldAccess(Ast.Var.desugared(whole, pos), "value", pos);
+                Ast.Expr inner = new Ast.FieldAccess(Ast.Var.desugared(whole, pos, reference()),
+                        "value", pos);
                 Ast.Expr body = bindPattern(patternChild(pat), inner, rest, pos, held);
                 yield Ast.LetIn.opening(whole, value,
                         Ast.Name.written(qualifiedNameOf(pat)), body, pos, held);
@@ -1484,7 +1518,8 @@ public final class AstBuilder {
                     String field = ident(names.get(0));
                     SyntaxToken var = names.size() > 1 ? names.get(1) : names.get(0);
                     body = new Ast.LetIn(binderOf(var),
-                            new Ast.FieldAccess(Ast.Var.desugared(whole, pos), field, pos), body,
+                            new Ast.FieldAccess(Ast.Var.desugared(whole, pos, reference()), field,
+                                    pos), body,
                             pos, held);
                 }
                 yield new Ast.LetIn(whole, value, body, pos, held);

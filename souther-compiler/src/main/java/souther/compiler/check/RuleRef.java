@@ -1,5 +1,7 @@
 package souther.compiler.check;
 
+import souther.compiler.types.CoverageOrigin;
+
 /**
  * Which rule of the model, and nothing about how anybody came to be holding it.
  *
@@ -64,7 +66,7 @@ public sealed interface RuleRef {
      * @param origin   which construct of which module the author wrote, which is what tells one
      *                 comparison from another wherever it is met
      */
-    record Comparison(String behavior, souther.compiler.types.CoverageOrigin origin)
+    record Comparison(String behavior, CoverageOrigin origin)
             implements RuleRef {
 
         public Comparison {
@@ -88,7 +90,7 @@ public sealed interface RuleRef {
      * @param origin   which application of which module the author wrote, which is what tells one
      *                 from another wherever it is met
      */
-    record Predicate(String behavior, souther.compiler.types.CoverageOrigin origin)
+    record Predicate(String behavior, CoverageOrigin origin)
             implements RuleRef {
 
         public Predicate {

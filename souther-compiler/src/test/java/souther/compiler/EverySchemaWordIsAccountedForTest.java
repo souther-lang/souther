@@ -188,10 +188,10 @@ class EverySchemaWordIsAccountedForTest {
      * thing this is here to notice.
      */
     private static Set<String> constructWords() {
-        return Arrays.stream(souther.compiler.types.CoverageConstruct.values())
-                .filter(c -> c != souther.compiler.types.CoverageConstruct.BINARY
-                        && c != souther.compiler.types.CoverageConstruct.CALL
-                        && c != souther.compiler.types.CoverageConstruct.NOT_WRITTEN)
+        return Arrays.stream(CoverageConstruct.values())
+                .filter(c -> c != CoverageConstruct.BINARY
+                        && c != CoverageConstruct.CALL
+                        && c != CoverageConstruct.NOT_WRITTEN)
                 .map(AdequacyReport::word)
                 .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
     }

@@ -4,6 +4,7 @@ import souther.compiler.diag.Region;
 import souther.compiler.observe.RowIdentity;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.CoverageOrigin;
+import souther.compiler.types.SourceReferenceOrigin;
 import souther.compiler.types.TypeKey;
 
 import java.util.ArrayList;
@@ -1092,7 +1093,13 @@ public interface Ast {
      *       which copies the fields of what the name stands for and so has nothing to evaluate.</li>
      * </ul>
      */
-    record Var(WrittenName written, Region region) implements Expr {
+    record Var(WrittenName written, SourceReferenceOrigin origin, Region region) implements Expr {
+
+        // `origin` is which reference of this source it is, and it is here rather than read off the
+        // name or the place: two occurrences of one name reach the same declaration and are two
+        // references, a pass may respell one, and where a name is written is where a complaint
+        // about it belongs. So which occurrence this is is minted where the source is read and
+        // carried from there, the way the constructs a source writes already are.
 
         public Var {
             if (written.region() != null && region == null) {
@@ -1110,19 +1117,19 @@ public interface Ast {
         }
 
         /** A name as the parser read it. */
-        public static Var written(String spelling, SourcePos pos) {
-            return written(WrittenName.of(spelling, pos));
+        public static Var written(String spelling, SourcePos pos, SourceReferenceOrigin origin) {
+            return written(WrittenName.of(spelling, pos), origin);
         }
 
         /** The same, off an occurrence the parser has already read. */
-        public static Var written(WrittenName written) {
-            return new Var(written, written.region());
+        public static Var written(WrittenName written, SourceReferenceOrigin origin) {
+            return new Var(written, origin, written.region());
         }
 
         /** A read of a name a desugaring minted, at the form it is rewriting. Written nowhere: the
          * characters at {@code anchor} spell whatever the author put there, which is not this. */
-        public static Var desugared(String name, SourcePos anchor) {
-            return written(WrittenName.synthetic(name, anchor));
+        public static Var desugared(String name, SourcePos anchor, SourceReferenceOrigin origin) {
+            return written(WrittenName.synthetic(name, anchor), origin);
         }
 
         /** The bare name this reaches its declaration by, whatever the source spelled. */
@@ -1136,9 +1143,9 @@ public interface Ast {
             return written.pos();
         }
 
-        /** The same name, over {@code region}. */
+        /** The same name, over {@code region}. The same reference, so it keeps its own origin. */
         public Var over(Region region) {
-            return new Var(written, region);
+            return new Var(written, origin, region);
         }
 
         @Override

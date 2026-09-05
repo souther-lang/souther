@@ -5,7 +5,9 @@ import souther.compiler.check.RuleReadingSource;
 import souther.compiler.ast.Ast;
 import souther.compiler.ast.DefinitionName;
 import souther.compiler.ast.Hir;
+import souther.compiler.check.AnalysisBody;
 import souther.compiler.check.BehaviorChecker;
+import souther.compiler.check.SpecChecker;
 import souther.compiler.check.CheckSurface;
 import souther.compiler.check.InvariantSettled;
 import souther.compiler.check.BehaviorContract;
@@ -1961,7 +1963,7 @@ public final class Bodies {
                     : null;
             List<Diagnostic> warnings = new ArrayList<>();
             try {
-                souther.compiler.check.SpecChecker.Checked checked =
+                SpecChecker.Checked checked =
                         TypeChecker.checkBehavior(spec.value(), fn.value(),
                         body.value().value().writtenBody(),
                         db.ask(new Front.Reading()).value(),
@@ -2220,7 +2222,7 @@ public final class Bodies {
     public record CheckedBody(Core body, souther.compiler.check.ElementBindings elements,
                              souther.compiler.coverage.DecisionSources decisions,
                              souther.compiler.coverage.SuppliedRules supplied,
-                             souther.compiler.check.AnalysisBody analysis) {}
+                             AnalysisBody analysis) {}
 
     /**
      * What a successful check produced for the backend (issue #81): the Core of every body it typed,
@@ -2248,7 +2250,7 @@ public final class Bodies {
         private final Map<String, souther.compiler.check.ElementBindings> elements;
         private final souther.compiler.coverage.DecisionSources decisions;
         private final souther.compiler.coverage.SuppliedRules supplied;
-        private final Map<String, souther.compiler.check.AnalysisBody> analysed;
+        private final Map<String, AnalysisBody> analysed;
 
         private Elaborated(souther.compiler.coverage.ModuleBodies of,
                            Map<String, Core> emittedHelpers,
@@ -2256,7 +2258,7 @@ public final class Bodies {
                            Map<String, souther.compiler.check.ElementBindings> elements,
                            souther.compiler.coverage.DecisionSources decisions,
                            souther.compiler.coverage.SuppliedRules supplied,
-                           Map<String, souther.compiler.check.AnalysisBody> analysed) {
+                           Map<String, AnalysisBody> analysed) {
             this.of = of;
             this.supplied = supplied;
             this.emittedHelpers = emittedHelpers;
@@ -2356,7 +2358,7 @@ public final class Bodies {
          * answered with. Taking the emitted tree instead is answering a question about meanings
          * with the tree the question is not about.
          */
-        public Map<String, souther.compiler.check.AnalysisBody> analysisBodies() {
+        public Map<String, AnalysisBody> analysisBodies() {
             return analysed;
         }
 
@@ -2441,7 +2443,7 @@ public final class Bodies {
             }
             // In the order the module declares them, which is what the numbering below is of.
             java.util.SequencedMap<String, Core> bodies = new LinkedHashMap<>();
-            Map<String, souther.compiler.check.AnalysisBody> analysed = new LinkedHashMap<>();
+            Map<String, AnalysisBody> analysed = new LinkedHashMap<>();
             Map<String, souther.compiler.check.ElementBindings> elements = new LinkedHashMap<>();
             // One reading for the module. Every behavior's check walks the same declarations, so the
             // entries agree wherever two of them wrote one fork; kept as one map so a reader asking

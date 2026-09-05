@@ -5,6 +5,7 @@ import souther.compiler.source.SourceId;
 
 import souther.compiler.ast.Ast;
 import souther.compiler.ast.WrittenName;
+import souther.compiler.regex.PatternPlan;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.Primary;
@@ -201,8 +202,7 @@ public final class Front {
         static final souther.compiler.partition.AdequacyPolicy STANDARD =
                 new souther.compiler.partition.AdequacyPolicy(
                         new souther.compiler.partition.AdequacyPolicy.OfTheMeasures(20_000,
-                                souther.compiler.regex.PatternPlan.Budget
-                                        .OF_BEHAVIOR_DISTINCTIONS),
+                                PatternPlan.Budget.OF_BEHAVIOR_DISTINCTIONS),
                         new souther.compiler.partition.AdequacyPolicy.OfTheGeneration(200, 4096));
     }
 

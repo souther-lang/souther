@@ -1,5 +1,10 @@
 package souther.compiler.partition;
 
+import souther.compiler.regex.PatternPlan;
+import souther.compiler.values.Allowance;
+
+import java.util.Objects;
+
 /**
  * What measuring one behavior and composing rows for it may spend.
  *
@@ -24,8 +29,8 @@ package souther.compiler.partition;
 public record AdequacyPolicy(OfTheMeasures measures, OfTheGeneration generation) {
 
     public AdequacyPolicy {
-        java.util.Objects.requireNonNull(measures, "a compilation measures under some budget");
-        java.util.Objects.requireNonNull(generation, "a compilation composes under some budget");
+        Objects.requireNonNull(measures, "a compilation measures under some budget");
+        Objects.requireNonNull(generation, "a compilation composes under some budget");
     }
 
     /**
@@ -49,7 +54,7 @@ public record AdequacyPolicy(OfTheMeasures measures, OfTheGeneration generation)
 
         private final int pairSpace;
 
-        private final souther.compiler.regex.PatternPlan.Budget behaviorDistinctions;
+        private final PatternPlan.Budget behaviorDistinctions;
 
         /**
          * @param pairSpace            how many two-class combinations across the behavior's
@@ -64,7 +69,7 @@ public record AdequacyPolicy(OfTheMeasures measures, OfTheGeneration generation)
          *                             rules it could afford
          */
         public OfTheMeasures(int pairSpace,
-                             souther.compiler.regex.PatternPlan.Budget behaviorDistinctions) {
+                             PatternPlan.Budget behaviorDistinctions) {
             // A guardrail is a positive number a count is compared against. Refused here rather
             // than left to whoever writes it: a bound that admits nothing measures nothing, and a
             // bound of nought would report every behavior as partial over a space it never walked.
@@ -105,8 +110,8 @@ public record AdequacyPolicy(OfTheMeasures measures, OfTheGeneration generation)
          *
          * @param <A> what a position is called
          */
-        public <A> souther.compiler.values.Allowance<A> allowanceForBehaviorDistinctions() {
-            return souther.compiler.values.Allowance.of(behaviorDistinctions);
+        public <A> Allowance<A> allowanceForBehaviorDistinctions() {
+            return Allowance.of(behaviorDistinctions);
         }
 
         /**

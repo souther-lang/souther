@@ -2,6 +2,7 @@ package souther.compiler.ast;
 
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.ReachName;
+import souther.compiler.types.SourceReferenceOrigin;
 import souther.compiler.types.ValueName;
 
 import org.junit.jupiter.api.Test;
@@ -36,7 +37,8 @@ class ANameAnsweredHalfwayIsRefusedTest {
      */
     @Test
     void aNameTheParserReadSaysOnlyWhatItIsWrittenAs() {
-        Ast.Var written = Ast.Var.written("spin", POS);
+        Ast.Var written = Ast.Var.written("spin", POS,
+                new SourceReferenceOrigin("m", 0));
 
         assertEquals("spin", written.name());
         assertEquals(Ast.Var.class, written.getClass(),

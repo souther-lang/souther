@@ -1,6 +1,8 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.Comparison;
+import souther.compiler.check.PathReachability;
+import souther.compiler.check.RuleCitation;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleRef;
 import souther.compiler.check.StringPredicates;
@@ -160,7 +162,7 @@ record BodyReadings(List<ComparisonReading> comparisons,
      */
     private record Body(String behavior, CoverageSites.Plan plan,
                         InputReading read,
-                        souther.compiler.check.PathReachability.Answers arrives) {
+                        PathReachability.Answers arrives) {
 
         Symbols symbols() {
             return read.symbols();
@@ -193,7 +195,7 @@ record BodyReadings(List<ComparisonReading> comparisons,
     static BodyReadings of(String behavior, Core body, CoverageSites.Plan plan,
                            InputReading read,
                            InputReads reads,
-                           souther.compiler.check.PathReachability.Answers arrives) {
+                           PathReachability.Answers arrives) {
         if (behavior == null) {
             throw new IllegalArgumentException("a body is somebody's body");
         }
@@ -270,7 +272,7 @@ record BodyReadings(List<ComparisonReading> comparisons,
                     new PredicateOrigin(
                             new RuleRef.Predicate(in.behavior(), call.origin()),
                             new PredicateOccurrence(out.stringPredicates().size()),
-                            new souther.compiler.check.RuleCitation.WrittenAt(
+                            new RuleCitation.WrittenAt(
                                     Citation.of(call.pos()))),
                     stated.subject(), reads, stated.reading(), assumed, live));
         }
