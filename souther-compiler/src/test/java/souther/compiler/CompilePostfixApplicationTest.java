@@ -366,6 +366,6 @@ class CompilePostfixApplicationTest {
         return Hir.Apply.read(new Ast.Apply(callee, java.util.List.of(),
                         CoverageOrigin.written("m", 0, CoverageConstruct.CALL), at, null),
                 new Hir.AppliedCallee(applied, callee.reportedAt()),
-                new Hir.Var.Unanswered(applied, applied.region()), java.util.List.of());
+                new Hir.Var.Unanswered(applied, null, applied.region()), java.util.List.of());
     }
 }

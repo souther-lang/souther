@@ -182,7 +182,7 @@ class WhatWasAppliedAndWhatIsAppliedAreTwoAnswersTest {
         souther.compiler.types.ValueName.Local local = new souther.compiler.types.ValueName.Local(
                 name, new souther.compiler.types.BindingId(
                         new souther.compiler.types.BindingOwner.OfValue("demo", "go"), 0));
-        return Hir.Var.respelled(name, new souther.compiler.types.ReachName.InScope(local),
+        return Hir.Var.respelled(name, new souther.compiler.types.ReachName.InScope(local), null,
                 call.function().pos(), call.function().region());
     }
 }

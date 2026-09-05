@@ -456,8 +456,11 @@ public final class Elaborator {
     private static Hir.Expr empty(String collection, Hir.RowCollection row) {
         souther.compiler.types.ValueName.Stdlib.Operation empty =
                 souther.compiler.types.ValueName.Stdlib.operation(collection, "empty");
+        // No source wrote this reference: the author wrote an empty collection, and the operation
+        // it stands for is this pass's.
         return Hir.Var.respelled(collection + ".empty",
-                new souther.compiler.types.ReachName.OfLibrary(empty), row.pos(), row.region());
+                new souther.compiler.types.ReachName.OfLibrary(empty), null, row.pos(),
+                row.region());
     }
 
     /** Elaborates {@code e} and checks it against {@code expected}, returning its Core. The check is

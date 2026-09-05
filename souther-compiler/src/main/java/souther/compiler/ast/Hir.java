@@ -10,6 +10,7 @@ import souther.compiler.types.MapKeyRepresentation;
 import souther.compiler.types.LeafScalar;
 import souther.compiler.types.CoverageOrigin;
 import souther.compiler.types.ReachName;
+import souther.compiler.types.SourceReferenceOrigin;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
@@ -1793,6 +1794,24 @@ public interface Hir {
         /** The name, and the occurrence of it that was read. */
         WrittenName written();
 
+        /**
+         * Which reference of the source this is, or null where no source wrote one.
+         *
+         * <p>Not the name and not the place. A pass may respell a reference — a helper written bare
+         * becomes qualified in a body carried out of its module — so what the name is spelled as
+         * says nothing about which occurrence it is; two occurrences of one name reach the same
+         * declaration, so what it reaches says nothing either; and where the characters are is
+         * where a complaint belongs. So a reader that has to tell one occurrence from another reads
+         * this ({@link SourceReferenceOrigin}).
+         *
+         * <p>Null is "no source wrote this reference" and never "it is not known which". A pass
+         * writing a reference of its own — the empty collection a literal stands for, a name a
+         * fixture composes — wrote it, and a reference given the number of one an author wrote
+         * would be this compiler's work passing for the model's. What a reader owed a source
+         * reference does where there is none is refuse, not guess.
+         */
+        SourceReferenceOrigin origin();
+
         /** The stretch of source the expression was written over. */
         @Override
         Region region();
@@ -1828,9 +1847,13 @@ public interface Hir {
         }
 
         /** The same, off an occurrence already read: a name standing as an expression over exactly
-         * the characters that spell it — every one but a name the author parenthesized. */
+         * the characters that spell it — every one but a name the author parenthesized.
+         *
+         * <p>No source wrote it. A pass writing a name of its own into a body wrote that reference,
+         * and giving it the number of one an author wrote would be this compiler's work standing
+         * among the model's. */
         static Var denoting(WrittenName written, ReachName reachedAs) {
-            return new Var.Denoting(written, reachedAs, written.region());
+            return new Var.Denoting(written, reachedAs, null, written.region());
         }
 
         /**
@@ -1841,9 +1864,28 @@ public interface Hir {
          * characters at {@code pos} spell what the author put there, which is not this, so the name
          * is written nowhere and only the expression has a place: the region is the one the name it
          * replaced was read over.
+         *
+         * <p><b>The reference is the one it replaced.</b> Respelling changes how a name is written
+         * and what route it takes to what it names; which occurrence of the source it is has not
+         * moved, and a reader telling two occurrences apart would be told they are two different
+         * ones. So {@code origin} is carried in from the name being replaced — see
+         * {@link #respelledAs}, which is the way in for a caller that has that name.
          */
-        static Var respelled(String spelling, ReachName reachedAs, SourcePos pos, Region region) {
-            return new Var.Denoting(WrittenName.synthetic(spelling, pos), reachedAs, region);
+        static Var respelled(String spelling, ReachName reachedAs, SourceReferenceOrigin origin,
+                             SourcePos pos, Region region) {
+            return new Var.Denoting(WrittenName.synthetic(spelling, pos), reachedAs, origin, region);
+        }
+
+        /**
+         * This name written and reached another way, which is the same reference of the source.
+         *
+         * <p>To a declaration, which is what respelling a name is for: a helper qualified by the
+         * module that declares it goes on reaching that declaration from a body carried out of it.
+         * A name that reaches a binding is read where the binding is and is not respelled to reach
+         * it another way, so the route this takes is narrower than a route in general.
+         */
+        default Var respelledAs(String spelling, ReachName.Declaration reachedAs) {
+            return respelled(spelling, reachedAs, origin(), pos(), region());
         }
 
         /**
@@ -1856,7 +1898,8 @@ public interface Hir {
         static Var local(Binder binder, SourcePos pos) {
             ValueName.Local local = new ValueName.Local(binder.name(), binder.id());
             WrittenName written = WrittenName.synthetic(binder.name(), pos);
-            return new Var.Denoting(written, new ReachName.InScope(local), written.region());
+            // No source wrote it: what a pass reads here is a binding that pass put there.
+            return new Var.Denoting(written, new ReachName.InScope(local), null, written.region());
         }
 
         /** The bare name this reaches its declaration by, whatever the source spelled. */
@@ -1904,20 +1947,21 @@ public interface Hir {
          * {@link Unanswered}.
          */
         default Var denoting(ReachName reachedAs) {
-            return new Var.Denoting(written(), reachedAs, region());
+            return new Var.Denoting(written(), reachedAs, origin(), region());
         }
 
         /** The same name, over {@code region} — whichever of the two it is. */
         default Var over(Region region) {
             return switch (this) {
-                case Var.Denoting d -> new Var.Denoting(d.written(), d.reachedAs(), region);
-                case Var.Unanswered u -> new Var.Unanswered(u.written(), region);
+                case Var.Denoting d ->
+                        new Var.Denoting(d.written(), d.reachedAs(), d.origin(), region);
+                case Var.Unanswered u -> new Var.Unanswered(u.written(), u.origin(), region);
             };
         }
 
         /** The same name, read and found to name nothing. */
         default Var unanswered() {
-            return new Var.Unanswered(written(), region());
+            return new Var.Unanswered(written(), origin(), region());
         }
 
         /**
@@ -1930,7 +1974,8 @@ public interface Hir {
          * was reached by. A denotation is changed by replacing the reference, which is
          * {@link #denoting(WrittenName, ReachName)}.
          */
-        record Denoting(WrittenName written, ReachName reachedAs, Region region) implements Var {
+        record Denoting(WrittenName written, ReachName reachedAs, SourceReferenceOrigin origin,
+                        Region region) implements Var {
 
             public Denoting {
                 if (reachedAs == null) {
@@ -1995,7 +2040,8 @@ public interface Hir {
          * makes it so. The order the passes run in makes nothing so: a compilation goes on
          * answering after an error, so only a producer that leaves them out can be named.
          */
-        record Unanswered(WrittenName written, Region region) implements Var {
+        record Unanswered(WrittenName written, SourceReferenceOrigin origin, Region region)
+                implements Var {
 
             public Unanswered {
                 heldBy(written, region);
@@ -2229,7 +2275,8 @@ public interface Hir {
         public static Apply synthetic(String fn, ReachName reachedAs, List<Expr> args,
                                       SourcePos pos, Region region) {
             return synthetic(
-                    Var.respelled(fn, Objects.requireNonNull(reachedAs, unanswered(fn)), pos, null),
+                    Var.respelled(fn, Objects.requireNonNull(reachedAs, unanswered(fn)), null, pos,
+                            null),
                     args, pos, region);
         }
 

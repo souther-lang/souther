@@ -667,8 +667,9 @@ public final class HelperInliner {
         // the operation it stands for, which is private to the library and takes another argument.
         return call.replacedBy(
                 Hir.Var.respelled(rewrite.target().qualified(),
-                        new ReachName.OfLibrary(rewrite.target()), call.function().pos(),
-                        call.function().region()),
+                        new ReachName.OfLibrary(rewrite.target()),
+                        call.function() instanceof Hir.Var named ? named.origin() : null,
+                        call.function().pos(), call.function().region()),
                 args);
     }
 
@@ -1165,8 +1166,9 @@ public final class HelperInliner {
                 // the application carries that, this being a rewrite of what it applies.
                 ValueName.Local applied = new ValueName.Local(f.name(), f.id());
                 yield inline(new Hir.LetIn(f, raw.function(), null, false, null,
+                        // A read of the binding this pass just made, which no source wrote.
                         raw.replacedBy(Hir.Var.respelled(f.name(),
-                                new ReachName.InScope(applied), raw.function().pos(),
+                                new ReachName.InScope(applied), null, raw.function().pos(),
                                 raw.function().region())),
                         raw.pos(), raw.region()));
             }
@@ -2264,15 +2266,17 @@ public final class HelperInliner {
         }
         Substituted stands = renaming.substituted(v.denotes());
         if (stands != null) {
-            return Hir.Var.respelled(stands.name(), stands.reachedAs(),
+            // A copy of the body reads the same reference the source wrote. Which copy it is is the
+            // expansion around it, not the reference.
+            return Hir.Var.respelled(stands.name(), stands.reachedAs(), v.origin(),
                     renaming.at(v.pos()), renaming.over(v.region()));
         }
         ReachName reaches = renaming.copy().of(v.reachedAs());
         if (renaming.stamps()) {
-            return Hir.Var.respelled(v.name(), reaches,
+            return Hir.Var.respelled(v.name(), reaches, v.origin(),
                     renaming.at(v.pos()), renaming.over(v.region()));
         }
-        return new Hir.Var.Denoting(v.written(), reaches, v.region());
+        return new Hir.Var.Denoting(v.written(), reaches, v.origin(), v.region());
     }
 
     private List<Hir.Expr> renameList(List<Hir.Expr> es, Renaming renaming) {

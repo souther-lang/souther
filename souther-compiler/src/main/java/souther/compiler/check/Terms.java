@@ -2723,7 +2723,9 @@ final class Terms {
             // A case of an enumeration is written by naming it, so the value is the name.
             case Core.UnitValue unit -> {
                 ValueName.OfType named = new ValueName.OfType(unit.data().name(), unit.data());
-                yield Hir.Var.respelled(unit.data().name(), new ReachName.InScope(named),
+                // Read back out of a checked tree, where no reference of the source is left to
+                // carry: what this stands for is the case the value is.
+                yield Hir.Var.respelled(unit.data().name(), new ReachName.InScope(named), null,
                         unit.pos(), null);
             }
             case null, default -> null;
