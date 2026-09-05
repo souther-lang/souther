@@ -14,6 +14,7 @@ import souther.compiler.types.CoverageConstruct;
 import souther.compiler.types.CoverageOrigin;
 import souther.compiler.values.UnreadReason;
 
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -432,9 +433,10 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
         assertEquals(projected(everyRuleReadingStopped()),
                 words(schema, "ruleStoppedReadingReason"),
                 "what a question's rule left admits what a reading can stop on");
-        assertEquals(projected(everyAnswerRealizationStopped()),
+        assertEquals(projected(everyLimitAQuestionCanStandOn()),
                 words(schema, "answerRealizationStoppedReason"),
-                "and what its position was short of admits what an answer can be short of");
+                "and what its position was short of admits what an answer a question waited on can"
+                        + " be short of");
     }
 
     /**
@@ -614,15 +616,26 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
     }
 
     /**
-     * And a second limit the answer ran into is refused rather than put in an order.
+     * And a second limit a question can stand on is a decision somebody takes.
      *
-     * <p>There is one such reason today. A second would be a pair with no order between them
-     * either, and what a document should write for a pair is a decision to take when there is one
-     * to take — taken by silence here, it would be taken by whichever a walk met first.
+     * <p>{@code answerStopped} is one word and not an array, because there is one such limit. A
+     * second would be a pair with no order between them either, and what a document writes for a
+     * pair is a decision to take when there is one to take — taken by silence, it would be taken by
+     * whichever a walk met first.
+     *
+     * <p><b>Counted from what can reach the field and not from the capability.</b>
+     * {@link BlockReason.AnswerRealizationStopped} holds what an answer this compiler was building
+     * ran out on, wherever that answer was being built; a question of a rule stands on the half of
+     * it a value reading records, which is what {@link UnreadReason} has words for. A position that
+     * could not hand its rules on as sets is the other half — it is a line a reader is owed at the
+     * place, and no rule raises a question of it — so counting the capability would have this
+     * asking for a decision about a field that reason cannot reach.
      */
     @Test
-    void aSecondLimitTheAnswerRanIntoIsADecisionSomebodyTakes() {
-        assertEquals(1, everyAnswerRealizationStopped().size(),
+    void aSecondLimitAQuestionCanStandOnIsADecisionSomebodyTakes() {
+        assertEquals(List.of(UnreadReason.EXACT_VALUES_TOO_COSTLY),
+                Arrays.stream(UnreadReason.values())
+                        .filter(each -> each.about() == UnreadReason.About.THE_ANSWER).toList(),
                 "a second one is a decision about what a document writes, and this is where it"
                         + " comes up for taking");
     }
@@ -642,10 +655,19 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
                 .map(BlockReason.RuleReadingStopped.class::cast).toList();
     }
 
-    /** The other half, which names no rule. */
-    private static List<BlockReason.AnswerRealizationStopped> everyAnswerRealizationStopped() {
-        return everyReason().stream()
-                .filter(BlockReason.AnswerRealizationStopped.class::isInstance)
+    /**
+     * The other half a question stands on, which names no rule.
+     *
+     * <p>From what reaches the field and not from {@link BlockReason.AnswerRealizationStopped}. That
+     * capability holds what an answer this compiler was building ran out on, wherever it was being
+     * built — a position that could not hand its rules on as sets is one, and it is a line a reader
+     * is owed at the place rather than anything a rule raises a question of. What a question waits
+     * on is the half a value reading records, which is what {@link UnreadReason} has words for.
+     */
+    private static List<BlockReason.AnswerRealizationStopped> everyLimitAQuestionCanStandOn() {
+        return Arrays.stream(UnreadReason.values())
+                .filter(each -> each.about() == UnreadReason.About.THE_ANSWER)
+                .map(BlockReason::ofAQuestionStandingOn)
                 .map(BlockReason.AnswerRealizationStopped.class::cast).toList();
     }
 
