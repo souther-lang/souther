@@ -197,14 +197,15 @@ sealed interface StatedByClauses {
     /**
      * Whether anything satisfies what has been read, as far as that is settled.
      *
-     * <p>Either language, because each can hold the whole answer on its own: what one of them
-     * cannot express it leaves alone. Where a language is settled that nothing satisfies it, that
-     * is the answer; where the values are a description nobody has built, the answer waits.
+     * <p>A choice is either of its branches; a reading is what its two languages leave between them,
+     * which is one answer and is {@link Confinement}'s. Asked of the languages one at a time, this
+     * said that something satisfies the rules whenever the language it happened to ask had nothing
+     * to say about them.
      */
     default Emptiness emptiness() {
         return switch (this) {
             case Choice it -> it.left().emptiness().joined(it.right().emptiness());
-            case Said it -> it.ordered().isBottom() ? Emptiness.EMPTY : it.values().emptiness();
+            case Said it -> new StatedTogether.Said(it.values(), it.ordered()).emptiness();
         };
     }
 
@@ -271,14 +272,13 @@ sealed interface StatedByClauses {
     /**
      * Whether something has already established that nobody can be in {@code branch}.
      *
-     * <p>Either language, because each can hold the whole answer on its own and what one of them
-     * cannot express it leaves alone. And established rather than worked out: an order is bottom or
-     * it is not, a description of values says so or waits, and where it waits this asks what was
-     * already built for the position rather than building it.
+     * <p>The two languages together ({@link Confinement}), and established rather than worked out:
+     * an order is bottom or it is not, a description of values says so or waits, and where it waits
+     * this asks what was already built for the position rather than building it.
      */
     private static boolean nobodyIsIn(StatedTogether.Said branch,
                                       souther.compiler.values.Allowance<FactSubject> by) {
-        return branch.ordered().isBottom() || branch.values().holdsNothingAsBuilt(by);
+        return branch.alreadyEstablished(by) == Emptiness.EMPTY;
     }
 
     /**
@@ -596,16 +596,24 @@ sealed interface StatedByClauses {
          */
         private Settlement.Sided probed(StatedTogether.Said read,
                                         souther.compiler.values.Allowance<FactSubject> by) {
-            if (read.ordered().isBottom()) {
-                return Settlement.Sided.settledAs(Emptiness.EMPTY);
-            }
-            Emptiness said = read.values().emptiness();
+            Emptiness said = read.emptiness();
             if (said != Emptiness.UNDECIDED) {
                 return Settlement.Sided.settledAs(said);
             }
             souther.compiler.values.Realized<FactSubject> made = read.values().resolve(by);
-            if (made.emptiness() != Emptiness.UNDECIDED) {
-                return Settlement.Sided.settledAs(made.emptiness());
+            // Worked out, the sets can be asked where the positions stop — which is the same
+            // question as above and a different answer, the descriptions having become sets.
+            Emptiness worked = new Confinement.OfAConjunction<>(
+                    souther.compiler.values.ConjoinedAdmissibleValues.of(made.values(), by),
+                    read.ordered(), ordered.carriers()).emptiness();
+            if (worked == Emptiness.EMPTY) {
+                return Settlement.Sided.settledAs(Emptiness.EMPTY);
+            }
+            // And a branch every position of which was worked out and which admits something is one
+            // somebody can be in. A position nobody built is neither: what stands there is every
+            // value, which is wider than the rules, so the branch may hold something they refuse.
+            if (worked == Emptiness.NONEMPTY && made.unbuilt().isEmpty()) {
+                return Settlement.Sided.settledAs(Emptiness.NONEMPTY);
             }
             Map<FactSubject, java.util.List<souther.compiler.values.UnreadReason>> why =
                     new java.util.LinkedHashMap<>(made.aboutARule());

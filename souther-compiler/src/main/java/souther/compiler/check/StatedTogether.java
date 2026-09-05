@@ -1,6 +1,8 @@
 package souther.compiler.check;
 
 import souther.compiler.numeric.OrderedIntervals;
+import souther.compiler.values.Allowance;
+import souther.compiler.values.Emptiness;
 import souther.compiler.values.PlannedValues;
 
 /**
@@ -23,7 +25,32 @@ sealed interface StatedTogether {
 
     /** What the clauses reaching here leave, in both languages. */
     record Said(PlannedValues<FactSubject> values, OrderedIntervals<FactSubject> ordered)
-            implements StatedTogether {
+            implements StatedTogether, Confinement<FactSubject> {
+
+        /**
+         * What the values leave, as far as that is settled without building anything.
+         *
+         * <p>A description of what a position admits is not a set, so the alternatives cannot be
+         * asked where their positions stop: which strings a pattern names is a machine somebody has
+         * to make, and making one here is the work this reading exists to put off. What is settled
+         * before that — a description that already says it admits nothing — is settled, and the rest
+         * waits.
+         */
+        @Override
+        public Emptiness ofTheValues() {
+            return values.emptiness();
+        }
+
+        /**
+         * The same, out of what was built for the positions rather than by building.
+         *
+         * <p>A description settled empty is settled whoever asks; where it is not, what stands is
+         * whatever the answer being put together has already worked out at those positions.
+         */
+        @Override
+        public Emptiness ofTheValuesAlreadyBuilt(Allowance<FactSubject> by) {
+            return values.holdsNothingAsBuilt(by) ? Emptiness.EMPTY : Emptiness.UNDECIDED;
+        }
     }
 
     /**

@@ -49,7 +49,7 @@ class ARenamingNamesTwoSubjectsTwoSubjectsTest {
     void eachSubjectIsHeldByOneDomainAlone() {
         ConstraintState<FactSubject> state = spread();
         assertTrue(state.facts().entails(ONLY_IN_FACTS, true));
-        assertFalse(state.ordered().at(ONLY_IN_FACTS).holdsNothing());
+        assertFalse(state.confinement().ordered().at(ONLY_IN_FACTS).holdsNothing());
         assertEquals(ValueSet.ANY, state.values().at(ONLY_IN_ORDERED));
     }
 
@@ -70,7 +70,7 @@ class ARenamingNamesTwoSubjectsTwoSubjectsTest {
         ConstraintState<String> said = spread().renamed(InjectiveRenaming.of(apart::get));
 
         assertTrue(said.facts().entails("p.f", true));
-        assertTrue(said.ordered().at("p.o").holdsNothing());
+        assertTrue(said.confinement().ordered().at("p.o").holdsNothing());
         assertEquals(ValueSet.just(Value.text("A")), said.values().at("p.v"));
         assertEquals(Endpoint.inclusive(Count.of(3)),
                 said.numbers().boundsOf(LinearForm.<String>atom("p.n")).max());
@@ -133,7 +133,7 @@ class ARenamingNamesTwoSubjectsTwoSubjectsTest {
                 .taking(ONLY_IN_FACTS, true)
                 .taking(OrderedIntervals.at(ONLY_IN_ORDERED,
                         new OrderedInterval(Endpoint.inclusive(Count.of(6)),
-                                Endpoint.inclusive(Count.of(2)))))
+                                Endpoint.inclusive(Count.of(2)))), Map.of())
                 .takingValuesRead(
                         AdmissibleValues.at(ONLY_IN_VALUES, ValueSet.just(Value.text("A"))),
                         souther.compiler.values.AsACompilationAllows.forAdmittedValues())

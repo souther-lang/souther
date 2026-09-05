@@ -318,7 +318,7 @@ public final class TypeCardinality {
     private static boolean restsOn(Emptiness why, Set<TypeSymbol> within, Set<TypeSymbol> shown) {
         return switch (why) {
             case Emptiness.ConflictingRules _, Emptiness.EmptyNumericInterval _,
-                 Emptiness.EmptyOrderedInterval _,
+                 Emptiness.EmptyOrderedInterval _, Emptiness.NoAllowedValueInRange _,
                  Emptiness.SetRequiresTooManyDistinctValues _,
                  Emptiness.NoAllowedCollectionSize _ -> true;
             case Emptiness.TheNameHasNone it ->

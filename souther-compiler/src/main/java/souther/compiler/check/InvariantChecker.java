@@ -844,7 +844,7 @@ public final class InvariantChecker {
                     new PartsRead(readBy, adoptedBy, narrowedBy), reach.withoutParts());
             ConstraintState<FactSubject> constraints = k.constraints()
                     .takingValuesRead(values, allowed)
-                    .taking(answered.whole().ordered());
+                    .taking(answered.whole().ordered(), reader.ordered().carriers());
             // How each atom's values are spaced, kept so that settling one afterwards states the
             // equality the same way this does. A count is a whole number of things whatever the
             // things are spaced by; a position's own value is spaced by its type.

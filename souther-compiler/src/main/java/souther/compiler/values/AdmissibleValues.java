@@ -610,6 +610,92 @@ public record AdmissibleValues<A>(Held<A> held, Map<A, ValueSet> perPosition,
     }
 
     /**
+     * Whether an alternative survives a question asked of every position it names.
+     *
+     * <p>The walk this reading owns, for a question it does not. What the rules leave is a union of
+     * products, and something said about the positions elsewhere — where their orders stop, say —
+     * cuts each product on its own: an alternative stands where every position of it still admits
+     * something, and the reading stands where any alternative does.
+     *
+     * <p><b>Per alternative and never per position.</b> The projection onto one position
+     * ({@link #at}) is the union over the alternatives, and a question answered against that is a
+     * question about a value no alternative stands for: {@code (x = A, y = B)} beside
+     * {@code (x = C, y = D)} projects to {@code x} in {@code {A, C}} and {@code y} in
+     * {@code {B, D}}, and asked position by position, a rule admitting {@code x = A} and
+     * {@code y = D} finds something at each of them and nothing anywhere.
+     *
+     * <p>A position no alternative names is not asked about. What is held there is every value, and
+     * a question that anything at all answers is answered by that — so what such a position could
+     * contribute is settled by whoever asks, before the walk.
+     *
+     * <p>Three answers, because the question may be one that waits. An alternative is settled empty
+     * where any of its positions is, and settled inhabited only where every one of them is; the
+     * reading is settled empty only where every alternative is, since one nobody worked out may yet
+     * hold something.
+     */
+    public Emptiness anyAlternativeAdmits(AskedOfEachPosition<A> asked) {
+        if (held instanceof Held.Alternatives<A> it) {
+            Emptiness any = Emptiness.EMPTY;
+            for (Box<A> box : it.boxes()) {
+                Emptiness stands = Emptiness.NONEMPTY;
+                for (Map.Entry<A, ValueSet> each : box.at().entrySet()) {
+                    stands = stands.met(asked.of(each.getKey(), each.getValue()));
+                    if (stands == Emptiness.EMPTY) {
+                        break;
+                    }
+                }
+                any = any.joined(stands);
+                if (any == Emptiness.NONEMPTY) {
+                    return any;
+                }
+            }
+            return any;
+        }
+        return Emptiness.EMPTY;
+    }
+
+    /**
+     * The positions every alternative is refused at, for a reader writing down where a reading was
+     * left nothing.
+     *
+     * <p>Every alternative and not one of them. Where the alternatives are refused at different
+     * positions, no position is what the reading has no value at — each of them holds values some
+     * alternative stands at — so what can be said is that nothing satisfies the rules, and naming
+     * one would send an author after a rule the model does not contain.
+     *
+     * <p>Asked to write a proof and not to reach an answer, so it walks the whole of every
+     * alternative where {@link #anyAlternativeAdmits} stops at the first position that settles one.
+     * What it cannot do is disagree with that answer about anything a reader acts on: what comes
+     * back is a place to name, and none of them is the general form.
+     */
+    public Set<A> refusedInEveryAlternativeAt(AskedOfEachPosition<A> asked) {
+        if (!(held instanceof Held.Alternatives<A> it)) {
+            return Set.of();
+        }
+        Set<A> everywhere = null;
+        for (Box<A> box : it.boxes()) {
+            Set<A> here = new LinkedHashSet<>();
+            box.at().forEach((position, set) -> {
+                if (asked.of(position, set) == Emptiness.EMPTY) {
+                    here.add(position);
+                }
+            });
+            if (here.isEmpty()) {
+                return Set.of();
+            }
+            if (everywhere == null) {
+                everywhere = here;
+            } else {
+                everywhere.retainAll(here);
+                if (everywhere.isEmpty()) {
+                    return Set.of();
+                }
+            }
+        }
+        return everywhere == null ? Set.of() : Collections.unmodifiableSet(everywhere);
+    }
+
+    /**
      * Every subject this reading is filed under.
      *
      * <p>The vocabulary of one reading, and the one place it is answered. A caller relating several

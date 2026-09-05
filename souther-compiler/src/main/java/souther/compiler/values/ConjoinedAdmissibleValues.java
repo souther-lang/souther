@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Deque;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -173,6 +174,44 @@ public final class ConjoinedAdmissibleValues<A> {
      */
     public boolean isBottom() {
         return factors.stream().anyMatch(AdmissibleValues::isBottom);
+    }
+
+    /**
+     * Whether an alternative of the conjunction survives a question asked of every position.
+     *
+     * <p>Factor by factor, and never the product of them. The vocabularies are disjoint, so an
+     * alternative of the conjunction is one alternative of each factor put side by side and the
+     * positions each of them names are asked about in that factor alone: the conjunction stands
+     * where every factor has an alternative that stands, and holds nothing where any factor has
+     * none. Expanded into the product first, the same answer would be reached over as many
+     * alternatives as the factors multiply to.
+     *
+     * <p>Nothing read is every value at every position, which stands whatever is asked — the
+     * question is one about which values a rule leaves, and no rule left any.
+     */
+    public Emptiness anyAlternativeAdmits(AskedOfEachPosition<A> asked) {
+        Emptiness stands = Emptiness.NONEMPTY;
+        for (AdmissibleValues<A> each : factors) {
+            stands = stands.met(each.anyAlternativeAdmits(asked));
+            if (stands == Emptiness.EMPTY) {
+                return stands;
+            }
+        }
+        return stands;
+    }
+
+    /**
+     * The positions every alternative of the conjunction is refused at.
+     *
+     * <p>Read off each factor and put together. An alternative of the conjunction is one alternative
+     * of every factor side by side, so it is refused at a position exactly where the factor naming
+     * that position is — and a position every alternative of its own factor is refused at is one
+     * every alternative of the conjunction is refused at.
+     */
+    public Set<A> refusedInEveryAlternativeAt(AskedOfEachPosition<A> asked) {
+        Set<A> out = new LinkedHashSet<>();
+        factors.forEach(each -> out.addAll(each.refusedInEveryAlternativeAt(asked)));
+        return Collections.unmodifiableSet(out);
     }
 
     /**

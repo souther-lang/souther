@@ -2,6 +2,8 @@ package souther.compiler.check;
 
 import souther.compiler.numeric.OrderedIntervals;
 import souther.compiler.values.AdmissibleValues;
+import souther.compiler.values.Allowance;
+import souther.compiler.values.Emptiness;
 
 import java.util.LinkedHashSet;
 import java.util.Set;
@@ -29,7 +31,8 @@ import java.util.Set;
  */
 record ReadByClauses(AdmissibleValues<FactSubject> values, OrderedIntervals<FactSubject> ordered,
                      Adoption<FactSubject> byValues, Adoption<FactSubject> byOrder,
-                     java.util.Map<souther.compiler.core.Core, OfAPart> parts) {
+                     java.util.Map<souther.compiler.core.Core, OfAPart> parts)
+        implements Confinement<FactSubject> {
 
     /**
      * What one rule came to on its own tree, once every branch of the value is decided.
@@ -176,13 +179,23 @@ record ReadByClauses(AdmissibleValues<FactSubject> values, OrderedIntervals<Fact
     }
 
     /**
-     * Whether nothing satisfies what has been read.
+     * What the values leave here, which is whether any alternative stands at all.
      *
-     * <p>Either language, because each can hold the whole answer on its own: what one of them
-     * cannot express it leaves alone.
+     * <p>Nothing is asked of the order at a position, and that is the account's rule rather than a
+     * gap: a set of values and a range share a value or they do not, and finding out takes a machine
+     * — which is the budget the answer is bounded by, spent to say what a rule adopted. So this
+     * declines to claim what nothing already established, which is the direction an account has to
+     * fail in.
      */
-    boolean holdsNothing() {
-        return values.isBottom() || ordered.isBottom();
+    @Override
+    public Emptiness ofTheValues() {
+        return values.anyAlternativeAdmits((_, _) -> Emptiness.NONEMPTY);
+    }
+
+    /** The same. Nothing here builds, so what was already built is all there is. */
+    @Override
+    public Emptiness ofTheValuesAlreadyBuilt(Allowance<FactSubject> by) {
+        return ofTheValues();
     }
 
     /**
