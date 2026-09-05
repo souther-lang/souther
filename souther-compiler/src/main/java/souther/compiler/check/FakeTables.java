@@ -122,6 +122,19 @@ public final class FakeTables {
         return new FakeTables(occurrences, declared);
     }
 
+    /** Two classifications are one where the blocks and the counts over them are, which is what an
+     *  answer this was read from is asked when something is compiled again. */
+    @Override
+    public boolean equals(Object o) {
+        return o instanceof FakeTables other
+                && written.equals(other.written) && declared.equals(other.declared);
+    }
+
+    @Override
+    public int hashCode() {
+        return written.hashCode() * 31 + declared.hashCode();
+    }
+
     /** Every block this module writes, in the order they were read, whether or not its target
      *  reached a behavior. */
     public List<Occurrence> written() {

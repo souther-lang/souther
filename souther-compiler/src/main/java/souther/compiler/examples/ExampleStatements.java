@@ -168,7 +168,7 @@ public final class ExampleStatements {
     }
 
     /** What the author wrote for a fake's target, for a message that quotes the source. */
-    static String wrote(Hir.Fake table) {
+    public static String wrote(Hir.Fake table) {
         return table.target().written().quoted();
     }
 
@@ -185,7 +185,7 @@ public final class ExampleStatements {
      * — a qualifier and its dots are part of what the marker covers, and an author may write spaces
      * or a comment between them.
      */
-    static Region marked(Hir.Fake fk) {
+    public static Region marked(Hir.Fake fk) {
         return fk.target().written().region();
     }
 

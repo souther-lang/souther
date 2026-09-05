@@ -105,6 +105,13 @@ public final class Acceptance {
                 for (Report failure : Report.errorsIn(db.ask(new Front.RowNames(id)).reports())) {
                     refused.add(new Located(failure.diagnostic(), ReportContext.inFile(id)));
                 }
+                // And what the module declares a stand-in for, before what a stand-in states: a
+                // behavior more than one block names has none, so every later report about one of
+                // them would be about a table standing in for nothing.
+                for (Report failure
+                        : Report.errorsIn(db.ask(new Names.StandInBlocks(id)).reports())) {
+                    refused.add(new Located(failure.diagnostic(), ReportContext.inFile(id)));
+                }
                 // Only the errors: this key also carries what a clean run wants to say about how
                 // well the rows cover the model, and a warning is not a reason to fail the build.
                 for (Report failure
