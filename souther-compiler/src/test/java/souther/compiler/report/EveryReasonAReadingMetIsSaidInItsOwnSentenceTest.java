@@ -37,7 +37,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * reason or a code added anywhere arrives here as a case with no sentence rather than as one it
  * quietly shares.
  */
-class EveryReasonAReadingMetIsSaidByAWordOfItsOwnTest {
+class EveryReasonAReadingMetIsSaidInItsOwnSentenceTest {
 
     /**
      * As many sentences as there are reasons, and no two reasons under one sentence.
@@ -59,7 +59,7 @@ class EveryReasonAReadingMetIsSaidByAWordOfItsOwnTest {
     }
 
     /**
-     * And the words group them the way this was decided to group them.
+     * And each word stands over the reasons this decided to put under it.
      *
      * <p>The decision itself, since nothing else keeps it. A place the walk could not reach and a
      * row that never came are one word because a reader weighing the document does the same thing
@@ -75,19 +75,25 @@ class EveryReasonAReadingMetIsSaidByAWordOfItsOwnTest {
      * something the vocabulary has never kept.
      */
     @Test
-    void theWordsGroupTheReasonsAsThisDecidedToGroupThem() {
+    void eachWordStandsOverTheReasonsThisDecidedToPutUnderIt() {
         Map<WeakeningWord, Set<String>> under = new LinkedHashMap<>();
         for (ReadingGap each : everyReason()) {
             under.computeIfAbsent(wordFor(each), _ -> new LinkedHashSet<>())
                     .add(each.getClass().getSimpleName());
         }
 
-        assertEquals(Set.of(
-                        Set.of("Observation"),
-                        Set.of("NoValue"),
-                        Set.of("CouldNotWalk", "CouldNotReadRow")),
-                new LinkedHashSet<>(under.values()),
-                () -> "the words no longer group the reasons as they were meant to: " + under);
+        // The word each group is under, and not only which reasons share one. A word is written
+        // into the document and named in the schema, so which reasons it stands over is as much of
+        // the contract as which of them are together — grouped alone, the words could be dealt out
+        // among the groups differently and every reader of a published document would be told
+        // something else about the same reasons.
+        assertEquals(Map.of(
+                        WeakeningWord.BORDER_VALUE_UNREADABLE, Set.of("Observation"),
+                        WeakeningWord.BORDER_VALUE_ABSENT, Set.of("NoValue"),
+                        WeakeningWord.BORDER_OBSERVATION_UNAVAILABLE,
+                                Set.of("CouldNotWalk", "CouldNotReadRow")),
+                under,
+                () -> "the words no longer stand over the reasons they were meant to: " + under);
     }
 
     private static WeakeningWord wordFor(ReadingGap why) {

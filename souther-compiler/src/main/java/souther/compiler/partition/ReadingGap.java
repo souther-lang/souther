@@ -8,9 +8,15 @@ import souther.compiler.observe.RunSensitivity;
  *
  * <p>What is there and was not kept, and what this compiler never got to. A value the observation
  * did not keep whole is a value that is there, named by the code an observation writes; the rest
- * arrived at no value and have no such code. What a reader does about them differs — the first is
- * something a wider budget keeps and the others are not — so all of them travel, and a quantity
- * stopped in more than one way says each.
+ * arrived at no value and have no such code. What a reader does about them differs, so all of them
+ * travel, and a quantity stopped in more than one way says each.
+ *
+ * <p>Whether a wider run would come to another answer is not what tells them apart. An observation
+ * answers it out of the code it carries and the codes do not agree with each other — one a wider
+ * run keeps, another it meets again — while the three that reached no value answer alike. So it is
+ * a question put to a reason rather than a way of sorting them, and {@link
+ * souther.compiler.publish.WeakeningWord}, which sorts them more coarsely still for a document,
+ * settles it for none of them.
  *
  * <p><b>{@link NoValue} is a place that was reached.</b> A walk that could not be taken and a row
  * that could not be read are this compiler unable to look, which is not the model putting a value
@@ -29,10 +35,10 @@ public sealed interface ReadingGap {
     /**
      * Whether a run of this compiler that allows more could come to a different answer here.
      *
-     * <p>Which is the difference this type's own comment already states — one is something a wider
-     * budget keeps and the other is not — said as a value rather than as prose. Each arm asks
-     * whatever holds the fact rather than answering for it: an observation that stopped carries the
-     * code, and the code is what every producer of it agrees about.
+     * <p>Each arm asks whatever holds the fact rather than answering for it: an observation that
+     * stopped carries the code, and the code is what every producer of it agrees about. Which is
+     * why the answer does not follow from which arm this is — two observations carry two codes and
+     * the codes answer differently — and why nothing coarser than an arm may be asked it.
      */
     RunSensitivity runSensitivity();
 

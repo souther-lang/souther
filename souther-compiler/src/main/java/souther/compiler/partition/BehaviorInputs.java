@@ -13,6 +13,7 @@ import souther.compiler.types.Type;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * What a behavior takes: what its inputs are called, what they are declared to be, and what those
@@ -136,6 +137,9 @@ public record BehaviorInputs(List<String> parameters, List<Type> types, RuleRead
 
         public Occurrence {
             at = Map.copyOf(at);
+            // An occurrence is a value the walk arrived at. Where none did, the walk says so with
+            // its own answer and hands back no occurrences at all.
+            Objects.requireNonNull(value, "an occurrence is a value standing at the path");
         }
 
         /**

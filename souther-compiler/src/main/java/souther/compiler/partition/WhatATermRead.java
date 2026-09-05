@@ -7,6 +7,7 @@ import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.ObservedValue;
 
 import java.util.List;
+import java.util.Objects;
 
 /**
  * What one term of a quantity came to at one row: the number it names, or why it names none.
@@ -28,7 +29,12 @@ import java.util.List;
 sealed interface WhatATermRead {
 
     /** The number the term names at this row. */
-    record Number(Place value) implements WhatATermRead { }
+    record Number(Place value) implements WhatATermRead {
+
+        public Number {
+            Objects.requireNonNull(value, "a term that names a number names one");
+        }
+    }
 
     /** The value was read and this term is no number of it, which is an answer about the value and
      *  not about anything that stopped. */
@@ -45,7 +51,12 @@ sealed interface WhatATermRead {
     record NothingWrittenThere() implements WhatATermRead { }
 
     /** No number, and this is what the reading met instead. */
-    record CameToNothing(ReadingGap why) implements WhatATermRead { }
+    record CameToNothing(ReadingGap why) implements WhatATermRead {
+
+        public CameToNothing {
+            Objects.requireNonNull(why, "a reading that came to nothing says what it met");
+        }
+    }
 
     /** What {@code on} reads where the walk to its one position came to {@code answered}. */
     static WhatATermRead at(TermOrders on, WalkResult<ObservationAtPoint> answered) {
