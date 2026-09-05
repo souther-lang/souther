@@ -158,6 +158,14 @@ class ASignatureIsReadForWhatItsDeclarationGuaranteesTest {
     }
 
     @Test
+    void aRecordHoldingItsOwnKindIsOpenedOnce() {
+        assertTrue(takes("aRecordThatHoldsItsOwnKind", THE_DERIVED_WORLD),
+                "a record whose component holds another of its own kind is a record that can be"
+                        + " written, and what it holds beside that is read, so a reading arrives at"
+                        + " the second component rather than at the first one for ever");
+    }
+
+    @Test
     void aDeclarationWithNoGenericsIsReadAsOneWithThem() {
         assertTrue(takes("aWorldSpelledOutright", THE_DERIVED_WORLD),
                 "a method with nothing generic about it writes no signature of its own, and its"
@@ -244,6 +252,9 @@ class ASignatureIsReadForWhatItsDeclarationGuaranteesTest {
         record Plain(DerivedSymbols world) {
         }
 
+        record HoldingItsOwnKind(List<HoldingItsOwnKind> more, DerivedSymbols world) {
+        }
+
         <S extends DerivedSymbols> void aBoundThatIsReferredTo(S world) {
         }
 
@@ -281,6 +292,9 @@ class ASignatureIsReadForWhatItsDeclarationGuaranteesTest {
         }
 
         void aComponentWrittenWithoutGenerics(Plain it) {
+        }
+
+        void aRecordThatHoldsItsOwnKind(HoldingItsOwnKind it) {
         }
 
         void aWorldSpelledOutright(DerivedSymbols world) {
