@@ -356,10 +356,12 @@ public final class Output {
      * counted classes, because what holds a row to a budget it cannot exceed is the counting itself
      * — a row evaluated against uncounted classes has nothing but a clock behind it.
      *
-     * <p>Absent where {@link ArmObservation#RECORD} is asked for and the plan and the bodies do not
-     * line up, which is the one thing this must not paper over: emitting a body an arm short reports the
-     * arm that ran as one nothing reaches, and that reads as a gap in the model rather than a fault in
-     * the measurement.
+     * <p>Absent where this compile has no bodies for the module, which is the whole of what an
+     * absence here says. A generation that contradicts itself — a node reached that the plan it was
+     * made from does not hold, an arm numbered that nothing wrote — is not a measurement this could
+     * not make, and answering with nothing for it would report a module with no arms to read exactly
+     * as a module whose arms were all read. So it is not caught: what a caller of this gets is the
+     * classes or a program the compiler refused, and there is no third thing.
      */
     public record Evaluated(String name, ArmObservation arms)
             implements Key<EvaluationArtifact> {
@@ -391,8 +393,6 @@ public final class Output {
                         emitted.probes()));
             } catch (CompileException e) {
                 return Answer.absent(e);
-            } catch (IllegalStateException _) {
-                return Answer.absent();   // the plan is not about these bodies
             }
         }
     }
