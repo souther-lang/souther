@@ -58,12 +58,54 @@ final class SetDivisions {
      *
      * @param divided   the positions divided, as evidence a partition reads like any other
      * @param undivided the rules that divided nothing, each with what became of it
+     * @param cells     what the divisions of each position leave it divided into, which is the
+     *                  coarsest partition every one of them is a union of cells of
      */
-    record Read(List<PartitionEvidence> divided, List<Undivided> undivided) {
+    record Read(List<PartitionEvidence> divided, List<Undivided> undivided,
+                Map<NumericTerm.FromOnePosition, List<Cell>> cells) {
 
         Read {
             divided = List.copyOf(divided);
             undivided = List.copyOf(undivided);
+            cells = Map.copyOf(cells);
+        }
+    }
+
+    /**
+     * One class the rules about a position leave it divided into.
+     *
+     * <p>A cell of the coarsest partition every rule's two sides are a union of cells of, which is
+     * what several rules about one position come to. {@code startsWith("JP", code)} and
+     * {@code endsWith("X", code)} leave four, and a run of the model is in exactly one of them —
+     * so four is what the rows are owed at, and the two rules taken one at a time would ask for a
+     * distinction the other one already made.
+     *
+     * <p><b>Which rules hold in it, and not a name.</b> A cell is where a run falls, and where it
+     * falls is decided by each rule coming out one way or the other. What a report calls it is the
+     * reader's to settle out of that; carried as a word made here, it would be a name for a set
+     * that says nothing about which rules of the model put a value in it.
+     *
+     * @param values    the values in it, which no other cell holds
+     * @param satisfies the rules a value here satisfies, in the order they were read
+     * @param fails     and the rules it does not
+     */
+    record Cell(ValueSet values, List<PredicateOrigin> satisfies, List<PredicateOrigin> fails) {
+
+        Cell {
+            if (values == null || values.isEmpty()) {
+                throw new IllegalArgumentException(
+                        "a class of a position holds a value; an empty one is no class of it");
+            }
+            satisfies = List.copyOf(satisfies);
+            fails = List.copyOf(fails);
+        }
+
+        /** The same cell, with {@code by} coming out {@code holding} and the values that leaves. */
+        Cell and(ValueSet narrowed, PredicateOrigin by, boolean holding) {
+            List<PredicateOrigin> yes = new ArrayList<>(satisfies);
+            List<PredicateOrigin> no = new ArrayList<>(fails);
+            (holding ? yes : no).add(by);
+            return new Cell(narrowed, yes, no);
         }
     }
 
@@ -118,7 +160,69 @@ final class SetDivisions {
         for (Asked each : asked) {
             divide(each, answers.get(each.term()), divided, undivided);
         }
-        return new Read(divided, undivided);
+        // And what the divisions of each position leave it divided into, worked out here because
+        // this is where the allowance is. Two rules about one position are not two partitions of
+        // it: a run falls in one cell of what they come to between them, and the cells are met out
+        // of their sides — which is machine work, and machine work outside an allowance is a
+        // measure deciding for itself how long it may take.
+        Map<NumericTerm.FromOnePosition, List<Cell>> cells = new LinkedHashMap<>();
+        for (NumericTerm.FromOnePosition term : byTerm.keySet()) {
+            List<SetDivision> here = divided.stream()
+                    .filter(each -> each.at().equals(term))
+                    .map(each -> ((PartitionEvidence.BySet) each).division()).toList();
+            if (here.isEmpty()) {
+                continue;
+            }
+            List<Cell> made = refined(term, here, allowance);
+            // The position's group again, and for the reason it was a group in the first place.
+            // Cells nobody could finish are a partition of the position this compiler does not
+            // have, and publishing the divisions beside it would leave a reader holding rules
+            // whose classes are not the ones the position is measured at.
+            if (made == null) {
+                divided.removeIf(each -> each.at().equals(term));
+                here.forEach(each -> undivided.add(new Undivided(each.origin(),
+                        new BlockReason.BehaviorDistinctionsTooCostly())));
+                continue;
+            }
+            cells.put(term, made);
+        }
+        return new Read(divided, undivided, cells);
+    }
+
+    /**
+     * What {@code divisions} leave {@code term} divided into, or null where the allowance ran out.
+     *
+     * <p>Each rule in turn against what the rules before it left: a cell either satisfies it or
+     * does not, and one that would hold no value is no class of the position and is dropped rather
+     * than published as a class no run is ever counted at.
+     *
+     * <p>Null and not the cells so far. A partition is exclusive and exhaustive or it is not one,
+     * and cells the meets got through before the allowance ran out are neither — read as the
+     * position's classes, the values in the ones nobody finished would be owed no row at all.
+     */
+    private static List<Cell> refined(NumericTerm.FromOnePosition term, List<SetDivision> divisions,
+                                      Allowance<NumericTerm.FromOnePosition> allowance) {
+        SetDivision first = divisions.get(0);
+        List<Cell> cells = new ArrayList<>();
+        cells.add(new Cell(first.whenTrue(), List.of(first.origin()), List.of()));
+        cells.add(new Cell(first.whenFalse(), List.of(), List.of(first.origin())));
+        for (SetDivision each : divisions.subList(1, divisions.size())) {
+            List<Cell> narrower = new ArrayList<>();
+            for (Cell cell : cells) {
+                for (boolean holding : new boolean[] {true, false}) {
+                    ValueSet side = holding ? each.whenTrue() : each.whenFalse();
+                    Allowance.Composed met = allowance.meet(term, cell.values(), side);
+                    if (met.gaveUp()) {
+                        return null;
+                    }
+                    if (!met.set().isEmpty()) {
+                        narrower.add(cell.and(met.set(), each.origin(), holding));
+                    }
+                }
+            }
+            cells = narrower;
+        }
+        return cells;
     }
 
     /**

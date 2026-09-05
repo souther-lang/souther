@@ -85,6 +85,37 @@ class WhatABehaviorsRuleAboutItsStringsDividesAPositionIntoTest {
     }
 
     /**
+     * And what two rules about one position leave it divided into is four classes, not two and two.
+     *
+     * <p>A run of the model satisfies each rule or does not, so it falls in exactly one of the four
+     * — and the rows are owed one at each. Taken a rule at a time, the position would be divided
+     * twice over and a reader would hold two partitions of one denominator.
+     */
+    @Test
+    void whatTwoRulesLeaveIsTheClassesTheyComeToBetweenThem() {
+        SetDivisions.Read read = readingsOf("""
+                behavior f : (code: String) -> Answer
+                let f (code) =
+                    if String.startsWith("JP", code) then Yes
+                    else if String.endsWith("X", code) then Yes else No
+                """);
+
+        List<SetDivisions.Cell> cells = read.cells().values().iterator().next();
+        assertEquals(1, read.cells().size(), "one position is divided");
+        assertEquals(4, cells.size(), "into the classes the two rules come to between them");
+        assertEquals(List.of(2, 1, 1, 0),
+                cells.stream().map(each -> each.satisfies().size()).toList(),
+                "each satisfying its own answer to each of the two rules");
+        // Exclusive, which is what makes them classes: a value the model may hold is in one.
+        assertEquals(1, cells.stream()
+                        .filter(each -> each.values().has(new Value.Text("JPX"))).count(),
+                "a string satisfying both is in exactly one of them");
+        assertEquals(1, cells.stream()
+                        .filter(each -> each.values().has(new Value.Text("US1"))).count(),
+                "and one satisfying neither is in exactly one of them");
+    }
+
+    /**
      * A rule every value satisfies divides nothing, and is said to.
      *
      * <p>Every string begins with the empty one, so one side of this holds every value the position
