@@ -156,10 +156,51 @@ class NoBroadFailureBecomesAnAnswerInTheAnalysisCoreTest {
             return owner + "." + method + descriptor + " catches " + simple;
         }
 
+        /**
+         * Over the parts, and never over what {@link #toString} makes of them.
+         *
+         * <p>The sets and maps this is filed in take their identity from here, so ordering by the
+         * shown form would put back exactly what holding the parts whole was for: two exceptions of
+         * two libraries spelled alike are shown alike, and the licence given to one would be a
+         * licence for the other.
+         */
         @Override
         public int compareTo(Site other) {
-            return toString().compareTo(other.toString());
+            int by = owner.compareTo(other.owner);
+            if (by == 0) {
+                by = method.compareTo(other.method);
+            }
+            if (by == 0) {
+                by = descriptor.compareTo(other.descriptor);
+            }
+            if (by == 0) {
+                by = caught.compareTo(other.caught);
+            }
+            return by;
         }
+    }
+
+    /**
+     * And what tells two of those apart is every part of them.
+     *
+     * <p>Held here rather than left to a reading of the comparison. What files a site under a key is
+     * the ordering, so a part left out of it is a part two sites may differ in and be one — and
+     * which parts those are is the whole of what the permissions above address.
+     */
+    @Test
+    void twoSitesThatDifferInAnyPartAreTwoSites() {
+        Site one = new Site("a.Owner", "run", "()V", "com.alpha.TimeoutException");
+
+        assertTrue(one.compareTo(new Site("a.Other", "run", "()V", "com.alpha.TimeoutException")) != 0,
+                "two owners are two places");
+        assertTrue(one.compareTo(new Site("a.Owner", "walk", "()V", "com.alpha.TimeoutException")) != 0,
+                "two methods are two places");
+        assertTrue(one.compareTo(new Site("a.Owner", "run", "(I)V", "com.alpha.TimeoutException")) != 0,
+                "two overloads under one name are two places");
+        assertTrue(one.compareTo(new Site("a.Owner", "run", "()V", "com.beta.TimeoutException")) != 0,
+                "two exceptions spelled alike in two packages are two things to catch");
+        assertEquals(0, one.compareTo(new Site("a.Owner", "run", "()V", "com.alpha.TimeoutException")),
+                "and the same site in every part is one site");
     }
 
     /**
@@ -323,18 +364,22 @@ class NoBroadFailureBecomesAnAnswerInTheAnalysisCoreTest {
                 method.code().ifPresent(code -> {
                     Walk walk = Walk.of(code);
                     for (ExceptionCatch caught : code.exceptionHandlers()) {
+                        // No type named is not a narrow handler. It is the widest there is — the
+                        // entry catches everything, which is what a `finally` compiles to — so it
+                        // is asked the same question under the name of what it takes.
                         String type = caught.catchType()
-                                .map(entry -> entry.asInternalName()).orElse(null);
-                        if (type == null || !isWide(type)) {
+                                .map(entry -> entry.asInternalName())
+                                .orElse("java/lang/Throwable");
+                        if (!isWide(type)) {
                             continue;
                         }
                         Site site = new Site(owner.replace('/', '.'),
                                 method.methodName().stringValue(),
                                 method.methodType().stringValue(), type.replace('/', '.'));
                         examined.add(site);
-                        Integer begins = walk.beginsAt(caught.handler());
-                        if (begins != null && walk.canReturnFrom(caught.handler())) {
-                            beginningAt.computeIfAbsent(site, _ -> new TreeSet<>()).add(begins);
+                        if (walk.canReturnFrom(caught.handler())) {
+                            beginningAt.computeIfAbsent(site, _ -> new TreeSet<>())
+                                    .add(walk.beginsAt(caught.handler()));
                         }
                     }
                 });
@@ -351,6 +396,12 @@ class NoBroadFailureBecomesAnAnswerInTheAnalysisCoreTest {
      * <p>Exception edges are left out on purpose. A handler reached from inside another handler is
      * itself one of the handlers this asks about, so following the throw would answer for it twice
      * and would say of a handler that rethrows that it can return.
+     *
+     * <p><b>Nothing here has a quiet arm.</b> A label nothing binds and a step off the end of a
+     * method are this reader failing to read a class file, not facts about the code — and answered
+     * quietly they are always answered on the safe-looking side: an edge dropped is a return not
+     * arrived at, and a handler skipped is a handler nobody asked about. That is the shape this
+     * whole check exists to refuse, so it is refused here first.
      */
     private record Walk(List<Instruction> instructions, Map<Label, Integer> at) {
 
@@ -367,23 +418,29 @@ class NoBroadFailureBecomesAnAnswerInTheAnalysisCoreTest {
             return new Walk(instructions, at);
         }
 
-        /** Which instruction {@code handler} begins at, or null where nothing binds it. */
-        Integer beginsAt(Label handler) {
-            return at.get(handler);
+        /** Which instruction {@code label} is bound to. */
+        int beginsAt(Label label) {
+            Integer where = at.get(label);
+            if (where == null) {
+                throw new IllegalStateException(
+                        "a label this method's code refers to is bound nowhere in it, so what a run"
+                                + " does from there was not read");
+            }
+            return where;
         }
 
         boolean canReturnFrom(Label handler) {
-            Integer start = at.get(handler);
-            if (start == null) {
-                return false;
-            }
             Set<Integer> seen = new HashSet<>();
             Deque<Integer> todo = new ArrayDeque<>();
-            todo.add(start);
+            todo.add(beginsAt(handler));
             while (!todo.isEmpty()) {
                 int here = todo.removeFirst();
-                if (here >= instructions.size() || !seen.add(here)) {
+                if (!seen.add(here)) {
                     continue;
+                }
+                if (here >= instructions.size()) {
+                    throw new IllegalStateException("a run walked off the end of a method, so the"
+                            + " edges out of its last instruction were not read");
                 }
                 Instruction instruction = instructions.get(here);
                 if (instruction instanceof ReturnInstruction) {
@@ -427,10 +484,7 @@ class NoBroadFailureBecomesAnAnswerInTheAnalysisCoreTest {
         }
 
         private void add(List<Integer> out, Label label) {
-            Integer target = at.get(label);
-            if (target != null) {
-                out.add(target);
-            }
+            out.add(beginsAt(label));
         }
     }
 
