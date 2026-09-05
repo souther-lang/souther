@@ -83,6 +83,43 @@ class AChoiceSaysWhatNothingElseSaidAboutAPositionTest {
             """.replace("UNREAD_A", souther.compiler.ARuleNoReadingTakesIn.about("a"));
 
     /**
+     * A form nothing reads, written beside the brackets rather than inside them.
+     *
+     * <p>Both alternatives read perfectly well. What nothing reads is the conjunct written next to
+     * the whole choice, and taking it away leaves the rule with no such reason at all.
+     */
+    private static final String BESIDE_THE_BRACKET = """
+            module demo
+
+            data N = { x: String, y: String }
+                invariant r = (x == "A" || x == "B") && UNREAD_Y
+            """.replace("UNREAD_Y", souther.compiler.ARuleNoReadingTakesIn.about("y"));
+
+    /** The same form inside one alternative, with a read conjunct beside the brackets. */
+    private static final String INSIDE_ONE_ALTERNATIVE = """
+            module demo
+
+            data N = { x: String, y: String }
+                invariant r = (x == "A" || UNREAD_Y) && y /= "Z"
+            """.replace("UNREAD_Y", souther.compiler.ARuleNoReadingTakesIn.about("y"));
+
+    /** And an alternative nothing reads, beside a conjunct that is the only thing to name `y`. */
+    private static final String THE_CONJUNCT_NAMES_A_POSITION_OF_ITS_OWN = """
+            module demo
+
+            data N = { x: String, y: String }
+                invariant r = (x == "A" || UNREAD_X) && y == "Q"
+            """.replace("UNREAD_X", souther.compiler.ARuleNoReadingTakesIn.about("x"));
+
+    /** An alternative that constrains the position and holds a form nothing reads beside it. */
+    private static final String THE_UNREAD_FORM_IS_UNDER_AN_ALTERNATIVE = """
+            module demo
+
+            data N = { x: String, y: String }
+                invariant r = x == "A" || (x == "B" && UNREAD_Y)
+            """.replace("UNREAD_Y", souther.compiler.ARuleNoReadingTakesIn.about("y"));
+
+    /**
      * Eight clauses about one position that nothing reads, written along one line.
      *
      * <p>Enough of them that an order arrived at by hashing would be some other order.
@@ -168,6 +205,75 @@ class AChoiceSaysWhatNothingElseSaidAboutAPositionTest {
         assertEquals(8, columns.size(), "one for each clause nothing reads");
         assertEquals(columns.stream().sorted().toList(), columns,
                 "they were met along the line, and nothing between there and here rearranged them");
+    }
+
+    /**
+     * A form nothing reads written beside the brackets leaves the choice answerable for nothing.
+     *
+     * <p>A conjunction of a choice is also the choice between the conjunctions, and the values are
+     * worked out that way — so read over that tree, both alternatives hold a form nothing reads and
+     * the choice comes out offering an alternative nothing could read. Neither alternative holds
+     * one. An author following it is sent to a choice that reads perfectly well, to lift something
+     * written somewhere else.
+     */
+    @Test
+    void aChoiceIsAnswerableForNothingWhereTheUnreadFormIsBesideIt() {
+        assertEquals(Set.of(), whatARuleIsAnswerableFor(BESIDE_THE_BRACKET, "x"),
+                "both alternatives were read, so the choice offered no alternative nothing could"
+                        + " read — whatever was written beside the brackets");
+        assertEquals(Set.of(UnreadReason.FORM_NOT_READ),
+                whatARuleIsAnswerableFor(BESIDE_THE_BRACKET, "y"),
+                "and what the conjunct beside them left is the conjunct's own, at the leaf it was"
+                        + " written as");
+    }
+
+    /**
+     * And the same form written inside one alternative leaves it answerable.
+     *
+     * <p>The control that makes the one above a claim rather than a spelling: the two models differ
+     * in where the form stands and in nothing else.
+     */
+    @Test
+    void aChoiceIsAnswerableWhereTheUnreadFormIsInsideAnAlternative() {
+        assertEquals(Set.of(UnreadReason.ALTERNATIVE_NOT_READ),
+                whatARuleIsAnswerableFor(INSIDE_ONE_ALTERNATIVE, "x"),
+                "the alternative beside the one naming `x` is one nothing could read, so what that"
+                        + " branch said of `x` binds nothing");
+    }
+
+    /**
+     * And a position only the conjunct beside the brackets names is not the choice's to answer for.
+     *
+     * <p>The other way the same rewriting is read as an author's work: distributed, the conjunct is
+     * part of each alternative, and the positions it reached are read as positions the alternative
+     * left open.
+     */
+    @Test
+    void aChoiceIsAnswerableForNothingAtAPositionItsAlternativesNeverReach() {
+        assertEquals(Set.of(),
+                whatARuleIsAnswerableFor(THE_CONJUNCT_NAMES_A_POSITION_OF_ITS_OWN, "y"),
+                "neither alternative names `y`, so nothing about it turns on which of them"
+                        + " anybody is in");
+        assertEquals(Set.of(UnreadReason.FORM_NOT_READ),
+                whatARuleIsAnswerableFor(THE_CONJUNCT_NAMES_A_POSITION_OF_ITS_OWN, "x"),
+                "while `x` is left by the form nothing reads, at the leaf it was written as");
+    }
+
+    /**
+     * And an alternative that constrains the position is still one nothing could read.
+     *
+     * <p>Held so that the three above are not answered by making a rule's account agree with what
+     * the position finally admits. Here the position comes out held to two strings and the choice is
+     * answerable all the same: had the branch been read, it might have turned out one nobody can be
+     * in, and then the position would be held to one. What a rule is answerable for and how wide a
+     * position ended up are two questions.
+     */
+    @Test
+    void anAlternativeThatConstrainsThePositionIsStillOneNothingCouldRead() {
+        assertEquals(Set.of(UnreadReason.ALTERNATIVE_NOT_READ),
+                whatARuleIsAnswerableFor(THE_UNREAD_FORM_IS_UNDER_AN_ALTERNATIVE, "x"),
+                "the form nothing reads stands under one alternative, which is what makes that"
+                        + " alternative one nothing could read");
     }
 
     /** What a rule of the declaration is answerable for at {@code field}. */
