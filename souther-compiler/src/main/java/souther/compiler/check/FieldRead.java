@@ -38,8 +38,14 @@ import java.util.Map;
 public record FieldRead(Symbols symbols, FieldTypes world, Unreadable unreadable) {
 
     /**
-     * What a reading does where the declarations at a position do not read — a data that declares
-     * one name twice, a spread of something that is no product, two spreads supplying one name.
+     * What a reading does where reading a position refuses.
+     *
+     * <p>Any refusal it raises, and not a list of them. What a value at a position is cannot be
+     * settled without following the names it wears and the spreads under them, so a reading of a
+     * position meets whatever those refuse — today a data that declares one name twice, a spread of
+     * something that is no product, two spreads supplying one name, and tomorrow whatever else is
+     * found there. Naming three would be a closure this does not have, and the reader that has to
+     * answer has to answer whichever it met.
      *
      * <p>Two worlds and not a fallback. Which of them a reader is in is what it was built with, the
      * way {@link FieldTypes} already is for what a field holds, so that neither has to decide what
@@ -54,7 +60,8 @@ public record FieldRead(Symbols symbols, FieldTypes world, Unreadable unreadable
         /** Nothing is readable there, which is an answer. A module still being typed has
          *  declarations that do not read yet and an author reading a name in it is owed what does —
          *  the rule {@link ResolvedFieldTypes} follows for what a field holds, followed here for
-         *  which names there are. */
+         *  which names there are. What was wrong is reported where the module is checked, so
+         *  nothing is lost by this reading not repeating it. */
         MAKES_NOTHING_READABLE
     }
 

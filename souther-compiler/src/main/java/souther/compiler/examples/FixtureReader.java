@@ -1136,6 +1136,11 @@ public final class FixtureReader {
                             || isFromList(c)) ->
                     STATES_NO_NAME;
             case Hir.Apply _ -> ELSEWHERE;
+            // A field taken off another value is a form this reading refuses, and it is refused
+            // where it is read. Answered as a value under no name, the rule about names would reach
+            // it first and tell whoever wrote it about the name a position takes, which is not what
+            // is wrong with it.
+            case Hir.FieldAccess _ -> ELSEWHERE;
             case null, default -> STATES_NO_NAME;
         };
     }

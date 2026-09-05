@@ -38,10 +38,15 @@ import java.util.Map;
  * it read no value at every name a model reads through a sum.
  *
  * <p><b>Asked of a {@link Shape} and not of a {@link Type}.</b> A shape has had the names a value
- * wears taken off already, and whether they come off is a rule about what a {@code .} may name
- * rather than a policy each reader settles — {@link FieldRead} holds it, and is what a reader with
- * a type in hand asks. Started here, a shape would be read for a position whose names nobody had
- * decided about.
+ * wears taken off already, and how far to look through them is the reader's own: a {@code .} an
+ * author wrote looks through none of them, and a walk over a behavior's positions looks through all
+ * of them — {@link TypeView} holds both directions for that reason. Started here, that policy would
+ * be decided for every reader by whichever one asked first.
+ *
+ * <p>Which is why the readers of the first kind go through {@link FieldRead} rather than reaching a
+ * shape themselves: for them the barrier is not a policy but what a {@code .} means, and one of them
+ * settling it again is what left an editor and a compiler answering differently about one
+ * {@code x.f}. A walk over positions is the other kind and takes a shape here, as it did.
  *
  * @param declaredBy     the declarations the names are written on, outermost spread first. What a
  *                       rule over one of these fields is written on, which is not the same as what a
