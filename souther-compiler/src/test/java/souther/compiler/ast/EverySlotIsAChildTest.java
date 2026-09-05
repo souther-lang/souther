@@ -26,7 +26,7 @@ class EverySlotIsAChildTest {
 
     private static Ast.Var name(String written) {
         return Ast.Var.written(written, POS,
-                new SourceReferenceOrigin("m", 0));
+                new SourceReferenceOrigin(new souther.compiler.types.WrittenOwner.Body("m", "b"), 0));
     }
 
     /** {@code Person { ..base, age: n }} — one name slot, one expression slot. */

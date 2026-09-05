@@ -361,7 +361,7 @@ class CompilePostfixApplicationTest {
     /** An application a source wrote, applying {@code applied} — as much of the reading as a
      *  question about what a report quotes needs. */
     private static Hir.Apply readApplying(WrittenName applied, SourcePos at) {
-        Ast.Expr callee = new Ast.Var(applied, new SourceReferenceOrigin("m", 0),
+        Ast.Expr callee = new Ast.Var(applied, new SourceReferenceOrigin(new souther.compiler.types.WrittenOwner.Body("m", "f"), 0),
                 applied.region());
         return Hir.Apply.read(new Ast.Apply(callee, java.util.List.of(),
                         SourceConstructOrigin.written(new souther.compiler.types.WrittenOwner.Body("m", "f"),

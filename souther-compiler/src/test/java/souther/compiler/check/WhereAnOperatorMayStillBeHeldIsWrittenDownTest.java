@@ -264,7 +264,7 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                     "the same, for the clauses a rule owes"),
             new Held("souther.compiler.partition.Condition.of",
                     "the composition, which the shape it makes carries"),
-            new Held("souther.compiler.partition.EnsuresThresholds.stated",
+            new Held("souther.compiler.partition.ClauseStatements.walk",
                     "walks into both halves, and stops where the connective composes either of"
                             + " them because what such a rule states is neither of its sides"),
 

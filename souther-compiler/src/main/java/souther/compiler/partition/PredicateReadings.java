@@ -12,7 +12,6 @@ import souther.compiler.core.Core;
 import souther.compiler.diag.Citation;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
-import souther.compiler.semantics.ConditionJoin;
 
 import souther.compiler.types.BindingId;
 
@@ -106,11 +105,11 @@ record PredicateReadings(List<Reading> predicates) {
     static PredicateReadings of(String behavior, AnalysisBody body, StatedContract stated,
                                 InputReading read, Map<BindingId, String> parameters,
                                 ElementBindings elements) {
-        List<Reading> found = new ArrayList<>();
+        List<Reading> predicates = new ArrayList<>();
         if (body != null) {
             walk(body.core(), behavior, read,
                     InputReads.ofParametersWhereCallsStand(parameters, elements),
-                    LiveFlow.of(body.core()), true, found);
+                    LiveFlow.of(body.core()), true, predicates);
         }
         // And what the behavior states about its own answer, which is the same kind of rule written
         // somewhere else. Two walks and one list: a body and an `ensures` may write a rule about one
@@ -119,49 +118,26 @@ record PredicateReadings(List<Reading> predicates) {
         //
         // The walks are apart because what counts as a rule differs. A body states one wherever it
         // computes something it reads; a clause states its own and those of both sides of every
-        // `&&` above them, and neither side of an `||` states what the rule states. That is each
-        // reader's own answer, and what a predicate means is neither's.
+        // `&&` above them. Which statements a clause has is neither reader's answer and is asked
+        // once ({@link ClauseStatements}), so what this walk does is read each of them.
         if (stated != null && !stated.isEmpty()) {
             InputReads reads = InputReads.ofWhatIsDeclared(
                     EnsuresThresholds.rootsOf(stated.params()));
             for (StatedContract.StatedRule rule : stated.rules()) {
                 for (StatedContract.Conjunct conjunct : rule.conjuncts()) {
                     Core one = conjunct.stated().orNull();
-                    if (one != null) {
-                        stated(one, behavior, read, reads, found);
+                    if (one == null) {
+                        continue;
+                    }
+                    for (ClauseStatements.Statement each : ClauseStatements.of(one, reads)) {
+                        if (each instanceof ClauseStatements.Statement.States states) {
+                            found(states.stated(), behavior, read, states.reads(), predicates);
+                        }
                     }
                 }
             }
         }
-        return new PredicateReadings(found);
-    }
-
-    /**
-     * The predicates a clause states outright: its own, and those of both sides of every {@code &&}
-     * above them.
-     *
-     * <p>The same descent {@link EnsuresThresholds} makes for the comparisons a clause states, and
-     * for the same reasons. Nothing below anything else: a disjunct holds where the other one does
-     * not, and a call's argument is not what the call comes to — so a set told from the rest by one
-     * of those is not one the rule tells from the rest.
-     */
-    private static void stated(Core e, String behavior, InputReading read, InputReads reads,
-                               List<Reading> out) {
-        // Through what a `let` binds, which is not a choice: what the expression comes to is its
-        // body. This is the shape a helper called from a clause arrives in.
-        if (e instanceof Core.LetIn let) {
-            stated(let.body(), behavior, read, reads.and(let.binder(), let.value()), out);
-            return;
-        }
-        if (e instanceof Core.Binary binary) {
-            ConditionJoin joined = ConditionJoin.of(binary.op()).orElse(null);
-            if (joined == ConditionJoin.BOTH) {
-                stated(binary.left(), behavior, read, reads, out);
-                stated(binary.right(), behavior, read, reads, out);
-            }
-            return;   // and an `||` states neither of its sides
-        }
-        found(e, behavior, read, reads, out);
+        return new PredicateReadings(predicates);
     }
 
     /**

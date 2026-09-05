@@ -1,6 +1,5 @@
 package souther.compiler.partition;
 
-import souther.compiler.semantics.ConditionJoin;
 import souther.compiler.check.Comparison;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.ComparisonClaim;
@@ -143,9 +142,17 @@ public final class EnsuresThresholds {
                 // concluded from it either way: it draws no line here, and that it drew none is not
                 // a statement that the model has none there. It is still counted, so that which
                 // line of the clause the next one is does not move with what this reading managed.
-                line = conjunct.stated().orNull() == null ? line + 1
-                        : stated(conjunct.stated().orNull(), rule, clause, line, read, reads,
-                                drawn);
+                if (conjunct.stated().orNull() == null) {
+                    line++;
+                    continue;
+                }
+                for (ClauseStatements.Statement each
+                        : ClauseStatements.of(conjunct.stated().orNull(), reads)) {
+                    if (each instanceof ClauseStatements.Statement.States states) {
+                        stated(states.stated(), rule, clause, line, read, states.reads(), drawn);
+                    }
+                    line++;
+                }
             }
         }
         return new Clauses(drawn.evidence(), drawn.between(), drawn.noLine().found());
@@ -158,49 +165,20 @@ public final class EnsuresThresholds {
                          RulesWithNoLine.Gathered noLine) {}
 
     /**
-     * The comparisons a rule states outright: its own, and those of both sides of every {@code &&}
-     * above them.
+     * What one thing a rule states comes to, where the reading of comparisons is concerned.
      *
-     * <p>Nothing below anything else. A disjunct holds where the other one does not, a call's
-     * argument is not what the call comes to, and neither states the comparison inside it — so a
-     * line drawn from one would be a line the model does not draw.
+     * <p>Which things a rule states is {@link ClauseStatements}' answer and not this reader's: the
+     * predicates a clause states are read off the same statements, and two walks recognising the
+     * same {@code &&} are two places free to disagree about it.
      *
      * @param line which line of the clause this one is
-     * @return which line of the clause the next one is. Every statement the walk reaches takes one,
-     *         whether or not a line came out of it, so that a reading which could make nothing of
-     *         one numbers the rest the same as a reading that could
      */
-    private static int stated(Core e, StatedContract.StatedRule rule, String clause, int line,
+    private static void stated(Core e, StatedContract.StatedRule rule, String clause, int line,
                               InputReading read, InputReads reads,
                               Drawn out) {
         Symbols symbols = read.symbols();
-        // Through what a `let` binds, which is not a choice: what the expression comes to is its
-        // body, so the body states whatever the rule states. This is the shape a helper called from
-        // a clause arrives in — the call is expanded and its argument bound to the helper's own
-        // parameter — and a walk that stopped here found the rule stating nothing while the model
-        // plainly says something about the position.
-        if (e instanceof Core.LetIn let) {
-            return stated(let.body(), rule, clause, line, read,
-                    reads.and(let.binder(), let.value()), out);
-        }
-        if (e instanceof Core.Binary binary) {
-            // Asked once of the connective this is, and both answers read off that. Asked again
-            // below for the other one, the second question would be free to come to a different
-            // answer about the very operator the first one has already been read for.
-            ConditionJoin joined = ConditionJoin.of(binary.op()).orElse(null);
-            if (joined == ConditionJoin.BOTH) {
-                return stated(binary.right(), rule, clause,
-                        stated(binary.left(), rule, clause, line, read, reads, out),
-                        read, reads, out);
-            }
-            if (joined == ConditionJoin.EITHER) {
-                // What such a rule states is not what either side of it states. Said as nothing
-                // rather than as a rule this could not read: reporting it would send an author
-                // after a limit of this compiler that is not there.
-                return line + 1;
-            }
-        }
-        // Anything else is a form this walk does not read. Which positions it is about is still
+        // Anything not read as a comparison is a form this walk does not read. Which positions it is
+        // about is still
         // said, because a position left out of every answer is reported as one the model draws no
         // line through — and the model says otherwise in the rule this stopped on.
         Comparison comparison = e instanceof Core.Binary binary
@@ -218,7 +196,7 @@ public final class EnsuresThresholds {
                                     .map(FilingCoordinate::at).toList(),
                             new BlockReason.UnreadComparisonForm()),
                     out.noLine());
-            return line + 1;
+            return;
         }
         // What the comparison comes to is read the same way wherever a comparison is written, which
         // is what {@link ComparisonAssessment} is for: a clause and a guard over one arithmetic form
@@ -293,7 +271,6 @@ public final class EnsuresThresholds {
                  ComparisonAssessment.NoFeasibleInput _,
                  ComparisonAssessment.AnswerDependent _, ComparisonAssessment.NoInput _ -> { }
         }
-        return line + 1;
     }
 
     /** How a row meets a line this clause drew, which is the clause's own answer and no other

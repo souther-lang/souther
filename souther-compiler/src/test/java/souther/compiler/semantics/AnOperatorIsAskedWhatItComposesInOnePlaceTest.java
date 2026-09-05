@@ -73,9 +73,12 @@ class AnOperatorIsAskedWhatItComposesInOnePlaceTest {
                     "the clauses an invariant states, numbered as that same walk numbers them"),
             new Licence("souther.compiler.check.FieldDomains.lambda$projection$2", 1,
                     "the clause that bounds a field, whose halves are answered beside it"),
-            new Licence("souther.compiler.partition.EnsuresThresholds.stated", 1,
-                    "the comparisons a rule states outright: one recognition, and both of what a"
-                            + " connective can compose read off it"));
+            new Licence("souther.compiler.partition.ClauseStatements.walk", 1,
+                    "what a behavior's clause states outright: one recognition, and both of what a"
+                            + " connective can compose read off it. The comparisons a clause draws"
+                            + " lines with and the predicates it tells sets of strings apart with"
+                            + " are read off the statements this leaves, so neither reader is a"
+                            + " second place the same `&&` is recognised in"));
 
     @Test
     void onlyARecognitionReadsAnOperatorForWhatItComposes() throws IOException {

@@ -79,18 +79,6 @@ public final class AstBuilder {
      */
     private final Map<WrittenOwner, Reading> readings = new LinkedHashMap<>();
 
-    /**
-     * How many references this source has been read to hold, which is what numbers the next one
-     * ({@link SourceReferenceOrigin}).
-     *
-     * <p>Counted over the source rather than within an owner, which is where this parts from the
-     * constructs. What a reference addresses is a name as it was written, and a name written in one
-     * definition is read from another — a helper's parameter, a stage's dependency — so an ordinal
-     * counted within the definition the characters are in would be one the reader cannot say what
-     * it was counted in.
-     */
-    private int referenceCounter = 0;
-
     private AstBuilder(String source, Placement read) {
         this.lines = new LineIndex(source, read);
         // Asked of a position, which is the one way there is to ask which text something is in.
@@ -102,23 +90,6 @@ public final class AstBuilder {
     /** What reads {@code owner}'s syntax, made once and handed back after that. */
     private Reading reading(WrittenOwner owner) {
         return readings.computeIfAbsent(owner, Reading::new);
-    }
-
-    /**
-     * Which reference of this source the next one is.
-     *
-     * <p>Taken here for the reason a construct's number is taken where the construct is read: this
-     * is the one place reading the syntax, and everything below reads a tree where a name may have
-     * been respelled, copied into another module, or resolved to what it reaches. None of those
-     * tells one occurrence from another, and a reader that wanted to would have nothing left but
-     * where the characters are — which is where a complaint belongs and is not what a reference is.
-     *
-     * <p>A name a desugaring writes takes one too. It stands where the author wrote a form that
-     * holds it, so it is a reference of this source however it is spelled — and leaving it without
-     * one would make the field a question every reader has to ask before it may use it.
-     */
-    private SourceReferenceOrigin reference() {
-        return new SourceReferenceOrigin(moduleName, referenceCounter++);
     }
 
     /**
@@ -208,9 +179,8 @@ public final class AstBuilder {
                             .example(n, target, named));
                 }
                 case FAKE_DEF -> {
-                    Ast.Var target = behaviorNameAfter(n, 1);
-                    fakes.add(reading(new WrittenOwner.Fake(text, moduleName, target.name()))
-                            .fake(n, target));
+                    fakes.add(reading(new WrittenOwner.Fake(text, moduleName, nameAfter(n, 1)))
+                            .fake(n));
                 }
                 default -> { /* MODULE_HEADER handled above; ERROR nodes are reported already */ }
             }
@@ -249,9 +219,8 @@ public final class AstBuilder {
                             .example(n, exampled, named));
                 }
                 case FAKE_DEF -> {
-                    Ast.Var stoodInFor = behaviorNameAfter(n, 1);
-                    fakes.add(reading(new WrittenOwner.Fake(text, moduleName, stoodInFor.name()))
-                            .fake(n, stoodInFor));
+                    fakes.add(reading(new WrittenOwner.Fake(text, moduleName, nameAfter(n, 1)))
+                            .fake(n));
                 }
                 case EXAMPLES_FILE_HEADER -> { /* the header itself */ }
                 case FN_DEF -> {
@@ -301,20 +270,19 @@ public final class AstBuilder {
     }
 
     /**
-     * The dotted name written at {@code from} in {@code n}'s meaningful children, as a behavior
-     * reference.
+     * The dotted name written at {@code from} in {@code n}'s meaningful children.
      *
-     * <p>Empty where the parser recovered from a form with no name at that position. A name is what
-     * the following passes ask about, so there has to be one to ask about; what is wrong with the
-     * text was said where it was read.
+     * <p>The text and not a reference: this is what says which owner wrote the block, and the owner
+     * is what a reference of it is counted within. Empty where the parser recovered from a form with
+     * no name at that position — what is wrong with the text was said where it was read.
      */
-    private Ast.Var behaviorNameAfter(SyntaxNode n, int from) {
+    private String nameAfter(SyntaxNode n, int from) {
         List<SyntaxElement> es = meaningful(n);
         if (from >= es.size() || !isToken(es.get(from), SyntaxKind.IDENT)) {
-            return Ast.Var.desugared("", pos(n), reference());
+            return "";
         }
         int[] at = {from};
-        return Ast.Var.written(dottedName(es, at).name(), reference());
+        return dottedName(es, at).name().canonical();
     }
 
     /** A name as the source wrote it — bare, or qualified through a module or an import alias — read
@@ -516,6 +484,52 @@ public final class AstBuilder {
     private final class Reading {
 
         private final WrittenOwner owner;
+
+        /**
+         * How many references this owner has been read to hold, which is what numbers the next one
+         * ({@link SourceReferenceOrigin}).
+         *
+         * <p>Its own counter, for the reason the block's is: a reference is not a construct, and one
+         * counter for both would make each one's numbers turn on how many of the other stood before
+         * it. Within the owner, for the reason every other number here is: what is written beside a
+         * definition does not number what the definition wrote.
+         */
+        private int referenceCounter;
+
+        /**
+         * Which reference of this owner the next one is.
+         *
+         * <p>Taken here for the reason a construct's number is taken where the construct is read:
+         * this is the one place reading the syntax, and everything below reads a tree where a name
+         * may have been respelled, copied into another module, or resolved to what it reaches. None
+         * of those tells one occurrence from another, and a reader that wanted to would have
+         * nothing left but where the characters are — which is where a complaint belongs and is not
+         * what a reference is.
+         *
+         * <p>A name a desugaring writes takes one too. It stands where the author wrote a form that
+         * holds it, so it is a reference of this source however it is spelled — and leaving it
+         * without one would make the field a question every reader has to ask before it may use it.
+         */
+        private SourceReferenceOrigin reference() {
+            return new SourceReferenceOrigin(owner, referenceCounter++);
+        }
+
+        /**
+         * The dotted name written at {@code from} in {@code n}'s meaningful children, as a behavior
+         * reference.
+         *
+         * <p>Empty where the parser recovered from a form with no name at that position. A name is
+         * what the following passes ask about, so there has to be one to ask about; what is wrong
+         * with the text was said where it was read.
+         */
+        private Ast.Var behaviorNameAfter(SyntaxNode n, int from) {
+            List<SyntaxElement> es = meaningful(n);
+            if (from >= es.size() || !isToken(es.get(from), SyntaxKind.IDENT)) {
+                return Ast.Var.desugared("", pos(n), reference());
+            }
+            int[] at = {from};
+            return Ast.Var.written(dottedName(es, at).name(), reference());
+        }
 
         /**
          * How many coverage-bearing constructs this owner has been read to hold, which is what
@@ -1634,8 +1648,9 @@ public final class AstBuilder {
         return new Ast.ExampleRow(identity, inputs, withs, expected, pos(n));
     }
 
-    /** {@code fake <target> | rows}, read for the owner {@code target} names. */
-    private Ast.Fake fake(SyntaxNode n, Ast.Var target) {
+    /** {@code fake <target> | rows}, read for the owner it names. */
+    private Ast.Fake fake(SyntaxNode n) {
+        Ast.Var target = behaviorNameAfter(n, 1);
         List<Ast.FakeRow> rows = new ArrayList<>();
         for (SyntaxNode row : childNodes(n, SyntaxKind.FAKE_ROW)) {
             rows.add(fakeRow(row));

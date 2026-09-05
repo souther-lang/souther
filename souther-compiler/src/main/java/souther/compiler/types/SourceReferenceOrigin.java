@@ -18,19 +18,26 @@ package souther.compiler.types;
  * which is what {@link SourceConstructOrigin} already does for the constructs a source writes.
  *
  * <p><b>Not a name anything outside one compilation can be matched by.</b> {@code ordinal} is the
- * builder's own count over the source it is reading. What identity needs is that the numbering be a
- * function of the source and that two references never share one, which it is and they do not —
- * matching one compilation's references against another's is a different question and not one this
- * answers.
+ * builder's own count over what {@link #owner} names. What identity needs is that the numbering be a
+ * function of the owner's syntax and that no two references of one owner share one, which it is and
+ * they do not — matching one compilation's references against another's is a different question and
+ * not one this answers.
  *
- * @param module   the module whose source wrote the reference, since each source numbers from zero
- * @param ordinal  which reference of that source it is, by the builder's own count over it
+ * <p>Counted within the owner and not over the file, for the reason a construct's number is. A count
+ * over the file makes the number a function of everything written before it there, so editing one
+ * definition renumbers the references of every one after it — and an identity that moves for an edit
+ * nothing about it can see is not one.
+ *
+ * @param owner    what wrote the reference: the declaration, the stated behavior, the body, or a
+ *                 source's rows for a behavior or its stand-in
+ * @param ordinal  which reference of that owner it is, by the builder's own count over it
  */
-public record SourceReferenceOrigin(String module, int ordinal) {
+public record SourceReferenceOrigin(WrittenOwner owner, int ordinal) {
 
     public SourceReferenceOrigin {
-        if (module == null) {
-            throw new IllegalArgumentException("a reference the source wrote is in some module");
+        if (owner == null) {
+            throw new IllegalArgumentException("a reference the source wrote was written by some"
+                    + " definition, block or set of rows");
         }
         if (ordinal < 0) {
             throw new IllegalArgumentException(
@@ -40,6 +47,6 @@ public record SourceReferenceOrigin(String module, int ordinal) {
 
     @Override
     public String toString() {
-        return module + "#ref" + ordinal;
+        return owner + "#ref" + ordinal;
     }
 }

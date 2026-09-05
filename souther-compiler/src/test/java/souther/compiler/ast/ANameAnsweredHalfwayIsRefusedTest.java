@@ -38,7 +38,7 @@ class ANameAnsweredHalfwayIsRefusedTest {
     @Test
     void aNameTheParserReadSaysOnlyWhatItIsWrittenAs() {
         Ast.Var written = Ast.Var.written("spin", POS,
-                new SourceReferenceOrigin("m", 0));
+                new SourceReferenceOrigin(new souther.compiler.types.WrittenOwner.Body("m", "b"), 0));
 
         assertEquals("spin", written.name());
         assertEquals(Ast.Var.class, written.getClass(),
