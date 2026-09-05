@@ -95,7 +95,7 @@ class AnObservationSaysTheSameThingWhereverThePathMeetsItTest {
         Partitions.Partitioning partitioning = Partitions.withThresholds(
                 Partitions.of(spec.name(), read, rules, souther.compiler.query.ReadAs.THE_COMPILATION_DOES),
                 read.quantities(rules),
-                GuardThresholds.of("book", body, plan,
+                GuardThresholds.of(body, plan,
                 compilation.db().ask(new souther.compiler.query.Adequacy.Inputs(module)).value().get("book"), rules).thresholds(), rules, souther.compiler.query.ReadAs.THE_COMPILATION_DOES);
         Output.Examples.Of observed = compilation.db()
                 .ask(Output.Examples.asked(compilation.db(), module,

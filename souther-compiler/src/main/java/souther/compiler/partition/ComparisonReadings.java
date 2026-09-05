@@ -2,16 +2,12 @@ package souther.compiler.partition;
 
 import souther.compiler.check.Comparison;
 import souther.compiler.check.PathReachability;
-import souther.compiler.check.RuleCitation;
 import souther.compiler.check.RuleReadingSource;
-import souther.compiler.check.RuleRef;
-import souther.compiler.check.StringPredicates;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.ComparisonCatalog;
 import souther.compiler.coverage.ComparisonOccurrence;
 import souther.compiler.coverage.CoverageSites;
-import souther.compiler.diag.Citation;
 import souther.compiler.types.BinOp;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
@@ -20,20 +16,16 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * One reading of the rules a body writes about its inputs: where each stands, what its names point
- * at, what a row had already satisfied to get there, and what became of it.
+ * One reading of a body's comparisons: where each stands, what its names point at, what a row had
+ * already satisfied to get there, whether a line may be drawn on it, and what it came to where one
+ * may.
  *
- * <p><b>Two answers out of one traversal, and they stay two answers.</b> A comparison places a line
- * on the order a position's values are counted on; a predicate over a string tells a set of those
- * values from the rest. What they have in common is where they stand — which names are in force, what
- * the conditions on the way established, whether what is computed there is read at all — and those
- * are facts about the program point rather than about either kind of rule. So one walk answers them,
- * and what it hands back is a pair of lists and not a sum: a reader wants the comparisons or it wants
- * the predicates, and made to switch over one type it would be reading the fact that both came out of
- * one walk, which is this class's business and nobody else's.
- *
- * <p>Asked once and handed on. Two calls of {@link #of} to take one list each is two traversals of
- * one body, which is the arrangement below is written against.
+ * <p><b>Of the body the backend emits, which is the tree the comparisons of a module are numbered
+ * in.</b> A rule stated as one of the language's own operations is not in this tree at all — it has
+ * been expanded into what it does — and is read where such operations still stand
+ * ({@link souther.compiler.check.AnalysisBody}) by a reading of its own. Two trees and two readings,
+ * which is not the same thing as one tree read twice: what each of them carries is where a rule
+ * stands in the tree it is in.
  *
  * <p><b>Each comparison is read once, here, and what it came to travels with it.</b> A reader that
  * reports why a comparison bears no line reads the answer off the standing and never reads the
@@ -63,12 +55,10 @@ import java.util.List;
  * out its way established — which is the whole of what makes this per comparison rather than per
  * fork. Everything else evaluates its parts under what stood at it.
  */
-record BodyReadings(List<ComparisonReading> comparisons,
-                    List<StringPredicateReading> stringPredicates) {
+record ComparisonReadings(List<Reading> comparisons) {
 
-    BodyReadings {
+    ComparisonReadings {
         comparisons = List.copyOf(comparisons);
-        stringPredicates = List.copyOf(stringPredicates);
     }
 
     /**
@@ -83,8 +73,8 @@ record BodyReadings(List<ComparisonReading> comparisons,
      *                reading has no arithmetic for is on the list as a decline, so the two are not
      *                one answer
      */
-    record ComparisonReading(ComparisonCatalog.Catalogued catalogued, InputReads reads,
-                             List<OnTheWay> assumed, BoundaryPolicy.Standing standing) {
+    record Reading(ComparisonCatalog.Catalogued catalogued, InputReads reads,
+                   List<OnTheWay> assumed, BoundaryPolicy.Standing standing) {
 
         /** Which comparison this is a reading of, which is what every reader joins on. */
         ComparisonOccurrence at() {
@@ -97,49 +87,10 @@ record BodyReadings(List<ComparisonReading> comparisons,
         }
     }
 
-    /**
-     * One predicate over a string, read where it is applied.
-     *
-     * <p>What the walk found and no more. Which predicate it is and which strings it states are read
-     * off the call by the one table that reads them; where it stands, what its names point at and
-     * what a row had satisfied to get there are this walk's, because they are facts about the
-     * program point and there is one walk that has them.
-     *
-     * <p><b>What it admits is not here, and neither is any machine.</b> A set of strings costs
-     * something to build, and what a position's rules may build is granted per position and spent as
-     * a group — so the sets are worked out where that allowance is, over every predicate that
-     * reached one position at once. Held here, each reading would have arrived at its own set one at
-     * a time, and which of a position's rules were answered would follow the order this walk
-     * happened to meet them in.
-     *
-     * @param origin  which rule this is a reading of, and which of its readings. One rule the author
-     *                wrote is read once per place a helper holding it was expanded, and the readings
-     *                divide the position they name differently
-     * @param subject the argument the rule is about, for a caller that resolves it to a position
-     * @param reads   what the names point at where this stands, which is what resolves the subject
-     * @param states  what the one table made of the strings this predicate states there
-     * @param assumed every condition on the way here, each with what became of it, as a comparison's
-     *                are
-     * @param live    whether what is computed here is read on the way to what the behavior answers
-     *                with
-     */
-    record StringPredicateReading(PredicateOrigin origin, Core subject, InputReads reads,
-                                  StringPredicates.Reading states, List<OnTheWay> assumed,
-                                  boolean live) {
-
-        StringPredicateReading {
-            if (origin == null || subject == null || states == null) {
-                throw new IllegalArgumentException(
-                        "a predicate that was read is some rule, about something, and was read");
-            }
-            assumed = List.copyOf(assumed);
-        }
-    }
-
     /** What each comparison stands under, filed under the site a run through it is recorded at. */
     ReachingCuts reaching(CoverageSites.Plan plan) {
         ReachingCuts.Collected cuts = new ReachingCuts.Collected();
-        for (ComparisonReading each : comparisons) {
+        for (Reading each : comparisons) {
             // Only where a run through it is written down. What stands on the way to a comparison
             // nothing records is a fact about the body all the same, and there is no run for a
             // reader of this to hold it against.
@@ -160,7 +111,7 @@ record BodyReadings(List<ComparisonReading> comparisons,
      * reading is one value for the whole of this walk. Put in it, the reading would be copied at
      * every step and asked of whichever copy a reader happened to hold.
      */
-    private record Body(String behavior, CoverageSites.Plan plan,
+    private record Body(CoverageSites.Plan plan,
                         InputReading read,
                         PathReachability.Answers arrives) {
 
@@ -173,36 +124,25 @@ record BodyReadings(List<ComparisonReading> comparisons,
         }
     }
 
-    /** What the walk fills as it goes: the comparisons of the body and the predicates over its
-     *  strings, gathered by one traversal because both are facts about where they stand. */
-    private record Found(List<ComparisonReading> comparisons,
-                         List<StringPredicateReading> stringPredicates) {}
-
     /**
      * One reading of {@code body}.
      *
-     * <p>{@code behavior} is whose body it is, and it is checked rather than trusted. A comparison
-     * the catalog named says which behavior's body it stands in, so every one the walk meets is held
-     * against what the caller said — a body read under another's name is refused at the first
-     * comparison in it. A predicate has no catalog to be named by, which is why the name is a
-     * parameter at all: a rule written in a body is one of that behavior's, and two behaviors
-     * calling one helper each read its predicate.
+     * <p>Whose body it is is not asked for: what a reading is of is a comparison the catalog named,
+     * and a name says which behavior's body it stands in. Taken as a parameter beside that, a
+     * caller could read one body under another's name and nothing would refuse it.
      *
      * <p>{@code arrives} is what the walk of the whole body found reaching each comparison, which is
      * one of the two domains a line is held against — the declarations leave the other. It is handed
      * in here because this is where a comparison is read, and a reading of it is made once.
      */
-    static BodyReadings of(String behavior, Core body, CoverageSites.Plan plan,
-                           InputReading read,
-                           InputReads reads,
-                           PathReachability.Answers arrives) {
-        if (behavior == null) {
-            throw new IllegalArgumentException("a body is somebody's body");
-        }
-        Found found = new Found(new ArrayList<>(), new ArrayList<>());
-        walk(body, new Body(behavior, plan, read, arrives), reads,
-                LiveFlow.of(body), List.of(), true, found);
-        return new BodyReadings(found.comparisons(), found.stringPredicates());
+    static ComparisonReadings of(Core body, CoverageSites.Plan plan,
+                                 InputReading read,
+                                 InputReads reads,
+                                 PathReachability.Answers arrives) {
+        List<Reading> readings = new ArrayList<>();
+        walk(body, new Body(plan, read, arrives), reads,
+                LiveFlow.of(body), List.of(), true, readings);
+        return new ComparisonReadings(readings);
     }
 
     /**
@@ -212,20 +152,13 @@ record BodyReadings(List<ComparisonReading> comparisons,
      *                nothing either
      */
     private static void walk(Core e, Body in, InputReads reads, LiveFlow flow,
-                             List<OnTheWay> assumed, boolean live, Found out) {
+                             List<OnTheWay> assumed, boolean live, List<Reading> out) {
         CoverageSites.Plan plan = in.plan();
         Symbols symbols = in.symbols();
         RuleReadingSource ruleSource = in.rules();
         ComparisonCatalog.Catalogued catalogued = e instanceof Core.Binary binary
                 ? plan.comparisons().at(binary).orElse(null) : null;
         if (catalogued != null) {
-            // What the caller said this body is, held against what the catalog says. A name handed
-            // in is a name a caller chose, and the one thing here that already knows whose body it
-            // is refuses a walk reading one behavior's body under another's name.
-            if (!in.behavior().equals(catalogued.which().behavior())) {
-                throw new IllegalArgumentException("this is " + catalogued.which().behavior()
-                        + "'s body and it is being read as " + in.behavior() + "'s");
-            }
             // What the catalog holds, kept whole. It carries which comparison this is, what the
             // recognition established and where it is written, and all three travel to whoever
             // reads this — taken apart here, a reader wanting one of them again would have to find
@@ -250,31 +183,7 @@ record BodyReadings(List<ComparisonReading> comparisons,
                                     catalogued.at(), in.read(), reads,
                                     null, false,
                                     in.arrives().arrivalAt(catalogued.which()))));
-            out.comparisons().add(
-                    new ComparisonReading(catalogued, reads, assumed, standing));
-        }
-        // And a predicate over a string, which is the other kind of rule a body writes about a
-        // position. Read here and not by a walk of its own: which names are in force, what a row
-        // had satisfied to get here and whether what is computed here is read at all are facts
-        // about the program point, and a second traversal is a second chance to disagree about
-        // them. What it means is asked of the one table that reads such a call, with the text
-        // reached through the names this walk has ({@link InputReads#writtenStringOf}) — so a rule
-        // written under `let prefix = "JP"` states what a rule written with the string states.
-        StringPredicates.Stated stated = e instanceof Core.PreservedCall call
-                ? StringPredicates.statedBy(call, symbols,
-                        written -> reads.writtenStringOf(written, symbols))
-                : null;
-        if (stated != null && e instanceof Core.PreservedCall call && call.origin().isWritten()) {
-            // Its own number, taken here, and what it names is the reading rather than the rule.
-            // Which rule it is came from the source; how many times that rule is read is a fact
-            // about this body, and this walk is what knows it.
-            out.stringPredicates().add(new StringPredicateReading(
-                    new PredicateOrigin(
-                            new RuleRef.Predicate(in.behavior(), call.origin()),
-                            new PredicateOccurrence(out.stringPredicates().size()),
-                            new RuleCitation.WrittenAt(
-                                    Citation.of(call.pos()))),
-                    stated.subject(), reads, stated.reading(), assumed, live));
+            out.add(new Reading(catalogued, reads, assumed, standing));
         }
         switch (e) {
             // The right operand runs only where the left came out the way that leaves the answer

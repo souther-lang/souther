@@ -146,7 +146,7 @@ class NothingThatWalksATreeNamesTheReadingOfTheInputTest {
                         "souther/compiler/inputs/Denotation",
                         "souther/compiler/inputs/ComparedNumbers$Read",
                         "souther/compiler/partition/AffineReading$OfAComparison$Stopped",
-                        "souther/compiler/partition/BodyReadings$ComparisonReading",
+                        "souther/compiler/partition/ComparisonReadings$Reading",
                         "souther/compiler/partition/Condition$Compares")),
                 () -> "what records where something was read is not walk state, and found " + keeps);
     }

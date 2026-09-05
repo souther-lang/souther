@@ -31,7 +31,7 @@ import java.util.Optional;
  * happened to reach.
  *
  * <p><b>A decision and not a walk.</b> Where a comparison is written and what is in force there is
- * {@link BodyReadings}'s, asked once for the whole body; this is what that walk asks at each
+ * {@link ComparisonReadings}'s, asked once for the whole body; this is what that walk asks at each
  * of them. Holding a walk of its own, this was one of two readings threading the same {@code let}
  * rule through the same tree to answer different halves of one question.
  *
@@ -58,7 +58,7 @@ final class BoundaryPolicy {
      * it stands, and the arithmetic has no answer to that.
      *
      * <p>Which comparison it is about is not held here. The reading that holds this holds the
-     * comparison beside it ({@link BodyReadings.Reading}), and a second copy would be one
+     * comparison beside it ({@link ComparisonReadings.Reading}), and a second copy would be one
      * nothing keeps equal to the first.
      */
     sealed interface Standing {
@@ -93,7 +93,7 @@ final class BoundaryPolicy {
      *
      * <p>Where the comparison stands and what its names point at are not arguments to this, and
      * neither is the reading of the comparison. A decision that took the reading only to hand it
-     * back was a second place holding it, and the walk that has it is {@link BodyReadings},
+     * back was a second place holding it, and the walk that has it is {@link ComparisonReadings},
      * which reads what this admits.
      *
      * <p><b>How many times a run passes the comparison is not asked.</b> A recording holds that a

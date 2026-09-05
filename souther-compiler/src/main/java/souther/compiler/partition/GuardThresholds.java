@@ -73,20 +73,14 @@ public final class GuardThresholds {
     public record Guards(List<LineEvidence> evidence,
                          RulesWithNoLine noLine,
                          List<LineDrawn> between,
-                         ReachingCuts reaching,
-                         List<BodyReadings.StringPredicateReading> stringPredicates) {
+                         ReachingCuts reaching) {
 
-        public static final Guards NONE = new Guards(List.of(), RulesWithNoLine.NONE, List.of(),
-                ReachingCuts.NONE, List.of());
+        public static final Guards NONE =
+                new Guards(List.of(), RulesWithNoLine.NONE, List.of(), ReachingCuts.NONE);
 
         public Guards {
             evidence = List.copyOf(evidence);
             between = List.copyOf(between);
-            // What the body states about the strings at its positions, carried as it was read.
-            // What each of them admits is not worked out here: the sets a position's rules leave
-            // are built out of what that position is allowed, as a group, so they are worked out
-            // where that allowance is and not one rule at a time as a walk meets them.
-            stringPredicates = List.copyOf(stringPredicates);
         }
 
         /** The lines, read off what the walk said. Not a list of their own: the walk met these and
@@ -136,9 +130,9 @@ public final class GuardThresholds {
      * the same ones to everything that asks, since each of these reading its own is every rule of
      * every parameter read again to arrive at the same answers.
      */
-    public static Guards of(String behavior, Core body, CoverageSites.Plan plan,
+    public static Guards of(Core body, CoverageSites.Plan plan,
                             InputDomain inputs, RuleReadingSource source) {
-        return of(behavior, body, plan, inputs.reading(source),
+        return of(body, plan, inputs.reading(source),
                 souther.compiler.check.ElementBindings.NONE,
                 souther.compiler.check.PathReachability.Answers.NONE);
     }
@@ -148,7 +142,7 @@ public final class GuardThresholds {
      * comparison ran — which is not something the arms of anything standing round it record.
      * {@code arrives} says what the paths leave arriving at each of those sites, which is what a
      * line is dropped by ({@link ComparisonAssessment.NothingArrivesAtItsLine}). */
-    public static Guards of(String behavior, Core body, CoverageSites.Plan plan,
+    public static Guards of(Core body, CoverageSites.Plan plan,
                             InputReading read,
                             souther.compiler.check.ElementBindings elements,
                             souther.compiler.check.PathReachability.Answers arrives) {
@@ -160,9 +154,9 @@ public final class GuardThresholds {
         // comparison is written, what its names point at, what a row had satisfied to get there,
         // whether a line may be drawn on it and what it came to are five questions about one
         // position, and one walk answers them about one position.
-        BodyReadings rules = BodyReadings.of(behavior, body, plan, read,
+        ComparisonReadings comparisons = ComparisonReadings.of(body, plan, read,
                 InputReads.ofParameters(inputs.parameterReads(), elements), arrives);
-        for (BodyReadings.ComparisonReading each : rules.comparisons()) {
+        for (ComparisonReadings.Reading each : comparisons.comparisons()) {
             switch (each.standing()) {
                 case BoundaryPolicy.Standing.Admitted admitted ->
                         lineAt(each.catalogued(), plan,
@@ -173,8 +167,7 @@ public final class GuardThresholds {
                 case BoundaryPolicy.Standing.Refused _ -> { }
             }
         }
-        return new Guards(found, withoutALine.found(), between, rules.reaching(plan),
-                rules.stringPredicates());
+        return new Guards(found, withoutALine.found(), between, comparisons.reaching(plan));
     }
 
     /**

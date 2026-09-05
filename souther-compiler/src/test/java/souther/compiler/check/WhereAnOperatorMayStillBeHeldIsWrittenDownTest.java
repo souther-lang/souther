@@ -270,7 +270,7 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
 
             // Which operand runs when, asked of the operator itself rather than of what it
             // composes: the two are answered by the same two operators and are not one question.
-            new Held("souther.compiler.partition.BodyReadings.walk",
+            new Held("souther.compiler.partition.ComparisonReadings.walk",
                     "walks both sides of a conjunction and of a disjunction, each under what the"
                             + " other side leaves"),
 
