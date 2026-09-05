@@ -310,7 +310,7 @@ public final class CoverageSites {
                 new LinkedHashMap<>(), new IdentityHashMap<>(), new LinkedHashMap<>(),
                 java.util.Set.of(), new IdentityHashMap<>(),
                 ComparisonCatalog.of(ModuleBodies.none()),
-                SiteNumbering.of(NumberingIdentity.of(ModuleBodies.none().module())));
+                SiteNumbering.of(NumberingIdentity.forThePlanOfNothing()));
 
         /**
          * Whether one run of the behavior can pass {@code node} more than once.
@@ -445,9 +445,57 @@ public final class CoverageSites {
         }
     }
 
-    /** The sites of every behavior body in one module, numbered in the order the bodies are declared
-     * and, within one, in the order the arms are written. */
+    /**
+     * The sites of every behavior body in one module, numbered in the order the bodies are declared
+     * and, within one, in the order the arms are written — the numbering being decided here.
+     *
+     * <p>Deciding a numbering is what whoever holds the bodies does once. Every other walk of them
+     * wants the places and not a second opinion about what the numbers mean, and asks
+     * {@link #under} with the numbering that was issued.
+     */
     public static Plan of(ModuleBodies of, DecisionSources decisions, SuppliedRules supplied) {
+        Walked walked = walked(of, decisions, supplied);
+        return asPlan(walked,
+                walked.walk().numbering.finish(of.module(), walked.executable()));
+    }
+
+    /**
+     * The same sites, under a numbering already issued over these bodies.
+     *
+     * <p>What a reader that needs where the places are does when the numbering is somebody else's
+     * to decide. The addresses handed out are addresses of {@code numbering}, so an arm of this
+     * plan and an arm of the plan the numbering was issued with are one address rather than two
+     * that agree.
+     *
+     * <p>The walk is held to having realized {@code numbering} rather than trusted to have: a walk
+     * that numbered a place otherwise would hand out an address saying the number means what this
+     * numbering says, and nothing downstream could see the difference.
+     *
+     * <p><b>For a reader that wants the places.</b> A number read back as a place needs no walk at
+     * all — {@link SiteNumbering#of} answers that from the numbering alone, and a caller that asks
+     * here for it walks every body to learn nothing it uses.
+     */
+    public static Plan under(ModuleBodies of, DecisionSources decisions, SuppliedRules supplied,
+                             NumberingIdentity numbering) {
+        Walked walked = walked(of, decisions, supplied);
+        return asPlan(walked,
+                walked.walk().numbering.realize(numbering, of.module(), walked.executable()));
+    }
+
+    /**
+     * What one walk of a module's bodies found, before its numbers mean places.
+     *
+     * <p>Held apart from the plan because the two ways in differ in one step and share the rest.
+     * Which step is the whole of what this change is about: whether the numbers this walk handed
+     * out are what decides the numbering, or are held against a numbering already decided. Written
+     * as a walk that takes what to do next, the step would be a call nothing reading the compiled
+     * classes could see, and who may decide a numbering is held by reading them.
+     */
+    private record Walked(ComparisonCatalog comparisons, Walk walk,
+                          Map<String, ExecutableIdentity> executable) { }
+
+    private static Walked walked(ModuleBodies of, DecisionSources decisions,
+                                 SuppliedRules supplied) {
         // Which comparisons there are is not this walk's to decide. Asked here and answered once,
         // so that what gets a number and what a line is drawn on are the same collection read twice
         // rather than two descents that happen to agree.
@@ -465,10 +513,18 @@ public final class CoverageSites {
             executable.put(body.getKey(), ExecutableIdentity.of(body.getValue(),
                     Binders.of(of.module(), walk.places)));
         }
-        // The numbering, now that every place is in it and what the bodies do is known — and then
-        // the walk's numbers read back as places of it. One direction and one moment: nothing above
-        // could have made an address, and nothing below sees a number.
-        SiteNumbering numbering = walk.numbering.finish(of.module(), executable);
+        return new Walked(comparisons, walk, executable);
+    }
+
+    /**
+     * What the walk found, with its numbers read back as places of {@code numbering}.
+     *
+     * <p>One direction and one moment: nothing before this could have made an address, and nothing
+     * after it sees a number.
+     */
+    private static Plan asPlan(Walked found, SiteNumbering numbering) {
+        ComparisonCatalog comparisons = found.comparisons();
+        Walk walk = found.walk();
         List<Site> sites = new ArrayList<>();
         for (DraftSite draft : walk.sites) {
             sites.add(switch (draft.outcome()) {
