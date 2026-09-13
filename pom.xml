@@ -93,8 +93,8 @@
              other outside dependency. -->
         <souther.build.api.version>1.1.0</souther.build.api.version>
         <junit.version>6.1.3</junit.version>
-        <!-- Named rather than written where it is used: `souther init` writes a project that runs
-             its tests, and what it hands that project is this number. -->
+        <!-- Named rather than written where it is used: `souther init` writes a project whose own
+             tests are run by Surefire, and what it hands that project is this number. -->
         <surefire.version>3.6.0</surefire.version>
         <!-- The coverage agent a run under `-Pcoverage-by-class` carries. Named once because two
              places need the same number: the profile that starts the agent and the test-support

@@ -314,19 +314,26 @@ public final class InitCommand {
         return new Line(Did.EDITED, display(here, file), notes);
     }
 
-    /** What to run next, which is the one thing a reader does after this command. */
+    /**
+     * What to run next, which is the one thing a reader does after this command.
+     *
+     * <p>A compile and not a test run. What is written here is a model and the rows that pin it down,
+     * and the rows are checked where the model is compiled; a project starts with no test, so naming
+     * one would send the reader to a phase with nothing in it.
+     */
     private static void next(PrintStream out, Project project, Path target, Path here,
                              Locale locale) {
         String where = display(here, target);
         String cd = where.isEmpty() || where.equals(".") ? "" : "cd " + where + " && ";
         if (project.build() == BuildSystem.MAVEN) {
-            out.println("    " + cd + "mvn test");
+            out.println("    " + cd + "mvn compile");
             return;
         }
         // A wrapper is not written here — one written at release time pins a Gradle version this
         // command has no way of revisiting — so a project that has none is told how to make one.
         boolean wrapper = Files.isRegularFile(target.resolve("gradlew"));
-        out.println("    " + cd + (wrapper ? "./gradlew test" : "gradle wrapper && ./gradlew test"));
+        out.println("    " + cd
+                + (wrapper ? "./gradlew classes" : "gradle wrapper && ./gradlew classes"));
         if (!wrapper && !onThePath("gradle")) {
             out.println();
             out.println("    " + Messages.get("cli.init.gradle", locale));

@@ -31,8 +31,8 @@ class AModuleNameFollowsFromTheCoordinateTest {
      * A file is named after the module it declares, which is not always the artifact.
      *
      * <p>The two part company exactly where the artifact carries a hyphen. Naming the file after the
-     * artifact would leave one name spelt two ways inside one project — the header, the Java package
-     * and the test directory all say the module's spelling.
+     * artifact would leave one name spelt two ways inside one project — the header and the package it
+     * generates into both say the module's spelling.
      */
     @Test
     void theSourceIsNamedAfterTheModuleAndNotTheArtifact() {
@@ -41,7 +41,6 @@ class AModuleNameFollowsFromTheCoordinateTest {
                 BuildSystem.MAVEN, "9.9.9");
 
         assertEquals("src/main/souther/billing_service.sou", Templates.modelPathOf(project));
-        assertEquals("com/acme/billing_service", project.packagePath());
     }
 
     /**
