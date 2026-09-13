@@ -105,9 +105,11 @@ public sealed interface ReachabilityGap {
          * Two numbers taken at one location, one of which the row is already being written for.
          *
          * <p>A row writes one value where a location is, and that one value would have to answer
-         * both — the length of a string beside the string. Told apart from the one above because
-         * only this one is about the condition and the item meeting at a location rather than about
-         * what could be built at a position.
+         * both — the length of a string beside the string. Which other number it meets is not part
+         * of it: the row may be writing that location for the item it is composed at, or for a
+         * condition on the way that was taken in before this one. Told apart from the one above
+         * because only this one is about two demands meeting at a location rather than about what
+         * could be built at a position.
          */
         record TwoNumbersAtOneLocation() implements Why {}
     }
