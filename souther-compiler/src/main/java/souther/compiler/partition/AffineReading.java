@@ -1,7 +1,6 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.AffineForms;
-import souther.compiler.check.Comparison;
 import souther.compiler.check.StatedComparison;
 import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.Location;
@@ -44,20 +43,6 @@ import java.util.Map;
  * @param claim what the operator states about the threshold's own value
  */
 record AffineReading(LinearForm<NumericTerm> form, BigDecimal cut, ComparisonClaim claim) {
-
-    /**
-     * {@code comparison} as this form, or null where nothing here reads it.
-     *
-     * <p>Null where the arithmetic names no position and where an operand is outside the affine
-     * fragment — an operand of a variable product is one value and the rule about it is one this
-     * does not model. What the rule places is not among the reasons: a comparison carries it, and
-     * every comparison places something.
-     */
-    static AffineReading of(Comparison comparison, InputDomain inputs, InputReads reads,
-                            RuleReadingSource ruleSource) {
-        return read(comparison.stated(), inputs, reads, ruleSource) instanceof OfAComparison.Cuts
-                cuts ? cuts.read() : null;
-    }
 
     /**
      * What reading {@code comparison} as a line came to.
@@ -287,8 +272,8 @@ record AffineReading(LinearForm<NumericTerm> form, BigDecimal cut, ComparisonCla
     }
 
     /** The one position this cuts where it cuts one with a coefficient of one, or null. A form
-     *  written {@code -x} has already been turned round by {@link #of}, so this asks about the
-     *  coefficient as the canonical form has it. */
+     *  written {@code -x} has already been turned round by the reading that made it
+     *  ({@link #read}), so this asks about the coefficient as the canonical form has it. */
     NumericTerm oneCoordinate() {
         if (form.coefs().size() != 1) {
             return null;

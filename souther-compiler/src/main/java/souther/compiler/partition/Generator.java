@@ -3072,7 +3072,7 @@ public final class Generator {
             List<NumericTerm.FromOnePosition> owing = new ArrayList<>();
             boolean shared = false;
             boolean placeable = true;
-            for (NumericTerm term : cut.cut().form().coefs().keySet()) {
+            for (NumericTerm term : cut.taken().terms()) {
                 // This very number already stands somewhere: the item asked for it, or an earlier
                 // cut did. Nothing to place, and the cut is answered at it either way.
                 if (out.containsKey(RealizationTarget.of(term))) {

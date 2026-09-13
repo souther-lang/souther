@@ -98,7 +98,7 @@ public final class AnAnswerComposed {
             }
             LinearForm<NumericTerm> over = overThisAnswer(at, form);
             region = region.assuming(over, rel);
-            cuts.add(new OnTheWay.TakenIn(anchor, new ReachingCuts.Cut(over, rel)));
+            cuts.add(new OnTheWay.TakenIn(anchor, new TakenConstraint.Affine(over, rel)));
         }
         return composed(subject, new Reachability.Reaching(region, required, cuts));
     }

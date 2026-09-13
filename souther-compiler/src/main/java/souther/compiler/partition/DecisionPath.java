@@ -153,8 +153,13 @@ final class DecisionPath {
                     condition.of() instanceof DecisionSubject.AnAnswer at && at.steps().isEmpty()
                             ? new AnswerDemand.ATruth(at.answered(), anchor, at.steps(), held)
                             : null;
-            case DecidedCondition.Compared(var condition, var held) -> compared(condition, held,
-                    anchor);
+            case DecidedCondition.Compared(var condition, var held) -> switch (condition) {
+                case DecisionCondition.AComparison it -> compared(it, held, anchor);
+                // A place on a carrier's own order, which is a value and not a form. What this
+                // stage composes against an answer is a form, so a column of that shape is left
+                // unstated here for the reason a form over two answers is.
+                case DecisionCondition.AnOrderedComparison _ -> null;
+            };
             case DecidedCondition.Unread _ -> null;
         };
     }
@@ -199,6 +204,11 @@ final class DecisionPath {
             case DecisionCondition.ATruth(var of) -> of instanceof DecisionSubject.AnAnswer;
             case DecisionCondition.AComparison(var form, var _) -> form.coefs().keySet().stream()
                     .anyMatch(DecisionAtom.OfAnAnswer.class::isInstance);
+            // A position against a written place on its own order. The place is what the rule wrote
+            // and the position is what the body compared, so what a column of this shape can be
+            // about is the one term it names.
+            case DecisionCondition.AnOrderedComparison(var term, var _, var _) ->
+                    term instanceof DecisionAtom.OfAnAnswer;
             case DecisionCondition.AConditionNotRead _ -> false;
         };
     }

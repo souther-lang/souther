@@ -23,6 +23,21 @@ import souther.compiler.numeric.Rel;
 public sealed interface DecisionCondition {
 
     /**
+     * A comparison, in whichever vocabulary its values are compared in.
+     *
+     * <p>Two of them, for the reason {@link TakenConstraint} has two: the arithmetic compares a form
+     * of numbers, and a position whose values count to none is compared against a written place on
+     * its own order. Both are one distinction a body draws, and a reader asking which columns a rule
+     * turns on asks for both — read as one shape, the second would have to be spelled as a form of
+     * things that do not add.
+     */
+    sealed interface Comparison extends DecisionCondition {
+
+        /** The relation this column is read as holding, which is the canonical one of the pair. */
+        Rel proposition();
+    }
+
+    /**
      * A comparison the arithmetic took in, as the proposition it states.
      *
      * <p>The form and one of the two relations over it, so that a comparison and its denial are one
@@ -41,12 +56,42 @@ public sealed interface DecisionCondition {
      * @param proposition the relation this column is read as holding, which is the canonical one of
      *                    the pair
      */
-    record AComparison(LinearForm<DecisionAtom> form, Rel proposition) implements DecisionCondition {
+    record AComparison(LinearForm<DecisionAtom> form, Rel proposition)
+            implements DecisionCondition.Comparison {
 
         public AComparison {
             if (form == null || proposition == null) {
                 throw new IllegalArgumentException(
                         "a comparison of a decision is a relation over a form");
+            }
+            if (proposition != proposition.orItsDenial()) {
+                throw new IllegalArgumentException("a comparison and its denial are one column,"
+                        + " read as " + proposition.orItsDenial() + " rather than as "
+                        + proposition);
+            }
+        }
+    }
+
+    /**
+     * One position compared against a written place on the order it stands on.
+     *
+     * <p>The column a rule over a carrier that counts nothing draws. There is no form here because
+     * there is no sum: two strings do not add, so what the body distinguished is this position
+     * against this place and not a quantity against nought.
+     *
+     * <p>Canonicalised the same way as the one above — one of the two relations stands for the pair
+     * — so that a guard and its denial are one column here as well.
+     *
+     * @param term the position the body compared
+     * @param at   the place on its order the rule names
+     */
+    record AnOrderedComparison(DecisionAtom term, souther.compiler.numeric.Place at,
+                               Rel proposition) implements DecisionCondition.Comparison {
+
+        public AnOrderedComparison {
+            if (term == null || at == null || proposition == null) {
+                throw new IllegalArgumentException(
+                        "a comparison on an order is a position, a place and a relation");
             }
             if (proposition != proposition.orItsDenial()) {
                 throw new IllegalArgumentException("a comparison and its denial are one column,"

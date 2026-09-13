@@ -109,7 +109,7 @@ class AConditionOverASharedNameIsOneTheComposerCanPlaceTest {
                 Map.of(new RealizationTarget.AtOnePosition(fixed.term()), at),
                 new Reachability.Reaching(domain().quantities(rules()).region(),
                         Requirements.NONE,
-                        List.of(new OnTheWay.TakenIn(WHERE, new ReachingCuts.Cut(
+                        List.of(new OnTheWay.TakenIn(WHERE, new TakenConstraint.Affine(
                                 LinearForm.atom(new NumericTerm.ValueOf(DEADLINE)), Rel.GE)))),
                 Generator.CandidateCheck.ANY);
     }

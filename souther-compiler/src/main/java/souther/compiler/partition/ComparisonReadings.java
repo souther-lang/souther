@@ -251,7 +251,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                 walk(both.right(), in, reads, flow,
                         taking(Condition.of(both.left(), reads, symbols, in.newtypes(), numbering),
                                 true,
-                                in.read().domain(), assumed, ruleSource),
+                                in.read(), assumed),
                         live, out, forks, numbering);
             }
             case Core.Binary either when either.op() == BinOp.OR -> {
@@ -259,7 +259,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                 walk(either.right(), in, reads, flow,
                         taking(Condition.of(either.left(), reads, symbols, in.newtypes(),
                                         numbering), false,
-                                in.read().domain(), assumed, ruleSource),
+                                in.read(), assumed),
                         live, out, forks, numbering);
             }
             // The condition under what stood above the fork, and each arm under what that arm proves
@@ -301,10 +301,10 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                             reads, atoms, owned));
                 }
                 walk(iff.then(), in, reads, flow,
-                        taking(condition, true, in.read().domain(), assumed, ruleSource),
+                        taking(condition, true, in.read(), assumed),
                         live, out, forks, numbering);
                 walk(iff.els(), in, reads, flow,
-                        taking(condition, false, in.read().domain(), assumed, ruleSource),
+                        taking(condition, false, in.read(), assumed),
                         live, out, forks, numbering);
             }
             // What a `let` computes is read on the way to the answer only where the name is read;
@@ -350,11 +350,10 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      * read a shape of condition the other did not.
      */
     private static List<OnTheWay> taking(Condition condition, boolean holding,
-                                         souther.compiler.inputs.InputDomain inputs,
-                                         List<OnTheWay> assumed,
-                                         RuleReadingSource ruleSource) {
+                                         souther.compiler.inputs.InputReading read,
+                                         List<OnTheWay> assumed) {
         List<OnTheWay> out = new ArrayList<>(assumed);
-        out.addAll(ReachingCuts.stating(condition, inputs, holding, ruleSource));
+        out.addAll(ReachingCuts.stating(condition, read, holding));
         return List.copyOf(out);
     }
 

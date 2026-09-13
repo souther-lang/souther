@@ -23,25 +23,35 @@ import java.util.List;
  * way, a column of a decision table and a line drawn on the same comparison would be free to
  * disagree.
  *
- * @param inputs the reading of what this behavior's input holds
- * @param rules  the reading of the declarations the comparisons are read against
+ * @param read the reading of this behavior's input: where its positions are, what the rules leave
+ *             the numbers at them, and the declarations both were read against
  */
-record ConditionMeanings(InputDomain inputs, RuleReadingSource rules) {
+record ConditionMeanings(souther.compiler.inputs.InputReading read) {
+
+    /** Where this behavior's positions are and what stands at each of them. */
+    InputDomain inputs() {
+        return read.domain();
+    }
+
+    /** The reading of the declarations the comparisons are read against. */
+    RuleReadingSource rules() {
+        return read.rules();
+    }
 
     /** The names the body's own text is read under. */
     Symbols symbols() {
-        return rules.symbols();
+        return rules().symbols();
     }
 
     /** Which declarations wear one value, which is what says whether reading a field reaches
      *  somewhere else ({@link souther.compiler.check.Location#isStep}). */
     DeclarationNewtypes newtypes() {
-        return rules.newtypes();
+        return rules().newtypes();
     }
 
     /** What {@code condition} coming out {@code held} states, and where it states nothing, that. */
     List<OnTheWay> stating(Condition condition, boolean held) {
-        return ReachingCuts.stating(condition, inputs, held, rules);
+        return ReachingCuts.stating(condition, read, held);
     }
 
     /**
@@ -51,7 +61,7 @@ record ConditionMeanings(InputDomain inputs, RuleReadingSource rules) {
      * point and this is not.
      */
     OnTheWay entering(Core.Match match, int part, InputReads reads, ConditionNumbering numbering) {
-        return ReachingCuts.entering(match, match.cases().get(part), part, inputs, reads, rules,
+        return ReachingCuts.entering(match, match.cases().get(part), part, inputs(), reads, rules(),
                 numbering);
     }
 }

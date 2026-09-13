@@ -45,11 +45,18 @@ class TheCutsAWalkTookInAreTheOnesARegionIsNarrowedByTest {
      */
     private static final class Recording implements SearchRegion {
 
-        private final List<ReachingCuts.Cut> told = new ArrayList<>();
+        private final List<TakenConstraint> told = new ArrayList<>();
 
         @Override
         public SearchRegion assuming(LinearForm<NumericTerm> form, Rel rel) {
-            told.add(new ReachingCuts.Cut(form, rel));
+            told.add(new TakenConstraint.Affine(form, rel));
+            return this;
+        }
+
+        @Override
+        public SearchRegion assuming(NumericTerm.FromOnePosition term,
+                                     souther.compiler.numeric.Place at, Rel rel) {
+            told.add(new TakenConstraint.Ordered(term, at, rel));
             return this;
         }
 
@@ -69,9 +76,15 @@ class TheCutsAWalkTookInAreTheOnesARegionIsNarrowedByTest {
         }
     }
 
-    private static ReachingCuts.Cut cut(String position, Rel rel) {
-        return new ReachingCuts.Cut(
+    private static TakenConstraint.Affine cut(String position, Rel rel) {
+        return new TakenConstraint.Affine(
                 LinearForm.atom(new NumericTerm.ValueOf(TermPath.of(position))), rel);
+    }
+
+    /** A bound on one position's own order, which is the other vocabulary a condition lands in. */
+    private static TakenConstraint.Ordered bound(String position, String at, Rel rel) {
+        return new TakenConstraint.Ordered(new NumericTerm.ValueOf(TermPath.of(position)),
+                souther.compiler.numeric.Text.of(at), rel);
     }
 
     /** A condition this reading met, named by nothing but which of them it is. */
@@ -87,8 +100,8 @@ class TheCutsAWalkTookInAreTheOnesARegionIsNarrowedByTest {
     /** Every cut the account carries, in the order it carries them, and nothing else. */
     @Test
     void theRegionIsToldTheCutsTheAccountCarries() {
-        ReachingCuts.Cut first = cut("x", Rel.GE);
-        ReachingCuts.Cut second = cut("y", Rel.LT);
+        TakenConstraint first = cut("x", Rel.GE);
+        TakenConstraint second = cut("y", Rel.LT);
         Recording region = new Recording();
 
         SearchRegion narrowed = new WayToTheBorder(List.of(
@@ -109,7 +122,7 @@ class TheCutsAWalkTookInAreTheOnesARegionIsNarrowedByTest {
      */
     @Test
     void aDeclinedConditionIsNotToldToTheRegion() {
-        ReachingCuts.Cut only = cut("x", Rel.GE);
+        TakenConstraint only = cut("x", Rel.GE);
         Recording region = new Recording();
 
         WayToTheBorder way = new WayToTheBorder(List.of(
@@ -122,6 +135,27 @@ class TheCutsAWalkTookInAreTheOnesARegionIsNarrowedByTest {
         assertEquals(2, way.declined().size(), "and it is still on the account");
         assertEquals(3, way.onTheWay().size(),
                 "which holds every condition on the way, in the order the walk met them");
+    }
+
+    /**
+     * A bound on a position's own order reaches the region as that, beside the arithmetic's.
+     *
+     * <p>Both vocabularies out of one list and in the order the walk met them. Carried as one shape,
+     * a bound on a carrier that counts nothing would have to be spelled as a form of things that do
+     * not add — and what the region was told would be a rule nobody wrote.
+     */
+    @Test
+    void aBoundOnAnOrderIsToldToTheRegionAsOne() {
+        TakenConstraint arithmetic = cut("n", Rel.GE);
+        TakenConstraint ordered = bound("s", "t", Rel.LT);
+        Recording region = new Recording();
+
+        new WayToTheBorder(List.of(
+                new OnTheWay.TakenIn(somewhere(1), arithmetic),
+                new OnTheWay.TakenIn(somewhere(2), ordered))).narrowing(region);
+
+        assertEquals(List.of(arithmetic, ordered), region.told,
+                "a condition in either vocabulary narrows the region it landed in");
     }
 
     /** A border with nothing on the way to it is the region it started as, and says so. */
@@ -140,7 +174,7 @@ class TheCutsAWalkTookInAreTheOnesARegionIsNarrowedByTest {
     /** A cut with a constant in it is handed over as written, since a domain is told `f rel 0`. */
     @Test
     void aCutIsHandedOverAsTheAccountHoldsIt() {
-        ReachingCuts.Cut shifted = new ReachingCuts.Cut(
+        TakenConstraint shifted = new TakenConstraint.Affine(
                 LinearForm.<NumericTerm>atom(new NumericTerm.ValueOf(TermPath.of("x")))
                         .minus(LinearForm.constant(new BigDecimal("17"))), Rel.LE);
         Recording region = new Recording();

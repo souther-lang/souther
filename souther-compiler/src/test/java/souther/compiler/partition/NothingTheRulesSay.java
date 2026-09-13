@@ -29,6 +29,12 @@ final class NothingTheRulesSay implements SearchRegion {
     }
 
     @Override
+    public SearchRegion assuming(NumericTerm.FromOnePosition term,
+                                 souther.compiler.numeric.Place at, Rel rel) {
+        return this;
+    }
+
+    @Override
     public SearchRegion given(Map<NumericTerm, Count> fixed) {
         return this;
     }

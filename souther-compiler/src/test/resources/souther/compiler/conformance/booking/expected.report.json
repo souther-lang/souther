@@ -2137,12 +2137,12 @@
             "behavior" : "redeem",
             "conditions" : [ {
               "kind" : "comparison",
+              "condition" : "EQ voucher spring",
+              "outcome" : "held"
+            }, {
+              "kind" : "comparison",
               "condition" : "GT LinearForm[constant=-4, coefs={party=1}]",
               "outcome" : "denied"
-            }, {
-              "kind" : "not_read",
-              "condition" : "condition 1 of `redeem`",
-              "outcome" : "held"
             } ]
           },
           "taken" : false,
@@ -2153,11 +2153,11 @@
             "behavior" : "redeem",
             "conditions" : [ {
               "kind" : "comparison",
-              "condition" : "GT LinearForm[constant=-4, coefs={party=1}]",
+              "condition" : "EQ voucher spring",
               "outcome" : "held"
             }, {
-              "kind" : "not_read",
-              "condition" : "condition 1 of `redeem`",
+              "kind" : "comparison",
+              "condition" : "GT LinearForm[constant=-4, coefs={party=1}]",
               "outcome" : "held"
             } ]
           },

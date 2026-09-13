@@ -1,10 +1,10 @@
 // A condition the arithmetic reads nothing of, written where a reader can open it.
 //
 // The line here is the one the second guard draws, and the way to it runs through the first. That
-// one is a string equality, which is a comparison this compiler has no cut for: the walk declines
-// it, and every row composed for the line is composed without it. Such a row does not arrive, so
-// the search comes back with nothing and the condition it was composed without is owed to a reader
-// — pointed at where the module that wrote it says it is written.
+// one is a string equality: two strings have no sum, so the reading stops and the rule is taken in
+// as a bound on the order the voucher stands on. Its denial is not: failing it leaves every string
+// but one, which is a hole and not an end, and no region is narrowed by one. So the way carries the
+// equality, the arm that turns back says it read nothing, and no row is found at either.
 module conformance.vouchers exposing ( Voucher, Party, Redeemed, redeem )
 
 data Voucher = String

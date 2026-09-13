@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.core.Core;
 import souther.compiler.inputs.InputDomain;
+import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.PathResolution;
@@ -61,9 +62,6 @@ public record ReachingCuts(Map<ModelOccurrence, List<OnTheWay>> byComparison) {
         byComparison = Map.copyOf(byComparison);
     }
 
-    /** One thing a row had to satisfy to get here: {@code form rel 0} over this input's terms. */
-    public record Cut(LinearForm<NumericTerm> form, Rel rel) {}
-
     /**
      * How a row for a border on the rule stated at {@code states} came to be looked for where it is:
      * the whole account of the walk to it.
@@ -100,8 +98,7 @@ public record ReachingCuts(Map<ModelOccurrence, List<OnTheWay>> byComparison) {
      * is declined whole, at the condition rather than at an operand — neither operand is what could
      * not be carried.
      */
-    static List<OnTheWay> stating(Condition node, InputDomain inputs, boolean holding,
-                                  RuleReadingSource ruleSource) {
+    static List<OnTheWay> stating(Condition node, InputReading read, boolean holding) {
         return switch (node) {
             // Coming out the way that gives both halves, each of them came out that way too. The
             // other composition says a disjunction of things, which is not a list of cuts and is
@@ -109,11 +106,11 @@ public record ReachingCuts(Map<ModelOccurrence, List<OnTheWay>> byComparison) {
             // neither, and narrowing on either would exclude rows that arrive. So the whole node is
             // declined, at the whole node's place.
             case Condition.Joined joined -> joined.how().under(holding) == ConditionJoin.BOTH
-                    ? and(stating(joined.left(), inputs, holding, ruleSource),
-                            stating(joined.right(), inputs, holding, ruleSource))
+                    ? and(stating(joined.left(), read, holding),
+                            stating(joined.right(), read, holding))
                     : List.of(new OnTheWay.Declined(joined.occurrence(), joined.anchor(),
                             new OnTheWay.Why.OneOfTwoThings()));
-            case Condition.Compares one -> List.of(of(one, inputs, holding, ruleSource));
+            case Condition.Compares one -> List.of(of(one, read, holding));
             // A truth is not an inequality over a form, which is what a cut is. Read as one here,
             // the region a search looks in would be narrowed by a proposition this arithmetic
             // cannot state, and the decision a body draws on such a value is a different question
@@ -192,31 +189,82 @@ public record ReachingCuts(Map<ModelOccurrence, List<OnTheWay>> byComparison) {
      * second reading of what a comparison says is a second thing to keep in step with how a border
      * is drawn, and the two disagreeing is a region that excludes the very level the border is at.
      *
-     * <p>And where it comes back with nothing, that is the whole of what is said. The reason the
-     * same comparison gets for drawing no line is {@link UnreadComparison}'s and answers another
-     * question: {@code 1 < 2} is a form nothing reads over there and constrains no position here,
-     * and a form this arithmetic cannot carry is a comparison between two positions over there
-     * while a relation between two positions is exactly what a cut carries here. What would tell
-     * this end's cases apart is {@link AffineReading} saying why it read nothing, which it does
-     * not.
+     * <p><b>Three answers and not one absence.</b> A reading that ran to the end and found the
+     * quantity empty, and a reading that stopped, are opposite facts — and both used to arrive here
+     * as a {@code null}. The second is not a decline on its own: the arithmetic stopping is what a
+     * written value on a carrier that counts nothing does, and such a comparison still says where on
+     * that carrier's order the position lies. So the stopped reading is asked again as written, and
+     * only a comparison neither vocabulary carries is declined.
+     *
+     * <p>The reason the same comparison gets for drawing no line is {@link UnreadComparison}'s and
+     * answers another question: {@code 1 < 2} is a form nothing reads over there and constrains no
+     * position here, and a form this arithmetic cannot carry is a comparison between two positions
+     * over there while a relation between two positions is exactly what a cut carries here.
      */
-    private static OnTheWay of(Condition.Compares comparison, InputDomain inputs, boolean holding,
-                               RuleReadingSource ruleSource) {
+    private static OnTheWay of(Condition.Compares comparison, InputReading read, boolean holding) {
         ConditionReportAnchor at = comparison.anchor();
-        AffineReading read = AffineReading.of(
-                comparison.comparison(), inputs, comparison.reads(), ruleSource);
-        if (read == null) {
-            return new OnTheWay.Declined(comparison.occurrence(), at,
-                    new OnTheWay.Why.ComparisonNotRepresentedAsACut());
+        return switch (AffineReading.read(comparison.comparison().stated(), read.domain(),
+                comparison.reads(), read.rules())) {
+            case AffineReading.OfAComparison.Cuts(var affine) -> {
+                // What the comparison states, in the words a domain is told things in. Taken the
+                // way the path met it: an arm reached by the condition failing has what holds
+                // exactly where the comparison does not.
+                Rel states = affine.claim().statedRelation();
+                // The form with the threshold moved into it, since what a domain is told is
+                // `f rel 0`.
+                LinearForm<NumericTerm> against =
+                        affine.form().minus(LinearForm.constant(affine.cut()));
+                yield new OnTheWay.TakenIn(at,
+                        new TakenConstraint.Affine(against, holding ? states : states.denied()));
+            }
+            // Read from end to end, and the quantity it cuts is nothing. `a - a > 0` constrains no
+            // position, so there is nothing for a region to be narrowed by and nothing this
+            // compiler fell short of — which is why it is not asked again as written.
+            case AffineReading.OfAComparison.CutsNothing _ ->
+                    new OnTheWay.Declined(comparison.occurrence(), at,
+                            new OnTheWay.Why.ComparisonStatesNoQuantity());
+            // The arithmetic stopped, which is what a written value on an order that counts nothing
+            // does. Asked as written, and declined only where that reading comes to nothing either.
+            case AffineReading.OfAComparison.Stopped _ -> {
+                OnTheWay.TakenIn ordered = onAnOrder(comparison, read, holding, at);
+                yield ordered != null ? ordered
+                        : new OnTheWay.Declined(comparison.occurrence(), at,
+                                new OnTheWay.Why.ComparisonNotRepresentedAsACut());
+            }
+        };
+    }
+
+    /**
+     * The comparison as a bound on one position's own order, or null where it draws none.
+     *
+     * <p>Read where the arithmetic stopped and nowhere else, so a spelling never settles what the
+     * canonical form has already settled — the arrangement {@link Cutting} is under, reached here
+     * for the same reason and off the same reading ({@link ComparedLine#asWritten}). What that
+     * reading answers is which position was compared and where on its order the written value
+     * falls, which is the whole of an ordered constraint.
+     *
+     * <p>Taken the way the path met it, like the form above: an arm reached by the condition failing
+     * has what holds exactly where the comparison does not. Which is why the relation is settled
+     * before the bound is asked for and not after: {@code /= } coming out one way and {@code ==}
+     * coming out the other are the same relation, and a reading that looked at what the author
+     * wrote would carry one of them and refuse the other.
+     *
+     * <p>Null as well where that relation draws no bound, which is what a hole in an order is. A
+     * region has no word for one, so a condition that comes to it is a condition this reading could
+     * not turn into a cut — said as that rather than carried as something taken in, since what a
+     * reader of {@link OnTheWay.TakenIn} does with it is take the search for narrowed.
+     */
+    private static OnTheWay.TakenIn onAnOrder(Condition.Compares comparison, InputReading read,
+                                              boolean holding, ConditionReportAnchor at) {
+        ComparedLine drawn = ComparedLine.asWritten(
+                comparison.comparison().stated(), read, comparison.reads());
+        if (drawn == null) {
+            return null;
         }
-        // What the comparison states, in the words a domain is told things in. Taken the way the
-        // path met it: an arm reached by the condition failing has what holds exactly where the
-        // comparison does not.
-        Rel states = read.claim().statedRelation();
-        // The form with the threshold moved into it, since what a domain is told is `f rel 0`.
-        LinearForm<NumericTerm> against =
-                read.form().minus(LinearForm.constant(read.cut()));
-        return new OnTheWay.TakenIn(at, new Cut(against, holding ? states : states.denied()));
+        Rel states = drawn.claim().statedRelation();
+        TakenConstraint.Ordered bound = TakenConstraint.Ordered.of(drawn.term(), drawn.value(),
+                holding ? states : states.denied());
+        return bound == null ? null : new OnTheWay.TakenIn(at, bound);
     }
 
     /** These conditions, with the rule stated at {@code states} reached under {@code assumed}. */
