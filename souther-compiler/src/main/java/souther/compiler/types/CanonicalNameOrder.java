@@ -1,5 +1,8 @@
 package souther.compiler.types;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Set;
 
@@ -59,8 +62,16 @@ public final class CanonicalNameOrder {
     private CanonicalNameOrder() {
     }
 
-    /** {@code names}, in the order they are shown. */
+    /**
+     * {@code names}, in the order they are shown.
+     *
+     * <p>Sorted in a list of its own rather than through a stream. Every union arranges its members
+     * here as it is built, so what this is asked of is a handful of names and it is asked often;
+     * a pipeline and the buffer it sorts into cost more than the sort does at that size.
+     */
     public static List<TypeSymbol> shown(Set<TypeSymbol> names) {
-        return names.stream().sorted().toList();
+        List<TypeSymbol> shown = new ArrayList<>(names);
+        shown.sort(Comparator.naturalOrder());
+        return Collections.unmodifiableList(shown);
     }
 }
