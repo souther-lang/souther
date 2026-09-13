@@ -9,7 +9,9 @@ import souther.compiler.report.AdequacyReport;
 import souther.compiler.report.GeneratedRows;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.SequencedMap;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -70,6 +72,56 @@ class AManyValuedNumberIsComposedBesideAnotherLocationTest {
             """;
 
     /**
+     * The same, where the two locations are fields of one value the row has to build.
+     *
+     * <p>What the refusal turned on was the item fixing more than one location, and where those
+     * locations sit was no part of it. Held only over separate parameters, this would be a test
+     * about the shape the reproducer happened to have: a row for two parameters writes two values
+     * and a row for two fields writes one value with both in it, and it is the second that has to
+     * hold a many-valued number and a sibling at once while the whole is assembled.
+     */
+    private static final String A_COUNT_BESIDE_A_SIBLING = """
+            module example.sibling
+
+            data Yes = { v: Int }
+            data No = { why: Int }
+
+            data R = { xs: List<Int>, n: Int }
+
+            behavior f : (r: R) -> Yes | No
+                constructs Yes
+                constructs No
+
+            let f (r) = {
+                guard List.length(r.xs) < r.n else No { why = 1 }
+                Yes { v = 1 }
+            }
+            """;
+
+    /**
+     * Two parts of two times, which is a number several values answer at each of two locations.
+     *
+     * <p>Beside the two strings above rather than a shape of them. What a part of a time is met by
+     * and what a length is met by are different accounts, and a composer that asked how many values
+     * answer a number would have turned both away for the same reason.
+     */
+    private static final String A_PART_BESIDE_A_PART = """
+            module example.parts
+
+            data Yes = { v: Int }
+            data No = { why: Int }
+
+            behavior at : (t: Time, u: Time) -> Yes | No
+                constructs Yes
+                constructs No
+
+            let at (t, u) = {
+                guard Time.hour(t) < Time.minute(u) else No { why = 1 }
+                Yes { v = 1 }
+            }
+            """;
+
+    /**
      * The same shape over numbers one value each answers, which always composed.
      *
      * <p>The baseline, so that the two above are read as the composer treating them alike rather
@@ -91,13 +143,23 @@ class AManyValuedNumberIsComposedBesideAnotherLocationTest {
             }
             """;
 
+    /**
+     * Every shape at once and not one until the first fails. Asserted model by model, a shape this
+     * never reached would be a shape nothing here says anything about, and the one that failed
+     * would be the only one a reader is shown.
+     */
     @Test
     void aNumberSeveralValuesAnswerIsComposedForLikeOneValueAnswers() {
-        for (String model : List.of(A_COUNT_BESIDE_A_VALUE, A_MEASURE_BESIDE_A_MEASURE,
-                A_VALUE_BESIDE_A_VALUE)) {
-            assertEquals(List.of(), whatNothingCouldShow(model),
-                    () -> "every point of this line has a row composed for it:\n" + model);
-        }
+        SequencedMap<String, List<String>> open = new LinkedHashMap<>();
+        open.put("a count beside a value", whatNothingCouldShow(A_COUNT_BESIDE_A_VALUE));
+        open.put("a measure beside a measure", whatNothingCouldShow(A_MEASURE_BESIDE_A_MEASURE));
+        open.put("a count beside a sibling", whatNothingCouldShow(A_COUNT_BESIDE_A_SIBLING));
+        open.put("a part beside a part", whatNothingCouldShow(A_PART_BESIDE_A_PART));
+        open.put("a value beside a value", whatNothingCouldShow(A_VALUE_BESIDE_A_VALUE));
+
+        SequencedMap<String, List<String>> none = new LinkedHashMap<>();
+        open.keySet().forEach(each -> none.put(each, List.of()));
+        assertEquals(none, open, "every point of every line has a row composed for it");
     }
 
     /**

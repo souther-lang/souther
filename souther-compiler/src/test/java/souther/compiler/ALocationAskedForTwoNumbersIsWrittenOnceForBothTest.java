@@ -78,30 +78,6 @@ class ALocationAskedForTwoNumbersIsWrittenOnceForBothTest {
             }
             """;
 
-    /**
-     * The same comparison over two times, which really is a second location.
-     *
-     * <p>Beside the one above, and it composes too. What a location asked for two numbers needs is
-     * one value answering both; what two locations need is a value at each, and neither of them is
-     * the other's problem — so the pair reads as two shapes of one answer rather than as a shape
-     * and its limit.
-     */
-    private static final String TWO_PARTS_OF_TWO_TIMES = """
-            module example.compared
-
-            data Yes = { v: Int }
-            data No = { why: Int }
-
-            behavior at : (t: Time, u: Time) -> Yes | No
-                constructs Yes
-                constructs No
-
-            let at (t, u) = {
-                guard Time.hour(t) < Time.minute(u) else No { why = 1 }
-                Yes { v = 1 }
-            }
-            """;
-
     /** The same of a date, which is the other family a value is built to have parts of. */
     private static final String TWO_PARTS_OF_A_DATE = """
             module example.date
@@ -174,7 +150,7 @@ class ALocationAskedForTwoNumbersIsWrittenOnceForBothTest {
     @Test
     void bothNumbersAreAnsweredByTheOneValueTheRowWrites() {
         for (String model : List.of(TWO_PARTS_OF_A_TIME, TWO_PARTS_OF_A_DATE,
-                TWO_PARTS_COMPARED_WITH_EACH_OTHER, TWO_PARTS_OF_TWO_TIMES)) {
+                TWO_PARTS_COMPARED_WITH_EACH_OTHER)) {
             List<String> open = whatNothingCouldShow(model);
 
             assertEquals(List.of(), open,
