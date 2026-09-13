@@ -850,6 +850,36 @@ public sealed interface ItemAssessment {
             out.addAll(uncomposed);
             return List.copyOf(out);
         }
+
+        /**
+         * Whether a demand standing where this row is already being written was left out of what
+         * was composed.
+         *
+         * <p>Two observations put side by side and never a third thing worked out from them. What
+         * the search came to is one fact; that a demand at one of the row's own locations was never
+         * brought into the composing is another, and this says only that both are here. It does not
+         * say the second is why the first happened — nothing here searched with that demand in, so
+         * what such a search would have found is not something this holds.
+         *
+         * <p>Asked here because this is where both halves are: the outcome is the attempt's and the
+         * gaps are the attempt's, and a reader that decided it from a sentence would be deciding it
+         * from whichever words that sentence was written in.
+         *
+         * <p>Only the demands at a location the row writes. A condition over positions nothing
+         * composed a value at is a different fact with its own word, and one the walk had no words
+         * for never reached the composer at all — neither of them is a demand this had and did not
+         * use.
+         */
+        default boolean composedWithoutADemandAtOneOfItsLocations() {
+            for (souther.compiler.partition.ReachabilityGap gap : unaccountedFor()) {
+                if (gap instanceof souther.compiler.partition.ReachabilityGap.Uncomposed(
+                        var _, souther.compiler.partition.ReachabilityGap.Why
+                                .TwoNumbersAtOneLocation _)) {
+                    return true;
+                }
+            }
+            return false;
+        }
     }
 
     /** This point's own measurement of whether a row is at it, or a settled nothing where no row is

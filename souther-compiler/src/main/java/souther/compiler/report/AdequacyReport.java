@@ -3111,8 +3111,24 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     " — nothing was planned for it, because this compiler stops at "
                             + said(it.limitedBy())
                             + whatTheRegionLeftOut(it.unaccountedFor(), shown, rendering, declaredIn);
+            // The opening says what was searched where the search was over less than the point
+            // asks. Every other outcome above already opens on something of this compiler's — a
+            // figure it stopped at, a population it writes some of, a plan it never made — and this
+            // one opened on the search's own word, which reads as a search that had everything and
+            // reached nothing. Where a demand at one of the row's own locations was never brought
+            // into the composing, that is what a reader acts on, and the word the search came back
+            // with follows it.
+            //
+            // What is claimed is the coverage and not the cause. Nothing here searched with that
+            // demand in, so an opening saying it is why the point is empty would say more than
+            // happened — and the sentence after it keeps saying that an empty search does not make
+            // the point unreachable.
             case ItemAssessment.Attempt.Unresolved it ->
-                    (it.why().reason().provesInfeasible() ? " — " : " — nothing composed one: ")
+                    (it.why().reason().provesInfeasible() ? " — "
+                            : it.composedWithoutADemandAtOneOfItsLocations()
+                                    ? " — nothing was composed against every demand at one of its"
+                                            + " locations: "
+                                    : " — nothing composed one: ")
                             + it.why().said().orElseGet(() -> whyUnresolved(it.why()))
                             + whatTheRegionLeftOut(it.unaccountedFor(), shown, rendering, declaredIn);
         };
