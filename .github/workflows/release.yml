@@ -14,7 +14,54 @@ permissions:
   contents: write
 
 jobs:
+  # jpackage builds an image for the platform it runs on, so the Windows distributions are built on
+  # a Windows runner and handed to the job that publishes. The tests are the CI workflow's and the
+  # publishing job's; what this job checks is that the images it wrote run.
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+
+      - name: Package the distributions
+        run: |
+          mvn -B --no-transfer-progress -DskipTests package
+          $version = (mvn -B -q --no-transfer-progress help:evaluate -Dexpression=project.version -DforceStdout).Trim()
+          bin/package-windows.ps1 -Version $version
+
+      # Both launchers, over the commands that need most of the runtime the image was built with: a
+      # compile writes bytecode, and `japi` reads javadoc out of a library's sources through a
+      # compiler. A module the image was built short of is answered for here and nowhere earlier,
+      # because nothing before this point runs on Windows at all.
+      - name: Run what was packaged
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $dist = 'souther-cli/target/dist'
+          Expand-Archive (Get-ChildItem "$dist/*-windows-x64.zip").FullName -DestinationPath "$dist/bundled-run"
+          Expand-Archive (Get-ChildItem "$dist/*-windows-x64-nojre.zip").FullName -DestinationPath "$dist/nojre-run"
+          $model = 'souther-test-support/src/main/resources/souther/corpus/catalog/catalog.sou'
+          $launchers = @("$dist/bundled-run/souther/souther.exe", "$dist/nojre-run/souther/bin/souther.cmd")
+          foreach ($souther in $launchers) {
+              & $souther compile $model -d "$dist/classes"
+              if ($LASTEXITCODE -ne 0) { throw "$souther could not compile $model" }
+              & $souther japi net.unit8.raoh.Result > $null
+              if ($LASTEXITCODE -ne 0) { throw "$souther could not read a library's javadoc" }
+          }
+
+      - name: Upload the distributions to the workflow run
+        uses: actions/upload-artifact@v7
+        with:
+          name: souther-windows
+          path: souther-cli/target/dist/*.zip
+
   release:
+    needs: windows
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -42,7 +89,15 @@ jobs:
           cp souther-lsp/target/souther-lsp-all.jar artifacts/souther-lsp.jar
           cp souther-compiler/src/main/resources/souther/compiler/highlight/souther.tmLanguage.json artifacts/
 
-      # Over whatever the step above collected, rather than a second list of the same four names, and
+      # The Windows distributions are built on a runner of their own, and the checksums below cover
+      # whatever this directory holds, so they are fetched into it before those are written.
+      - name: Collect the Windows distributions
+        uses: actions/download-artifact@v7
+        with:
+          name: souther-windows
+          path: artifacts/
+
+      # Over whatever the steps above collected, rather than a second list of the same names, and
       # under the names the release publishes, so `sha256sum -c SHA256SUMS` works in a directory the
       # assets were downloaded into. The file is written outside artifacts/ and moved in, so it
       # cannot turn up in its own listing.
