@@ -25,6 +25,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>So this is about {@code members()} itself. A walk that takes them in the order it finds them
  * — a renderer written later, a list built out of them, a fold that stops early — is shown one
  * order however the union was built, by having done nothing at all.
+ *
+ * <p><b>Each claim asked of what owns it.</b> That the members are in one order however they were
+ * collected is asked of {@code Type.union}, which is where a plain set becomes a union; that the
+ * constructor is what puts them in it is asked of the constructor, because a factory that arranged
+ * them on the way would answer the first while leaving the second false.
  */
 class AUnionHoldsItsMembersInTheOrderTheyAreShownTest {
 
@@ -58,6 +63,26 @@ class AUnionHoldsItsMembersInTheOrderTheyAreShownTest {
         assertTrue(walked.size() > 1,
                 () -> "every way of holding the members walks them alike, so a union keeping what"
                         + " it was handed would pass this as it stands: " + walked);
+    }
+
+    /**
+     * And the constructor is what puts them in it.
+     *
+     * <p>Asked of the constructor because that is what owns the claim. Every union below this one
+     * is made through {@code Type.union}, which has to make a sequenced set of what it was handed
+     * and could arrange the members while it does — and were the arranging to move there, each of
+     * them would go on passing while {@code new Type.Union(...)} built a union in whatever order it
+     * was given. Something does build one that way: the cases of a boundary output answer their
+     * type by calling the constructor.
+     */
+    @Test
+    void theConstructorIsWhatPutsTheMembersInThatOrder() {
+        SequencedSet<TypeSymbol> backwards = new LinkedHashSet<>(List.of(PENSIONER, MINOR, ADULT));
+
+        assertEquals(List.of(ADULT, MINOR, PENSIONER),
+                List.copyOf(new Type.Union(backwards).members()),
+                "a union built through its constructor holds the members in the order it was"
+                        + " handed them");
     }
 
     /** However it was built, the members come back in one order. */
