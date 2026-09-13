@@ -3,6 +3,7 @@ package souther.compiler;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.SourceRendering;
+import souther.compiler.partition.CompositionBudget;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
@@ -149,6 +150,60 @@ class APointTriedWithSeveralValuesIsAnsweredByWhatWasBuiltTest {
             assertFalse(each.contains("how many values a point is tried with"),
                     () -> "the values ran out before the figure did: " + each);
         }
+    }
+
+    /**
+     * A line whose region holds however many values this compiler tries a point with.
+     *
+     * <p>The condition above it holds of nothing the position admits, so every value is built into
+     * a row that turns back and the asking goes on until one of the two runs out. Written against
+     * the figure rather than at a number of its own, because which of them runs out first is the
+     * whole question and a number here would answer it by hand.
+     */
+    private static final String AS_MANY_VALUES_AS_THE_FIGURE = """
+            module example.counted
+
+            data Bit = Int
+                invariant range = value >= 0 && value <= %d
+
+            data Yes = { v: Int }
+            data No = { why: Int }
+
+            behavior f : (x: Bit) -> Yes | No
+                constructs Yes
+                constructs No
+
+            let f (x) = {
+                guard Int.abs(x.value) > 100 else No { why = 0 }
+                guard x.value < %d else No { why = 1 }
+                Yes { v = 1 }
+            }
+            """;
+
+    /**
+     * A point with exactly as many values as the figure allows names no figure.
+     *
+     * <p>The case a count cannot tell from the one beside it. Every value there was got built, and
+     * the asking ended because there was nothing left to ask for — so an author sent to raise the
+     * figure would raise it and be told the same thing. One more value in the region and the figure
+     * is what ended it, which is the same page with one number changed.
+     */
+    @Test
+    void aPointWithAsManyValuesAsTheFigureAllowsNamesNoFigure() {
+        String figure = "how many values a point is tried with";
+        int allows = CompositionBudget.VALUES_A_POINT_IS_TRIED_WITH.maximum();
+
+        assertEquals(List.of(), whereNothingCouldShowARow(holding(allows)).stream()
+                        .filter(each -> each.contains(figure)).toList(),
+                "the values ran out, and nothing of this compiler's did");
+        assertFalse(whereNothingCouldShowARow(holding(allows + 1)).stream()
+                        .filter(each -> each.contains(figure)).toList().isEmpty(),
+                "one value further out and the figure is what ended the asking");
+    }
+
+    /** The model above, with a region of {@code values} values below the line. */
+    private static String holding(int values) {
+        return AS_MANY_VALUES_AS_THE_FIGURE.formatted(values + 1, values + 1);
     }
 
     /** The point lines of the page that say a search came to nothing. */

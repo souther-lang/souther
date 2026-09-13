@@ -117,7 +117,7 @@ public enum CompositionBudget {
      * <p>Its own figure and not {@link #PLACES_A_PAIR_IS_TRIED_AT}. That one bounds how many places
      * along a pair's line are walked, which is the geometry of the item; this one bounds how many
      * values a position is asked for after the whole row was built and read back at the point, and
-     * what it spends is a row apiece.
+     * what it spends is one value apiece.
      *
      * <p>Nor {@link #VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT}, which is about getting past a
      * condition on the way to the border with the row already composed. The question here is the
@@ -125,14 +125,22 @@ public enum CompositionBudget {
      *
      * <p>One per value and never one per row. A value may be built into several rows — one for each
      * way the dependencies are stood in — and all of them are put to the point before the value is
-     * counted as tried: charged per row, a point with more ways to stand its dependencies in would
-     * be allowed fewer values than one with fewer.
+     * counted as tried. Were it charged per row, a point with more ways to stand its dependencies
+     * in would be allowed fewer values than one with fewer.
      *
      * <p><b>So this stops no search either, and what it stops carries it.</b> Each search ran to
      * the end of what it was handed and said what it found; this says the values it was handed were
      * fewer than the point had, which is the answer being over less than the point
      * ({@code Attempt.Limited}). Held nowhere, the figure would be spent on a point whose report
      * says a search had everything and reached nothing.
+     *
+     * <p><b>And only where it took a value away.</b> Whether there was another value to try is the
+     * realizer's answer and not the count's: a point with exactly as many values as this allows is
+     * one where every value was tried and nothing was given up, and a figure named there is a
+     * number an author raises to be told the same thing. So the asking ends by asking once more —
+     * for a value and not for a row, which spends nothing — and what that answer was short of is
+     * what the point is said to be short of, this figure or a population this compiler writes some
+     * of ({@code Attempt.Unexhausted}).
      */
     VALUES_A_POINT_IS_TRIED_WITH(8),
 
