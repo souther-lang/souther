@@ -2877,21 +2877,12 @@ public final class Generator {
         // about the row being written.
         Standing where = alsoOnTheWay(subject, fixing, reaching);
         Map<RealizationTarget, Place> standing = where.at();
-        // How many locations the item fixes, and not how many numbers it names. The limit below is
-        // about a value being asked to stand beside a second location of the same item, and a
-        // location the item names twice is one location: counted as the numbers, an item comparing
-        // two numbers of one value met a limit about there being two values.
-        //
-        // The way's are not counted in: a position bounded on the way is one this could leave to
-        // its own range without the row stopping being a row at the item.
-        boolean besideAnotherLocation = byTheLocationTheyWrite(fixing).size() > 1;
         // One edge per location and not one per number. A location asked for two numbers is one
         // value to write, so the two are composed together and written once; walked one number at a
         // time, the second was a value built for a place the first had already written.
         for (Map.Entry<TermPath, SequencedMap<RealizationTarget, Place>> group
                 : byTheLocationTheyWrite(standing).entrySet()) {
-            Edge edge = edgeAt(subject, group.getValue(), besideAnotherLocation,
-                    reaching.region());
+            Edge edge = edgeAt(subject, group.getValue(), reaching.region());
             if (edge.values().isEmpty()) {
                 return edge.cameToNothing(label, where.unrepresented());
             }
@@ -3385,29 +3376,15 @@ public final class Generator {
      * inputs nothing bounds has no axis and its body still draws lines between them — the value is
      * written from the declared type.
      *
-     * @param besideAnotherLocation whether the item fixes a location beside this one. A count taken
-     *                              of a location is met by several values and only one of them can
-     *                              be offered beside a second location that is being fixed as well,
-     *                              which is a limit of the reading this replaced rather than a rule:
-     *                              it is preserved here so that collapsing the two searches into one
-     *                              changed nothing, and removing it is its own answer to give
+     * <p><b>What a number is met by is not asked, and how many locations are being fixed is not
+     * either.</b> A number several values answer is asked for one of them, and the one this is
+     * handed reads back as that number — which is what {@link TermRealizations} promises of
+     * everything it builds, one way round and not as an inverse. Whether a second location is being
+     * fixed beside this one says nothing about that promise, so a row is composed here for a number
+     * many values answer exactly as it is for a number one does.
      */
     private static Edge edgeAt(MeasuredInput subject, SequencedMap<RealizationTarget, Place> group,
-                               boolean besideAnotherLocation,
                                souther.compiler.inputs.SearchRegion within) {
-        // A number met by several values can offer only one of them beside a second position being
-        // fixed as well. Whether it is met by several is the realization's question and not the kind
-        // of term's: an operation whose inverse is single-valued would be the same kind of term and
-        // would have been turned away here with nothing saying so (#1027).
-        //
-        // Of each number and not of the location, because the limit is about a number met by
-        // several values. A location asked for several numbers is narrower than any of them and not
-        // wider, so asking of the group would let through what asking of one refuses.
-        for (RealizationTarget target : group.keySet()) {
-            if (besideAnotherLocation && !TermRealizations.onlyOneValueAnswersIt(target)) {
-                return Edge.none(UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
-            }
-        }
         RealizationTarget target = group.firstEntry().getKey();
         // Which value answers the number is `TermRealizations`' one answer — asked of it whatever
         // kind of number this is, so that what can be built is settled in one place. Read off the

@@ -93,23 +93,24 @@ class WhatTheWayLeftOutIsSaidBeforeWhatTheSearchCameToTest {
      * A point nothing composed a row for with the way used whole, which is the control.
      *
      * <p>Its search was over everything the point asks, so the clause this puts first would be one
-     * written for a search that left nothing out. This is the shape of #1654 and not of this one,
-     * which is the second thing it holds: the two are not one sentence.
+     * written for a search that left nothing out. The rules of the record leave the two positions
+     * a range each and the rule between them asks for a product no pair of those ranges reaches, so
+     * every value tried is refused and no condition above the line is in it.
      */
     private static final String THE_WAY_WAS_USED_WHOLE = """
             module example.apart
 
-            data Yes = { v: Int }
-            data No = { why: Int }
+            data Amount = Int
+                invariant range = value >= 0 && value <= 3
 
-            behavior f : (xs: List<Int>, n: Int) -> Yes | No
-                constructs Yes
-                constructs No
+            data R = { a1: Amount, a2: Amount }
+                invariant rule = a1.value * a2.value >= 100
 
-            let f (xs, n) = {
-                guard List.length(xs) < n else No { why = 1 }
-                Yes { v = 1 }
-            }
+            data Ok
+
+            behavior f : (r: R) -> Ok
+
+            let f (r) = if r.a1.value > 1 then Ok else Ok
             """;
 
     private static final String LEFT_OUT =

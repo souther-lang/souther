@@ -78,30 +78,6 @@ class ALocationAskedForTwoNumbersIsWrittenOnceForBothTest {
             }
             """;
 
-    /**
-     * The same comparison over two times, which really is a second location.
-     *
-     * <p>The control for the one above, and it is still open. A number met by several values cannot
-     * be offered beside another location being fixed as well, which is #1654 and is untouched here
-     * — so the pair differs in exactly the thing the limit is about, and a row composed for the one
-     * above is not this compiler having stopped counting locations at all.
-     */
-    private static final String TWO_PARTS_OF_TWO_TIMES = """
-            module example.compared
-
-            data Yes = { v: Int }
-            data No = { why: Int }
-
-            behavior at : (t: Time, u: Time) -> Yes | No
-                constructs Yes
-                constructs No
-
-            let at (t, u) = {
-                guard Time.hour(t) < Time.minute(u) else No { why = 1 }
-                Yes { v = 1 }
-            }
-            """;
-
     /** The same of a date, which is the other family a value is built to have parts of. */
     private static final String TWO_PARTS_OF_A_DATE = """
             module example.date
@@ -197,20 +173,6 @@ class ALocationAskedForTwoNumbersIsWrittenOnceForBothTest {
         assertEquals(List.of(), whatNothingCouldShow(ONE_PART_OF_A_TIME));
     }
 
-    /**
-     * And a second location is still a second location, which is what the item's own limit is
-     * about.
-     *
-     * <p>The same comparison over two times rather than two parts of one. A number met by several
-     * values cannot be offered beside another location being fixed as well — that is #1654 — so
-     * every point of this line is still open. Read as passing because the model above passes, the
-     * change would be this compiler having stopped counting locations at all.
-     */
-    @Test
-    void aComparisonAcrossTwoLocationsIsStillRefused() {
-        assertFalse(whatNothingCouldShow(TWO_PARTS_OF_TWO_TIMES).isEmpty(),
-                "a value met by several is not offered beside a second location of the item");
-    }
 
     /**
      * And a location whose two numbers no value answers together is still said to be one, which is

@@ -455,30 +455,31 @@ class ALineBetweenTwoPositionsIsStillALineTest {
     }
 
     /**
-     * A line on a measure of two positions is drawn and read, and nothing here promises it.
+     * A line on a measure of two positions is drawn, read, and written for.
      *
-     * <p>Three answers and not one. The line is where the two lengths are equal and the rows can be
-     * read against it; nothing here writes a value from a length — four is not what goes at the
-     * position, it is four characters somebody has to choose — so no witness is found; and with no
-     * witness nothing is counted.
+     * <p>Three answers and not one. The line is where the two lengths are equal, the rows can be
+     * read against it, and a row is composed at it — four is not what goes at the position, it is
+     * four characters somebody has to choose, and choosing them is what a realizer does. So the
+     * points are counted and an author with no row at them is short of one.
      *
-     * <p>What is said about that matters more than the absence. Two strings of one length are the
-     * easiest row in the file to write by hand, so a sentence saying no value can be written there
-     * would be false, and the one written says what this could not do.
+     * <p>Two strings of one length are the easiest row in the file to write by hand, and the row
+     * this offers is that row.
      */
     @Test
-    void aLineOnAMeasureIsReadAndPromisedByNothing() {
+    void aLineOnAMeasureIsDrawnAndWrittenFor() {
         String report = report(MEASURED);
         String rows = generated(MEASURED);
 
-        assertFalse(report.contains("no row is at the OFF point ("), report);
         // The point is at a distance of nothing, which is what a level of a distance is — how far
         // the row stands from the other position, and which position that is is each reading's.
-        assertTrue(report.contains(
+        assertTrue(report.contains("no row is at the OFF point ("), report);
+        assertFalse(report.contains(
                 "nothing could show a row can be written at the OFF point ("), report);
         assertTrue(report.contains("read as cmp/String.length(a): = String.length(b)"), report);
-        assertTrue(rows.contains("nothing here could build a representative for it"), rows);
-        assertTrue(rows.contains("does not make one unwritable"), rows);
+        assertTrue(rows.contains("(\"\", \"\")"),
+                () -> "two strings of one length, which is what the line is: " + rows);
+        assertTrue(rows.contains("(\"x\", \"\")"),
+                () -> "and one longer by a character, which is the point beside it: " + rows);
     }
 
     /**
