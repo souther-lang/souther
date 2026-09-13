@@ -3385,12 +3385,12 @@ public final class Generator {
      * inputs nothing bounds has no axis and its body still draws lines between them — the value is
      * written from the declared type.
      *
-     * @param besideAnother whether another position of the same item is fixed too. A count taken of a
-     *                      location is met by several values and only one of them can be offered
-     *                      beside a second position that is being fixed as well, which is a limit of
-     *                      the reading this replaced rather than a rule: it is preserved here so that
-     *                      collapsing the two searches into one changed nothing, and removing it is
-     *                      its own answer to give
+     * @param besideAnotherLocation whether the item fixes a location beside this one. A count taken
+     *                              of a location is met by several values and only one of them can
+     *                              be offered beside a second location that is being fixed as well,
+     *                              which is a limit of the reading this replaced rather than a rule:
+     *                              it is preserved here so that collapsing the two searches into one
+     *                              changed nothing, and removing it is its own answer to give
      */
     private static Edge edgeAt(MeasuredInput subject, SequencedMap<RealizationTarget, Place> group,
                                boolean besideAnotherLocation,
