@@ -32,6 +32,7 @@ import souther.compiler.evaluate.DepthLimitExceeded;
 import souther.compiler.evaluate.EvaluationContext;
 import souther.compiler.evaluate.StepLimitExceeded;
 import souther.compiler.diag.SourcePos;
+import souther.compiler.observe.Asserted;
 import souther.compiler.observe.Disposition;
 import souther.compiler.observe.Expectation;
 import souther.compiler.observe.ExpectationState;
@@ -2254,12 +2255,16 @@ public final class ExampleVerifier {
                                       Type answers) {
         return switch (stated) {
             case Expectation.TheCase _ -> fixtures.describeActual(result);
+            // Beside what the row stated, which is what tells the two writings which of their parts
+            // go together. Neither of them states an order — both went through a table — so where
+            // each part is written is settled where they are written out.
+            case Expectation.TheValue(Asserted written) ->
+                    fixtures.shown(fixtures.structured(result), answers, written);
             // The whole answer where the row said nothing about it either. A row whose answer is
             // owed is shown what came back, which is what an author about to write the answer down
             // is reading the report for; shown a case instead, they would be handed less than the
-            // row is short of.
-            case Expectation.TheValue _, Expectation.Owed _ ->
-                    fixtures.shown(fixtures.structured(result), answers);
+            // row is short of. Nothing is written beside it, so nothing puts its pairs anywhere.
+            case Expectation.Owed _ -> fixtures.shown(fixtures.structured(result), answers);
         };
     }
 

@@ -9,6 +9,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Function;
 
 /**
  * Whether two values are the same value, and where they are not.
@@ -149,6 +150,12 @@ final class ValueMatch {
      */
     private record Difference(List<PathElement> path, Mismatch.Reason reason, Compared left,
                               ObservedValue right, Position position) {}
+
+    /** What a text stated this to be, where a text did. Every part of the left of a correspondence
+     *  was projected from one, which is what lets a report write the statement out beside it. */
+    private static Asserted statedOf(Compared c) {
+        return c.from() instanceof Origin.Stated(Asserted value) ? value : null;
+    }
 
     /** What a text stated, as the walk reads it. */
     private static Compared stated(Asserted stated) {
@@ -382,19 +389,136 @@ final class ValueMatch {
                                  Position element, ObservedValue right, Position position) {
         List<ObservedValue> remaining = new ArrayList<>(ys);
         for (Compared x : left.elements()) {
-            boolean found = false;
-            for (int i = 0; i < remaining.size(); i++) {
-                if (at(path, x, remaining.get(i), element) == null) {
-                    remaining.remove(i);
-                    found = true;
-                    break;
-                }
-            }
-            if (!found) {
+            int found = standing(path, x, remaining, Function.identity(), element);
+            if (found < 0) {
                 return differs(path, Mismatch.Reason.SHAPE, left, right, position);
             }
+            remaining.remove(found);
         }
         return null;
+    }
+
+    /**
+     * Which of {@code among} stands for {@code x}, or {@code -1} where none does.
+     *
+     * <p>The one step a set and a map are both matched by, and the one thing either of them asks
+     * beyond what everything else is compared by: which value of the answer is the one the
+     * statement is about, where nothing but the values says. Written once because it is one
+     * question — a second way of finding it would be a second answer to what being the same value
+     * means, held somewhere the first one is not.
+     *
+     * <p>{@code of} says how to reach the value from what the caller is holding: a set holds the
+     * values and a map holds pairs whose keys are matched. Said that way rather than by having each
+     * caller hand over a list of what is to be compared, because building one is work done once per
+     * member of a scan that is already one per member — the same question, asked of what the caller
+     * has, and nothing made to ask it.
+     */
+    private <T> int standing(List<PathElement> path, Compared x, List<T> among,
+                             Function<T, ObservedValue> of, Position at) {
+        for (int i = 0; i < among.size(); i++) {
+            if (at(path, x, of.apply(among.get(i)), at) == null) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    /**
+     * Which part of {@code answered} stands for which part of what {@code stated} states.
+     *
+     * <p>The correspondence the comparison settles, said out so that a report writing the two side
+     * by side does not settle it again. A map's entries are paired by key and a set's elements
+     * without an order, and both are answered by {@link #standing} — the same step, asked of the
+     * same values at the same positions, so that two entries the comparison matched are two a
+     * report puts together.
+     *
+     * <p><b>All of it, where a comparison stops at the first difference.</b> What is written out is
+     * the whole answer, so the pairing is wanted under the parts that differ as much as under the
+     * ones that do not. Nothing here decides whether they are the same, which is why walking on
+     * says nothing it should not: a part that stands against nothing is recorded as standing
+     * against nothing.
+     */
+    Alignment align(Asserted stated, ObservedValue answered, Position position) {
+        return align(stated(stated), answered, position);
+    }
+
+    private Alignment align(Compared left, ObservedValue right, Position position) {
+        return switch (left) {
+            case Built built when right instanceof ObservedValue.Constructed b
+                    && built.type().equals(b.type()) -> {
+                Map<String, Alignment> fields = new LinkedHashMap<>();
+                for (Map.Entry<String, Compared> each : built.fields().entrySet()) {
+                    ObservedValue under = b.field(each.getKey());
+                    if (under != null) {
+                        fields.put(each.getKey(), align(each.getValue(), under,
+                                types.field(built.type(), each.getKey())));
+                    }
+                }
+                yield new Alignment.Built(fields);
+            }
+            case Elements elements when right instanceof ObservedValue.Sequence s ->
+                    aligned(elements, s, position);
+            case Entries entries when right instanceof ObservedValue.Mapping m ->
+                    aligned(entries, m, position);
+            // Two shapes that do not line up. What stands under one of them stands under nothing of
+            // the other, which is what there is to say about it.
+            case Leaf _, Built _, Elements _, Entries _ -> new Alignment.Leaf();
+        };
+    }
+
+    /** A sequence, element by element: where it is read as a set, each of the answer's stands for
+     *  whichever of the statement's it was found to be; otherwise for the one in its place. */
+    private Alignment aligned(Elements left, ObservedValue.Sequence s, Position position) {
+        Type open = position.opened() instanceof Position.At(Type type) ? type : null;
+        Position element = switch (open) {
+            case Type.ListOf l -> Position.at(l.element());
+            case Type.SetOf set -> Position.at(set.element());
+            case null, default -> Position.UNREAD;
+        };
+        boolean asASet = left.container() == Asserted.Container.SET || open instanceof Type.SetOf;
+        if (!asASet) {
+            List<Alignment> byElement = new ArrayList<>();
+            for (int i = 0; i < s.elements().size(); i++) {
+                byElement.add(i < left.elements().size()
+                        ? align(left.elements().get(i), s.elements().get(i), element)
+                        : new Alignment.Nothing());
+            }
+            return new Alignment.InOrder(byElement);
+        }
+        // Each of the statement's elements takes the one of the answer's it stands for, asked the
+        // way a set is matched everywhere else, and kept beside it. Neither side's own sequence is a
+        // fact about the value, so what a report does with these is the report's to settle; what is
+        // said here is only which of them go together.
+        List<ObservedValue> remaining = new ArrayList<>(s.elements());
+        List<Alignment.Stood> written = new ArrayList<>();
+        for (Compared x : left.elements()) {
+            int at = standing(List.of(), x, remaining, Function.identity(), element);
+            if (at < 0) {
+                continue;
+            }
+            ObservedValue stood = remaining.remove(/* index */ at);
+            written.add(new Alignment.Stood(statedOf(x), stood, align(x, stood, element)));
+        }
+        return new Alignment.Unordered(written, remaining);
+    }
+
+    /** A mapping: the answer's entries that have a counterpart, each beside it, then the rest. */
+    private Alignment aligned(Entries left, ObservedValue.Mapping m, Position position) {
+        Position key = position.key();
+        Position value = position.value();
+        List<ObservedValue.Entry> remaining = new ArrayList<>(m.entries());
+        List<Alignment.Placed> written = new ArrayList<>();
+        for (Pair each : left.entries()) {
+            int found = standing(List.of(), each.key(), remaining, ObservedValue.Entry::key, key);
+            if (found < 0) {
+                continue;
+            }
+            ObservedValue.Entry taken = remaining.remove(found);
+            written.add(new Alignment.Placed(
+                    new Asserted.Entry(statedOf(each.key()), statedOf(each.value())),
+                    taken, align(each.value(), taken.value(), value)));
+        }
+        return new Alignment.Entries(written, List.copyOf(remaining));
     }
 
     /**
@@ -414,13 +538,7 @@ final class ValueMatch {
         }
         List<ObservedValue.Entry> remaining = new ArrayList<>(ys.entries());
         for (Pair entry : left.entries()) {
-            int found = -1;
-            for (int i = 0; i < remaining.size(); i++) {
-                if (at(path, entry.key(), remaining.get(i).key(), key) == null) {
-                    found = i;
-                    break;
-                }
-            }
+            int found = standing(path, entry.key(), remaining, ObservedValue.Entry::key, key);
             if (found < 0) {
                 return differs(path, Mismatch.Reason.SHAPE, left, right, position);
             }
