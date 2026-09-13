@@ -45,9 +45,10 @@ sealed interface CaseSpace {
      * <p>Ordered so that two readings of one subject list them alike — a report saying what a match
      * left out reads this, and an order that came out differently each time would move a message
      * nothing about the program had changed. A sum's cases come as declared and an optional's
-     * present carrier before its absent one; a union states no order of its own, so the one
-     * {@link AtomSpace#statedBy} puts on it is used rather than the order its set happens to
-     * iterate in — which is not an order anything about the program decided.
+     * present carrier before its absent one; a union holds its members in the order they are shown,
+     * settled where it was built, so what {@link AtomSpace#statedBy} reads off it is one order
+     * however the members reached it — and not the order some set happened to iterate in, which is
+     * not an order anything about the program decided.
      *
      * <p>It is not the order arms are tried in. Which arm of a {@code match} takes a value is
      * decided by the order the arms are written, which is the match's and not the subject's.

@@ -24,7 +24,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
+import java.util.SequencedSet;
 
 /**
  * Holds what is declared of the language's operations to what the library declares, and answers
@@ -404,7 +404,8 @@ final class OperationFactBinder {
                     holdTheResultToTheDeclaration(declaration, TypeRequirement.NUMBER,
                             "where the arithmetic it computes is answered");
             case NumericResult.Answered.InTheCaseCarrying(Type carried) -> {
-                if (!(declaration.result() instanceof Type.Union(Set<TypeSymbol> members))) {
+                if (!(declaration.result()
+                        instanceof Type.Union(SequencedSet<TypeSymbol> members))) {
                     throw new IllegalStateException(operation + " answers "
                             + Type.show(declaration.result())
                             + ", which has no case for the number it computes to arrive in");

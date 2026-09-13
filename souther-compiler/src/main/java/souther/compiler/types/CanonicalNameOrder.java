@@ -36,10 +36,23 @@ import java.util.Set;
  * readers can be used as one — the names compare, so a walk can take the first — and a walk that
  * does is one whose answer moves when what readers are shown is changed.
  *
- * <p>Nothing comes back that says it is in this order. A plurality that crosses into a report says
- * which order it is in by its type, because between being handed one and reading it lies everything
- * a consumer might do with the order; a sequence here becomes the sentence in the expression that
- * asked for it and is never held by anybody. The claim is the call.
+ * <p><b>One owner, and two ways of being one.</b> An order a plurality does not have of its own has
+ * to be established somewhere that goes on governing every reading of it, or a reader downstream
+ * is left working out again what somebody upstream already decided.
+ *
+ * <p>Sometimes that place is the crossing. A set arranged here immediately before the one reader
+ * that shows it is in this order for as long as the expression lasts and is held by nobody, so the
+ * claim is the call — which is what a plurality reaching a report cannot do, because between being
+ * handed one and reading it lies everything a consumer might do with the order, and there the
+ * order is said by the type it crosses as. {@code PublishedCaseOrder} and the case names of a
+ * report take a plain set from wherever their callers had one, so each of those owns the order of
+ * what it was handed.
+ *
+ * <p>Sometimes the value owns it instead. {@link Type.Union} puts its members in this order where
+ * it is built, so every later reading of them is in it by having done nothing — no walk over a
+ * union has an order to decide, and a reader written afterwards is right without knowing this
+ * class exists. Where that holds, arranging the members again is a second owner of one order, and
+ * the one that goes untested is whichever of the two somebody later changes.
  */
 public final class CanonicalNameOrder {
 

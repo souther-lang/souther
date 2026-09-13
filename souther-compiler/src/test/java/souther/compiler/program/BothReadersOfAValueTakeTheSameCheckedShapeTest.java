@@ -181,7 +181,7 @@ class BothReadersOfAValueTakeTheSameCheckedShapeTest {
         List<TypeSymbol> out = new ArrayList<>();
         switch (type) {
             case Type.Ref(TypeSymbol name) -> out.add(name);
-            case Type.Union(java.util.Set<TypeSymbol> members) -> out.addAll(members);
+            case Type.Union(java.util.SequencedSet<TypeSymbol> members) -> out.addAll(members);
             case Type.ListOf(Type element) -> out.addAll(declarationsIn(element));
             case Type.SetOf(Type element) -> out.addAll(declarationsIn(element));
             case Type.OptionOf(Type element) -> out.addAll(declarationsIn(element));
