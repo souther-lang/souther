@@ -71,8 +71,8 @@ class WhatTheSearchAnswersForDoesNotTurnOnHowCaseNamesCompareTest {
 
     @Test
     void oneModelSpelledTwoWaysIsAnsweredForTheSameWay() {
-        TreeMap<String, String> asWritten = answeredFor(MODEL);
-        TreeMap<String, String> respelled = answeredFor(respelled(MODEL));
+        Map<String, String> asWritten = answeredFor(MODEL);
+        Map<String, String> respelled = answeredFor(respelled(MODEL));
 
         assertFalse(asWritten.isEmpty(), "the run was asked about something");
         assertEquals(asWritten.keySet(), respelled.keySet(),
@@ -94,7 +94,7 @@ class WhatTheSearchAnswersForDoesNotTurnOnHowCaseNamesCompareTest {
      * <p>The kind of answer and not the row, because which row answers is what several searches
      * finding one apiece leave to whoever offers them.
      */
-    private static TreeMap<String, String> answeredFor(String model) {
+    private static Map<String, String> answeredFor(String model) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
@@ -104,7 +104,7 @@ class WhatTheSearchAnswersForDoesNotTurnOnHowCaseNamesCompareTest {
         String module = compilation.modules().get(0);
         Map<String, Adequacy.Filling> filled = Adequacy.generatedOf(compilation.db(), module);
         assertTrue(filled != null && !filled.isEmpty(), "the module is searched");
-        TreeMap<String, String> out = new TreeMap<>();
+        Map<String, String> out = new TreeMap<>();
         filled.forEach((behavior, filling) -> {
             filling.composed().discharge().classes().forEach((owed, answer) ->
                     out.put(behavior + " class " + owed, kindOf(answer)));

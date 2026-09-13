@@ -12,6 +12,7 @@ import souther.compiler.query.Settlements;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeSet;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -142,8 +143,8 @@ class WhatTheOfferedRowsSettleDoesNotTurnOnHowCaseNamesCompareTest {
 
     @Test
     void oneModelSpelledTwoWaysSettlesTheSameObligations() {
-        TreeSet<String> asWritten = settledBy(MODEL);
-        TreeSet<String> respelled = settledUnder(MODEL, THE_OTHER_WAY);
+        Set<String> asWritten = settledBy(MODEL);
+        Set<String> respelled = settledUnder(MODEL, THE_OTHER_WAY);
 
         assertFalse(asWritten.isEmpty(), "the offering settles something to compare");
         assertEquals(List.of(), onlyOneSpellingSettles(asWritten, respelled),
@@ -161,8 +162,8 @@ class WhatTheOfferedRowsSettleDoesNotTurnOnHowCaseNamesCompareTest {
      */
     @Test
     void eitherCaseReachingThePointSettlesTheSameObligations() {
-        TreeSet<String> asWritten = settledBy(EITHER_REACHES);
-        TreeSet<String> respelled = settledUnder(EITHER_REACHES, THE_OTHER_WAY);
+        Set<String> asWritten = settledBy(EITHER_REACHES);
+        Set<String> respelled = settledUnder(EITHER_REACHES, THE_OTHER_WAY);
 
         assertFalse(asWritten.isEmpty(), "the offering settles something to compare");
         assertEquals(List.of(), onlyOneSpellingSettles(asWritten, respelled),
@@ -172,8 +173,8 @@ class WhatTheOfferedRowsSettleDoesNotTurnOnHowCaseNamesCompareTest {
     /** And the same where what a row has to carry to reach a point is the case it stands in. */
     @Test
     void aPointBehindACaseIsSettledUnderEitherSpelling() {
-        TreeSet<String> asWritten = settledBy(BEHIND_A_CASE);
-        TreeSet<String> respelled = settledUnder(BEHIND_A_CASE, THE_OTHER_WAY);
+        Set<String> asWritten = settledBy(BEHIND_A_CASE);
+        Set<String> respelled = settledUnder(BEHIND_A_CASE, THE_OTHER_WAY);
 
         assertFalse(asWritten.isEmpty(), "the offering settles something to compare");
         assertEquals(List.of(), onlyOneSpellingSettles(asWritten, respelled),
@@ -195,7 +196,7 @@ class WhatTheOfferedRowsSettleDoesNotTurnOnHowCaseNamesCompareTest {
     }
 
     /** The obligations the rows offered over the module settle, as this walk reads them. */
-    private static TreeSet<String> settledBy(String model) {
+    private static Set<String> settledBy(String model) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
@@ -208,7 +209,7 @@ class WhatTheOfferedRowsSettleDoesNotTurnOnHowCaseNamesCompareTest {
         Composition offering = Composition.composed(OfferingRequest.overTheModule(module), filled,
                 Adequacy.accountFor(compilation.db(), module, new GenerationScope.Module()));
         Settlements settlements = Settlements.of(compilation.db(), offering);
-        TreeSet<String> out = new TreeSet<>();
+        Set<String> out = new TreeSet<>();
         for (ObligationIdentity item : settlements.settled()) {
             out.add(String.valueOf(item));
         }
@@ -221,8 +222,8 @@ class WhatTheOfferedRowsSettleDoesNotTurnOnHowCaseNamesCompareTest {
      * <p>The difference rather than the two sets, because an obligation is written out in full here
      * and a reader is owed the ones that moved rather than every one that did not.
      */
-    private static List<String> onlyOneSpellingSettles(TreeSet<String> asWritten,
-                                                      TreeSet<String> respelled) {
+    private static List<String> onlyOneSpellingSettles(Set<String> asWritten,
+                                                      Set<String> respelled) {
         List<String> out = new ArrayList<>();
         asWritten.stream().filter(each -> !respelled.contains(each))
                 .forEach(each -> out.add("only as written: " + each));
@@ -232,12 +233,12 @@ class WhatTheOfferedRowsSettleDoesNotTurnOnHowCaseNamesCompareTest {
     }
 
     /** What the model settles under {@code spelling}, said in the names the model is written in. */
-    private static TreeSet<String> settledUnder(String written, Map<String, String> spelling) {
+    private static Set<String> settledUnder(String written, Map<String, String> spelling) {
         String model = written;
         for (Map.Entry<String, String> each : spelling.entrySet()) {
             model = model.replace(each.getKey(), each.getValue());
         }
-        TreeSet<String> out = new TreeSet<>();
+        Set<String> out = new TreeSet<>();
         for (String each : settledBy(model)) {
             String said = each;
             for (Map.Entry<String, String> pair : spelling.entrySet()) {

@@ -233,24 +233,26 @@ record AnswersForARule(RequiredDependencies requires,
      * taking one apiece and comparing them would find two askings with a value in common to have
      * none.
      *
-     * <p>What tells two candidates apart is the value, which is the case it is of and everything
-     * written under it — held as the value rather than as the line it prints as, a reading of one
-     * asking and a reading of the other agreeing would be two spellings agreeing.
+     * <p>What tells two candidates apart is {@link Candidate#writes}, which is what a row writes
+     * for the value. Each asking composes its own value, so two answers to one asking are alike in
+     * what a row would write and need not be alike in how they were made.
      */
     private List<Candidate> servingEveryAsking(RequiredDependencies.Required required,
                                                Map<InjectedAnswer, List<Candidate>> values) {
         if (values.isEmpty()) {
             return composed(required, List.of());
         }
-        List<Candidate> serving = null;
+        Map<WhatARowWrites, Candidate> serving = null;
         for (List<Candidate> each : values.values()) {
+            Map<WhatARowWrites, Candidate> here = new LinkedHashMap<>();
+            each.forEach(candidate -> here.putIfAbsent(candidate.writes(), candidate));
             if (serving == null) {
-                serving = new ArrayList<>(each);
+                serving = here;
             } else {
-                serving.retainAll(each);
+                serving.keySet().retainAll(here.keySet());
             }
         }
-        return List.copyOf(serving);
+        return List.copyOf(serving.values());
     }
 
     /** Every value of the dependency's answer meeting {@code demands}, and none where none was
@@ -274,15 +276,37 @@ record AnswersForARule(RequiredDependencies requires,
     /**
      * One value a row could stand a dependency in with.
      *
-     * <p>The case beside the value, so that what two askings have in common is asked of what the
-     * candidate is rather than of the words it is written with. Two candidates of one case carrying
-     * different values are two candidates, which is what a demand about a place inside an answer
-     * leaves.
+     * <p>Two of these are one value where {@link #writes} says so, which is asked of the candidate
+     * rather than left to what the two happen to be made of.
      *
      * @param caseOfTheAnswer which case of a union this is a value of, or null where the answer is
      *                        not a union
      */
-    private record Candidate(TypeSymbol caseOfTheAnswer, FixtureTemplate value) {}
+    private record Candidate(TypeSymbol caseOfTheAnswer, FixtureTemplate value) {
+
+        /**
+         * What tells this candidate from another where the question is whether one value answers
+         * every asking a row makes.
+         *
+         * <p>What a row writes, which is the answer {@link RowKey} gives to the same question about
+         * a whole row. A {@code with} is a line of source and two askings are served by one value
+         * when the row writes one line for both of them, so that is what is compared — the case
+         * beside it, which is the fact a candidate carries that the line is of.
+         *
+         * <p><b>And not the value as it is made.</b> A {@link FixtureTemplate} holds the tree a
+         * decoder builds as well as the text, and a name inside that tree carries which reference
+         * of a declaration the run composed — a number minted to tell two occurrences apart
+         * ({@link souther.compiler.types.FixtureReferenceOrigin}). Compared as it is made, two
+         * askings answered by one value would be two the moment the value is a name, because each
+         * asking composed its own occurrence of it.
+         */
+        WhatARowWrites writes() {
+            return new WhatARowWrites(caseOfTheAnswer, value.text());
+        }
+    }
+
+    /** One value as a row writes it, which is what two askings have in common or do not. */
+    private record WhatARowWrites(TypeSymbol caseOfTheAnswer, String written) {}
 
     /** The askings of each dependency, in the order they were first asked about. */
     private static Map<ValueName.Behavior, Map<InjectedAnswer, List<AnswerDemand>>> byDependency(
