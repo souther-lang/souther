@@ -88,9 +88,9 @@ class OnlyTypeAtWrittenPathStepsIntoAWrittenValueTest {
      * exactly the agreement that is a law and not a reason to share.
      *
      * <p>So what is named here is on the composing side, and being on it is what the entry is for.
-     * {@code Generator.edgeAt} takes the root a value is to be written at and hands what it finds
-     * to the composition; a method that arrived here having read a row would be the same category
-     * error one call further out.
+     * {@code Generator.edgeAt} takes the numbers one location is to be written for and hands what
+     * it finds to the composition; a method that arrived here having read a row would be the same
+     * category error one call further out.
      */
     @Test
     void theWalkIsAskedWhereAValueIsComposed() {
@@ -101,8 +101,7 @@ class OnlyTypeAtWrittenPathStepsIntoAWrittenValueTest {
                         + " calls");
         assertEquals(Set.of("souther.compiler.partition.Generator#edgeAt("
                         + "Lsouther/compiler/partition/MeasuredInput;"
-                        + "Lsouther/compiler/partition/RealizationTarget;"
-                        + "Lsouther/compiler/numeric/Place;Z"
+                        + "Ljava/util/SequencedMap;Z"
                         + "Lsouther/compiler/inputs/SearchRegion;)"
                         + "Lsouther/compiler/partition/Generator$Edge;"), asks,
                 "where a value is written is asked where one is composed, and a second asker is a"
