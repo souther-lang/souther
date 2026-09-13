@@ -77,6 +77,103 @@ public record FillResult(GenerationPlan plan, SequencedMap<RowId, ComposedRow> c
         }
     }
 
+    /**
+     * What several runs over one plan came to together.
+     *
+     * <p>A behavior whose dependencies a way leaves open is searched once per way of standing them
+     * in, and what the searches found is one answer about the model: an obligation is answered by a
+     * row where any of them composed one, and is unanswered where none did. Read off one run, the
+     * answer would be about that run's stand-ins and would be reported as an answer about the
+     * model.
+     *
+     * <p>Commutative and idempotent at every obligation, which is what makes it that answer: a row
+     * built by any run is a row, and the order the runs were made in decides only which of several
+     * rows the answer names.
+     *
+     * <p><b>The rows of the runs whose obligations another run's row was named for do not go on.</b>
+     * What they were searched with has been read already — it is in this answer, at every obligation
+     * they reached — and offering them as well would be offering rows for what they turn out to
+     * reach besides. That is a question about incidental coverage rather than about which cases
+     * were searched, and nothing here is owed it.
+     */
+    public static FillResult union(List<FillResult> searched) {
+        if (searched.size() == 1) {
+            return searched.getFirst();
+        }
+        GenerationPlan plan = searched.getFirst().plan();
+        SequencedMap<RowId, ComposedRow> composed = new LinkedHashMap<>();
+        Map<String, RowId> named = new LinkedHashMap<>();
+        Map<ClassOfAPosition, ClassDisposition> classes = new LinkedHashMap<>();
+        for (ClassOfAPosition owed : plan.classesOwed()) {
+            ClassDisposition.Built built = null;
+            ClassDisposition.Unresolved none = null;
+            for (int run = 0; run < searched.size() && built == null; run++) {
+                switch (searched.get(run).discharge().at(owed)) {
+                    case ClassDisposition.Built(var rowId) -> built = new ClassDisposition.Built(
+                            naming(searched, composed, named, run, rowId));
+                    case ClassDisposition.Unresolved unresolved ->
+                            none = none == null ? unresolved : none;
+                }
+            }
+            classes.put(owed, built == null ? none : built);
+        }
+        Map<Generator.ArmOwed, ArmDisposition> arms = new LinkedHashMap<>();
+        for (Generator.ArmOwed owed : plan.armsOwed()) {
+            ArmDisposition.Built built = null;
+            ArmDisposition.NoWayIn nowhere = null;
+            List<Generator.UnresolvedCombination> why = new ArrayList<>();
+            for (int run = 0; run < searched.size(); run++) {
+                switch (searched.get(run).discharge().at(owed)) {
+                    case ArmDisposition.Built(var rowId, var at) -> {
+                        if (built == null) {
+                            built = new ArmDisposition.Built(
+                                    naming(searched, composed, named, run, rowId), at);
+                        }
+                    }
+                    case ArmDisposition.Unresolved(var reasons) -> reasons.stream()
+                            .filter(each -> !why.contains(each)).forEach(why::add);
+                    case ArmDisposition.NoWayIn noWayIn ->
+                            nowhere = nowhere == null ? noWayIn : nowhere;
+                }
+            }
+            // A row wherever one was built, and otherwise the whole of what the runs made of it.
+            // An arm with nowhere to look is what the reading of the body says and is the same
+            // whatever a row stands the dependencies in with, so it is that answer and not a
+            // search that failed.
+            arms.put(owed, built != null ? built
+                    : why.isEmpty() ? nowhere : new ArmDisposition.Unresolved(why));
+        }
+        List<Generator.UnresolvedCombination> unresolved = new ArrayList<>();
+        List<GenerationReason> reasons = new ArrayList<>();
+        for (FillResult each : searched) {
+            each.unresolved().stream().filter(one -> !unresolved.contains(one))
+                    .forEach(unresolved::add);
+            each.reasons().stream().filter(one -> !reasons.contains(one)).forEach(reasons::add);
+        }
+        return new FillResult(plan, composed, unresolved, reasons,
+                new Discharge(classes, arms));
+    }
+
+    /**
+     * The number one run's row goes by among all of them, adding it to the rows the union holds the
+     * first time it is named.
+     *
+     * <p>Numbered afresh because a row id tells rows of one run apart and nothing more. Two runs
+     * each number their rows from nought, and a union taking the numbers as they came would hold
+     * one row under an id another run's row already had.
+     */
+    private static RowId naming(List<FillResult> searched, SequencedMap<RowId, ComposedRow> composed,
+                                Map<String, RowId> named, int run, RowId rowId) {
+        RowId already = named.get(run + "/" + rowId.value());
+        if (already != null) {
+            return already;
+        }
+        RowId here = new RowId(composed.size());
+        named.put(run + "/" + rowId.value(), here);
+        composed.put(here, searched.get(run).composed().get(rowId));
+        return here;
+    }
+
     /** Nothing asked for, nothing composed, nothing to answer for. */
     public static FillResult nothingAskedOf(GenerationPlan plan) {
         return new FillResult(plan, new LinkedHashMap<>(), List.of(), List.of(),

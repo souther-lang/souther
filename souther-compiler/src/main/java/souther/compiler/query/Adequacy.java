@@ -1874,17 +1874,33 @@ public final class Adequacy {
                 souther.compiler.partition.DecisionReading.Ruled ruled, Coverages.Probe probe,
                 souther.compiler.partition.RulesTaken taken,
                 souther.compiler.partition.Reachability.Reaching reaching) {
-            return switch (probe.attempt("a rule of the decision", Map.of(), reaching,
-                    ruled.demands())) {
-                // What the composing came to, said on the axis it is about. The rule is left where
-                // it was and nothing here is a word about the model: the way may be the easiest row
-                // in the file to write by hand, and a requirement carrying this reason would say
-                // otherwise.
-                case Generator.BoundaryAttempt.NoRow none ->
-                        RuleSettlement.nothingToTryWith(none.why());
-                case Generator.BoundaryAttempt.Built built ->
-                        RuleSettlement.of(whereItWent(built.row().toRun(), probe, taken, ruled));
-            };
+            // Every way of standing the dependencies in, and the first that takes the rule. Which
+            // case a row carries where the way names none decides where the row goes, so a row
+            // that went elsewhere says that of the case it carried and not of the rule.
+            RuleSettlement firstTried = null;
+            for (Generator.BoundaryAttempt made : probe.attempt("a rule of the decision", Map.of(),
+                    reaching, ruled.demands())) {
+                RuleSettlement here = switch (made) {
+                    // What the composing came to, said on the axis it is about. The rule is left
+                    // where it was and nothing here is a word about the model: the way may be the
+                    // easiest row in the file to write by hand, and a requirement carrying this
+                    // reason would say otherwise.
+                    case Generator.BoundaryAttempt.NoRow none ->
+                            RuleSettlement.nothingToTryWith(none.why());
+                    case Generator.BoundaryAttempt.Built built ->
+                            RuleSettlement.of(whereItWent(built.row().toRun(), probe, taken, ruled));
+                };
+                if (here.requirement() instanceof RuleRequirement.Required) {
+                    return here;
+                }
+                firstTried = firstTried == null ? here : firstTried;
+            }
+            // Nothing was tried at all, which is the classes not linking rather than a search that
+            // came to nothing.
+            return firstTried != null ? firstTried
+                    : RuleSettlement.nothingToTryWith(new Generator.UnresolvedCombination(
+                            List.of("a rule of the decision"),
+                            Generator.UnresolvedCombination.Reason.LINKAGE_FAILED));
         }
 
         /**
@@ -2053,7 +2069,7 @@ public final class Adequacy {
         }
 
         @Override
-        public Generator.BoundaryAttempt attempt(String label,
+        public List<Generator.BoundaryAttempt> attempt(String label,
                 java.util.Map<souther.compiler.partition.RealizationTarget,
                         souther.compiler.numeric.Place> fixing,
                 souther.compiler.partition.Reachability.Reaching reaching,
@@ -2061,13 +2077,19 @@ public final class Adequacy {
             Generator.CandidateCheck check =
                     (at, candidate) -> built(building.build(sig.ins().get(at), candidate.value()));
             try {
-                return Generator.probeFixing(subject, label, fixing, reaching, check,
-                        answers.of(demands));
+                // One per way of standing the dependencies in. Which of them answers what was asked
+                // is not something this can tell — where a row goes is read by whoever asked — so
+                // all of them go back and none is chosen here.
+                List<Generator.BoundaryAttempt> out = new ArrayList<>();
+                for (AnswersStoodIn stood : answers.of(demands)) {
+                    out.add(Generator.probeFixing(subject, label, fixing, reaching, check, stood));
+                }
+                return List.copyOf(out);
             } catch (LinkageError _) {
                 // The generated classes would not link, so nothing can be built to find out what a
                 // model admits. Nothing was tried, which is not the same as everything tried being
                 // refused, and neither of them says the row cannot be written.
-                return null;
+                return List.of();
             }
         }
 
@@ -3748,14 +3770,19 @@ public final class Adequacy {
          * offered without a stand-in it needs is a row a person completes and cannot run, so the
          * rows of such a behavior are held back where they are read — which takes telling the two
          * apart, and an empty list tells nobody anything.
+         *
+         * <p><b>One per way of answering them, which a way asking nothing may leave several of.</b>
+         * A union answer nothing narrows is answered by a value of any of its cases, and which case
+         * a row carries decides which of the body's ways it goes down. Each is searched with, and
+         * what the search comes to is what all of them came to together.
          */
-        private static AnswersStoodIn supplying(
+        private static List<AnswersStoodIn> supplying(
                 Db db, String module, String behavior,
                 souther.compiler.partition.MeasuredInput subject) {
             AnswersForARule answers = answering(db, module, behavior, subject);
             return answers == null
-                    ? new AnswersStoodIn.NothingComposed(Generator
-                            .UnresolvedCombination.Reason.NOTHING_STANDS_IN_FOR_A_DEPENDENCY)
+                    ? List.of(new AnswersStoodIn.NothingComposed(Generator
+                            .UnresolvedCombination.Reason.NOTHING_STANDS_IN_FOR_A_DEPENDENCY))
                     : answers.of(souther.compiler.partition.AnswersDemanded.NOTHING);
         }
 
@@ -4304,7 +4331,7 @@ public final class Adequacy {
                 souther.compiler.coverage.CoverageSites.Plan plan,
                 Optional<SiteNumbering> numbering, RowReading observed,
                 BoundaryValues building, InputDomain domain,
-                Generator.Trial trial, AnswersStoodIn stood, boolean recording,
+                Generator.Trial trial, List<AnswersStoodIn> stood, boolean recording,
                 souther.compiler.partition.AdequacyPolicy.OfTheGeneration budget) {
             if (observed.someRowsUnseen()) {
                 // Rows exist that nothing read. What they cover is unknown, so what is left uncovered
@@ -4329,10 +4356,18 @@ public final class Adequacy {
                             InputClassifications.of(row.inputs(), axes),
                             watched(row, recording, numbering)))
                     .toList();
-            return Generator.fill(asked, existing, check,
-                    souther.compiler.reading.CoverageRead
-                            .of(spec.name(), body, plan, domain, reading),
-                    trial, baselines, stood, budget);
+            // One search per way of standing the dependencies in, and their union. What a way
+            // leaves open about a union answer is part of what is searched: a case decides which of
+            // the body's ways a candidate goes down, so a search of one case answers about the model
+            // only where the model has one case to answer about.
+            List<souther.compiler.partition.FillResult> searched = new ArrayList<>();
+            for (AnswersStoodIn each : stood) {
+                searched.add(Generator.fill(asked, existing, check,
+                        souther.compiler.reading.CoverageRead
+                                .of(spec.name(), body, plan, domain, reading),
+                        trial, baselines, each, budget));
+            }
+            return souther.compiler.partition.FillResult.union(searched);
         }
 
         /**

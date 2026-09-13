@@ -672,9 +672,15 @@ final class Coverages {
 
         /**
          * What building a row for {@code label} came to, with each position of the item fixed
-         * where {@code fixing} puts it and the rest of the row built to reach the border, or null
-         * where the attempt could not be made at all — which leaves the point unknown rather than
-         * refused.
+         * where {@code fixing} puts it and the rest of the row built to reach the border, and
+         * empty where the attempt could not be made at all — which leaves the point unknown rather
+         * than refused.
+         *
+         * <p><b>One attempt per way of standing the dependencies in.</b> A behavior whose union
+         * answer the demands leave open has a value of each case to be stood up with, and which of
+         * them a row carries decides where the row goes — so whether a row reaches this item is
+         * whether any of them does. Which of the ones that reach it is offered is the caller's, and
+         * is a choice between rows that each answer what was asked.
          *
          * <p>One method, whatever the border was drawn on. What the row is for is the coverage item
          * and what is fixed to build it is a placement that stands for it; a side of a border is met
@@ -696,7 +702,7 @@ final class Coverages {
          *                 read. Held by the probe, a search would compose its row under whatever
          *                 the behavior answers generally and be run under what it actually needs
          */
-        souther.compiler.partition.Generator.BoundaryAttempt attempt(
+        java.util.List<souther.compiler.partition.Generator.BoundaryAttempt> attempt(
                 String label,
                 Map<souther.compiler.partition.RealizationTarget, Place> fixing,
                 souther.compiler.partition.Reachability.Reaching reaching,
@@ -1010,13 +1016,30 @@ final class Coverages {
                         // place the positions stand at, and nothing about it turns on what a
                         // dependency says — so the row is stood in with whatever answers the
                         // behavior generally, which is what asking nothing gets.
-                        souther.compiler.partition.Generator.BoundaryAttempt made =
+                        //
+                        // Which leaves the case of a union answer open, and a row arrives at a
+                        // point inside one of the cases only by carrying that case. So each way of
+                        // standing the dependencies in is built and read back, and the point is
+                        // reached where any of them reaches it — a walk stopping at the first row
+                        // that was composed would report a point as unwritable whenever the case
+                        // that row happened to carry does not pass through it.
+                        java.util.List<souther.compiler.partition.Generator.BoundaryAttempt> tried =
                                 probe.attempt(label, found.fixing(), able,
                                         souther.compiler.partition.AnswersDemanded.NOTHING);
-                        yield whatCameOfIt(made, label, within,
-                                () -> standingThere(probe, line, criterion, site,
-                                        (souther.compiler.partition.Generator.BoundaryAttempt.Built)
-                                                made));
+                        ItemAssessment.Attempt first = null;
+                        for (souther.compiler.partition.Generator.BoundaryAttempt made : tried) {
+                            ItemAssessment.Attempt here = whatCameOfIt(made, label, within,
+                                    () -> standingThere(probe, line, criterion, site,
+                                            (souther.compiler.partition.Generator.BoundaryAttempt
+                                                    .Built) made));
+                            if (here instanceof ItemAssessment.Attempt.Certified) {
+                                first = here;
+                                break;
+                            }
+                            first = first == null ? here : first;
+                        }
+                        yield first != null ? first
+                                : whatCameOfIt(null, label, within, () -> null);
                     }
                     // And the two ways of finding nothing are not one answer. A walk of the whole
                     // of what the rules leave that reaches no value settles the point; a search

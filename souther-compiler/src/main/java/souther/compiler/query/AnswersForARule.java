@@ -11,6 +11,7 @@ import souther.compiler.partition.FixtureTemplate;
 import souther.compiler.partition.Generator;
 import souther.compiler.partition.InjectedAnswer;
 import souther.compiler.partition.StoodInAnswer;
+import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
@@ -60,26 +61,91 @@ record AnswersForARule(RequiredDependencies requires,
                        Map<ValueName.Behavior, AnswerSubjects> standing,
                        FakeTables blocks) {
 
-    /** What a row taking {@code demanded} stands the dependencies in with. */
-    AnswersStoodIn of(AnswersDemanded demanded) {
+    /**
+     * Every way a row taking {@code demanded} could stand the dependencies in, or the one answer
+     * saying nothing stands them in.
+     *
+     * <p>Several where a way leaves the case of a union answer open: each case a value composes for
+     * is a row the way admits, and which of them reaches what is not something a reading of the way
+     * says. They are searched with rather than chosen between, so what a search comes to about a
+     * model does not follow from which of them was taken first.
+     *
+     * <p>The ways of the dependencies taken together, which is why this is a product. Two
+     * dependencies each left open are answered by a row apiece, and a walk pairing them off would
+     * search some of the rows a way admits and report about the model as though it had searched
+     * them all.
+     */
+    List<AnswersStoodIn> of(AnswersDemanded demanded) {
         if (!demanded.whole()) {
             // The way asks something of an answer that nothing here states, so a value composed
             // against the rest would be composed against part of what the row has to be.
-            return new AnswersStoodIn.NothingComposed(
-                    Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+            return List.of(new AnswersStoodIn.NothingComposed(
+                    Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE));
         }
         Map<ValueName.Behavior, Map<InjectedAnswer, List<AnswerDemand>>> asked = byDependency(
                 demanded.byAnswer());
-        List<StoodInAnswer> out = new ArrayList<>();
+        List<List<StoodInAnswer>> apiece = new ArrayList<>();
         for (RequiredDependencies.Required each : requires.inOrder()) {
-            AnswersStoodIn here =
-                    standingIn(each, asked.getOrDefault(each.dependency(), Map.of()));
-            if (!(here instanceof AnswersStoodIn.Stood(var answers))) {
-                return here;
+            StandingIn here = standingIn(each, asked.getOrDefault(each.dependency(), Map.of()));
+            if (here instanceof StandingIn.None(var why)) {
+                return List.of(new AnswersStoodIn.NothingComposed(why));
             }
-            out.addAll(answers);
+            apiece.add(((StandingIn.Any) here).alternatives());
         }
-        return new AnswersStoodIn.Stood(List.copyOf(out));
+        List<AnswersStoodIn> out = new ArrayList<>();
+        for (List<StoodInAnswer> combination : everyCombinationOf(apiece)) {
+            out.add(new AnswersStoodIn.Stood(combination));
+        }
+        return List.copyOf(out);
+    }
+
+    /**
+     * One list per way of answering every dependency, in the order the alternatives are enumerated
+     * in.
+     *
+     * <p>A behavior requiring nothing has one way of answering nothing, which is what the product of
+     * no lists is. Written as an empty list of ways, a row of such a behavior would be a row nothing
+     * composes.
+     */
+    private static List<List<StoodInAnswer>> everyCombinationOf(List<List<StoodInAnswer>> apiece) {
+        List<List<StoodInAnswer>> out = new ArrayList<>();
+        out.add(List.of());
+        for (List<StoodInAnswer> alternatives : apiece) {
+            List<List<StoodInAnswer>> wider = new ArrayList<>();
+            for (List<StoodInAnswer> already : out) {
+                for (StoodInAnswer each : alternatives) {
+                    List<StoodInAnswer> both = new ArrayList<>(already);
+                    both.add(each);
+                    wider.add(List.copyOf(both));
+                }
+            }
+            out = wider;
+        }
+        return out;
+    }
+
+    /**
+     * What one dependency can be stood in with, or why nothing stands it in.
+     *
+     * <p>Alternatives and not one answer, for the reason {@link #of} is a product: a dependency
+     * whose case a way leaves open has a value apiece and every one of them is a row.
+     */
+    private sealed interface StandingIn {
+
+        /** The ways it can be answered, every one of which composes a row. */
+        record Any(List<StoodInAnswer> alternatives) implements StandingIn {
+
+            public Any {
+                alternatives = List.copyOf(alternatives);
+                if (alternatives.isEmpty()) {
+                    throw new IllegalArgumentException(
+                            "a dependency something stands in for has a way of standing in");
+                }
+            }
+        }
+
+        /** Nothing does, in the words a search comes back with. */
+        record None(Generator.UnresolvedCombination.Reason why) implements StandingIn {}
     }
 
     /**
@@ -95,30 +161,33 @@ record AnswersForARule(RequiredDependencies requires,
      * no such value composes, the module's table stands where it states one — the way may be one
      * the module was written for — and what the run reaches decides whether it was.
      */
-    private AnswersStoodIn standingIn(RequiredDependencies.Required required,
-                                      Map<InjectedAnswer, List<AnswerDemand>> asked) {
+    private StandingIn standingIn(RequiredDependencies.Required required,
+                                  Map<InjectedAnswer, List<AnswerDemand>> asked) {
         if (asked.isEmpty() && stated(required.dependency())) {
             return byTheModule(required);
         }
-        Map<InjectedAnswer, FixtureTemplate> values = new LinkedHashMap<>();
+        Map<InjectedAnswer, List<Candidate>> values = new LinkedHashMap<>();
         for (Map.Entry<InjectedAnswer, List<AnswerDemand>> each : asked.entrySet()) {
-            FixtureTemplate value = composed(required, each.getValue());
-            if (value == null) {
+            List<Candidate> composed = composed(required, each.getValue());
+            if (composed.isEmpty()) {
                 return stated(required.dependency()) ? byTheModule(required) : nothingStandsIn();
             }
-            values.put(each.getKey(), value);
+            values.put(each.getKey(), composed);
         }
-        FixtureTemplate one = oneValueForAll(required, values);
-        if (one != null) {
-            return new AnswersStoodIn.Stood(
-                    List.of(new StoodInAnswer.OnTheRow(required.dependency(), one)));
+        List<Candidate> serving = servingEveryAsking(required, values);
+        if (!serving.isEmpty()) {
+            List<StoodInAnswer> alternatives = new ArrayList<>();
+            for (Candidate each : serving) {
+                alternatives.add(new StoodInAnswer.OnTheRow(required.dependency(), each.value()));
+            }
+            return new StandingIn.Any(alternatives);
         }
         // The way wants the dependency to answer differently at different calls, which wants a
         // table — written once for a module and part of the environment several rows share rather
         // than part of a row. Nothing here composes one, so the row leans on the one the module
         // states, and where the module states none there is nothing for this way to be tried with.
         return stated(required.dependency()) ? byTheModule(required)
-                : new AnswersStoodIn.NothingComposed(
+                : new StandingIn.None(
                         Generator.UnresolvedCombination.Reason.A_TABLE_IS_WHAT_THIS_NEEDS);
     }
 
@@ -142,42 +211,78 @@ record AnswersForARule(RequiredDependencies requires,
                 && ExampleStatements.answersEveryCall(table.read());
     }
 
-    private static AnswersStoodIn byTheModule(RequiredDependencies.Required required) {
-        return new AnswersStoodIn.Stood(
+    private static StandingIn byTheModule(RequiredDependencies.Required required) {
+        return new StandingIn.Any(
                 List.of(new StoodInAnswer.InTheModule(required.dependency())));
     }
 
-    private static AnswersStoodIn nothingStandsIn() {
-        return new AnswersStoodIn.NothingComposed(
+    private static StandingIn nothingStandsIn() {
+        return new StandingIn.None(
                 Generator.UnresolvedCombination.Reason.NOTHING_STANDS_IN_FOR_A_DEPENDENCY);
     }
 
     /**
-     * The value that serves every asking, or null where the askings want different ones.
+     * Every value that serves every asking, which is what the askings have in common.
      *
      * <p>Asked of what the row would write, which is what a {@code with} is. It is not a question
      * about which askings are one — that is {@link InjectedAnswer}'s and was settled where the body
-     * was read — but about whether the answers a row states come to one line of source.
+     * was read — but about whether one value answers the askings a row makes.
+     *
+     * <p>An intersection and not a comparison of two, because an asking may leave several values
+     * open: two askings that leave the cases of a union open leave the cases they share, and a walk
+     * taking one apiece and comparing them would find two askings with a value in common to have
+     * none.
+     *
+     * <p>What tells two candidates apart is the value, which is the case it is of and everything
+     * written under it — held as the value rather than as the line it prints as, a reading of one
+     * asking and a reading of the other agreeing would be two spellings agreeing.
      */
-    private FixtureTemplate oneValueForAll(RequiredDependencies.Required required,
-                                           Map<InjectedAnswer, FixtureTemplate> values) {
+    private List<Candidate> servingEveryAsking(RequiredDependencies.Required required,
+                                               Map<InjectedAnswer, List<Candidate>> values) {
         if (values.isEmpty()) {
             return composed(required, List.of());
         }
-        FixtureTemplate first = values.values().iterator().next();
-        return values.values().stream().allMatch(each -> each.text().equals(first.text()))
-                ? first : null;
+        List<Candidate> serving = null;
+        for (List<Candidate> each : values.values()) {
+            if (serving == null) {
+                serving = new ArrayList<>(each);
+            } else {
+                serving.retainAll(each);
+            }
+        }
+        return List.copyOf(serving);
     }
 
-    /** A value of the dependency's answer meeting {@code demands}, or null where none was composed. */
-    private FixtureTemplate composed(RequiredDependencies.Required required,
+    /** Every value of the dependency's answer meeting {@code demands}, and none where none was
+     *  composed. */
+    private List<Candidate> composed(RequiredDependencies.Required required,
                                      List<AnswerDemand> demands) {
         AnswerSubjects subjects = standing.get(required.dependency());
-        AnswerSubjects.Chosen chosen = subjects == null ? null : subjects.against(demands);
-        return chosen != null
-                && AnAnswerComposed.of(chosen.standing(), chosen.demands())
-                        instanceof AnAnswerComposed.Outcome.Composed(var value) ? value : null;
+        if (subjects == null) {
+            return List.of();
+        }
+        List<Candidate> out = new ArrayList<>();
+        for (AnswerSubjects.Feasible each : subjects.against(demands)) {
+            if (AnAnswerComposed.of(each.standing(), each.demands())
+                    instanceof AnAnswerComposed.Outcome.Composed(var value)) {
+                out.add(new Candidate(each.caseOfTheAnswer(), value));
+            }
+        }
+        return List.copyOf(out);
     }
+
+    /**
+     * One value a row could stand a dependency in with.
+     *
+     * <p>The case beside the value, so that what two askings have in common is asked of what the
+     * candidate is rather than of the words it is written with. Two candidates of one case carrying
+     * different values are two candidates, which is what a demand about a place inside an answer
+     * leaves.
+     *
+     * @param caseOfTheAnswer which case of a union this is a value of, or null where the answer is
+     *                        not a union
+     */
+    private record Candidate(TypeSymbol caseOfTheAnswer, FixtureTemplate value) {}
 
     /** The askings of each dependency, in the order they were first asked about. */
     private static Map<ValueName.Behavior, Map<InjectedAnswer, List<AnswerDemand>>> byDependency(
