@@ -5319,9 +5319,9 @@ public final class Generator {
      * asked of the variant.
      *
      * <p>A location asked for several numbers settles at none of them. What is settled is a place on
-     * the root's own order, and a group is over numbers taken of the root — the content of the
-     * location is not among them, because a value answering a number taken of it and the content
-     * both is not something composed together.
+     * the root's own order, and a group is over numbers taken of the root — which numbers go in one
+     * group is {@link TermRealizations#oneValueAnswersThemTogether}, and the content of the location
+     * is not among the ones it puts together.
      */
     private static Edge edgeFrom(TermRealizations.Realization made,
                                  SequencedMap<RealizationTarget, Place> group) {
