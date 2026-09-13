@@ -48,8 +48,8 @@ class EveryFigureTheComposingStageStopsAtIsABudgetOrIsSaidNotToBeTest {
     private static final Map<String, String> NOT_A_BUDGET = new LinkedHashMap<>(Map.ofEntries(
             // Numbers a value is written at, which are what a date or a time looks like and not how
             // far this looks for one.
-            Map.entry("souther.compiler.partition.TermRealizations.A_YEAR",
-                    "the year a time of day is written in"),
+            Map.entry("souther.compiler.partition.TermRealizations.A_LEAP_YEAR",
+                    "the year a date is written in where no rule asked for one"),
             Map.entry("souther.compiler.partition.TermRealizations.A_LONGEST_MONTH",
                     "the month a day of the month is offered in"),
             Map.entry("souther.compiler.partition.TermRealizations.FIRST_OF_THE_MONTH",

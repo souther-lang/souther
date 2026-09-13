@@ -3100,13 +3100,9 @@ public final class Generator {
                 // asked of the reader that owns it, because a container written whole and a
                 // position inside it are one location spelled two ways.
                 List<RealizationTarget> beside = alsoWritingAt(out, at.position());
-                if (!beside.isEmpty()) {
-                    List<RealizationTarget> both = new ArrayList<>(beside);
-                    both.add(RealizationTarget.of(at));
-                    if (!TermRealizations.oneValueAnswersThemTogether(both)) {
-                        shared = true;
-                        break;
-                    }
+                if (!beside.isEmpty() && !writtenTogether(beside, at)) {
+                    shared = true;
+                    break;
                 }
                 owing.add(at);
             }
@@ -3138,6 +3134,32 @@ public final class Generator {
             }
         }
         return new Standing(out, unrepresented);
+    }
+
+    /**
+     * Whether a number at {@code at} is one the row writes together with the ones already standing
+     * beside it.
+     *
+     * <p>Two things have to hold and they are two questions. The numbers have to be gathered under
+     * one write, which is what {@link #byTheLocationTheyWrite} does and it does it by the path —
+     * so a number at a path holding another is one location and is not one write, and placing it
+     * here would leave the writing to refuse the pair and the whole point with it. And one value
+     * has to answer them all, which is the realizer's.
+     *
+     * <p>Asked against the same path the gathering uses, so the two cannot part. Asked here as
+     * whether they are one location, this would admit a pair nothing afterwards puts together.
+     */
+    private static boolean writtenTogether(List<RealizationTarget> beside,
+                                           NumericTerm.FromOnePosition at) {
+        List<RealizationTarget> both = new ArrayList<>(beside.size() + 1);
+        for (RealizationTarget target : beside) {
+            if (!target.writeRoot().equals(at.position())) {
+                return false;
+            }
+            both.add(target);
+        }
+        both.add(RealizationTarget.of(at));
+        return TermRealizations.oneValueAnswersThemTogether(both);
     }
 
     /**

@@ -559,9 +559,17 @@ final class TermRealizations {
      * between is something {@code java.time} answers, and building a date to find out whether one
      * could be built is asking a question by reading the exception from the answer.
      *
-     * <p>A part nobody asked for stands where such a part is offered when it is the one asked for,
-     * so a date built for one part is the date this wrote before the others could be asked for
-     * beside it.
+     * <p><b>A part nobody asked for stands at the value that rules out the fewest of the parts that
+     * were asked for.</b> The parts of a date are not independent the way the parts of a time are:
+     * how far the days run depends on the month, and February's length depends on the year. So a
+     * value chosen here for a part nobody asked for is not merely a value that part can take — a
+     * date exists for every one of those — it is the one that leaves every combination the calendar
+     * admits still writable. The longest month, and a year whose February is a day longer.
+     *
+     * <p>Chosen for a part alone, each of them would be right and the pair would not: a month and a
+     * day asked for together would be offered in whichever year the month-alone case happened to
+     * name, and the twenty-ninth of February would be a day the calendar has that nothing here
+     * writes.
      *
      * <p>How far the days run is asked of the month the date is actually built in, and not of how
      * far a day of any month can run. Where no month was asked for that is the longest there is, so
@@ -586,7 +594,7 @@ final class TermRealizations {
             return null;
         }
         java.time.YearMonth in = java.time.YearMonth.of(
-                year == null ? A_YEAR : year.intValueExact(),
+                year == null ? A_LEAP_YEAR : year.intValueExact(),
                 month == null ? A_LONGEST_MONTH : month.intValueExact());
         if (day != null && !within(day, 1, in.lengthOfMonth())) {
             return null;
@@ -612,9 +620,15 @@ final class TermRealizations {
         return onThoseParts(Map.of(part, count), sourceType, observed, ruleSource);
     }
 
-    /** The year a month or a day is offered in. Every month is a month of every year, and the month
-     *  below is as long in any of them, so which year this is says nothing. */
-    private static final int A_YEAR = 2001;
+    /**
+     * The year a month or a day is offered in.
+     *
+     * <p>Which year it is says nothing about a month on its own, and says one thing about a month
+     * and a day together: February is a day longer in a leap year, so this is one. Offered in a
+     * year that is not, the twenty-ninth of February would be a day the calendar has and no witness
+     * could be written for.
+     */
+    private static final int A_LEAP_YEAR = 2000;
 
     /** January, which has as many days as any month has, so every day-of-month a date can fall on is
      *  a day of this one. */
