@@ -19,7 +19,7 @@ if not defined JAVA_HOME where java.exe >nul 2>&1 || goto :nojava
 exit /b %ERRORLEVEL%
 
 :nojava
-1>&2 echo souther needs Java 25 and found none: set JAVA_HOME to a Java 25 installation, or put
-1>&2 echo java on PATH. The distribution without `nojre` in its name carries a Java of its own
-1>&2 echo and needs neither.
+1>&2 echo souther found no Java: set JAVA_HOME to a JDK 25, or put its java on PATH. A JDK rather
+1>&2 echo than a JRE, because `souther japi` reads javadoc through a compiler. The distribution
+1>&2 echo without `nojdk` in its name carries a runtime of its own and needs neither.
 exit /b 1

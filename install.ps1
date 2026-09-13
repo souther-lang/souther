@@ -5,7 +5,7 @@
 #
 # Piping to iex passes no arguments, so the form that takes them names the script block:
 #
-#   & ([scriptblock]::Create((irm https://raw.githubusercontent.com/souther-lang/souther/main/install.ps1))) -Nojre
+#   & ([scriptblock]::Create((irm https://raw.githubusercontent.com/souther-lang/souther/main/install.ps1))) -Nojdk
 #   & ([scriptblock]::Create((irm https://raw.githubusercontent.com/souther-lang/souther/main/install.ps1))) -Uninstall
 #
 # Everything it writes is under %LOCALAPPDATA%\Programs\souther, which it owns: an uninstall removes
@@ -17,8 +17,9 @@ param(
     # A release version without the `v`, or the latest release when left out. Required with -From,
     # which has no release to ask.
     [string] $Version,
-    # The distribution that expects a Java 25 on the machine rather than carrying one.
-    [switch] $Nojre,
+    # The distribution that expects a JDK 25 on the machine rather than carrying a runtime. A JDK
+    # rather than a JRE, because `souther japi` reads javadoc through a compiler.
+    [switch] $Nojdk,
     [switch] $Uninstall,
     # A directory holding the archives and a SHA256SUMS over them, instead of a GitHub Release.
     # What packaged them can install them this way without publishing anything.
@@ -70,7 +71,7 @@ if ($From) {
     $Version = $latest.tag_name -replace '^v', ''
 }
 
-$archive = if ($Nojre) { "souther-$Version-windows-x64-nojre.zip" } else { "souther-$Version-windows-x64.zip" }
+$archive = if ($Nojdk) { "souther-$Version-windows-x64-nojdk.zip" } else { "souther-$Version-windows-x64.zip" }
 
 $work = Join-Path ([IO.Path]::GetTempPath()) ("souther-install-" + [Guid]::NewGuid())
 New-Item -ItemType Directory -Force -Path $work | Out-Null

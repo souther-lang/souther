@@ -2,10 +2,16 @@
 # Writes the two Windows distributions of the command line into souther-cli/target/dist:
 #
 #   souther-<version>-windows-x64.zip        souther.exe beside a Java runtime of its own
-#   souther-<version>-windows-x64-nojre.zip  souther.cmd over a Java the machine already has
+#   souther-<version>-windows-x64-nojdk.zip  souther.cmd over a JDK the machine already has
+#
+# The second says JDK rather than JRE because `souther japi` reads javadoc out of a library's
+# sources through a compiler, and a runtime built without one answers that command with a class it
+# cannot find while answering every other command as if nothing were missing.
 #
 # Run it on Windows, after `mvn package` has written the shaded jar and the launcher: jpackage
 # builds an image for the platform it runs on, and the console launcher it writes is a Windows one.
+# The executable is not a native form of Souther: it is what WinGet's portable package can name,
+# which has to be an executable, and jpackage writes it from the same jar the other archive runs.
 #
 #   mvn -B -DskipTests package
 #   bin/package-windows.ps1
@@ -82,10 +88,10 @@ if ($LASTEXITCODE -ne 0) { throw "jpackage ended with $LASTEXITCODE" }
 # The launcher sits at the root of the image, where jpackage puts the other distribution's, so the
 # directory that has to reach a path is `souther` in both and nothing downstream asks which was
 # unpacked.
-$nojre = Join-Path $dist 'nojre'
-New-Item -ItemType Directory -Force -Path (Join-Path $nojre 'souther/lib') | Out-Null
-Copy-Item $launcher (Join-Path $nojre 'souther/souther.cmd')
-Copy-Item $jar (Join-Path $nojre 'souther/lib/souther.jar')
+$nojdk = Join-Path $dist 'nojdk'
+New-Item -ItemType Directory -Force -Path (Join-Path $nojdk 'souther/lib') | Out-Null
+Copy-Item $launcher (Join-Path $nojdk 'souther/souther.cmd')
+Copy-Item $jar (Join-Path $nojdk 'souther/lib/souther.jar')
 
 # Both archives hold a `souther` directory rather than their contents at the root, because WinGet
 # names the launcher by a path relative to the root of what it unpacked, and because unpacking one
@@ -95,4 +101,4 @@ function Write-Zip([string] $from, [string] $to) {
     Write-Host "wrote $to"
 }
 Write-Zip $bundled (Join-Path $dist "souther-$Version-windows-x64.zip")
-Write-Zip $nojre (Join-Path $dist "souther-$Version-windows-x64-nojre.zip")
+Write-Zip $nojdk (Join-Path $dist "souther-$Version-windows-x64-nojdk.zip")

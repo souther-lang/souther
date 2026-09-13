@@ -54,9 +54,9 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $dist = 'souther-cli/target/dist'
           Expand-Archive (Get-ChildItem "$dist/*-windows-x64.zip").FullName -DestinationPath "$dist/bundled-run"
-          Expand-Archive (Get-ChildItem "$dist/*-windows-x64-nojre.zip").FullName -DestinationPath "$dist/nojre-run"
+          Expand-Archive (Get-ChildItem "$dist/*-windows-x64-nojdk.zip").FullName -DestinationPath "$dist/nojdk-run"
           $model = 'souther-test-support/src/main/resources/souther/corpus/catalog/catalog.sou'
-          $launchers = @("$dist/bundled-run/souther/souther.exe", "$dist/nojre-run/souther/souther.cmd")
+          $launchers = @("$dist/bundled-run/souther/souther.exe", "$dist/nojdk-run/souther/souther.cmd")
           foreach ($souther in $launchers) {
               & $souther compile $model -d "$dist/classes"
               if ($LASTEXITCODE -ne 0) { throw "$souther could not compile $model" }
@@ -89,12 +89,12 @@ jobs:
 
           # Both distributions, second over first, so what is checked is an install and then an
           # install onto one already there.
-          foreach ($nojre in @($true, $false)) {
-              ./install.ps1 -Version $version -From $dist -Nojre:$nojre
+          foreach ($nojdk in @($true, $false)) {
+              ./install.ps1 -Version $version -From $dist -Nojdk:$nojdk
               $launcher = @(Get-ChildItem "$link/souther.exe", "$link/souther.cmd" -ErrorAction SilentlyContinue)[0]
-              if (-not $launcher) { throw "no launcher under $link after installing (nojre=$nojre)" }
+              if (-not $launcher) { throw "no launcher under $link after installing (nojdk=$nojdk)" }
               & $launcher.FullName help > $null
-              if ($LASTEXITCODE -ne 0) { throw "the installed launcher could not answer (nojre=$nojre)" }
+              if ($LASTEXITCODE -ne 0) { throw "the installed launcher could not answer (nojdk=$nojdk)" }
               $entries = Get-Entries
               if (@($entries | Where-Object { $_ -eq $link }).Count -ne 1) {
                   throw "PATH holds $link other than once: $($entries -join ';')"
