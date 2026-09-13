@@ -143,7 +143,7 @@ public record DecisionReading(String behavior, List<Ruled> found, Enumeration en
     /** What this body's conditions decide, made once for the whole reading of it. */
     private static DecisionMeanings meanings(InputReading read,
                                              Set<ValueName.Behavior> dependencies) {
-        ConditionMeanings states = new ConditionMeanings(read.domain(), read.rules());
+        ConditionMeanings states = new ConditionMeanings(read);
         DecisionSubjects subjects =
                 new DecisionSubjects(read.domain(), read.rules().symbols(),
                         read.rules().published(), read.rules().kinds(), read.rules().newtypes(),

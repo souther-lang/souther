@@ -2137,11 +2137,27 @@
             "behavior" : "redeem",
             "conditions" : [ {
               "kind" : "comparison",
+              "condition" : "EQ voucher spring",
+              "outcome" : "held"
+            }, {
+              "kind" : "comparison",
               "condition" : "GT LinearForm[constant=-4, coefs={party=1}]",
               "outcome" : "denied"
+            } ]
+          },
+          "taken" : false,
+          "requirement" : "unsettled",
+          "because" : "a_composed_row_went_elsewhere"
+        }, {
+          "obligationId" : {
+            "behavior" : "redeem",
+            "conditions" : [ {
+              "kind" : "comparison",
+              "condition" : "EQ voucher spring",
+              "outcome" : "held"
             }, {
-              "kind" : "not_read",
-              "condition" : "condition 1 of `redeem`",
+              "kind" : "comparison",
+              "condition" : "GT LinearForm[constant=-4, coefs={party=1}]",
               "outcome" : "held"
             } ]
           },
@@ -2153,23 +2169,7 @@
             "behavior" : "redeem",
             "conditions" : [ {
               "kind" : "comparison",
-              "condition" : "GT LinearForm[constant=-4, coefs={party=1}]",
-              "outcome" : "held"
-            }, {
-              "kind" : "not_read",
-              "condition" : "condition 1 of `redeem`",
-              "outcome" : "held"
-            } ]
-          },
-          "taken" : false,
-          "requirement" : "unsettled",
-          "because" : "a_composed_row_went_elsewhere"
-        }, {
-          "obligationId" : {
-            "behavior" : "redeem",
-            "conditions" : [ {
-              "kind" : "not_read",
-              "condition" : "condition 1 of `redeem`",
+              "condition" : "EQ voucher spring",
               "outcome" : "denied"
             } ]
           },
@@ -2184,8 +2184,8 @@
         "obligationId" : {
           "behavior" : "redeem",
           "conditions" : [ {
-            "kind" : "not_read",
-            "condition" : "condition 1 of `redeem`",
+            "kind" : "comparison",
+            "condition" : "EQ voucher spring",
             "outcome" : "denied"
           } ]
         },

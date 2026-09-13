@@ -24,6 +24,7 @@ import souther.compiler.partition.ConditionReportAnchor;
 import souther.compiler.partition.CompositionBudget;
 import souther.compiler.partition.CompositionRepertoire;
 import souther.compiler.partition.DecidedCondition;
+import souther.compiler.partition.DecisionCondition;
 import souther.compiler.partition.DecisionSubject;
 import souther.compiler.partition.DecisionReading;
 import souther.compiler.partition.DecisionRule;
@@ -3312,6 +3313,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // between positions there, which is something a cut carries perfectly well.
             case OnTheWay.Why.ComparisonNotRepresentedAsACut _ ->
                     "a comparison this reading could not turn into a cut";
+            // And the other way a comparison leaves a region unnarrowed, which is not a shortfall
+            // of this compiler: the rule was read to the end and constrains no position, so there
+            // is nothing an author would change.
+            case OnTheWay.Why.ComparisonStatesNoQuantity _ ->
+                    "a comparison that constrains no position";
             case OnTheWay.Why.OneOfTwoThings _ ->
                     "an outcome that states one of two things";
             case OnTheWay.Why.ForkArmNotReadAsANarrowing _ ->
@@ -3674,8 +3680,14 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         switch (decided) {
             case DecidedCondition.Compared(var condition, var held) -> {
                 out.put("kind", "comparison");
-                out.put("condition",
-                        condition.proposition() + " " + condition.form());
+                // The quantity as the vocabulary it was compared in spells it. A place is keyed by
+                // what it is rather than by how the rule wrote it, for the reason a form's
+                // threshold is moved into it: `0.00` and `0` are one column.
+                out.put("condition", condition.proposition() + " " + switch (condition) {
+                    case DecisionCondition.AComparison it -> it.form().toString();
+                    case DecisionCondition.AnOrderedComparison it ->
+                            it.term() + " " + it.at().key();
+                });
                 out.put("outcome", held ? "held" : "denied");
             }
             case DecidedCondition.Stood(var condition, var held) -> {

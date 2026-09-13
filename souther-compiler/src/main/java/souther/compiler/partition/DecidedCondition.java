@@ -20,8 +20,8 @@ public sealed interface DecidedCondition {
     /** Which distinction this is an answer about. */
     DecisionCondition condition();
 
-    /** A comparison, held or denied. */
-    record Compared(DecisionCondition.AComparison condition, boolean held)
+    /** A comparison, held or denied, in whichever vocabulary its values are compared in. */
+    record Compared(DecisionCondition.Comparison condition, boolean held)
             implements DecidedCondition {
 
         public Compared {

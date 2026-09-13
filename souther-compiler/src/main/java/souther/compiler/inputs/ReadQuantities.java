@@ -117,8 +117,38 @@ final class ReadQuantities implements Quantities {
     private final Map<StructuralContext, ConstraintState<InputAtom>> answered =
             new ConcurrentHashMap<>();
 
-    /** One thing taken in about a form of this input's terms: {@code form rel 0}. */
-    private record Assumed(LinearForm<NumericTerm> form, Rel rel) {}
+    /**
+     * One thing taken in about this input's values.
+     *
+     * <p>Two shapes, because the values a carrier holds are not always numbers. The arithmetic's is
+     * a relation over a form of them; a position whose values do not count to numbers is ordered all
+     * the same, and what a rule says about one of those is where on that order it lies. Held apart
+     * here rather than converted, since a form is a sum and there is nothing to add.
+     */
+    private sealed interface Assumed {
+
+        /** Which of the input's numbers this is about. */
+        Set<NumericTerm> terms();
+
+        /** One thing taken in about a form of this input's terms: {@code form rel 0}. */
+        record OverAForm(LinearForm<NumericTerm> form, Rel rel) implements Assumed {
+
+            @Override
+            public Set<NumericTerm> terms() {
+                return form.coefs().keySet();
+            }
+        }
+
+        /** One position held against a written place on the order it stands on. */
+        record OnAnOrder(NumericTerm term, souther.compiler.numeric.Place at, Rel rel)
+                implements Assumed {
+
+            @Override
+            public Set<NumericTerm> terms() {
+                return Set.of(term);
+            }
+        }
+    }
 
     /** The values fixed at one term, kept as their least and greatest so that what was fixed does
      *  not depend on the order it arrived in. */
@@ -331,7 +361,33 @@ final class ReadQuantities implements Quantities {
                 return this;
             }
         }
-        Assumed taking = new Assumed(form, rel);
+        return alsoAssuming(new Assumed.OverAForm(form, rel));
+    }
+
+    /**
+     * The same rules, with {@code term rel at} taken in on the order that term stands on.
+     *
+     * <p>Reached only through {@link ReadRegion}, like the form above, and kept as the assertion for
+     * the same reason. What is not asked here is the arithmetic's question: a place on an order that
+     * counts nothing has no spacing to check and no number to be, and a bound on it is read back
+     * where a term is asked as itself ({@link #whereOneTermRuns}) rather than solved with the
+     * relations.
+     *
+     * <p>This value back where the relation states no bound. {@link Rel#NE} holds everywhere except
+     * at one place, which is a hole and not an end — and a range is what this vocabulary has. Kept
+     * as a bound either way, it would be read back as one and would narrow the order to a side the
+     * rule never named.
+     */
+    ReadQuantities assuming(NumericTerm term, souther.compiler.numeric.Place at, Rel rel) {
+        if (term == null || at == null || boundsAt(at, rel) == null) {
+            return this;
+        }
+        held(term);
+        return alsoAssuming(new Assumed.OnAnOrder(term, at, rel));
+    }
+
+    /** The same rules with one more thing taken in, or this where it was already taken in. */
+    private ReadQuantities alsoAssuming(Assumed taking) {
         if (assumed.contains(taking)) {
             return this;
         }
@@ -339,6 +395,26 @@ final class ReadQuantities implements Quantities {
         both.add(taking);
         return new ReadQuantities(byRoot, roots, byPath, cases, typeAt, fixed, ruleReading,
                 both);
+    }
+
+    /**
+     * The range {@code rel at} leaves, or null where the relation leaves no range.
+     *
+     * <p>An equality is both ends at one place, which is a range of one value and not a fixing: what
+     * a caller fixed is where a row was told to stand, and what a rule said is what the values may
+     * be. The two are read together at {@link #whereOneTermRuns} and are not one another.
+     */
+    private static NumericDomain.Bounds boundsAt(souther.compiler.numeric.Place at, Rel rel) {
+        return switch (rel) {
+            case GE -> new NumericDomain.Bounds(Endpoint.inclusive(at), null);
+            case GT -> new NumericDomain.Bounds(Endpoint.exclusive(at), null);
+            case LE -> new NumericDomain.Bounds(null, Endpoint.inclusive(at));
+            case LT -> new NumericDomain.Bounds(null, Endpoint.exclusive(at));
+            case EQ -> new NumericDomain.Bounds(Endpoint.inclusive(at), Endpoint.inclusive(at));
+            // A hole, and this vocabulary says where a run stops. Said as a range, the value the
+            // rule refuses would become an end and one whole side of the order would go with it.
+            case NE -> null;
+        };
     }
 
     /**
@@ -389,7 +465,13 @@ final class ReadQuantities implements Quantities {
         // Read under this context like everything else. A condition is about the positions it
         // names, so one taken in about a case says nothing where the value is another — left in, it
         // would be a rule about a row that is not the row being asked about.
-        for (Assumed each : assumed) {
+        // The arithmetic's alone. What was taken in on an order that counts nothing has no form to
+        // solve with the relations and is read back where a term is asked as itself; brought in
+        // here, it would be a rule over a number nothing can space.
+        for (Assumed taken : assumed) {
+            if (!(taken instanceof Assumed.OverAForm each)) {
+                continue;
+            }
             if (!stands(each.form().coefs().keySet(), under)) {
                 continue;
             }
@@ -488,7 +570,7 @@ final class ReadQuantities implements Quantities {
         StructuralContext.Merge merged = new StructuralContext.Merge.Together(
                 StructuralContext.NONE);
         List<NumericTerm> said = new ArrayList<>(fixed.keySet());
-        assumed.forEach(each -> said.addAll(each.form().coefs().keySet()));
+        assumed.forEach(each -> said.addAll(each.terms()));
         said.sort(java.util.Comparator.comparing(NumericTerm::toString));
         for (NumericTerm term : said) {
             if (!(merged instanceof StructuralContext.Merge.Together it)) {
@@ -1131,6 +1213,15 @@ final class ReadQuantities implements Quantities {
      */
     private NumericDomain.Bounds whereOneTermRuns(NumericTerm term) {
         NumericDomain.Bounds runs = meeting(whereItsValuesAre(term), term.intrinsicBounds());
+        // And what was taken in about this position's own order. Here rather than with the
+        // relations, because this is the one shape such a rule has: a bound on a carrier that counts
+        // nothing is about one position, and the arithmetic that adds terms together has no word for
+        // the place it names.
+        for (Assumed taken : assumed) {
+            if (taken instanceof Assumed.OnAnOrder each && each.term().equals(term)) {
+                runs = meeting(runs, boundsAt(each.at(), each.rel()));
+            }
+        }
         Fixed fixedAt = fixed.get(term);
         // Where two values were fixed there, between them: the rules leave nothing at all, which
         // {@link #emptiness} says, and a range that crossed itself is not something to hand a

@@ -212,6 +212,12 @@ class EverySchemaWordIsAccountedForTest {
     private static Set<String> conditionWords() {
         Map<String, String> spelling = new LinkedHashMap<>();
         spelling.put("AComparison", "comparison");
+        // The same word as the one above, because a consumer acts on the kind and both of these
+        // are one: a comparison of the body, held or denied. Which vocabulary its values were
+        // compared in is inside the identity, which is a key to join on and not a grammar anybody
+        // reads — given a word of its own, every consumer written before it would skip the rules
+        // that carry it while reporting that it had read them all.
+        spelling.put("AnOrderedComparison", "comparison");
         spelling.put("ATruth", "truth");
         spelling.put("ACase", "case");
         spelling.put("AConditionNotRead", "not_read");
