@@ -5,8 +5,8 @@ package souther.cli.init;
  * much of a model it starts with, and the Souther it is compiled by.
  *
  * <p>All four are settled before a file is written. Each of them is read by more than one template —
- * the module name is a header, a Java package and a directory — and deciding one of them inside a
- * template would be deciding it once per file.
+ * the module name is a header and the name of the file that holds it — and deciding one of them
+ * inside a template would be deciding it once per file.
  *
  * @param coordinate what the build calls this project
  * @param moduleName the header the {@code .sou} declares, which is also the package it generates into
@@ -28,10 +28,5 @@ public record Project(Coordinate coordinate, String moduleName, Model model, Bui
      */
     String sourceStem() {
         return moduleName.substring(moduleName.lastIndexOf('.') + 1);
-    }
-
-    /** Where a Java source of this module's package goes, under a source root. */
-    String packagePath() {
-        return moduleName.replace('.', '/');
     }
 }

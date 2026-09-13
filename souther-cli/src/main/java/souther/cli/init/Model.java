@@ -12,9 +12,9 @@ import java.util.List;
  *
  * <p>What separates them is what the first build answers. {@code none} is a module and nowhere for
  * a rule to live yet; {@code minimal} is a value with a rule on it, which is the smallest thing this
- * language is for; {@code full} is a model whose {@code example} rows and whose Java test both
- * answer on the first run, so that {@code mvn test} and {@code souther examples} say something
- * before a line has been written.
+ * language is for; {@code full} is a model whose {@code example} rows answer on the first run, so
+ * that {@code mvn compile} and {@code souther examples} say something before a line has been
+ * written.
  */
 public enum Model {
 

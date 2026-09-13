@@ -89,11 +89,11 @@ mvn install
 
 That executable is the `souther-cli` module: the compiler, the runtime, and their dependencies in one really-executable jar (a launcher stub prepended to an uber jar), so no classpath and no `java -jar` are needed. Most of what a small compile from the command line costs is the JVM loading and verifying the compiler's classes, so the first compile leaves an archive of them under `${XDG_CACHE_HOME:-$HOME/.cache}/souther`, named for the version, and the compiles after it start from that. Deleting it costs one slower compile; where it cannot be written, nothing is written and every compile is that one. An archive belongs to the binary that wrote it and to the JDK that wrote it, so one whose binary has been rebuilt or copied elsewhere, or which the JDK now running will not take, may be left unusable rather than rewritten — deleting it is what puts the next compile back to the faster one.
 
-`souther init` writes a project rather than leaving one to be copied from an example. It takes the coordinate — a group and an artifact are yours to decide — and writes a build that already declares the Souther plugin, a model, the `example` rows covering it, and a Java test that reaches the generated types, so `mvn test` and `souther examples` both answer on the first run. `--build gradle` writes a Gradle build instead. Run inside a project that already has a `pom.xml` or a `build.gradle.kts`, it reads the coordinate out of that build and adds a source directory and the plugin declaration to it. Nothing already written is overwritten, and what it left alone it says.
+`souther init` writes a project rather than leaving one to be copied from an example. It takes the coordinate — a group and an artifact are yours to decide — and writes a build that already declares the Souther plugin and one `.sou` holding a model with the `example` rows covering it, so the first compile checks those rows and `souther examples` answers on the first run. `--build gradle` writes a Gradle build instead. Run inside a project that already has a `pom.xml` or a `build.gradle.kts`, it reads the coordinate out of that build and adds a source directory and the plugin declaration to it. Nothing already written is overwritten, and what it left alone it says.
 
 ```sh
 souther init com.example:hello
-cd hello && mvn test
+cd hello && mvn compile
 ```
 
 To try a behavior without writing any Java, `souther run` compiles a `.sou` in memory and drives one behavior: it decodes the `--input` JSON through the behavior's derived decoders, applies it, and prints the result through its derived encoder. A single file run on its own may omit the `module` header — it is named after the file (ADR-0043).

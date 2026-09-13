@@ -30,10 +30,8 @@ $ souther init com.example:hello
     created  hello/.gitignore
     created  hello/src/main/souther/hello.sou
              module com.example.hello
-    created  hello/src/main/souther/hello.examples.sou
-    created  hello/src/test/java/com/example/hello/ReturnBookTest.java
 
-    cd hello && mvn test
+    cd hello && mvn compile
 ```
 
 `--build gradle` writes `settings.gradle.kts` and `build.gradle.kts` instead, and no wrapper: a
@@ -55,7 +53,10 @@ souther {
 Where a `pom.xml` or a `build.gradle.kts` is already there, the coordinate is read out of it rather
 than written on the line, `--build` is not read — the build that is there is the build — and what is
 added is a source directory and the plugin declaration. The previous contents of the build file are
-left in a `.orig` beside it, unless git is already holding them.
+left in a `.orig` beside it, unless git is already holding them. What it says to run there is `mvn
+test` — the build has whatever tests its author wrote, and a run of them is what says the model now
+beside them compiles and breaks nothing. A project this command laid out has none of its own, so that
+one is sent to `mvn compile`, which is where its `example` rows are checked.
 
 The module header follows from the coordinate: the group and the artifact, with a hyphen written as
 an underscore, so `com.acme:billing-service` writes `module com.acme.billing_service`. That name is
@@ -65,8 +66,10 @@ also the Java package the model generates into, and the source is named after it
 `--model` says how much of a model to start with, and defaults to `full` where a project is created
 and `none` where one is added to. `none` is the module header; `minimal` adds one `data` with an
 `invariant`; `full` is a model that uses `data`, `invariant`, `behavior`, `constructs` and `guard`,
-with an `.examples.sou` covering it and a Java test that reaches the generated types — so that both
-`mvn test` and `souther examples` answer on the first run.
+with the `example` rows covering it below the behavior in the same file — so that the compile checks
+them and `souther examples` answers on the first run. One file either way: `examples for` puts the
+rows in a file of their own, and that is a move to make once there are more rows than the model reads
+beside.
 
 <!-- souther-section: compile -->
 ## compile

@@ -27,12 +27,12 @@ final class Versions {
 
     private static final Properties STATED = read();
 
-    /** The JUnit a generated project's test is written against. */
+    /** The JUnit a generated project's own tests are written against. */
     static String junit() {
         return stated("junit.version");
     }
 
-    /** The Surefire a generated Maven project runs that test with. */
+    /** The Surefire a generated Maven project runs those tests with. */
     static String surefire() {
         return stated("surefire.version");
     }

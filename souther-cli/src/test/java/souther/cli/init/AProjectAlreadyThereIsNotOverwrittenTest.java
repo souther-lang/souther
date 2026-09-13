@@ -11,6 +11,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Locale;
+import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -41,7 +42,7 @@ class AProjectAlreadyThereIsNotOverwrittenTest {
         assertEquals("<project>mine</project>", Files.readString(project.resolve("pom.xml")));
         assertTrue(run.out().contains("kept     hello/pom.xml"),
                 "a file that was left alone is not reported as left alone:\n" + run.out());
-        assertTrue(run.out().contains("created  hello/src/main/souther/hello.examples.sou"),
+        assertTrue(run.out().contains("created  hello/.gitignore"),
                 "the rest of the project was not finished:\n" + run.out());
     }
 
@@ -51,12 +52,17 @@ class AProjectAlreadyThereIsNotOverwrittenTest {
         Run run = run(directory, "com.example:hello");
 
         assertEquals(0, run.code());
-        for (String file : List.of("pom.xml", ".gitignore", "src/main/souther/hello.sou",
-                "src/main/souther/hello.examples.sou",
-                "src/test/java/com/example/hello/ReturnBookTest.java")) {
-            assertTrue(Files.isRegularFile(directory.resolve("hello").resolve(file)),
-                    "not written: " + file);
+        Path project = directory.resolve("hello");
+        for (String file : List.of("pom.xml", ".gitignore", "src/main/souther/hello.sou")) {
+            assertTrue(Files.isRegularFile(project.resolve(file)), "not written: " + file);
         }
+        try (Stream<Path> written = Files.list(project.resolve("src/main/souther"))) {
+            assertEquals(List.of("hello.sou"),
+                    written.map(each -> each.getFileName().toString()).sorted().toList(),
+                    "the model is written in more files than the one that holds it");
+        }
+        assertTrue(Files.notExists(project.resolve("src/test")),
+                "a project this command writes starts with a test of its own");
         assertTrue(run.out().contains("module com.example.hello"),
                 "the module name, which is derived and not written by the author, is not said:\n"
                         + run.out());
