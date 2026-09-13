@@ -102,7 +102,7 @@ public record FillResult(GenerationPlan plan, SequencedMap<RowId, ComposedRow> c
         }
         GenerationPlan plan = searched.getFirst().plan();
         SequencedMap<RowId, ComposedRow> composed = new LinkedHashMap<>();
-        Map<String, RowId> named = new LinkedHashMap<>();
+        Map<OfARun, RowId> named = new LinkedHashMap<>();
         Map<ClassOfAPosition, ClassDisposition> classes = new LinkedHashMap<>();
         for (ClassOfAPosition owed : plan.classesOwed()) {
             ClassDisposition.Built built = null;
@@ -121,7 +121,10 @@ public record FillResult(GenerationPlan plan, SequencedMap<RowId, ComposedRow> c
         for (Generator.ArmOwed owed : plan.armsOwed()) {
             ArmDisposition.Built built = null;
             ArmDisposition.NoWayIn nowhere = null;
-            List<Generator.UnresolvedCombination> why = new ArrayList<>();
+            // Kept once apiece by what a reason is rather than by walking the ones already held.
+            // Two runs of a body with something to say at every arm say most of it twice, and a
+            // list asked whether it holds each of them compares every reason with every other.
+            Set<Generator.UnresolvedCombination> why = new LinkedHashSet<>();
             for (int run = 0; run < searched.size(); run++) {
                 switch (searched.get(run).discharge().at(owed)) {
                     case ArmDisposition.Built(var rowId, var at) -> {
@@ -130,8 +133,7 @@ public record FillResult(GenerationPlan plan, SequencedMap<RowId, ComposedRow> c
                                     naming(searched, composed, named, run, rowId), at);
                         }
                     }
-                    case ArmDisposition.Unresolved(var reasons) -> reasons.stream()
-                            .filter(each -> !why.contains(each)).forEach(why::add);
+                    case ArmDisposition.Unresolved(var reasons) -> why.addAll(reasons);
                     case ArmDisposition.NoWayIn noWayIn ->
                             nowhere = nowhere == null ? noWayIn : nowhere;
                 }
@@ -141,16 +143,15 @@ public record FillResult(GenerationPlan plan, SequencedMap<RowId, ComposedRow> c
             // whatever a row stands the dependencies in with, so it is that answer and not a
             // search that failed.
             arms.put(owed, built != null ? built
-                    : why.isEmpty() ? nowhere : new ArmDisposition.Unresolved(why));
+                    : why.isEmpty() ? nowhere : new ArmDisposition.Unresolved(List.copyOf(why)));
         }
-        List<Generator.UnresolvedCombination> unresolved = new ArrayList<>();
-        List<GenerationReason> reasons = new ArrayList<>();
+        Set<Generator.UnresolvedCombination> unresolved = new LinkedHashSet<>();
+        Set<GenerationReason> reasons = new LinkedHashSet<>();
         for (FillResult each : searched) {
-            each.unresolved().stream().filter(one -> !unresolved.contains(one))
-                    .forEach(unresolved::add);
-            each.reasons().stream().filter(one -> !reasons.contains(one)).forEach(reasons::add);
+            unresolved.addAll(each.unresolved());
+            reasons.addAll(each.reasons());
         }
-        return new FillResult(plan, composed, unresolved, reasons,
+        return new FillResult(plan, composed, List.copyOf(unresolved), List.copyOf(reasons),
                 new Discharge(classes, arms));
     }
 
@@ -163,16 +164,20 @@ public record FillResult(GenerationPlan plan, SequencedMap<RowId, ComposedRow> c
      * one row under an id another run's row already had.
      */
     private static RowId naming(List<FillResult> searched, SequencedMap<RowId, ComposedRow> composed,
-                                Map<String, RowId> named, int run, RowId rowId) {
-        RowId already = named.get(run + "/" + rowId.value());
+                                Map<OfARun, RowId> named, int run, RowId rowId) {
+        OfARun which = new OfARun(run, rowId);
+        RowId already = named.get(which);
         if (already != null) {
             return already;
         }
         RowId here = new RowId(composed.size());
-        named.put(run + "/" + rowId.value(), here);
+        named.put(which, here);
         composed.put(here, searched.get(run).composed().get(rowId));
         return here;
     }
+
+    /** A row of one of the runs, which is what tells two rows apart while they are being joined. */
+    private record OfARun(int run, RowId rowId) {}
 
     /** Nothing asked for, nothing composed, nothing to answer for. */
     public static FillResult nothingAskedOf(GenerationPlan plan) {
