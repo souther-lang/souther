@@ -28,10 +28,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * above the line sends elsewhere does not reach the point — so a page with no point left
  * unestablished is the statement that the value answers both numbers at once.
  *
- * <p><b>And only what one value can be built to answer.</b> Which numbers those are is the
- * realizer's, and a location asked for its own content beside a number taken of it is not among
- * them. The last model here holds that, so this does not read as a claim about every two numbers at
- * one location.
+ * <p><b>Its own content among them.</b> What a string is and how long it is are two numbers of one
+ * location as much as the parts of a time are, and a row is composed holding both: the value the
+ * comparison puts the string at is one of however many have the length the rule leaves.
+ *
+ * <p><b>And only where a value stands at the point.</b> Whether one does is the model's answer and
+ * not this compiler's reach — two rules can leave a location nothing at all — so the last model
+ * here is one whose rules leave no value standing at the point, and this does not read as a claim
+ * that a row comes of two numbers belonging to one location.
  */
 class ALocationAskedForTwoNumbersIsWrittenOnceForBothTest {
 
@@ -96,6 +100,31 @@ class ALocationAskedForTwoNumbersIsWrittenOnceForBothTest {
             }
             """;
 
+    /**
+     * A location asked for its own value and for a number taken of that value.
+     *
+     * <p>The comparison puts {@code b} at a place of the strings and the rule above it puts {@code
+     * b} at a place of its lengths, which is one location measured at two numbers and is not two
+     * locations. Composed for one of them at a time, the row was written at whatever the line's own
+     * edge chose and arrived only where that value happened to meet the rule that was dropped.
+     */
+    private static final String A_VALUE_AND_A_NUMBER_TAKEN_OF_IT = """
+            module example.string
+
+            data Yes = { v: Int }
+            data No = { why: Int }
+
+            behavior cmp : (a: String, b: String) -> Yes | No
+                constructs Yes
+                constructs No
+
+            let cmp (a, b) = {
+                guard String.length(b) /= 1 else No { why = 0 }
+                guard a < b else No { why = 1 }
+                Yes { v = 1 }
+            }
+            """;
+
     /** One part alone, which is what the parts beside it being free looks like when nothing asks
      *  for them. */
     private static final String ONE_PART_OF_A_TIME = """
@@ -115,21 +144,19 @@ class ALocationAskedForTwoNumbersIsWrittenOnceForBothTest {
             """;
 
     /**
-     * A location asked for its own content beside a number taken of it, which is not a pair one
-     * value is built for.
+     * The same two numbers of one location, where the rules leave no value that stands at the
+     * point.
      *
-     * <p>The control, and it is still open. What a string is and how long it is do not leave each
-     * other free the way the parts of a time do, so nothing composes the two together and the
-     * condition above the line is still one the row was written without. Read as passing because
-     * the models above pass, this test would be saying that any two numbers at a location compose.
+     * <p>The control, and it is still open. A string and its length are written together in the
+     * model above; what is different here is the model. A string whose length is below one is the
+     * least string there is, so nothing stands below it for the comparison — and no value put to
+     * this point arrives, however many of them it is put.
      *
-     * <p>And nothing else answers it either: the only string of no characters is the least one
-     * there is, so no value stands below it and no second value put to this point would arrive.
-     * Written at a length several strings have, the search finds one of them and the condition it
-     * was composed without is met by accident — which says nothing about whether the two were
-     * composed together.
+     * <p>Which is what keeps the models above from reading as a claim about this compiler's reach.
+     * A point is answered where a value answers it, and two numbers belonging to one location is
+     * not a reason to write a row.
      */
-    private static final String A_MEASURE_AND_THE_VALUE_MEASURED = """
+    private static final String WHERE_NO_VALUE_STANDS_AT_THE_POINT = """
             module example.string
 
             data Yes = { v: Int }
@@ -156,7 +183,7 @@ class ALocationAskedForTwoNumbersIsWrittenOnceForBothTest {
     @Test
     void bothNumbersAreAnsweredByTheOneValueTheRowWrites() {
         for (String model : List.of(TWO_PARTS_OF_A_TIME, TWO_PARTS_OF_A_DATE,
-                TWO_PARTS_COMPARED_WITH_EACH_OTHER)) {
+                TWO_PARTS_COMPARED_WITH_EACH_OTHER, A_VALUE_AND_A_NUMBER_TAKEN_OF_IT)) {
             List<String> open = whatNothingCouldShow(model);
 
             assertEquals(List.of(), open,
@@ -181,19 +208,27 @@ class ALocationAskedForTwoNumbersIsWrittenOnceForBothTest {
 
 
     /**
-     * And a location whose two numbers no value answers together is still said to be one, which is
-     * what keeps this from reading as a claim about any two numbers at a location.
+     * And a point no value of the model stands at is left open, whatever its numbers belong to.
+     *
+     * <p>What the models above establish is that a location measured twice is answered where a
+     * value answers it. Read as a claim about the numbers rather than about the values, this would
+     * say a row comes of two of them belonging to one location — and the row would be one a person
+     * pastes and finds the point still uncovered.
+     *
+     * <p>The page says what the composer did as well, which is a separate answer: this one is
+     * written for one number of the location and the rule about the other is a condition it was
+     * composed without. Where a value stands at the point that is what the search goes on to find,
+     * and here there is none.
      */
     @Test
-    void aPairNoValueAnswersTogetherIsStillLeftOut() {
-        String page = human(A_MEASURE_AND_THE_VALUE_MEASURED);
+    void aPointNoValueStandsAtIsStillLeftOpen() {
+        String page = human(WHERE_NO_VALUE_STANDS_AT_THE_POINT);
 
+        assertFalse(whatNothingCouldShow(WHERE_NO_VALUE_STANDS_AT_THE_POINT).isEmpty(),
+                () -> "no string stands below the least one, so the point is open: " + page);
         assertTrue(page.contains("a condition on another number taken where this row is already"
                         + " being written for one"),
-                () -> "nothing composes a string that is both as long as one rule says and where"
-                        + " the other puts it: " + page);
-        assertFalse(whatNothingCouldShow(A_MEASURE_AND_THE_VALUE_MEASURED).isEmpty(),
-                "and the point it was composed without is still open");
+                () -> "and the row was composed for one number of the location: " + page);
     }
 
     /**
