@@ -40,6 +40,20 @@ class TheShippedJarAnswersFromWhatItCarriesIT {
         return new Answer(process.waitFor(), out, err);
     }
 
+    /**
+     * The reading only a distribution can answer: the manifest is what carries the version, and the
+     * unit tests run from class files, where there is none and the answer is {@code unreleased}.
+     * Held against what the build says its version is, so a jar answering some other version — or
+     * still answering as a build tree — is not a pass.
+     */
+    @Test
+    void theShippedJarSaysWhichSoutherItIs() throws Exception {
+        Answer answer = souther("--version");
+
+        assertEquals(0, answer.code(), answer.err());
+        assertEquals("souther " + System.getProperty("souther.version"), answer.out().strip());
+    }
+
     @Test
     void theSpecificationIsAnsweredFromInsideTheJar() throws Exception {
         Answer answer = souther("doc", "purpose");

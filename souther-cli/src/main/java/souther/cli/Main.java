@@ -28,6 +28,7 @@ import souther.compiler.doc.JapiCommand;
 import souther.compiler.doc.McpServer;
 import souther.compiler.fmt.Deviations;
 import souther.compiler.fmt.Formatter;
+import souther.compiler.meta.ModuleMetadata;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -112,7 +113,11 @@ public final class Main {
         // be an option of no command, since which command's options are read is what has not been
         // said yet; read as its own shape it would be a line whose remaining arguments nothing
         // looks at, and `souther --help compile` would answer with the listing.
-        CliCommand command = CliOption.isHelp(named) ? CliCommand.HELP : CliCommand.named(named);
+        // `--version` is written where a command goes for the same reason, and by the reader who
+        // has written nothing else yet.
+        CliCommand command = CliOption.isHelp(named) ? CliCommand.HELP
+                : CliOption.isVersion(named) ? CliCommand.VERSION
+                : CliCommand.named(named);
         if (command == null) {
             String hint = named.endsWith(".sou")
                     ? "no command given — did you mean `souther compile " + named
@@ -132,6 +137,12 @@ public final class Main {
         // the one reply that leaves its author where they started.
         if (read.help()) {
             System.out.println(Usage.of(command));
+            return 0;
+        }
+        // Before the refusal as well, and for a reason of its own: which compiler is reading the
+        // line is not a question about the line, so nothing wrong with the line changes the answer.
+        if (read.version()) {
+            System.out.println(version());
             return 0;
         }
         if (read.refusal() != null) {
@@ -164,6 +175,7 @@ public final class Main {
             case MCP -> () -> mcpSubcommand(rest);
             case LSP -> () -> lspSubcommand(rest);
             case HELP -> () -> helpSubcommand(rest);
+            case VERSION -> () -> versionSubcommand(rest);
         };
     }
 
@@ -495,6 +507,36 @@ public final class Main {
      */
     static CliCommand helpTarget(String[] args) {
         return args.length == 1 ? CliCommand.named(args[0]) : null;
+    }
+
+    /**
+     * {@code souther version}: which Souther this is.
+     *
+     * <p>On stdout under a zero exit code, like {@code help} and for the same reason: it is what was
+     * asked for. A reader who installed this from a package manager, or who is looking at the
+     * {@code current} link a Windows distribution leaves beside its version-named directories, has
+     * nothing else to ask.
+     */
+    private static int versionSubcommand(String[] args) {
+        if (args.length > 0) {
+            System.err.println(Messages.get("cli.version.arguments",
+                    RenderOptions.asking(null).locale(), String.join(", ", args)));
+            System.err.println(Usage.of(CliCommand.VERSION));
+            return 2;
+        }
+        System.out.println(version());
+        return 0;
+    }
+
+    /**
+     * The line that says which Souther this is.
+     *
+     * <p>Read from the jar's manifest, which Maven fills from the root pom, so the version is
+     * written in one place and this is a reading of it rather than a second statement. Running from
+     * class files there is no manifest, and {@code unreleased} is a true answer about a build tree.
+     */
+    static String version() {
+        return "souther " + ModuleMetadata.compilerVersion();
     }
 
     /**

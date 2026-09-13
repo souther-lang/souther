@@ -1,6 +1,7 @@
 package souther.lsp;
 
 import souther.compiler.cst.LineIndex;
+import souther.compiler.meta.ModuleMetadata;
 import souther.lsp.analysis.Analyzer;
 import souther.lsp.analysis.DocumentStore;
 import souther.lsp.analysis.ModuleGraph;
@@ -488,11 +489,18 @@ public final class LspServer {
         };
     }
 
-    /** What the client is told it may call, drawn from the methods that are answered. */
+    /**
+     * What the client is told it may call, drawn from the methods that are answered.
+     *
+     * <p>The version is read where every other reader of it reads it, and is not stated here. Told
+     * as a literal it was told once and then left behind, so an editor was being shown a version
+     * this server is not — and which Souther this is has one answer whoever asks.
+     */
     private Map<String, Object> initializeResult() {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("capabilities", LspMethod.serverCapabilities());
-        result.put("serverInfo", Map.of("name", "souther-lsp", "version", "0.1.0"));
+        result.put("serverInfo",
+                Map.of("name", "souther-lsp", "version", ModuleMetadata.compilerVersion()));
         return result;
     }
 

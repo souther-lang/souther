@@ -179,6 +179,7 @@ The `souther` binary answers questions about the language and its libraries itse
 person nor a coding agent has to hunt through a workspace or disassemble jars:
 
 ```sh
+souther --version              # which Souther this is
 souther help                   # every command, with a line saying what it is for
 souther help compile           # one command's arguments and every option it takes
 souther doc                    # every specification section and shipped topic, name<TAB>title

@@ -60,16 +60,19 @@ enum CliOption {
     COLOR("compile/run/examples", "auto|always|never",
             "color the human output (default auto); not read under --format json", "--color"),
     /** Every command's, which is what the null owner means. */
-    HELP(null, null, "what this command takes, and what its options mean", "--help", "-h");
+    HELP(null, null, "what this command takes, and what its options mean", "--help", "-h"),
+    /** Every command's too: which compiler a line reached is a question about any line. */
+    VERSION(null, null, "which Souther this is", "--version");
 
     /** Why a command line is refused: a catalog key and what fills it. */
     record Refusal(String key, Object... args) {}
 
     /**
      * What one reading of a command line found: why it is refused, if it is, the language it is to
-     * be answered in, and whether it asks what the command takes.
+     * be answered in, whether it asks what the command takes, and whether it asks which compiler is
+     * answering.
      *
-     * <p>The three come from the same walk because they are answers about the same tokens. Reading
+     * <p>They come from the same walk because they are answers about the same tokens. Reading
      * the line twice — once to find {@code --lang}, once to check it — is two rules for what a token
      * is, and they part company on the lines that need them most: a value that is spelt like an
      * option is a value to one walk and an option to the other.
@@ -78,9 +81,10 @@ enum CliOption {
      * hands {@code run} the input {@code --help}; a line scanned for the token finds a request for
      * help in it, and answers a question its author did not ask instead of running what they wrote.
      * So this is true where the walk recognised {@link #HELP} in a position an option is read in,
-     * and there is no other way for it to become true.
+     * and there is no other way for it to become true. {@link #VERSION} is recognised the same way,
+     * for the same reason.
      */
-    record Reading(Refusal refusal, String lang, boolean help) {}
+    record Reading(Refusal refusal, String lang, boolean help, boolean version) {}
 
     /**
      * The commands that take the option, in the form a refusal names them, or null for an option
@@ -240,6 +244,7 @@ enum CliOption {
         Refusal token = null;
         String lang = null;
         boolean help = false;
+        boolean version = false;
         for (int i = 0; i < args.length; i++) {
             String word = args[i];
             CliOption option = BY_SPELLING.get(word);
@@ -260,6 +265,9 @@ enum CliOption {
             if (option == HELP) {
                 help = true;   // recognised where an option is read, which is the whole of the rule
             }
+            if (option == VERSION) {
+                version = true;
+            }
             if (option.takesAValue()) {
                 // Whatever follows is this option's value, option-shaped or not: `--module
                 // --generate` names a module, which is what the command's own parser reads it as.
@@ -278,7 +286,7 @@ enum CliOption {
                 }
             }
         }
-        return new Reading(token != null ? token : unmet(written, asWritten), lang, help);
+        return new Reading(token != null ? token : unmet(written, asWritten), lang, help, version);
     }
 
     /**
@@ -291,6 +299,17 @@ enum CliOption {
      */
     static boolean isHelp(String token) {
         return BY_SPELLING.get(token) == HELP;
+    }
+
+    /**
+     * Whether this token is a spelling of {@link #VERSION}.
+     *
+     * <p>For the position {@link #isHelp} is for, and for the reader who reaches it first: what a
+     * package manager just installed is asked with {@code souther --version} before anything else
+     * has been written on the line, so there is no command yet whose options could be read.
+     */
+    static boolean isVersion(String token) {
+        return BY_SPELLING.get(token) == VERSION;
     }
 
     /** The first constraint between options this line does not meet, or null where it meets them. */

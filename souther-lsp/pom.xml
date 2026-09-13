@@ -76,6 +76,29 @@
              resolves is `souther-lsp.jar`, which this build leaves as javac wrote it. -->
         <finalName>souther-lsp</finalName>
         <plugins>
+            <!-- The `*IT` tests launch the uber jar an editor launches. What only packaging decides
+                 is whether the manifest reaches it: the version the handshake states is read from
+                 there, and a shade that dropped the attribute would answer as a build tree to every
+                 editor while every test in this module still passed. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-failsafe-plugin</artifactId>
+                <version>3.6.0</version>
+                <configuration>
+                    <systemPropertyVariables>
+                        <souther.lsp.jar>${project.build.directory}/souther-lsp-all.jar</souther.lsp.jar>
+                        <souther.version>${project.version}</souther.version>
+                    </systemPropertyVariables>
+                </configuration>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>integration-test</goal>
+                            <goal>verify</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-shade-plugin</artifactId>
