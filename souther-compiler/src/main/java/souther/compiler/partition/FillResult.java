@@ -1,15 +1,21 @@
 package souther.compiler.partition;
 
+import souther.compiler.reading.PathAccess;
+
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.SequencedMap;
+import java.util.SequencedSet;
 import java.util.Set;
 
 /**
- * What one run of the generator came to, against the plan it was asked with.
+ * What the generator came to, against the plan it was asked with.
+ *
+ * <p>One run's, or what the runs of one plan came to together — {@link #acrossRuns} makes the
+ * second out of the first, and a plan searched one way is the second already.
  *
  * <p>A fill is total over its plan. Every class and every arm the plan names has an entry saying
  * what became of it, and the constructor is where that is settled — so a way out of the search that
@@ -81,16 +87,18 @@ public record FillResult(GenerationPlan plan, SequencedMap<RowId, ComposedRow> c
      * What several runs over one plan came to together.
      *
      * <p>A behavior whose dependencies a way leaves open is searched once per way of standing them
-     * in, and what the searches found is one answer about the model: an obligation is answered by a
-     * row where any of them composed one, and is unanswered where none did. Read off one run, the
-     * answer would be about that run's stand-ins and would be reported as an answer about the
-     * model.
+     * in, and what the searches found is one answer about the model. Read off one run, the answer
+     * would be about that run's stand-ins and would be reported as an answer about the model.
      *
-     * <p>Whether an obligation is answered by a row is commutative and idempotent, which is what
-     * makes it that answer: a row built by any run is a row. What the order the runs were made in
-     * decides is which of several rows the answer names — and, where every run came to nothing at
-     * a class, which run's reason is the one carried, a class holding one where an arm holds all of
-     * them.
+     * <p>What the answer about the model is at each obligation is {@link
+     * ClassDisposition#acrossRuns} and {@link ArmDisposition#acrossRuns}, said beside the answers a
+     * run gives. This is the rest: the plan every run has to have been asked with, the reasons of
+     * the runs as a whole, and the numbers the rows come out under.
+     *
+     * <p><b>Which row a reader is offered is settled here and nowhere above.</b> The answer about
+     * the model names every run that composed one; a reader is offered one of them, which is the
+     * one enumerated first. That choice is about how the rows are presented, so the answer itself
+     * does not turn on the order the runs were made in and this does.
      *
      * <p><b>The rows of the runs whose obligations another run's row was named for do not go on.</b>
      * What they were searched with has been read already — it is in this answer, at every obligation
@@ -98,54 +106,47 @@ public record FillResult(GenerationPlan plan, SequencedMap<RowId, ComposedRow> c
      * reach besides. That is a question about incidental coverage rather than about which cases
      * were searched, and nothing here is owed it.
      */
-    public static FillResult union(List<FillResult> searched) {
-        if (searched.size() == 1) {
-            return searched.getFirst();
+    public static FillResult acrossRuns(List<FillResult> searched) {
+        if (searched.isEmpty()) {
+            // A plan is searched at least once, so nothing to join is a caller with no question
+            // rather than a question nothing answered. Which plan the answer would be about is the
+            // first thing this needs and the one thing no run can supply.
+            throw new IllegalArgumentException("no runs of a plan to join");
         }
         GenerationPlan plan = searched.getFirst().plan();
+        for (FillResult each : searched) {
+            // One question asked several ways, not several questions. Answers to two plans joined
+            // here would be reported as one behavior's, and the obligations of one of them would be
+            // answered by what was never asked about them.
+            if (!each.plan().equals(plan)) {
+                throw new IllegalArgumentException(
+                        "runs of two plans cannot be joined: " + plan + " and " + each.plan());
+            }
+        }
+        if (searched.size() == 1) {
+            // The one run's rows keep the numbers they were composed under. Folding it would come
+            // to the same answer and hand the rows different numbers, and nothing is owed the
+            // second of those.
+            return searched.getFirst();
+        }
         SequencedMap<RowId, ComposedRow> composed = new LinkedHashMap<>();
         Map<OfARun, RowId> named = new LinkedHashMap<>();
         Map<ClassOfAPosition, ClassDisposition> classes = new LinkedHashMap<>();
         for (ClassOfAPosition owed : plan.classesOwed()) {
-            ClassDisposition.Built built = null;
-            ClassDisposition.Unresolved none = null;
-            for (int run = 0; run < searched.size() && built == null; run++) {
-                switch (searched.get(run).discharge().at(owed)) {
-                    case ClassDisposition.Built(var rowId) -> built = new ClassDisposition.Built(
-                            naming(searched, composed, named, run, rowId));
-                    case ClassDisposition.Unresolved unresolved ->
-                            none = none == null ? unresolved : none;
-                }
+            List<ClassDisposition> runs = new ArrayList<>();
+            for (FillResult each : searched) {
+                runs.add(each.discharge().at(owed));
             }
-            classes.put(owed, built == null ? none : built);
+            classes.put(owed, offering(ClassDisposition.acrossRuns(runs), searched, composed,
+                    named));
         }
         Map<Generator.ArmOwed, ArmDisposition> arms = new LinkedHashMap<>();
         for (Generator.ArmOwed owed : plan.armsOwed()) {
-            ArmDisposition.Built built = null;
-            ArmDisposition.NoWayIn nowhere = null;
-            // Kept once apiece by what a reason is rather than by walking the ones already held.
-            // Two runs of a body with something to say at every arm say most of it twice, and a
-            // list asked whether it holds each of them compares every reason with every other.
-            Set<Generator.UnresolvedCombination> why = new LinkedHashSet<>();
-            for (int run = 0; run < searched.size(); run++) {
-                switch (searched.get(run).discharge().at(owed)) {
-                    case ArmDisposition.Built(var rowId, var at) -> {
-                        if (built == null) {
-                            built = new ArmDisposition.Built(
-                                    naming(searched, composed, named, run, rowId), at);
-                        }
-                    }
-                    case ArmDisposition.Unresolved(var reasons) -> why.addAll(reasons);
-                    case ArmDisposition.NoWayIn noWayIn ->
-                            nowhere = nowhere == null ? noWayIn : nowhere;
-                }
+            List<ArmDisposition> runs = new ArrayList<>();
+            for (FillResult each : searched) {
+                runs.add(each.discharge().at(owed));
             }
-            // A row wherever one was built, and otherwise the whole of what the runs made of it.
-            // An arm with nowhere to look is what the reading of the body says and is the same
-            // whatever a row stands the dependencies in with, so it is that answer and not a
-            // search that failed.
-            arms.put(owed, built != null ? built
-                    : why.isEmpty() ? nowhere : new ArmDisposition.Unresolved(List.copyOf(why)));
+            arms.put(owed, offering(ArmDisposition.acrossRuns(runs), searched, composed, named));
         }
         Set<Generator.UnresolvedCombination> unresolved = new LinkedHashSet<>();
         Set<GenerationReason> reasons = new LinkedHashSet<>();
@@ -158,12 +159,59 @@ public record FillResult(GenerationPlan plan, SequencedMap<RowId, ComposedRow> c
     }
 
     /**
-     * The number one run's row goes by among all of them, adding it to the rows the union holds the
+     * The answer about a class as a reader is offered it, with the row under the number it goes by
+     * here.
+     *
+     * <p>The first of the runs that composed one. Every one of them answers the obligation, and
+     * offering a second would be offering a row for what it turns out to reach besides.
+     */
+    private static ClassDisposition offering(ClassDisposition.AcrossRuns answer,
+                                             List<FillResult> searched,
+                                             SequencedMap<RowId, ComposedRow> composed,
+                                             Map<OfARun, RowId> named) {
+        return switch (answer) {
+            case ClassDisposition.AcrossRuns.Built(List<ClassDisposition.AcrossRuns.Witness> of) -> {
+                ClassDisposition.AcrossRuns.Witness first = of.getFirst();
+                yield new ClassDisposition.Built(naming(searched, composed, named, first.run(),
+                        first.built().rowId()));
+            }
+            case ClassDisposition.AcrossRuns.Unresolved(Generator.UnresolvedCombination why) ->
+                    new ClassDisposition.Unresolved(why);
+        };
+    }
+
+    /**
+     * The same for an arm.
+     *
+     * <p>The row and the place it went through are taken from the one witness. They are what one
+     * run answered with, and a row of one run beside the place another run's row went through would
+     * say a row goes somewhere it does not.
+     */
+    private static ArmDisposition offering(ArmDisposition.AcrossRuns answer,
+                                           List<FillResult> searched,
+                                           SequencedMap<RowId, ComposedRow> composed,
+                                           Map<OfARun, RowId> named) {
+        return switch (answer) {
+            case ArmDisposition.AcrossRuns.Built(List<ArmDisposition.AcrossRuns.Witness> of) -> {
+                ArmDisposition.AcrossRuns.Witness first = of.getFirst();
+                yield new ArmDisposition.Built(naming(searched, composed, named, first.run(),
+                        first.built().rowId()), first.built().at());
+            }
+            case ArmDisposition.AcrossRuns.Unresolved(
+                    SequencedSet<Generator.UnresolvedCombination> why) ->
+                    new ArmDisposition.Unresolved(List.copyOf(why));
+            case ArmDisposition.AcrossRuns.NoWayIn(List<PathAccess> at) ->
+                    new ArmDisposition.NoWayIn(at);
+        };
+    }
+
+    /**
+     * The number one run's row goes by among all of them, adding it to the rows this holds the
      * first time it is named.
      *
      * <p>Numbered afresh because a row id tells rows of one run apart and nothing more. Two runs
-     * each number their rows from nought, and a union taking the numbers as they came would hold
-     * one row under an id another run's row already had.
+     * each number their rows from nought, and taking the numbers as they came would hold one row
+     * under an id another run's row already had.
      */
     private static RowId naming(List<FillResult> searched, SequencedMap<RowId, ComposedRow> composed,
                                 Map<OfARun, RowId> named, int run, RowId rowId) {
