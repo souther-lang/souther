@@ -2877,16 +2877,21 @@ public final class Generator {
         // about the row being written.
         Standing where = alsoOnTheWay(subject, fixing, reaching);
         Map<RealizationTarget, Place> standing = where.at();
+        // How many locations the item fixes, and not how many numbers it names. The limit below is
+        // about a value being asked to stand beside a second location of the same item, and a
+        // location the item names twice is one location: counted as the numbers, an item comparing
+        // two numbers of one value met a limit about there being two values.
+        //
+        // The way's are not counted in: a position bounded on the way is one this could leave to
+        // its own range without the row stopping being a row at the item.
+        boolean besideAnotherLocation = byTheLocationTheyWrite(fixing).size() > 1;
         // One edge per location and not one per number. A location asked for two numbers is one
         // value to write, so the two are composed together and written once; walked one number at a
         // time, the second was a value built for a place the first had already written.
         for (Map.Entry<TermPath, SequencedMap<RealizationTarget, Place>> group
                 : byTheLocationTheyWrite(standing).entrySet()) {
-            // Beside another where the item fixes more than one position. The way's are not counted
-            // in: what that limit is about is a number met by several values being asked to stand
-            // beside a second position of the same item, and a position bounded on the way is one
-            // this could leave to its own range without the row stopping being a row at the item.
-            Edge edge = edgeAt(subject, group.getValue(), fixing.size() > 1, reaching.region());
+            Edge edge = edgeAt(subject, group.getValue(), besideAnotherLocation,
+                    reaching.region());
             if (edge.values().isEmpty()) {
                 return edge.cameToNothing(label, where.unrepresented());
             }
@@ -3388,7 +3393,7 @@ public final class Generator {
      *                      its own answer to give
      */
     private static Edge edgeAt(MeasuredInput subject, SequencedMap<RealizationTarget, Place> group,
-                               boolean besideAnother,
+                               boolean besideAnotherLocation,
                                souther.compiler.inputs.SearchRegion within) {
         // A number met by several values can offer only one of them beside a second position being
         // fixed as well. Whether it is met by several is the realization's question and not the kind
@@ -3399,7 +3404,7 @@ public final class Generator {
         // several values. A location asked for several numbers is narrower than any of them and not
         // wider, so asking of the group would let through what asking of one refuses.
         for (RealizationTarget target : group.keySet()) {
-            if (besideAnother && !TermRealizations.onlyOneValueAnswersIt(target)) {
+            if (besideAnotherLocation && !TermRealizations.onlyOneValueAnswersIt(target)) {
                 return Edge.none(UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
             }
         }

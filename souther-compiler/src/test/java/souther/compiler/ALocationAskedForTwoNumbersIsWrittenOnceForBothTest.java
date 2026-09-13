@@ -53,6 +53,55 @@ class ALocationAskedForTwoNumbersIsWrittenOnceForBothTest {
             }
             """;
 
+    /**
+     * Two parts of one time compared with each other, which the item fixes both of.
+     *
+     * <p>Beside the one above and not a shape of it. There the item names one number and the way
+     * above the line names the other, so the item fixes one location; here the item names both and
+     * fixes one location twice. A limit about a value standing beside a second location of the same
+     * item counts the locations — read as the numbers, this item is two and the row is refused for
+     * a limit about something the model does not have here.
+     */
+    private static final String TWO_PARTS_COMPARED_WITH_EACH_OTHER = """
+            module example.compared
+
+            data Yes = { v: Int }
+            data No = { why: Int }
+
+            behavior at : (t: Time) -> Yes | No
+                constructs Yes
+                constructs No
+
+            let at (t) = {
+                guard Time.hour(t) < Time.minute(t) else No { why = 1 }
+                Yes { v = 1 }
+            }
+            """;
+
+    /**
+     * The same comparison over two times, which really is a second location.
+     *
+     * <p>The control for the one above, and it is still open. A number met by several values cannot
+     * be offered beside another location being fixed as well, which is #1654 and is untouched here
+     * — so the pair differs in exactly the thing the limit is about, and a row composed for the one
+     * above is not this compiler having stopped counting locations at all.
+     */
+    private static final String TWO_PARTS_OF_TWO_TIMES = """
+            module example.compared
+
+            data Yes = { v: Int }
+            data No = { why: Int }
+
+            behavior at : (t: Time, u: Time) -> Yes | No
+                constructs Yes
+                constructs No
+
+            let at (t, u) = {
+                guard Time.hour(t) < Time.minute(u) else No { why = 1 }
+                Yes { v = 1 }
+            }
+            """;
+
     /** The same of a date, which is the other family a value is built to have parts of. */
     private static final String TWO_PARTS_OF_A_DATE = """
             module example.date
@@ -124,7 +173,8 @@ class ALocationAskedForTwoNumbersIsWrittenOnceForBothTest {
      */
     @Test
     void bothNumbersAreAnsweredByTheOneValueTheRowWrites() {
-        for (String model : List.of(TWO_PARTS_OF_A_TIME, TWO_PARTS_OF_A_DATE)) {
+        for (String model : List.of(TWO_PARTS_OF_A_TIME, TWO_PARTS_OF_A_DATE,
+                TWO_PARTS_COMPARED_WITH_EACH_OTHER)) {
             List<String> open = whatNothingCouldShow(model);
 
             assertEquals(List.of(), open,
@@ -148,6 +198,21 @@ class ALocationAskedForTwoNumbersIsWrittenOnceForBothTest {
     }
 
     /**
+     * And a second location is still a second location, which is what the item's own limit is
+     * about.
+     *
+     * <p>The same comparison over two times rather than two parts of one. A number met by several
+     * values cannot be offered beside another location being fixed as well — that is #1654 — so
+     * every point of this line is still open. Read as passing because the model above passes, the
+     * change would be this compiler having stopped counting locations at all.
+     */
+    @Test
+    void aComparisonAcrossTwoLocationsIsStillRefused() {
+        assertFalse(whatNothingCouldShow(TWO_PARTS_OF_TWO_TIMES).isEmpty(),
+                "a value met by several is not offered beside a second location of the item");
+    }
+
+    /**
      * And a location whose two numbers no value answers together is still said to be one, which is
      * what keeps this from reading as a claim about any two numbers at a location.
      */
@@ -163,11 +228,18 @@ class ALocationAskedForTwoNumbersIsWrittenOnceForBothTest {
                 "and the point it was composed without is still open");
     }
 
-    /** The points and rules of the page that nothing could show a row can be written at. */
+    /**
+     * The points of the line that nothing could show a row can be written at.
+     *
+     * <p>The points and not the rules of the body. Whether a row composed for one rule took another
+     * is a question about which rules the rows between them reach, and it is asked of a body rather
+     * than of a location — a model here that has such a rule open has it open whether or not a
+     * value was composed at each of its points.
+     */
     private static List<String> whatNothingCouldShow(String model) {
         List<String> found = new ArrayList<>();
         for (String line : human(model).split("\n")) {
-            if (line.contains("nothing could show a row can be written")) {
+            if (line.contains("nothing could show a row can be written at the ")) {
                 found.add(line.trim());
             }
         }

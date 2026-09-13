@@ -212,10 +212,15 @@ final class TermRealizations {
      * taken as, and that is this file's question: the composer's is where the value goes.
      *
      * <p>The parts of a time and the parts of a date are the ones a value can be built to have
-     * together, and they are what a count of seconds and a date are spelled in — each part is its
-     * own place in the spelling, so what one of them asks for leaves the others free. Anything else
-     * is refused here rather than tried and found wanting: how long a string is does not leave the
-     * string free, and a value answering both a length and an order is not something below builds.
+     * together. Not because they are independent — the parts of a time are and the parts of a date
+     * are not, since a day of the month runs as far as that month goes and February goes further in
+     * a leap year — but because each of them is a place in what a time and a date are spelled in,
+     * and a value can be built with those places asked for at once. Whatever the parts do to each
+     * other is the calendar's, and {@link #dateOn} is where it is answered.
+     *
+     * <p>Anything else is refused here rather than tried and found wanting: how long a string is is
+     * no place in the spelling of a string, and a value answering both a length and an order is not
+     * something below builds.
      *
      * <p>Distinct parts, which is what makes them independent. Two asks at one part are two asks
      * for one number and are the same target, so a group holding a part twice is a group somebody
