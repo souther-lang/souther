@@ -567,6 +567,24 @@ asking for the reason it is wrong. What does not ask is a line where the token s
 value: `souther run m.sou --input --help` hands `run` the input `--help`, and that is read as the
 value it is, not as a request.
 
+<!-- souther-section: version -->
+## version
+
+```
+souther version
+```
+
+Which Souther this is, on stdout under a zero exit code. `souther --version` asks the same thing and
+is answered the same way, and so does `--version` written after any command.
+
+The version is read from the jar's manifest, which the build fills from the one place the project's
+version is written. Run from class files rather than from a distribution there is no manifest, and
+the answer is `unreleased` — a true statement about a build tree, and not a version anything
+resolves.
+
+The same reading is what the language server tells an editor as its `serverInfo`, so which Souther
+this is has one answer whoever asks it.
+
 <!-- souther-section: shared-options -->
 ## Options every command shares
 
@@ -576,11 +594,13 @@ value it is, not as a request.
 | `--lang <tag>` | message locale, e.g. `ja` or `en`. Overrides `SOUTHER_LANG`; with neither, `en`, which is what the shipped documents are written in |
 | `--color auto\|always\|never` | color the human output (default `auto`) |
 | `--help`, `-h` | what this command takes, and what its options mean |
+| `--version` | which Souther this is |
 
-`--help` and `-h` are taken by every command, including `help` itself. `--format` and `--color`
-apply to `compile`, `run` and `examples`; `--lang` to those and to `init`, which writes what it did
-in the language the line asks for. Passing one of them to a command that does not take it is an
-error.
+`--help` and `-h` are taken by every command, including `help` itself. So is `--version`, which
+answers and runs nothing else, and answers ahead of whatever is wrong with the line: which compiler
+read it is not a question about it. `--format` and `--color` apply to `compile`, `run` and
+`examples`; `--lang` to those and to `init`, which writes what it did in the language the line asks
+for. Passing one of them to a command that does not take it is an error.
 
 Because every command takes `-h`, no command reads that token as a file name. A single dash is
 otherwise read as a path by any command that has no such option — a file may be named `-d` — and

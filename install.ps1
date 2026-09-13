@@ -115,4 +115,4 @@ finally {
 Set-UserPathEntry $true
 
 Write-Host "souther $Version is installed in $(Join-Path $InstallDir $Version)."
-Write-Host "$entry is on your PATH. Open a new terminal, then run: souther help"
+Write-Host "$entry is on your PATH. Open a new terminal, then run: souther --version"
