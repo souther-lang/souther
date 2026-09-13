@@ -179,6 +179,33 @@ public sealed interface Criterion {
     }
 
     /**
+     * The same demand on a row, about the quantity measured the other way round.
+     *
+     * <p><b>For a quantity that is how far two positions stand apart, which two positions have two
+     * of.</b> {@code a - b} and {@code b - a} are one relation said twice, and a demand written
+     * against the first is a demand against the second with every level negated. What that buys is
+     * which of the two positions a search settles first: neither is the pair's own, and a search
+     * that could only settle one of them answered about a relation from one side.
+     *
+     * <p>Every level moves, and the run's two ends change places with them — which is why this is
+     * the run's own answer ({@link Band#reflected}) and not a level-by-level mapping applied here.
+     * The side the point is named for moves too: a row above the line is a row below it once the
+     * quantity is measured backwards.
+     *
+     * <p>Not a second reading of what the criterion asks. What is asked is unchanged and the
+     * quantity it is asked of is the other one, so a row at this criterion over {@code a - b} is a
+     * row at the reflected one over {@code b - a} and there is nothing to keep in step.
+     */
+    default Criterion reflected() {
+        return switch (this) {
+            case AtTheLevel(Level at) -> new AtTheLevel(at.negated());
+            case Within(Band band, Level except, Towards away) ->
+                    new Within(band.reflected(), except == null ? null : except.negated(),
+                            away.opposite());
+        };
+    }
+
+    /**
      * Whether two criteria ask a row for the same thing.
      *
      * <p>The same shape asking for the same values, and not the same set of rows: a level and a run

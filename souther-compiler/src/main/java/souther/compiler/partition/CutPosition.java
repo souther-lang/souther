@@ -82,6 +82,18 @@ public record CutPosition(Level written, BigDecimal per) implements Comparable<C
         return new CutPosition(reduced(written, rule[1]), rule[0]);
     }
 
+    /**
+     * The same line on the quantity read the other way round.
+     *
+     * <p>The place negates and the share does not. How much of the quantity the rule wrote is a
+     * fact about the rule's form and says nothing about which way the quantity is measured, so a
+     * line at a third of {@code a - b} is at minus a third of {@code b - a} and is still a third of
+     * whatever was written.
+     */
+    public CutPosition reflected() {
+        return new CutPosition(written.negated(), per);
+    }
+
     /** The reduced numerator, put back on whatever order the line was written on. */
     private static Level reduced(Level written, BigDecimal to) {
         return switch (written) {
