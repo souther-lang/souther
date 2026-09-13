@@ -64,6 +64,43 @@ jobs:
               if ($LASTEXITCODE -ne 0) { throw "$souther could not read a library's javadoc" }
           }
 
+      # The launcher refuses a Java older than the classes in the jar, and the runner's Java is not
+      # old, so the refusal is reached with an image that only states a version — which is enough
+      # because the check reads the `release` file rather than starting anything. The second image
+      # states a version that is not a number, which is the case the launcher must not refuse: it
+      # goes on and runs the java it found, and the java it found here is an empty file.
+      - name: Refuse an old Java, and run on one whose version cannot be read
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $souther = 'souther-cli/target/dist/nojdk-run/souther/souther.cmd'
+          foreach ($image in @(
+              @{ states = 'JAVA_VERSION="21.0.1"'; refused = $true },
+              @{ states = 'JAVA_VERSION="ea"'; refused = $false })) {
+              $fake = Join-Path $env:RUNNER_TEMP ("java-" + [Guid]::NewGuid())
+              New-Item -ItemType Directory -Force -Path (Join-Path $fake 'bin') | Out-Null
+              Set-Content (Join-Path $fake 'release') $image.states
+              Set-Content (Join-Path $fake 'bin/java.exe') ''
+              $env:JAVA_HOME = $fake
+
+              # Native stderr is being read here, so the preference that turns a write to it into a
+              # terminating error is put down for the length of the call.
+              $prior = $ErrorActionPreference
+              $ErrorActionPreference = 'Continue'
+              $said = (& $souther help 2>&1 | Out-String)
+              $ended = $LASTEXITCODE
+              $ErrorActionPreference = $prior
+
+              if ($image.refused) {
+                  if ($said -notmatch 'souther needs Java 25') {
+                      throw "the launcher did not refuse an image stating $($image.states): $said"
+                  }
+                  if ($ended -ne 1) { throw "a refusal ended with $ended rather than 1" }
+              } elseif ($said -match 'souther needs Java 25') {
+                  throw "the launcher refused an image whose version it could not read: $said"
+              }
+          }
+          $env:JAVA_HOME = $env:JAVA_HOME_25_X64
+
       # The installer writes the user's path, points a link and removes a directory recursively, and
       # nothing else in this repository does any of that. It is run against the archives just
       # packaged rather than a release, so what is checked is this commit's installer rather than the
