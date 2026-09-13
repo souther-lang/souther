@@ -16,7 +16,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * A point whose count no value of the order stands at is a point nothing composes a value for.
+ * A point whose count one position of a form cannot stand at is reached by the rest of them.
  *
  * <p>An order that counts may stop. A time of day counts seconds from midnight and has 86400 of
  * them, so the count below its first is a count no time has — and the arithmetic that puts a point
@@ -30,11 +30,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * so a rule over it has a position on the bounded order. Every other order a line had been drawn on
  * stops nowhere a count reaches.
  *
- * <p>What such a point leaves is what a point nothing can be written at has always left, and the
- * border beside it is unaffected — the line is still drawn, and the points that do have values keep
- * them.
+ * <p>What the point wants is a count and not a time of day, and a form has more than one position
+ * to reach a count with: the second before the first midnight is the last second of the day before.
+ * So the answer is a row at that day, and never a time the order has no value for — which is the
+ * thing that threw, and is what the walk still may not write.
  */
-class ACountNoValueOfTheOrderStandsAtComposesNothingTest {
+class ACountNoValueOfTheOrderStandsAtIsReachedAnotherWayTest {
 
     private static final String MODEL = """
             module demo
@@ -57,48 +58,40 @@ class ACountNoValueOfTheOrderStandsAtComposesNothingTest {
     }
 
     /**
-     * The point below it composes nothing, and says so.
+     * The point below it is answered by the day before, and never by a time before midnight.
      *
      * <p>The band this line leaves has its points at nought and beside it, and a time of day at the
-     * bottom of its order has nothing below it: the point wants a second before midnight of the
-     * first day there is. So it is unresolved for the reason a point nothing can be written at is
-     * unresolved, which is the answer that was already there for a case no module can name.
+     * bottom of its order has nothing below it: read as a time, the point wants a second before
+     * midnight of the first day there is. Read as a count of the form, it wants what the last
+     * second of the day before adds up to — which is a row, and the one the walk hands back once
+     * the arrangement it reached first is put aside.
      */
     @Test
-    void thePointBelowItIsUnresolvedRatherThanThrown() {
-        List<String> reasons = new ArrayList<>();
-        for (BorderAssessment border : measured()) {
-            border.items().forEach((role, item) -> {
-                if (item instanceof ItemAssessment.Owed owed && wordOf(owed) != null) {
-                    reasons.add(wordOf(owed).toString());
-                }
-            });
-        }
-        assertTrue(!reasons.isEmpty(), "a point of this line was owed a row and got none");
-        assertEquals(List.of(), reasons.stream()
-                        .filter(each -> !each.equals("NOTHING_COMPOSES_ONE")).toList(),
-                "and that is what a point nothing composes a value at says: " + reasons);
+    void thePointBelowItIsReachedByTheDayBefore() {
+        assertTrue(rowsComposed().contains(
+                        "[Date(\"1969-12-31\"), Time(\"23:59:59\"),"
+                                + " DateTime(\"1970-01-01T00:00:00\")]"),
+                () -> "the count below the first midnight is a day earlier: " + rowsComposed());
     }
 
-    /**
-     * The word the one search of a point came back with, or null where it composed a row.
-     *
-     * <p>Asked of the outcome and not of which outcome it is. A point is put one value after
-     * another and the figure for how many ends the asking, so what a search that reached no row
-     * came to arrives wearing that figure as often as not — and what this test is about is the
-     * word, which is the same word either way.
-     */
-    private static Generator.UnresolvedCombination.Reason wordOf(ItemAssessment.Owed owed) {
-        return switch (owed.searches().only()) {
-            case ItemAssessment.Attempt.Unresolved it -> it.why().reason();
-            case ItemAssessment.Attempt.Limited it -> it.why().reason();
-            default -> null;
-        };
-    }
-
-    /** And the points that do have values keep them, so the line was not emptied to get here. */
+    /** And every one of them is a value the orders hold, which is what threw. */
     @Test
-    void thePointsWithValuesKeepThem() {
+    void everyRowIsOneTheOrdersHold() {
+        assertEquals(List.of(
+                        "[Date(\"1969-12-31\"), Time(\"23:59:59\"),"
+                                + " DateTime(\"1970-01-01T00:00:00\")]",
+                        "[Date(\"1970-01-01\"), Time(\"00:00:00\"),"
+                                + " DateTime(\"1970-01-01T00:00:00\")]",
+                        "[Date(\"1969-12-31\"), Time(\"23:59:58\"),"
+                                + " DateTime(\"1970-01-01T00:00:00\")]",
+                        "[Date(\"1970-01-01\"), Time(\"00:00:01\"),"
+                                + " DateTime(\"1970-01-01T00:00:00\")]"),
+                rowsComposed(),
+                "the points of this line, at counts the declared form puts them at");
+    }
+
+    /** What each point of the line was given, in the order the points are held. */
+    private static List<String> rowsComposed() {
         List<String> rows = new ArrayList<>();
         for (BorderAssessment border : measured()) {
             border.items().forEach((role, item) -> {
@@ -109,11 +102,7 @@ class ACountNoValueOfTheOrderStandsAtComposesNothingTest {
                 }
             });
         }
-        assertEquals(List.of(
-                        "[Date(\"1970-01-01\"), Time(\"00:00:00\"), DateTime(\"1970-01-01T00:00:00\")]",
-                        "[Date(\"1970-01-01\"), Time(\"00:00:01\"), DateTime(\"1970-01-01T00:00:00\")]"),
-                rows,
-                "the two points that have a value, at the counts the declared form puts them at");
+        return rows;
     }
 
     /** The lines the behavior's positions met, whosever the row at each point is. */

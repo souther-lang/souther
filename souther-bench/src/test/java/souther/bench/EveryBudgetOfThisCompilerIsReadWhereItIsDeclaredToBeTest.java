@@ -134,7 +134,8 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + " point had"),
             Map.entry("souther.compiler.partition.LevelRealizer#ofAForm("
                             + "Lsouther/compiler/partition/Standing$OfAForm;"
-                            + "Lsouther/compiler/inputs/SearchRegion;)"
+                            + "Lsouther/compiler/inputs/SearchRegion;"
+                            + "Lsouther/compiler/partition/ValuesTried;)"
                             + "Lsouther/compiler/partition/Realization;",
                     "collects what the level walks ran out of, and the levels it was offered"),
             Map.entry("souther.compiler.partition.LevelRealizer$Search#stepsLeft()Z",

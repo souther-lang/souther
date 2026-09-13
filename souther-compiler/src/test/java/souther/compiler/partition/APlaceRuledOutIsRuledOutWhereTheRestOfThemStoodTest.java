@@ -12,6 +12,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -24,19 +25,17 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class APlaceRuledOutIsRuledOutWhereTheRestOfThemStoodTest {
 
-    private static final NumericTerm.FromOnePosition SETTLED =
-            new NumericTerm.ValueOf(TermPath.of("a"));
-    private static final NumericTerm.FromOnePosition ANCHOR =
-            new NumericTerm.ValueOf(TermPath.of("b"));
+    private static final RealizationTarget SETTLED =
+            new RealizationTarget.AtOnePosition(new NumericTerm.ValueOf(TermPath.of("a")));
+    private static final RealizationTarget ANCHOR =
+            new RealizationTarget.AtOnePosition(new NumericTerm.ValueOf(TermPath.of("b")));
 
     private static Place at(long n) {
         return new Count(BigDecimal.valueOf(n));
     }
 
     private static ValuesTried rejecting(Place settled, Place anchored) {
-        return ValuesTried.NONE.and(Map.of(
-                new RealizationTarget.AtOnePosition(SETTLED), settled,
-                new RealizationTarget.AtOnePosition(ANCHOR), anchored));
+        return ValuesTried.NONE.and(Map.of(SETTLED, settled, ANCHOR, anchored));
     }
 
     @Test
@@ -75,9 +74,8 @@ class APlaceRuledOutIsRuledOutWhereTheRestOfThemStoodTest {
     @Test
     @DisplayName("two arrangements that shared an anchor are both apart under it")
     void everyPlaceTriedUnderOneAnchorIsApart() {
-        ValuesTried tried = rejecting(at(3), at(10)).and(Map.of(
-                new RealizationTarget.AtOnePosition(SETTLED), at(4),
-                new RealizationTarget.AtOnePosition(ANCHOR), at(10)));
+        ValuesTried tried = rejecting(at(3), at(10))
+                .and(Map.of(SETTLED, at(4), ANCHOR, at(10)));
 
         assertEquals(List.of(at(3), at(4)),
                 tried.apartFor(SETTLED, Map.of(ANCHOR, at(10))).places());
@@ -114,11 +112,30 @@ class APlaceRuledOutIsRuledOutWhereTheRestOfThemStoodTest {
     @DisplayName("the same arrangement spelled another way is remembered once")
     void oneArrangementIsRememberedOnce() {
         ValuesTried tried = rejecting(at(3), at(10))
-                .and(Map.of(new RealizationTarget.AtOnePosition(SETTLED),
-                                new Count(new BigDecimal("3.0")),
-                        new RealizationTarget.AtOnePosition(ANCHOR),
-                                new Count(new BigDecimal("10.00"))));
+                .and(Map.of(SETTLED, new Count(new BigDecimal("3.0")),
+                        ANCHOR, new Count(new BigDecimal("10.00"))));
 
         assertEquals(1, tried.rejected().size(), "one arrangement was tried, written two ways");
+    }
+
+    /**
+     * And a whole arrangement is asked for as one, which is what a search that chooses for every
+     * target at once has to ask.
+     *
+     * <p>Beside the projection above and not instead of it. A walk that reaches an assignment
+     * before anything is built has all of them in hand, and the one thing it may not offer is the
+     * arrangement a row was already built from — every other arrangement standing one of those
+     * places is one nothing has tried.
+     */
+    @Test
+    @DisplayName("a whole arrangement is held, and one that differs anywhere is not")
+    void aWholeArrangementIsHeldAndOthersAreNot() {
+        ValuesTried tried = rejecting(at(3), at(10));
+
+        assertTrue(tried.holds(Map.of(SETTLED, at(3), ANCHOR, at(10))));
+        assertFalse(tried.holds(Map.of(SETTLED, at(3), ANCHOR, at(20))),
+                "the same place for one of them is not the same arrangement");
+        assertFalse(tried.holds(Map.of(SETTLED, at(3))),
+                "and an arrangement of fewer of them is not it either");
     }
 }
