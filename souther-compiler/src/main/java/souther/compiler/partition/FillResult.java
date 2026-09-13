@@ -86,9 +86,11 @@ public record FillResult(GenerationPlan plan, SequencedMap<RowId, ComposedRow> c
      * answer would be about that run's stand-ins and would be reported as an answer about the
      * model.
      *
-     * <p>Commutative and idempotent at every obligation, which is what makes it that answer: a row
-     * built by any run is a row, and the order the runs were made in decides only which of several
-     * rows the answer names.
+     * <p>Whether an obligation is answered by a row is commutative and idempotent, which is what
+     * makes it that answer: a row built by any run is a row. What the order the runs were made in
+     * decides is which of several rows the answer names — and, where every run came to nothing at
+     * a class, which run's reason is the one carried, a class holding one where an arm holds all of
+     * them.
      *
      * <p><b>The rows of the runs whose obligations another run's row was named for do not go on.</b>
      * What they were searched with has been read already — it is in this answer, at every obligation

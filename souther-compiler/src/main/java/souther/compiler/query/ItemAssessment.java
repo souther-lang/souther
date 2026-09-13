@@ -116,10 +116,17 @@ public sealed interface ItemAssessment {
             };
         }
 
-        /** The same point, with what one more search of it came to. */
-        public Owed settledBy(Attempt searched) {
-            return new Owed(criterion, coverage, projection,
-                    searches.plus(SearchOutcomes.of(searched)));
+        /**
+         * The same point, with what searching it came to.
+         *
+         * <p>Everything one search of it came to, which is one outcome per way there was of
+         * standing the dependencies in. A search that had several and handed one of them over
+         * would be handing over whichever was tried first, and what the others found — a figure
+         * that held one back, a row that composed and stood somewhere else — would be gone before
+         * anybody asked.
+         */
+        public Owed settledBy(SearchOutcomes searched) {
+            return new Owed(criterion, coverage, projection, searches.plus(searched));
         }
 
         /**

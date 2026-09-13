@@ -1,8 +1,10 @@
 package souther.compiler;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.partition.DecisionRule;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
+import souther.compiler.query.RuleSettlement;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -72,7 +74,7 @@ class WhatTheSearchAnswersForDoesNotTurnOnHowCaseNamesCompareTest {
     @Test
     void oneModelSpelledTwoWaysIsAnsweredForTheSameWay() {
         Map<String, String> asWritten = answeredFor(MODEL);
-        Map<String, String> respelled = answeredFor(respelled(MODEL));
+        Map<String, String> respelled = answeredFor(respelled(MODEL), THE_OTHER_WAY);
 
         assertFalse(asWritten.isEmpty(), "the run was asked about something");
         assertEquals(asWritten.keySet(), respelled.keySet(),
@@ -95,6 +97,10 @@ class WhatTheSearchAnswersForDoesNotTurnOnHowCaseNamesCompareTest {
      * finding one apiece leave to whoever offers them.
      */
     private static Map<String, String> answeredFor(String model) {
+        return answeredFor(model, Map.of());
+    }
+
+    private static Map<String, String> answeredFor(String model, Map<String, String> back) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
@@ -110,7 +116,26 @@ class WhatTheSearchAnswersForDoesNotTurnOnHowCaseNamesCompareTest {
                     out.put(behavior + " class " + owed, kindOf(answer)));
             filling.composed().discharge().arms().forEach((owed, answer) ->
                     out.put(behavior + " arm " + owed, kindOf(answer)));
+            // And what searching each rule of the decision established, which is the other half of
+            // what a search answers for. A rule names the cases its way turns on, so the key is
+            // said in the names the model under test is written in.
+            Map<DecisionRule, RuleSettlement> rules =
+                    compilation.db().ask(new Adequacy.DecisionSearch(module, behavior)).value();
+            if (rules != null) {
+                rules.forEach((rule, settled) -> out.put(
+                        behavior + " rule " + spelledBefore(String.valueOf(rule), back),
+                        kindOf(settled.requirement())));
+            }
         });
+        return out;
+    }
+
+    /** A key said in the names the model this is compared with uses. */
+    private static String spelledBefore(String said, Map<String, String> back) {
+        String out = said;
+        for (Map.Entry<String, String> each : back.entrySet()) {
+            out = out.replace(each.getValue(), each.getKey());
+        }
         return out;
     }
 
