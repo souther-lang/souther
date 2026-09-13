@@ -118,8 +118,13 @@ final class Outwards {
         // of what the run holds, which is why it ends its own way. Reported as a walk that tried
         // them all, a pair the rules leave a place for anywhere but here came back as a pair
         // nothing could build.
+        //
+        // Unless the run is that one place, and then there is nothing further for a way of naming
+        // one to reach. Said the other way, a run bounded to a single value would have this
+        // compiler reporting a population it writes some of — of a walk that wrote all of it.
         if (!carrier.counts()) {
-            return new Walked(List.of(first), Ended.WITH_NO_STEP_TO_TAKE);
+            return new Walked(List.of(first), onePlace(within, first)
+                    ? Ended.HAVING_TRIED_THEM_ALL : Ended.WITH_NO_STEP_TO_TAKE);
         }
         List<Place> out = new ArrayList<>();
         out.add(first);
@@ -153,5 +158,18 @@ final class Outwards {
             }
         }
         return new Walked(out, ended);
+    }
+
+    /**
+     * Whether the run is the one place already in hand.
+     *
+     * <p>Both ends the place itself and both of them its own, which is the only shape an order with
+     * no arithmetic can be asked about: anything else needs a comparison this would have to make
+     * with the order's own values, and the caller already holds what came of asking that.
+     */
+    private static boolean onePlace(NumericDomain.Bounds within, Place first) {
+        return within.min() != null && within.max() != null
+                && within.min().inclusive() && within.max().inclusive()
+                && within.min().at().sameAs(first) && within.max().at().sameAs(first);
     }
 }
