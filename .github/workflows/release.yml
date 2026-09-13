@@ -65,20 +65,27 @@ jobs:
           }
 
       # The launcher refuses a Java older than the classes in the jar, and the runner's Java is not
-      # old, so the refusal is reached with an image that only states a version — which is enough
-      # because the check reads the `release` file rather than starting anything. The second image
-      # states a version that is not a number, which is the case the launcher must not refuse: it
-      # goes on and runs the java it found, and the java it found here is an empty file.
-      - name: Refuse an old Java, and run on one whose version cannot be read
+      # old, so the refusal is reached with an image that only states a version, which is enough
+      # because the check reads the `release` file rather than starting anything.
+      #
+      # The rest are the readings that must not be refused, and they are what the refusal is worth
+      # knowing against: a version that is not a run of digits, a release that says nothing about a
+      # version, and no release at all. Each of those leaves the launcher with nothing to compare,
+      # which is where a comparison written without somewhere to go has neither a left side nor a
+      # reason to be reached. What such a run does instead is run the java it found, and the java it
+      # found here is an empty file, so it fails — at the java, not at the reading.
+      - name: Refuse an old Java, and run on one whose version it cannot read
         run: |
           $ErrorActionPreference = 'Stop'
           $souther = 'souther-cli/target/dist/nojdk-run/souther/souther.cmd'
           foreach ($image in @(
               @{ states = 'JAVA_VERSION="21.0.1"'; refused = $true },
-              @{ states = 'JAVA_VERSION="ea"'; refused = $false })) {
+              @{ states = 'JAVA_VERSION="ea"'; refused = $false },
+              @{ states = 'IMPLEMENTOR="nobody"'; refused = $false },
+              @{ states = $null; refused = $false })) {
               $fake = Join-Path $env:RUNNER_TEMP ("java-" + [Guid]::NewGuid())
               New-Item -ItemType Directory -Force -Path (Join-Path $fake 'bin') | Out-Null
-              Set-Content (Join-Path $fake 'release') $image.states
+              if ($null -ne $image.states) { Set-Content (Join-Path $fake 'release') $image.states }
               Set-Content (Join-Path $fake 'bin/java.exe') ''
               $env:JAVA_HOME = $fake
 
@@ -90,6 +97,11 @@ jobs:
               $ended = $LASTEXITCODE
               $ErrorActionPreference = $prior
 
+              # A launcher that died reading the line would also not have refused, so the reading
+              # that cannot be told from the deciding is named and refused here.
+              if ($said -match 'syntax of the command is incorrect') {
+                  throw "the launcher did not parse against an image stating $($image.states): $said"
+              }
               if ($image.refused) {
                   if ($said -notmatch 'souther needs Java 25') {
                       throw "the launcher did not refuse an image stating $($image.states): $said"

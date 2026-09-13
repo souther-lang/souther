@@ -11,14 +11,17 @@ rem that compiles here would depend on where it was compiled.
 rem
 rem The version of the Java it found is read out of the `release` file of the image that Java belongs
 rem to, rather than by starting it and asking. Asking costs a JVM start on every command run, and
-rem this costs two file reads. A version below the one the classes in the jar were written for is
-rem refused here, because what the JVM says instead names a class file version and leaves the reader
-rem to work out which Java that was.
+rem this costs two file reads. A version read as a number below the one the classes in the jar were
+rem written for is refused here, because what the JVM says instead names a class file version and
+rem leaves the reader to work out which Java that was.
 rem
-rem Not being able to read it is not a refusal. A Java can be reached through something that is not
-rem its own image directory (a shim, a wrapper, a path a user assembled), and a launcher that
-rem refused whatever it could not account for would refuse a working Java. Such a run gets what it
-rem would have got had nothing been read at all.
+rem Read as a number, and nothing else is read as anything. A Java can be reached through something
+rem that is not its own image directory (a shim, a wrapper, a path a user assembled), an image can
+rem carry no `release` at all, and one that carries it can state a version this does not understand.
+rem A launcher that refused whatever it could not account for would refuse a working Java, and one
+rem that compared whatever it found would be comparing text, which puts the refusal on which letters
+rem sort under a two. So the comparison is reached only by a run of digits, and every other reading
+rem gets what it would have got had nothing been read at all.
 setlocal
 
 set "java=java.exe"
@@ -31,10 +34,20 @@ if not defined JAVA_HOME for /f "delims=" %%p in ('where java.exe 2^>nul') do if
 if not defined JAVA_HOME if not defined onpath goto :nojava
 if not defined JAVA_HOME call :imageholding "%onpath%"
 
+rem Each step below leaves for :run rather than guarding the comparison with a condition beside it. A
+rem variable is put into a line before any of that line's conditions is weighed, so a comparison
+rem written behind a guard has nothing on its left the moment there is nothing to compare.
+rem
+rem The second step is what makes the third a comparison of numbers: the digits are the delimiters,
+rem so a version that is a run of them yields no word to iterate over and the line does nothing,
+rem while anything else yields one and leaves.
 set "major="
 if defined image if exist "%image%\release" for /f "usebackq tokens=2 delims==" %%v in (`findstr /b /c:"JAVA_VERSION=" "%image%\release"`) do call :majorof %%v
-if defined major if %major% LSS 25 goto :oldjava
+if not defined major goto :run
+for /f "delims=0123456789" %%x in ("%major%") do goto :run
+if %major% LSS 25 goto :oldjava
 
+:run
 "%java%" -Xss4m -jar "%~dp0lib\souther.jar" %*
 exit /b %ERRORLEVEL%
 
