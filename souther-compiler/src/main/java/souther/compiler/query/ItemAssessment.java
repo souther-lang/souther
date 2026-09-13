@@ -850,6 +850,7 @@ public sealed interface ItemAssessment {
             out.addAll(uncomposed);
             return List.copyOf(out);
         }
+
     }
 
     /** This point's own measurement of whether a row is at it, or a settled nothing where no row is

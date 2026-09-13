@@ -3086,7 +3086,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     " — this compiler stopped at " + said(it.stoppedBy())
                             + andWritesSomeOf(it.notAllOf()) + ": "
                             + it.why().said().orElseGet(() -> whyUnresolved(it.why()))
-                            + whatTheRegionLeftOut(it.unaccountedFor(), shown, rendering, declaredIn);
+                            + alsoLeftOut(it.unaccountedFor(), shown, rendering, declaredIn);
             // Said as what this compiler writes rather than as a number it stopped at, because
             // there is no number: an author told to raise one would raise it and get the same
             // offer. What would change this is somebody writing the rest of what it walks, and the
@@ -3095,7 +3095,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     " — this compiler writes some of " + writes(it.notAllOf())
                             + " rather than all of them: "
                             + it.why().said().orElseGet(() -> whyUnresolved(it.why()))
-                            + whatTheRegionLeftOut(it.unaccountedFor(), shown, rendering, declaredIn);
+                            + alsoLeftOut(it.unaccountedFor(), shown, rendering, declaredIn);
             // Both halves, because neither says what the other does. The word is what the search
             // itself came to; the figure is why that word is not about the whole of the point. Said
             // as the word alone, an author reads a proof about a value this compiler never planned
@@ -3104,18 +3104,52 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     " — as far as this compiler plans, which stops at "
                             + said(it.limitedBy()) + ": "
                             + it.why().said().orElseGet(() -> whyUnresolved(it.why()))
-                            + whatTheRegionLeftOut(it.unaccountedFor(), shown, rendering, declaredIn);
+                            + alsoLeftOut(it.unaccountedFor(), shown, rendering, declaredIn);
             // No search to report on, which is what this says instead of saying what one found. The
             // figure is what an author would raise to get one made at all.
             case ItemAssessment.Attempt.Unplanned it ->
                     " — nothing was planned for it, because this compiler stops at "
                             + said(it.limitedBy())
-                            + whatTheRegionLeftOut(it.unaccountedFor(), shown, rendering, declaredIn);
-            case ItemAssessment.Attempt.Unresolved it ->
-                    (it.why().reason().provesInfeasible() ? " — " : " — nothing composed one: ")
-                            + it.why().said().orElseGet(() -> whyUnresolved(it.why()))
-                            + whatTheRegionLeftOut(it.unaccountedFor(), shown, rendering, declaredIn);
+                            + alsoLeftOut(it.unaccountedFor(), shown, rendering, declaredIn);
+            // What the search was over comes first here, and only here. Every outcome above opens
+            // on something of this compiler's — a figure it stopped at, a population it writes
+            // some of, a plan it never made — so a reader of one of those already knows the word
+            // beside it is not about the whole of the point, and what the way left out is read
+            // after it. This one opens on the search's own word, which on its own reads as a
+            // search that had everything and reached nothing; an author met it and went looking
+            // for a row nothing can write.
+            //
+            // Which conditions those are is not asked again: it is the same clause, in the place
+            // that says what the word after it is worth. Said as a second sentence of its own,
+            // there would be two wordings for one fact and a day when they part.
+            //
+            // The coverage and not the cause. Nothing here composed against those conditions, so
+            // what a search with them in would have found is not something to say — and the word
+            // that follows keeps saying an empty search does not make the point unreachable.
+            case ItemAssessment.Attempt.Unresolved it -> {
+                String word = (it.why().reason().provesInfeasible() ? "" : "nothing composed one: ")
+                        + it.why().said().orElseGet(() -> whyUnresolved(it.why()));
+                String leftOut =
+                        whatTheRegionLeftOut(it.unaccountedFor(), shown, rendering, declaredIn);
+                yield " — " + (leftOut.isEmpty() ? word : leftOut + "; " + word);
+            }
         };
+    }
+
+    /**
+     * The same, after an opening that has already said what of this compiler's the point is open
+     * on.
+     *
+     * <p>Beside the clause rather than inside it, because where it stands is the caller's. An
+     * outcome that opens on a figure, a population or a plan has already told a reader that the
+     * word beside it is not the whole of the point, so what the way left out reads after it; an
+     * outcome that opens on what the search came to has not, and puts the same clause first.
+     */
+    private static String alsoLeftOut(
+            List<ReachabilityGap> left, Map<ConditionReportAnchor, Citation> shown,
+            SourceRendering rendering, SourceId declaredIn) {
+        String said = whatTheRegionLeftOut(left, shown, rendering, declaredIn);
+        return said.isEmpty() ? "" : "; " + said;
     }
 
     /**
@@ -3137,7 +3171,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         if (left.isEmpty()) {
             return "";
         }
-        StringBuilder out = new StringBuilder("; not every condition on the way to the line is one"
+        StringBuilder out = new StringBuilder("not every condition on the way to the line is one"
                 + " the row was composed against: ");
         for (int i = 0; i < left.size(); i++) {
             out.append(i == 0 ? "" : ", ")
