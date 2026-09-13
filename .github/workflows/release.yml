@@ -147,8 +147,25 @@ jobs:
               ./install.ps1 -Version $version -From $dist -Nojdk:$nojdk
               $launcher = @(Get-ChildItem "$link/souther.exe", "$link/souther.cmd" -ErrorAction SilentlyContinue)[0]
               if (-not $launcher) { throw "no launcher under $link after installing (nojdk=$nojdk)" }
-              & $launcher.FullName help > $null
-              if ($LASTEXITCODE -ne 0) { throw "the installed launcher could not answer (nojdk=$nojdk)" }
+              # Asked what it is rather than asked for anything, which is the one question whose
+              # answer runs the whole chain this step installed: the version directory, the link
+              # pointing at it, the launcher under it, the jar the launcher runs, and the manifest
+              # inside the jar. Answered with a version other than the one packaged, some link in
+              # that chain is pointing somewhere else.
+              #
+              # Both spellings, because the reader this is for types the one with the dashes and
+              # this is the only place a dashed argument reaches these launchers at all. The jpackage
+              # image's is a native executable of its own, and whether what a reader writes arrives
+              # at the jar is a fact about that executable rather than about the command line.
+              foreach ($asking in @('version', '--version')) {
+                  $said = (& $launcher.FullName $asking | Out-String).Trim()
+                  if ($LASTEXITCODE -ne 0) {
+                      throw "the installed launcher could not answer '$asking' (nojdk=$nojdk)"
+                  }
+                  if ($said -ne "souther $version") {
+                      throw "the installed launcher answers '$asking' with '$said' rather than 'souther $version' (nojdk=$nojdk)"
+                  }
+              }
               $entries = Get-Entries
               if (@($entries | Where-Object { $_ -eq $link }).Count -ne 1) {
                   throw "PATH holds $link other than once: $($entries -join ';')"

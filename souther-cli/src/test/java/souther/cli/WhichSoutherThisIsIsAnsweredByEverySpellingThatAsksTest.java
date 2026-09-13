@@ -82,12 +82,19 @@ class WhichSoutherThisIsIsAnsweredByEverySpellingThatAsksTest {
         assertEquals(theReading(), said.out().strip());
     }
 
-    /** And ahead of what is wrong with the line, which is why nothing wrong with one is asserted. */
+    /**
+     * And ahead of what is wrong with the line: the answer is written and the refusal is not.
+     *
+     * <p>Both halves, because a line answered and refused at once is the shape this would otherwise
+     * drift into — the version on stdout under a zero code, and the unknown option on stderr beside
+     * it, which is a reader told their line is wrong by a run that did what they asked.
+     */
     @Test
     void theOptionOutranksARefusalOfTheLine() {
         Said said = run("compile", "--nonsense", "--version");
 
         assertEquals(0, said.code(), said.err());
+        assertEquals("", said.err());
         assertEquals(theReading(), said.out().strip());
     }
 

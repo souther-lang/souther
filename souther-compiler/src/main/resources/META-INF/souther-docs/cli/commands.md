@@ -582,8 +582,8 @@ version is written. Run from class files rather than from a distribution there i
 the answer is `unreleased` — a true statement about a build tree, and not a version anything
 resolves.
 
-The same reading is what the language server tells an editor as its `serverInfo`, so which Souther
-this is has one answer whoever asks it.
+The same reading is what `lsp` tells an editor and what `mcp` tells an agent harness as their
+`serverInfo`, so which Souther this is has one answer whoever asks it.
 
 <!-- souther-section: shared-options -->
 ## Options every command shares
