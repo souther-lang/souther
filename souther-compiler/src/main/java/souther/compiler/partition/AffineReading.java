@@ -272,8 +272,8 @@ record AffineReading(LinearForm<NumericTerm> form, BigDecimal cut, ComparisonCla
     }
 
     /** The one position this cuts where it cuts one with a coefficient of one, or null. A form
-     *  written {@code -x} has already been turned round by {@link #of}, so this asks about the
-     *  coefficient as the canonical form has it. */
+     *  written {@code -x} has already been turned round by the reading that made it
+     *  ({@link #read}), so this asks about the coefficient as the canonical form has it. */
     NumericTerm oneCoordinate() {
         if (form.coefs().size() != 1) {
             return null;
