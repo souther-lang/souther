@@ -6,6 +6,7 @@ import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.numeric.OrderedInterval;
 import souther.compiler.numeric.Place;
+import souther.compiler.numeric.PlacesApart;
 import souther.compiler.numeric.Text;
 import souther.compiler.regex.Meter;
 import souther.compiler.values.Allowance;
@@ -508,7 +509,7 @@ final class Classing {
         // own, because what one of them costs to write is nothing the class beside it should be
         // short of.
         Place stands = carrier.somewhereIn(cell.values(), new OrderedInterval(null, null),
-                List.of(), perWitness.get());
+                PlacesApart.NONE, perWitness.get());
         FixtureTemplate written =
                 stands == null ? null : writing.apply(stands);
         return written == null

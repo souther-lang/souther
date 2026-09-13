@@ -163,21 +163,25 @@ class AChoiceOfBoundsOnOneNumberStopsItWhereBothLeaveItTest {
      *
      * <p>Two alternatives naming one size each leave the run between them, and a set of four is a
      * row nobody can write. So both lines are drawn — the sizes are where the model says they are —
-     * and the run between them comes back with nothing standing on it, because every value tried
-     * there was refused. The two are different contracts and this holds them apart: read as a
-     * representation of the sizes, the range would say four is one of them.
+     * and nothing divides the position into the classes those sizes would make. The two are
+     * different contracts and this holds them apart: read as a representation of the sizes, the
+     * rule would divide the values and say four is one of them.
+     *
+     * <p>Each half read where it is stated. What the lines come to is read off the border, and
+     * whether the sizes were represented off the partition — the run either line leaves is a run
+     * with a size of the model at one end of it, so a row standing there says nothing either way
+     * about the size nobody wrote.
      */
     @Test
     void andTheEnvelopeIsWhereTheEndsAreAndNotWhatTheNumberHolds() {
-        assertEquals(List.of("border      borders 2   obligations 0/0",
+        assertEquals(List.of(
+                        "partition   not measured (no partition axis was derived at any position)",
+                        "· divided no way: c[*]",
+                        "border      borders 2   obligations 0/0",
                         "· read as check/Set.size(c): = 3",
-                        "· read as check/Set.size(c): in 3 < Set.size(c) <= 5"
-                                + " — nothing composed one: every value tried at"
-                                + " 3 < Set.size(c) <= 5 was refused",
+                        "· read as check/Set.size(c): in 3 < Set.size(c) <= 5",
                         "· read as check/Set.size(c): = 5",
-                        "· read as check/Set.size(c): in 3 <= Set.size(c) < 5"
-                                + " — nothing composed one: every value tried at"
-                                + " 3 <= Set.size(c) < 5 was refused"),
+                        "· read as check/Set.size(c): in 3 <= Set.size(c) < 5"),
                 linesOfSource("""
                         module example.rooms
 
@@ -191,8 +195,11 @@ class AChoiceOfBoundsOnOneNumberStopsItWhereBothLeaveItTest {
                         behavior check : (c: Codes) -> Answer
                         let check (c) = Yes
                         """,
-                        each -> each.startsWith("border") || each.startsWith("· read as")),
-                "the ends are at three and five, and no set has a size between them");
+                        each -> each.startsWith("border") || each.startsWith("· read as")
+                                || each.startsWith("partition")
+                                || each.startsWith("· divided")),
+                "the ends are at three and five, and nothing says the sizes between them are"
+                        + " values");
     }
 
     /**

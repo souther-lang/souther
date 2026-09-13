@@ -116,12 +116,26 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
             Map.entry("souther.compiler.partition.LevelRealizer#ofTwo("
                             + "Lsouther/compiler/partition/Standing$OfTwoOnOneCarrier;"
                             + "Lsouther/compiler/inputs/SearchRegion;"
-                            + "Lsouther/compiler/partition/WitnessSearch;)"
+                            + "Lsouther/compiler/partition/WitnessSearch;"
+                            + "Lsouther/compiler/partition/ValuesTried;)"
                             + "Lsouther/compiler/partition/Realization;",
                     "stops walking a line at the places it tries and says which figure"),
+            Map.entry("souther.compiler.query.Coverages$2#search("
+                            + "Lsouther/compiler/partition/Criterion;Ljava/lang/String;)"
+                            + "Lsouther/compiler/query/SearchOutcomes;",
+                    "stops asking a point for another value to stand a row on, and answers with"
+                            + " what the values it did try came to"),
+            Map.entry("souther.compiler.query.Coverages$2#endedBy("
+                            + "Lsouther/compiler/query/SearchOutcomes;"
+                            + "Lsouther/compiler/partition/Realization;)"
+                            + "Lsouther/compiler/query/SearchOutcomes;",
+                    "hands that figure on with the answer where the realizer had a value left to"
+                            + " give, which is what says the answer is about fewer values than the"
+                            + " point had"),
             Map.entry("souther.compiler.partition.LevelRealizer#ofAForm("
                             + "Lsouther/compiler/partition/Standing$OfAForm;"
-                            + "Lsouther/compiler/inputs/SearchRegion;)"
+                            + "Lsouther/compiler/inputs/SearchRegion;"
+                            + "Lsouther/compiler/partition/ValuesTried;)"
                             + "Lsouther/compiler/partition/Realization;",
                     "collects what the level walks ran out of, and the levels it was offered"),
             Map.entry("souther.compiler.partition.LevelRealizer$Search#stepsLeft()Z",
@@ -206,7 +220,8 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
         Set<String> found = new LinkedHashSet<>();
         for (Compiled.Site site : Compiled.sites()) {
             if (site.owner().equals(BUDGET) && !site.member().equals("<init>")
-                    && !site.from().equals(BUDGET) && !javacsOwn(site.from())) {
+                    && !site.from().equals(BUDGET)
+                    && !javacsOwn(site.from(), site.method())) {
                 found.add(site.at());
             }
         }
@@ -234,10 +249,16 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
      * table reads every constant to number them. Counted as readers, every exhaustive switch would
      * be a place to write a sentence about — and the sentence would be about the switch, which is
      * already named here by the method that holds it.
+     *
+     * <p>The table is built where a class is prepared, which is what tells it from a class somebody
+     * wrote. An anonymous class is named the same way and its methods are code as much as any
+     * other's, so a figure read in one is a figure read here — exempted by the name alone, the one
+     * place the reading of a border spends this compiler's figures was a place nothing asked about.
      */
-    private static boolean javacsOwn(String from) {
+    private static boolean javacsOwn(String from, String method) {
         int nested = from.lastIndexOf('$');
         return nested >= 0 && from.length() > nested + 1
-                && Character.isDigit(from.charAt(nested + 1));
+                && Character.isDigit(from.charAt(nested + 1))
+                && method.equals("<clinit>");
     }
 }

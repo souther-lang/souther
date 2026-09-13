@@ -38,6 +38,7 @@ import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
+import souther.compiler.numeric.PlacesApart;
 import souther.compiler.regex.Language;
 import souther.compiler.regex.Meter;
 import souther.compiler.regex.PatternPlan;
@@ -1203,7 +1204,7 @@ public final class Partitions {
                     standing(view, carrier, value, ruleSource)));
         }
         // Out of what writing one value costs, as every witness for a row is.
-        Place other = carrier.somethingOtherThan(values, within, admits,
+        Place other = carrier.somethingOtherThan(PlacesApart.of(values), within, admits,
                 PatternPlan.Budget.OF_A_WITNESS.meter());
         String label = "/= " + String.join(", ",
                 values.stream().map(carrier::written).toList());

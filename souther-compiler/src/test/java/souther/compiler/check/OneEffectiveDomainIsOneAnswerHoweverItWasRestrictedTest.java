@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.OrderedInterval;
 import souther.compiler.numeric.Place;
+import souther.compiler.numeric.PlacesApart;
 import souther.compiler.numeric.Text;
 import souther.compiler.regex.Meter;
 import souther.compiler.regex.PatternParser;
@@ -77,7 +78,7 @@ class OneEffectiveDomainIsOneAnswerHoweverItWasRestrictedTest {
      */
     private static Answer asked(ValueSet set, OrderedInterval run) {
         Meter meter = PatternPlan.Budget.OF_A_WITNESS.meter();
-        Place at = TEXT.somewhereIn(set, run, List.of(), meter);
+        Place at = TEXT.somewhereIn(set, run, PlacesApart.NONE, meter);
         if (at != null) {
             return new Answer.Wrote(((Text) at).at());
         }

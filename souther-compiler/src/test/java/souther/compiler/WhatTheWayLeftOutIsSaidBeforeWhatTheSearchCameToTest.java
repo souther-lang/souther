@@ -35,7 +35,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class WhatTheWayLeftOutIsSaidBeforeWhatTheSearchCameToTest {
 
-    /** A condition above the line measuring a location the comparison below it compares. */
+    /**
+     * A condition above the line measuring a location the comparison below it compares.
+     *
+     * <p>At a length nothing stands below, so that the row composed without the condition does not
+     * meet it by accident. The only string of no characters is the least one there is, and a point
+     * asking for a value under it is one no second value put to it would reach either.
+     */
     private static final String A_MEASURE_OF_A_COMPARED_POSITION = """
             module example.shared
 
@@ -47,7 +53,7 @@ class WhatTheWayLeftOutIsSaidBeforeWhatTheSearchCameToTest {
                 constructs No
 
             let cmp (a, b) = {
-                guard String.length(b) /= 1 else No { why = 0 }
+                guard String.length(b) < 1 else No { why = 0 }
                 guard a < b else No { why = 1 }
                 Yes { v = 1 }
             }
@@ -122,6 +128,7 @@ class WhatTheWayLeftOutIsSaidBeforeWhatTheSearchCameToTest {
      */
     @Test
     void whateverLetTheConditionGoIsSaidBeforeTheSearchesWord() {
+        int openedOnTheClause = 0;
         for (String model : List.of(A_MEASURE_OF_A_COMPARED_POSITION,
                 POSITIONS_NOTHING_COMPOSED_A_VALUE_AT, A_SHAPE_THE_WALK_HAS_NO_WORDS_FOR)) {
             List<String> said = whereNothingCouldShowARow(model);
@@ -129,12 +136,27 @@ class WhatTheWayLeftOutIsSaidBeforeWhatTheSearchCameToTest {
             assertFalse(said.isEmpty(), () -> "this model has points nothing composed a row for:\n"
                     + model);
             for (String each : said) {
-                assertTrue(each.contains("— " + LEFT_OUT + ":"),
-                        () -> "the line opens on what the way left out: " + each);
-                assertTrue(each.indexOf(LEFT_OUT) < each.indexOf("nothing composed one:"),
-                        () -> "and the search's own word follows it: " + each);
+                assertTrue(each.contains(LEFT_OUT),
+                        () -> "the line says what the way left out: " + each);
+                // Where the outcome is the search's own word and nothing else, the clause opens
+                // the line: read the other way round, an author meets a word that on its own says
+                // a search had everything and reached nothing. Where the outcome opens on
+                // something of this compiler's, the reader already knows the word beside it is
+                // about less than the point, and the clause is read after it.
+                if (each.contains("nothing composed one:")) {
+                    openedOnTheClause++;
+                    assertTrue(each.contains("— " + LEFT_OUT + ":"),
+                            () -> "the line opens on what the way left out: " + each);
+                    assertTrue(each.indexOf(LEFT_OUT) < each.indexOf("nothing composed one:"),
+                            () -> "and the search's own word follows it: " + each);
+                }
             }
         }
+        // And the ordering above was read of something. A rule about lines of one shape, checked
+        // where no line has that shape, is a green that says nothing — and every model here could
+        // come to open on a figure without a word of this test changing.
+        assertTrue(openedOnTheClause > 0,
+                "a point of these models is answered by the search's own word and nothing else");
     }
 
     /**

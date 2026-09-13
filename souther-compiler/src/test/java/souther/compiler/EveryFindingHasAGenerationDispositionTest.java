@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.partition.GenerationOutcome;
+import souther.compiler.partition.PointRole;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderObligationPointAssessment;
 import souther.compiler.query.Compilation;
@@ -174,8 +175,8 @@ class EveryFindingHasAGenerationDispositionTest {
      * A generation narrowed to one behavior answers from what that behavior's search composed.
      *
      * <p>A line is owed once over every behavior carrying the type, and a row for it may be
-     * composable at one of them and not at another — {@code held} holds the field to a single
-     * value the line is not at, and {@code anywhere} does not. Answered from the module's readings, a
+     * composable at one of them and not at another — {@code held} holds the field to values the
+     * line itself is not at, and {@code anywhere} does not. Answered from the module's readings, a
      * request that searched only {@code held} would say a row is on offer because {@code anywhere}
      * had one, and print no row beside it (issue #1062).
      *
@@ -187,9 +188,9 @@ class EveryFindingHasAGenerationDispositionTest {
     void aGenerationNarrowedToOneBehaviorAnswersFromWhatThatBehaviorSearched() {
         Compilation compilation = compiled(NARROWED);
         List<PointResolution> atHeld = drawnBy(resolved(compilation, "example.narrowed",
-                new GenerationScope.Behavior("held")), "Code");
+                new GenerationScope.Behavior("held")), "Code", PointRole.ON);
         List<PointResolution> atAnywhere = drawnBy(resolved(compilation, "example.narrowed",
-                new GenerationScope.Behavior("anywhere")), "Code");
+                new GenerationScope.Behavior("anywhere")), "Code", PointRole.ON);
 
         assertFalse(atHeld.isEmpty(), "the line is owed at both, so both are asked about");
         assertFalse(atAnywhere.isEmpty(), "the line is owed at both, so both are asked about");
@@ -207,9 +208,23 @@ class EveryFindingHasAGenerationDispositionTest {
      * <p>Asked by the declaration the line is owed to, because a model has more than one: what
      * {@code Narrow} says about its own field is a line too, and a reading that can compose nothing
      * at {@code Code}'s line composes one at that.
+     *
      */
     private static List<PointResolution> drawnBy(BorderAccount rows, String declaredOn) {
+        return drawnBy(rows, declaredOn, null);
+    }
+
+    /**
+     * The same, at one of the line's points.
+     *
+     * <p>Because the points of a line are separate work. A position admitting nothing at the value
+     * a rule names admits plenty in the run beside it, so a caller whose subject is a point nobody
+     * can stand at has to say which point that is.
+     */
+    private static List<PointResolution> drawnBy(BorderAccount rows, String declaredOn,
+                                                 PointRole role) {
         return rows.resolved().entrySet().stream()
+                .filter(each -> role == null || each.getKey().role() == role)
                 .filter(each -> each.getKey().line().owedToTheDeclaration()
                         .map(on -> on.name().equals(declaredOn)).orElse(false))
                 .map(each -> each.getValue().resolution()).toList();
@@ -218,7 +233,7 @@ class EveryFindingHasAGenerationDispositionTest {
     /**
      * A line the first reading composes nothing at is searched at the next.
      *
-     * <p>The whole of what a search over the readings is for. {@code Narrow} holds its field to four
+     * <p>The whole of what a search over the readings is for. {@code Narrow} holds its field to three
      * characters or more, so the reading of the line at {@code held} cannot stand a row at length 1
      * — and a line one reading composes nothing at is not a line nothing composes a row for
      * (issue #1076). Stopping at the first reading, the module's own declaration was reported as
@@ -227,7 +242,8 @@ class EveryFindingHasAGenerationDispositionTest {
     @Test
     void aLineTheFirstReadingComposesNothingAtIsSearchedAtTheNext() {
         List<PointResolution> atCode = drawnBy(
-                resolved(compiled(HELD_FIRST), "example.held", new GenerationScope.Module()), "Code");
+                resolved(compiled(HELD_FIRST), "example.held", new GenerationScope.Module()),
+                "Code", PointRole.ON);
 
         assertFalse(atCode.isEmpty(), "the model under test has a line owed at both");
         assertEquals(List.of("anywhere"), atCode.stream()
@@ -278,7 +294,7 @@ class EveryFindingHasAGenerationDispositionTest {
     @Test
     void aWalkThatCouldNotSeeEveryReadingDoesNotSettleTheLine() {
         List<SearchCoverage> narrowed = drawnBy(resolved(compiled(NARROWED), "example.narrowed",
-                new GenerationScope.Behavior("held")), "Code").stream()
+                new GenerationScope.Behavior("held")), "Code", PointRole.ON).stream()
                 .filter(each -> each instanceof PointResolution.Unresolved)
                 .map(each -> ((PointResolution.Unresolved) each).coverage()).toList();
 
