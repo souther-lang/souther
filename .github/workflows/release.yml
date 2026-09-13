@@ -9,6 +9,14 @@ on:
     tags:
       - 'v*'
   workflow_dispatch:
+  # Nothing else runs on Windows, so a change to what is packaged there would otherwise first be
+  # run at release time. The job below that packages runs on such a change; the one that publishes
+  # has nothing to publish and does not.
+  pull_request:
+    paths:
+      - '.github/workflows/release.yml'
+      - 'bin/package-windows.ps1'
+      - 'souther-cli/src/main/launcher/**'
 
 permissions:
   contents: write
@@ -62,6 +70,7 @@ jobs:
 
   release:
     needs: windows
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
