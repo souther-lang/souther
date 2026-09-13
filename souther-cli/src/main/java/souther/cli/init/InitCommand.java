@@ -168,7 +168,7 @@ public final class InitCommand {
         }
         say(out, report, locale);
         out.println();
-        next(out, project, target, here, locale);
+        next(out, project, target, here, locale, existing == null);
         return 0;
     }
 
@@ -317,23 +317,26 @@ public final class InitCommand {
     /**
      * What to run next, which is the one thing a reader does after this command.
      *
-     * <p>A compile and not a test run. What is written here is a model and the rows that pin it down,
-     * and the rows are checked where the model is compiled; a project starts with no test, so naming
-     * one would send the reader to a phase with nothing in it.
+     * <p>Which command that is follows from which of this command's two readings ran. A project this
+     * command laid out starts with a model and the rows that pin it down, and the rows are checked
+     * where the model is compiled — it has no test, so naming one would send the reader to a phase
+     * with nothing in it. A build that was added to has whatever tests its author wrote, and a run of
+     * those is what says the model now beside them compiles and breaks nothing.
      */
-    private static void next(PrintStream out, Project project, Path target, Path here,
-                             Locale locale) {
+    private static void next(PrintStream out, Project project, Path target, Path here, Locale locale,
+                             boolean creating) {
         String where = display(here, target);
         String cd = where.isEmpty() || where.equals(".") ? "" : "cd " + where + " && ";
         if (project.build() == BuildSystem.MAVEN) {
-            out.println("    " + cd + "mvn compile");
+            out.println("    " + cd + (creating ? "mvn compile" : "mvn test"));
             return;
         }
         // A wrapper is not written here — one written at release time pins a Gradle version this
         // command has no way of revisiting — so a project that has none is told how to make one.
         boolean wrapper = Files.isRegularFile(target.resolve("gradlew"));
+        String task = creating ? "classes" : "test";
         out.println("    " + cd
-                + (wrapper ? "./gradlew classes" : "gradle wrapper && ./gradlew classes"));
+                + (wrapper ? "./gradlew " + task : "gradle wrapper && ./gradlew " + task));
         if (!wrapper && !onThePath("gradle")) {
             out.println();
             out.println("    " + Messages.get("cli.init.gradle", locale));

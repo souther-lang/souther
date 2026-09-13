@@ -53,7 +53,10 @@ souther {
 Where a `pom.xml` or a `build.gradle.kts` is already there, the coordinate is read out of it rather
 than written on the line, `--build` is not read — the build that is there is the build — and what is
 added is a source directory and the plugin declaration. The previous contents of the build file are
-left in a `.orig` beside it, unless git is already holding them.
+left in a `.orig` beside it, unless git is already holding them. What it says to run there is `mvn
+test` — the build has whatever tests its author wrote, and a run of them is what says the model now
+beside them compiles and breaks nothing. A project this command laid out has none of its own, so that
+one is sent to `mvn compile`, which is where its `example` rows are checked.
 
 The module header follows from the coordinate: the group and the artifact, with a hyphen written as
 an underscore, so `com.acme:billing-service` writes `module com.acme.billing_service`. That name is
