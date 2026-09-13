@@ -283,7 +283,7 @@ class NoBroadFailureBecomesAnAnswerInTheAnalysisCoreTest {
                     "(Ljava/lang/String;Ljava/util/Map;"
                             + "Lsouther/compiler/partition/Reachability$Reaching;"
                             + "Lsouther/compiler/partition/AnswersDemanded;)"
-                            + "Lsouther/compiler/partition/Generator$BoundaryAttempt;",
+                            + "Ljava/util/List;",
                     "java.lang.LinkageError",
                     "whether the classes generated for this model link, asked by building a row"
                             + " out of them — answered as nothing tried, which is not everything"
