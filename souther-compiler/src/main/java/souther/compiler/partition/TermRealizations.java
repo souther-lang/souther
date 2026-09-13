@@ -173,37 +173,6 @@ final class TermRealizations {
     }
 
     /**
-     * Whether one value of the position is the only one that answers a given number.
-     *
-     * <p>Asked here and keyed on the account of what is taken, because that account <em>is</em> the
-     * algorithm and whether its inverse is single-valued is a property of the algorithm. Read off
-     * the kind of term instead, every operation answering a number of a location was many-valued —
-     * which is true of the two there are and is not what being one of them means. An injective
-     * intrinsic would be a term of the same kind and would have been treated as many-valued, with
-     * nothing saying so: the same defect {@code SizeOf} was, at a smaller size (#1027).
-     *
-     * <p>Answered without building anything, because the readers that ask are deciding whether to
-     * try. What a value looks like is {@link #at}'s and costs what it costs.
-     */
-    static boolean onlyOneValueAnswersIt(RealizationTarget target) {
-        return switch (target.term()) {
-            // The number is the value, so it is the one value there is.
-            case NumericTerm.ValueOf _ -> true;
-            case NumericTerm.TakenOf taken -> switch (taken.takenAs()) {
-                // Every container of that many answers it, every time within that hour does, and
-                // every date in that year falls in it. So does every container adding up to a
-                // total: one element at the whole of it, or two that come to it between them.
-                case TakenAs.HowManyItHolds _, TakenAs.TheSumOfWhatItHolds _,
-                     TakenAs.PartOfTime _, TakenAs.PartOfDate _ -> false;
-            };
-            // Every container whose values come to it answers it, whichever account is taken over
-            // them. A run is many values by construction, so no account of one is met by a single
-            // container.
-            case NumericTerm.TakenOver _ -> false;
-        };
-    }
-
-    /**
      * Whether one value of a root answers all of these numbers at once.
      *
      * <p><b>Asked before anything is built, the way its neighbour above is.</b> A row writes one

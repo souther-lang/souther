@@ -81,10 +81,10 @@ class ALocationAskedForTwoNumbersIsWrittenOnceForBothTest {
     /**
      * The same comparison over two times, which really is a second location.
      *
-     * <p>The control for the one above, and it is still open. A number met by several values cannot
-     * be offered beside another location being fixed as well, which is #1654 and is untouched here
-     * — so the pair differs in exactly the thing the limit is about, and a row composed for the one
-     * above is not this compiler having stopped counting locations at all.
+     * <p>Beside the one above, and it composes too. What a location asked for two numbers needs is
+     * one value answering both; what two locations need is a value at each, and neither of them is
+     * the other's problem — so the pair reads as two shapes of one answer rather than as a shape
+     * and its limit.
      */
     private static final String TWO_PARTS_OF_TWO_TIMES = """
             module example.compared
@@ -174,7 +174,7 @@ class ALocationAskedForTwoNumbersIsWrittenOnceForBothTest {
     @Test
     void bothNumbersAreAnsweredByTheOneValueTheRowWrites() {
         for (String model : List.of(TWO_PARTS_OF_A_TIME, TWO_PARTS_OF_A_DATE,
-                TWO_PARTS_COMPARED_WITH_EACH_OTHER)) {
+                TWO_PARTS_COMPARED_WITH_EACH_OTHER, TWO_PARTS_OF_TWO_TIMES)) {
             List<String> open = whatNothingCouldShow(model);
 
             assertEquals(List.of(), open,
@@ -197,20 +197,6 @@ class ALocationAskedForTwoNumbersIsWrittenOnceForBothTest {
         assertEquals(List.of(), whatNothingCouldShow(ONE_PART_OF_A_TIME));
     }
 
-    /**
-     * And a second location is still a second location, which is what the item's own limit is
-     * about.
-     *
-     * <p>The same comparison over two times rather than two parts of one. A number met by several
-     * values cannot be offered beside another location being fixed as well — that is #1654 — so
-     * every point of this line is still open. Read as passing because the model above passes, the
-     * change would be this compiler having stopped counting locations at all.
-     */
-    @Test
-    void aComparisonAcrossTwoLocationsIsStillRefused() {
-        assertFalse(whatNothingCouldShow(TWO_PARTS_OF_TWO_TIMES).isEmpty(),
-                "a value met by several is not offered beside a second location of the item");
-    }
 
     /**
      * And a location whose two numbers no value answers together is still said to be one, which is

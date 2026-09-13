@@ -101,7 +101,7 @@ class OnlyTypeAtWrittenPathStepsIntoAWrittenValueTest {
                         + " calls");
         assertEquals(Set.of("souther.compiler.partition.Generator#edgeAt("
                         + "Lsouther/compiler/partition/MeasuredInput;"
-                        + "Ljava/util/SequencedMap;Z"
+                        + "Ljava/util/SequencedMap;"
                         + "Lsouther/compiler/inputs/SearchRegion;)"
                         + "Lsouther/compiler/partition/Generator$Edge;"), asks,
                 "where a value is written is asked where one is composed, and a second asker is a"
