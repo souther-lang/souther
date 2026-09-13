@@ -2877,17 +2877,20 @@ public final class Generator {
         // about the row being written.
         Standing where = alsoOnTheWay(subject, fixing, reaching);
         Map<RealizationTarget, Place> standing = where.at();
-        for (Map.Entry<RealizationTarget, Place> each : standing.entrySet()) {
+        // One edge per location and not one per number. A location asked for two numbers is one
+        // value to write, so the two are composed together and written once; walked one number at a
+        // time, the second was a value built for a place the first had already written.
+        for (Map.Entry<TermPath, SequencedMap<RealizationTarget, Place>> group
+                : byTheLocationTheyWrite(standing).entrySet()) {
             // Beside another where the item fixes more than one position. The way's are not counted
             // in: what that limit is about is a number met by several values being asked to stand
             // beside a second position of the same item, and a position bounded on the way is one
             // this could leave to its own range without the row stopping being a row at the item.
-            Edge edge = edgeAt(subject, each.getKey(), each.getValue(),
-                    fixing.size() > 1, reaching.region());
+            Edge edge = edgeAt(subject, group.getValue(), fixing.size() > 1, reaching.region());
             if (edge.values().isEmpty()) {
                 return edge.cameToNothing(label, where.unrepresented());
             }
-            TermPath at = each.getKey().writeRoot();
+            TermPath at = group.getKey();
             // Two terms at one location is that location asked for two things at once — a string of
             // a length and the string itself — and what a row writes at a location is one value.
             // The fixing keeps them apart ({@link Realization.Found}) and this cannot, so it says so
@@ -3057,8 +3060,6 @@ public final class Generator {
                                          Reachability.Reaching reaching) {
         Map<RealizationTarget, Place> out = new LinkedHashMap<>(fixing);
         List<ReachabilityGap.Uncomposed> unrepresented = new ArrayList<>();
-        java.util.Set<TermPath> taken = new java.util.LinkedHashSet<>();
-        fixing.keySet().forEach(target -> taken.add(target.writeRoot()));
         souther.compiler.inputs.SearchRegion here = reaching.region();
         for (Map.Entry<RealizationTarget, Place> each : fixing.entrySet()) {
             if (each.getValue() instanceof Count count) {
@@ -3088,19 +3089,24 @@ public final class Generator {
                     break;
                 }
                 // Another number taken at the same location. A row writes one value where a
-                // location is, and that one value would have to answer both — a string of a length
-                // and the string itself is the shape of it. Nothing here composes a value to two
-                // numbers at once, so the cut is one this could not put a value under.
+                // location is, and that one value has to answer both — the hour of a time beside
+                // its minute, the length of a string beside the string. Whether one value can is
+                // {@link TermRealizations}' answer and is asked before anything is placed here: a
+                // group it builds together is placed and written once, and one it does not is a cut
+                // this could not put a value under.
                 //
-                // Which locations are one is asked of the reader that owns it, because a container
-                // written whole and a position inside it are one location spelled two ways. Kept
-                // here as a lookup of the path, this would place a cut the writing then refuses,
-                // and a cut that cannot be represented would sink the whole point rather than being
-                // reported as the one thing it is.
-                if (taken.stream().anyMatch(
-                        each -> LocationWrites.oneLocation(each, at.position()))) {
-                    shared = true;
-                    break;
+                // Asked of what is already standing rather than of a list kept beside it, so the
+                // answer is about the demands this row actually has. Which locations are one is
+                // asked of the reader that owns it, because a container written whole and a
+                // position inside it are one location spelled two ways.
+                List<RealizationTarget> beside = alsoWritingAt(out, at.position());
+                if (!beside.isEmpty()) {
+                    List<RealizationTarget> both = new ArrayList<>(beside);
+                    both.add(RealizationTarget.of(at));
+                    if (!TermRealizations.oneValueAnswersThemTogether(both)) {
+                        shared = true;
+                        break;
+                    }
                 }
                 owing.add(at);
             }
@@ -3128,11 +3134,29 @@ public final class Generator {
                 if (each.getValue() instanceof Count count) {
                     here = here.given(each.getKey(), count);
                 }
-                taken.add(each.getKey().position());
                 out.put(new RealizationTarget.AtOnePosition(each.getKey()), each.getValue());
             }
         }
         return new Standing(out, unrepresented);
+    }
+
+    /**
+     * The numbers already being written where {@code position} is, which is what a number asked for
+     * there has to stand beside.
+     *
+     * <p>Read off what is standing rather than kept as a set of paths alongside it. The two would
+     * be one answer held twice, and what the question is about is the targets and not the paths:
+     * whether a value can answer them together is asked of the numbers.
+     */
+    private static List<RealizationTarget> alsoWritingAt(Map<RealizationTarget, Place> standing,
+                                                         TermPath position) {
+        List<RealizationTarget> beside = new ArrayList<>();
+        for (RealizationTarget target : standing.keySet()) {
+            if (LocationWrites.oneLocation(target.writeRoot(), position)) {
+                beside.add(target);
+            }
+        }
+        return beside;
     }
 
     /**
@@ -3341,16 +3365,23 @@ public final class Generator {
      *                      collapsing the two searches into one changed nothing, and removing it is
      *                      its own answer to give
      */
-    private static Edge edgeAt(MeasuredInput subject, RealizationTarget target, Place at,
+    private static Edge edgeAt(MeasuredInput subject, SequencedMap<RealizationTarget, Place> group,
                                boolean besideAnother,
                                souther.compiler.inputs.SearchRegion within) {
         // A number met by several values can offer only one of them beside a second position being
         // fixed as well. Whether it is met by several is the realization's question and not the kind
         // of term's: an operation whose inverse is single-valued would be the same kind of term and
         // would have been turned away here with nothing saying so (#1027).
-        if (besideAnother && !TermRealizations.onlyOneValueAnswersIt(target)) {
-            return Edge.none(UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+        //
+        // Of each number and not of the location, because the limit is about a number met by
+        // several values. A location asked for several numbers is narrower than any of them and not
+        // wider, so asking of the group would let through what asking of one refuses.
+        for (RealizationTarget target : group.keySet()) {
+            if (besideAnother && !TermRealizations.onlyOneValueAnswersIt(target)) {
+                return Edge.none(UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+            }
         }
+        RealizationTarget target = group.firstEntry().getKey();
         // Which value answers the number is `TermRealizations`' one answer — asked of it whatever
         // kind of number this is, so that what can be built is settled in one place. Read off the
         // kind of term here as well, an operation would gain a value nothing writes for it on the
@@ -3370,10 +3401,31 @@ public final class Generator {
         // And both orders the value is read back on, which are the reading's. Taken off the type
         // above, the walk that answers where a value is written would be answering what a number
         // there is measured on as well, and the two are one value only for as long as no term
-        // arrives where they part.
-        souther.compiler.inputs.TermOrders on = subject.quantities().ordersOf(target.term());
-        return edgeFrom(TermRealizations.at(writtenAt, on, at, within, subject.ruleReading()),
-                target, at);
+        // arrives where they part. Handed over as the question rather than as an answer, since a
+        // group is over several terms and each of them is measured where this reading says.
+        return edgeFrom(TermRealizations.together(writtenAt, group,
+                subject.quantities()::ordersOf, within, subject.ruleReading()), group);
+    }
+
+    /**
+     * The row's positions gathered under the location each of them is written at.
+     *
+     * <p>Which is what a row is: one value per location, whatever number of the model that value
+     * was asked for. Walked as the numbers alone, a location asked for two of them is two edges and
+     * two values, and what the row carries is the second one.
+     *
+     * <p>By the path each number is written at and not by which paths reach one value. A container
+     * and a position inside it are one location and are two entries here, which leaves them where
+     * they were: nothing composes those together, and {@link LocationWrites} is what says so.
+     */
+    private static SequencedMap<TermPath, SequencedMap<RealizationTarget, Place>>
+            byTheLocationTheyWrite(Map<RealizationTarget, Place> standing) {
+        SequencedMap<TermPath, SequencedMap<RealizationTarget, Place>> out = new LinkedHashMap<>();
+        for (Map.Entry<RealizationTarget, Place> each : standing.entrySet()) {
+            out.computeIfAbsent(each.getKey().writeRoot(), _ -> new LinkedHashMap<>())
+                    .put(each.getKey(), each.getValue());
+        }
+        return out;
     }
 
     /**
@@ -5260,11 +5312,19 @@ public final class Generator {
      * the root free, since the number is not what stands there — so what the search records as
      * settled is the one and not the other. The one question here the variant genuinely settles, and
      * asked of the variant.
+     *
+     * <p>A location asked for several numbers settles at none of them. What is settled is a place on
+     * the root's own order, and a group is over numbers taken of the root — the content of the
+     * location is not among them, because a value answering a number taken of it and the content
+     * both is not something composed together.
      */
-    private static Edge edgeFrom(TermRealizations.Realization made, RealizationTarget target,
-                                 Place at) {
-        Place settled = switch (target.term()) {
-            case NumericTerm.ValueOf _ -> at;
+    private static Edge edgeFrom(TermRealizations.Realization made,
+                                 SequencedMap<RealizationTarget, Place> group) {
+        if (group.size() != 1) {
+            return new Edge(made, null);
+        }
+        Place settled = switch (group.firstEntry().getKey().term()) {
+            case NumericTerm.ValueOf _ -> group.firstEntry().getValue();
             // What an operation answered is not what its root holds — three characters is not the
             // position standing at three, and a hundred is not what the list adding up to it holds.
             case NumericTerm.TakenOf _, NumericTerm.TakenOver _ -> null;

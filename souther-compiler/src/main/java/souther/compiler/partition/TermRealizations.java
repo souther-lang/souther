@@ -14,8 +14,13 @@ import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.Type;
 
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.SequencedMap;
 import java.util.Set;
+import java.util.function.Function;
 
 /**
  * The values that put a term at a number, which is the other direction of reading a
@@ -199,6 +204,109 @@ final class TermRealizations {
     }
 
     /**
+     * Whether one value of a root answers all of these numbers at once.
+     *
+     * <p><b>Asked before anything is built, the way its neighbour above is.</b> A row writes one
+     * value where a location is, so a location asked for two numbers is answered by composing a
+     * value that has both or by nothing at all. Which of those it is turns on what the numbers are
+     * taken as, and that is this file's question: the composer's is where the value goes.
+     *
+     * <p>The parts of a time and the parts of a date are the ones a value can be built to have
+     * together, and they are what a count of seconds and a date are spelled in — each part is its
+     * own place in the spelling, so what one of them asks for leaves the others free. Anything else
+     * is refused here rather than tried and found wanting: how long a string is does not leave the
+     * string free, and a value answering both a length and an order is not something below builds.
+     *
+     * <p>Distinct parts, which is what makes them independent. Two asks at one part are two asks
+     * for one number and are the same target, so a group holding a part twice is a group somebody
+     * built by hand.
+     *
+     * <p>One target is always together with itself, so a caller need not ask whether it has more
+     * than one before asking this.
+     */
+    static boolean oneValueAnswersThemTogether(Collection<RealizationTarget> targets) {
+        if (targets.size() <= 1) {
+            return true;
+        }
+        Set<TakenAs.TimePart> times = new java.util.LinkedHashSet<>();
+        Set<TakenAs.DatePart> dates = new java.util.LinkedHashSet<>();
+        for (RealizationTarget target : targets) {
+            if (!(target.term() instanceof NumericTerm.TakenOf taken)) {
+                return false;
+            }
+            switch (taken.takenAs()) {
+                case TakenAs.PartOfTime part -> times.add(part.part());
+                case TakenAs.PartOfDate part -> dates.add(part.part());
+                case TakenAs.HowManyItHolds _, TakenAs.TheSumOfWhatItHolds _ -> {
+                    return false;
+                }
+            }
+        }
+        return times.size() + dates.size() == targets.size()
+                && (times.isEmpty() || dates.isEmpty());
+    }
+
+    /**
+     * The values to write at one root so that every one of these numbers is its answer.
+     *
+     * <p><b>One call for the whole of what a location was asked for.</b> Asked once per number and
+     * the answers combined afterwards, there is nothing to combine: two values were built for one
+     * place and the row holds whichever was written last, which is the point answered for one of
+     * its numbers and offered as answered for both.
+     *
+     * <p>A group of one is {@link #at}, and is not a second way of doing what that does. Every
+     * location the composer writes comes through here, so the case that grew the vocabulary is the
+     * case with one number in it rather than the case the code was written for.
+     *
+     * <p>What a group this cannot build together comes back as is a root nothing composes a value
+     * for, which is what {@link #oneValueAnswersThemTogether} says before a caller gets here — so a
+     * caller that asked is not told anything it could have avoided asking for.
+     *
+     * <p>What each number is measured on is read per term and not handed in, for the reason the
+     * single one reads it: a term this reading measures somewhere else is a term whose value would
+     * be written on a carrier a caller found elsewhere.
+     */
+    static Realization together(Type sourceType, SequencedMap<RealizationTarget, Place> demands,
+                                Function<NumericTerm, TermOrders> ordersOf,
+                                souther.compiler.inputs.SearchRegion within,
+                                RuleReadingContext reading) {
+        if (demands.size() == 1) {
+            Map.Entry<RealizationTarget, Place> one = demands.firstEntry();
+            return at(sourceType, ordersOf.apply(one.getKey().term()), one.getValue(), within,
+                    reading);
+        }
+        if (sourceType == null || !oneValueAnswersThemTogether(demands.keySet())) {
+            return new Realization.None(
+                    Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+        }
+        SequencedMap<TakenAs.TimePart, Count> times = new LinkedHashMap<>();
+        SequencedMap<TakenAs.DatePart, Count> dates = new LinkedHashMap<>();
+        Carrier observed = null;
+        for (Map.Entry<RealizationTarget, Place> each : demands.entrySet()) {
+            TermOrders orders = ordersOf.apply(each.getKey().term());
+            if (orders == null || !(each.getValue() instanceof Count count)
+                    || !(each.getKey().term() instanceof NumericTerm.TakenOf taken)) {
+                return new Realization.None(
+                        Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+            }
+            // The root's, and one root has one. Read off each term because that is where a reading
+            // answers it, and the same answer each time round is what being one location means.
+            observed = orders.observed();
+            switch (taken.takenAs()) {
+                case TakenAs.PartOfTime part -> times.put(part.part(), count);
+                case TakenAs.PartOfDate part -> dates.put(part.part(), count);
+                case TakenAs.HowManyItHolds _, TakenAs.TheSumOfWhatItHolds _ -> {
+                    return new Realization.None(
+                            Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+                }
+            }
+        }
+        return times.isEmpty()
+                ? onThoseParts(dates, sourceType, observed, reading.source())
+                : atThoseParts(times, sourceType, observed, reading.source());
+    }
+
+    /**
      * The values to write at {@code target}'s root so that its number is {@code answer}, given what
      * the root holds.
      *
@@ -338,38 +446,68 @@ final class TermRealizations {
     }
 
     /**
-     * A time of day whose given part stands at that number, with the parts below it at nought.
+     * A time of day whose given parts stand at those numbers, with the parts beside them at nought.
      *
      * <p>One of the many, and not the many. Every time in that hour answers the same hour, and
      * which of them is offered is this reader's to choose — what it owes is that what it offers
-     * reads back, not that it enumerates the inverse. Nought below is the plain choice: the hour on
-     * the hour.
+     * reads back, not that it enumerates the inverse. Nought beside is the plain choice: the hour
+     * on the hour.
      *
- * <p>The order is handed in and not named here. That what this is taken of is a time is the
+     * <p><b>Every part asked for at once, because the value is one value.</b> The parts of a time
+     * are what one count of seconds is spelled in, so a value written for one of them and a value
+     * written for another are the same value written twice — and the row that has to hold both is
+     * holding whichever was written last. Adding them up is the whole of what taking them together
+     * is: the parts do not overlap, so what each contributes to the count is what it contributes
+     * whoever else was asked for.
+     *
+     * <p>The order is handed in and not named here. That what this is taken of is a time is the
      * arm's own condition and the library is held to it, but which carrier a time is written on is
      * {@link Carrier}'s one answer — named here, this would be a second place saying what a time
      * counts, and the two would part the day the first one moved.
      */
-    private static Realization atThatPart(TakenAs.TimePart part, Type sourceType, Carrier observed,
-                                          Place answer, RuleReadingSource ruleSource) {
-        if (observed == null || !(answer instanceof Count count) || !count.whole()
-                || count.signum() < 0
-                || count.at().compareTo(java.math.BigDecimal.valueOf(part.many())) >= 0) {
-            // Outside the parts a day has. Not this reader's to report as a refusal: what a part
-            // runs between is the operation's declared bound, and a number outside it is a number
-            // nothing answers.
+    private static Realization atThoseParts(SequencedMap<TakenAs.TimePart, Count> parts,
+                                            Type sourceType, Carrier observed,
+                                            RuleReadingSource ruleSource) {
+        if (observed == null || parts.isEmpty()) {
             return new Realization.None(
                     Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
         }
-        Place seconds = Count.of(count.at()
-                .multiply(java.math.BigDecimal.valueOf(part.seconds())));
+        java.math.BigDecimal seconds = java.math.BigDecimal.ZERO;
+        for (Map.Entry<TakenAs.TimePart, Count> each : parts.entrySet()) {
+            Count count = each.getValue();
+            if (!count.whole() || count.signum() < 0
+                    || count.at().compareTo(
+                            java.math.BigDecimal.valueOf(each.getKey().many())) >= 0) {
+                // Outside the parts a day has. Not this reader's to report as a refusal: what a
+                // part runs between is the operation's declared bound, and a number outside it is a
+                // number nothing answers.
+                return new Realization.None(
+                        Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+            }
+            seconds = seconds.add(count.at()
+                    .multiply(java.math.BigDecimal.valueOf(each.getKey().seconds())));
+        }
         FixtureTemplate standing = WornNames.under(
                 TypeView.of(sourceType, ruleSource.inners(), ruleSource.symbols(), ruleSource.published()).wrappers(),
-                FixtureTemplate.on(observed, seconds, ruleSource.symbols().scope()::reach), ruleSource);
+                FixtureTemplate.on(observed, Count.of(seconds), ruleSource.symbols().scope()::reach),
+                ruleSource);
         return standing == null
                 ? new Realization.None(
                         Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE)
                 : Realization.Built.whole(List.of(standing));
+    }
+
+    /** The same for the one part a rule named, which is where the parts beside it are every part
+     *  there is. */
+    private static Realization atThatPart(TakenAs.TimePart part, Type sourceType, Carrier observed,
+                                          Place answer, RuleReadingSource ruleSource) {
+        if (!(answer instanceof Count count)) {
+            return new Realization.None(
+                    Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+        }
+        SequencedMap<TakenAs.TimePart, Count> one = new LinkedHashMap<>();
+        one.put(part, count);
+        return atThoseParts(one, sourceType, observed, ruleSource);
     }
 
     /**
@@ -391,13 +529,14 @@ final class TermRealizations {
      * what a witness can be built from, and reading the second off the first would make a bound
      * loosened by hand into dates that cannot be written.
      */
-    private static Realization onThatPart(TakenAs.DatePart part, Type sourceType, Carrier observed,
-                                          Place answer, RuleReadingSource ruleSource) {
-        if (observed == null || !(answer instanceof Count count) || !count.whole()) {
+    private static Realization onThoseParts(SequencedMap<TakenAs.DatePart, Count> parts,
+                                            Type sourceType, Carrier observed,
+                                            RuleReadingSource ruleSource) {
+        if (observed == null || parts.isEmpty()) {
             return new Realization.None(
                     Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
         }
-        java.time.LocalDate on = dateOn(part, count.at());
+        java.time.LocalDate on = dateOn(parts);
         if (on == null) {
             // Outside the parts a date has. Not this reader's to report as a refusal: a number no
             // date answers is a number nothing composes one for.
@@ -415,37 +554,66 @@ final class TermRealizations {
     }
 
     /**
-     * The date this offers for a part standing at {@code answer}, or null where no date has that
-     * part.
+     * The date this offers for those parts standing at those numbers, or null where no date has
+     * them.
      *
      * <p>Asked of the calendar rather than tried and caught. What a year, a month and a day run
      * between is something {@code java.time} answers, and building a date to find out whether one
      * could be built is asking a question by reading the exception from the answer.
+     *
+     * <p>A part nobody asked for stands where such a part is offered when it is the one asked for,
+     * so a date built for one part is the date this wrote before the others could be asked for
+     * beside it.
+     *
+     * <p>How far the days run is asked of the month the date is actually built in, and not of how
+     * far a day of any month can run. Where no month was asked for that is the longest there is, so
+     * every day a date can fall on is a day of the one this writes; where one was, the days are
+     * that month's and a rule about the thirty-first of a short one has no witness because the
+     * calendar has none.
      */
-    private static java.time.LocalDate dateOn(TakenAs.DatePart part, java.math.BigDecimal answer) {
-        return switch (part) {
-            case YEAR -> within(answer, java.time.LocalDate.MIN.getYear(),
-                    java.time.LocalDate.MAX.getYear())
-                    ? java.time.LocalDate.of(answer.intValueExact(), A_LONGEST_MONTH, FIRST_OF_THE_MONTH)
-                    : null;
-            case MONTH -> within(answer, java.time.temporal.ChronoField.MONTH_OF_YEAR)
-                    ? java.time.LocalDate.of(A_YEAR, answer.intValueExact(), FIRST_OF_THE_MONTH)
-                    : null;
-            case DAY -> dayOfTheMonthItIsOfferedIn(answer);
-        };
+    private static java.time.LocalDate dateOn(SequencedMap<TakenAs.DatePart, Count> parts) {
+        for (Count each : parts.values()) {
+            if (!each.whole()) {
+                return null;
+            }
+        }
+        java.math.BigDecimal year = asked(parts, TakenAs.DatePart.YEAR);
+        java.math.BigDecimal month = asked(parts, TakenAs.DatePart.MONTH);
+        java.math.BigDecimal day = asked(parts, TakenAs.DatePart.DAY);
+        if (year != null && !within(year, java.time.LocalDate.MIN.getYear(),
+                java.time.LocalDate.MAX.getYear())) {
+            return null;
+        }
+        if (month != null && !within(month, java.time.temporal.ChronoField.MONTH_OF_YEAR)) {
+            return null;
+        }
+        java.time.YearMonth in = java.time.YearMonth.of(
+                year == null ? A_YEAR : year.intValueExact(),
+                month == null ? A_LONGEST_MONTH : month.intValueExact());
+        if (day != null && !within(day, 1, in.lengthOfMonth())) {
+            return null;
+        }
+        return in.atDay(day == null ? FIRST_OF_THE_MONTH : day.intValueExact());
     }
 
-    /**
-     * The date a day of the month is offered on, or null where that month has no such day.
-     *
-     * <p>How far the days run is asked of the month this offers them in, and not of how far a day of
-     * any month can run. The two agree only while that month is the longest there is, and a month
-     * chosen here that was not would leave the check admitting days the date cannot be built for —
-     * an answer that is refused rather than absent, at whichever value the two parted.
-     */
-    private static java.time.LocalDate dayOfTheMonthItIsOfferedIn(java.math.BigDecimal answer) {
-        java.time.YearMonth month = java.time.YearMonth.of(A_YEAR, A_LONGEST_MONTH);
-        return within(answer, 1, month.lengthOfMonth()) ? month.atDay(answer.intValueExact()) : null;
+    /** The number a part was asked to stand at, or null where nobody asked for it. */
+    private static java.math.BigDecimal asked(SequencedMap<TakenAs.DatePart, Count> parts,
+                                              TakenAs.DatePart part) {
+        Count count = parts.get(part);
+        return count == null ? null : count.at();
+    }
+
+    /** The same for the one part a rule named, which is where the parts beside it are every part
+     *  there is. */
+    private static Realization onThatPart(TakenAs.DatePart part, Type sourceType, Carrier observed,
+                                          Place answer, RuleReadingSource ruleSource) {
+        if (!(answer instanceof Count count)) {
+            return new Realization.None(
+                    Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+        }
+        SequencedMap<TakenAs.DatePart, Count> one = new LinkedHashMap<>();
+        one.put(part, count);
+        return onThoseParts(one, sourceType, observed, ruleSource);
     }
 
     /** The year a month or a day is offered in. Every month is a month of every year, and the month

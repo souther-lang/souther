@@ -53,24 +53,6 @@ class WhatTheWayLeftOutIsSaidBeforeWhatTheSearchCameToTest {
             }
             """;
 
-    /** The same, where both demands are numbers taken of one location on one carrier. */
-    private static final String TWO_MEASURES_OF_ONE_LOCATION = """
-            module example.shared
-
-            data Yes = { v: Int }
-            data No = { why: Int }
-
-            behavior at : (t: Time) -> Yes | No
-                constructs Yes
-                constructs No
-
-            let at (t) = {
-                guard Time.hour(t) /= 0 else No { why = 0 }
-                guard Time.minute(t) < 30 else No { why = 1 }
-                Yes { v = 1 }
-            }
-            """;
-
     /** A condition above the line over positions nothing composed a value at. */
     private static final String POSITIONS_NOTHING_COMPOSED_A_VALUE_AT = """
             module example.positions
@@ -139,7 +121,7 @@ class WhatTheWayLeftOutIsSaidBeforeWhatTheSearchCameToTest {
      */
     @Test
     void whateverLetTheConditionGoIsSaidBeforeTheSearchesWord() {
-        for (String model : List.of(A_MEASURE_OF_A_COMPARED_POSITION, TWO_MEASURES_OF_ONE_LOCATION,
+        for (String model : List.of(A_MEASURE_OF_A_COMPARED_POSITION,
                 POSITIONS_NOTHING_COMPOSED_A_VALUE_AT, A_SHAPE_THE_WALK_HAS_NO_WORDS_FOR)) {
             List<String> said = whereNothingCouldShowARow(model);
 
