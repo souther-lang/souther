@@ -1,2 +1,7 @@
 # Highlight Souther sources on GitHub using F#'s grammar (closest ML-family match).
 *.sou linguist-language=FSharp
+
+# cmd.exe runs a batch file by reading it as it goes and seeks back to a label by file offset, and
+# it counts the offsets of a file whose lines end the way Windows ends them. Checked out this way on
+# every platform, so the file packaged on Linux and the file packaged on Windows are one file.
+*.cmd text eol=crlf
