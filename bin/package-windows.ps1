@@ -8,15 +8,14 @@
 # builds an image for the platform it runs on, and the console launcher it writes is a Windows one.
 #
 #   mvn -B -DskipTests package
-#   bin/package-windows.ps1 -Version 0.1.1-SNAPSHOT
+#   bin/package-windows.ps1
 
 [CmdletBinding()]
-param(
-    [Parameter(Mandatory = $true)] [string] $Version
-)
+param()
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+Add-Type -AssemblyName System.IO.Compression.FileSystem
 
 $root = Split-Path -Parent (Split-Path -Parent $PSCommandPath)
 $target = Join-Path $root 'souther-cli/target'
@@ -25,6 +24,25 @@ $launcher = Join-Path $target 'launcher/souther.cmd'
 foreach ($file in @($jar, $launcher)) {
     if (-not (Test-Path $file)) { throw "$file is missing: package the reactor first" }
 }
+
+# The build stamps the version into the jar, and asking the jar is asking the thing being packaged:
+# a version read from anywhere else is a second answer that can differ from this one.
+$Version = $null
+$open = [IO.Compression.ZipFile]::OpenRead($jar)
+try {
+    $stamp = $open.GetEntry('META-INF/maven/org.souther-lang/souther-cli/pom.properties')
+    if (-not $stamp) { throw "$jar carries no version stamp" }
+    $reader = New-Object IO.StreamReader($stamp.Open())
+    try {
+        while ($null -ne ($line = $reader.ReadLine())) {
+            if ($line -match '^version=(.+)$') { $Version = $Matches[1].Trim() }
+        }
+    }
+    finally { $reader.Dispose() }
+}
+finally { $open.Dispose() }
+if (-not $Version) { throw "$jar states no version" }
+Write-Host "packaging souther $Version"
 
 # jpackage takes a version of one to three integers. A Maven version carries a qualifier after a
 # hyphen on everything that is not a final release, and what the archives are named by keeps it.
@@ -45,6 +63,7 @@ Copy-Item $jar $staged
 
 # --win-console is what makes the launcher a command: without it the image is a windowed
 # application, whose standard output and error reach nobody and whose exit code reaches no shell.
+# The stack is the one every launcher hands the JVM, and the launchers beside this one say why.
 $bundled = Join-Path $dist 'bundled'
 jpackage --type app-image `
     --name souther `
@@ -60,16 +79,17 @@ jpackage --type app-image `
     --description 'The Souther compiler and command line'
 if ($LASTEXITCODE -ne 0) { throw "jpackage ended with $LASTEXITCODE" }
 
+# The launcher sits at the root of the image, where jpackage puts the other distribution's, so the
+# directory that has to reach a path is `souther` in both and nothing downstream asks which was
+# unpacked.
 $nojre = Join-Path $dist 'nojre'
-New-Item -ItemType Directory -Force -Path (Join-Path $nojre 'souther/bin') | Out-Null
 New-Item -ItemType Directory -Force -Path (Join-Path $nojre 'souther/lib') | Out-Null
-Copy-Item $launcher (Join-Path $nojre 'souther/bin/souther.cmd')
+Copy-Item $launcher (Join-Path $nojre 'souther/souther.cmd')
 Copy-Item $jar (Join-Path $nojre 'souther/lib/souther.jar')
 
 # Both archives hold a `souther` directory rather than their contents at the root, because WinGet
 # names the launcher by a path relative to the root of what it unpacked, and because unpacking one
 # by hand into a directory of the user's choosing should not scatter it.
-Add-Type -AssemblyName System.IO.Compression.FileSystem
 function Write-Zip([string] $from, [string] $to) {
     [System.IO.Compression.ZipFile]::CreateFromDirectory($from, $to)
     Write-Host "wrote $to"

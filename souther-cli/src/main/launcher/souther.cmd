@@ -1,6 +1,7 @@
 @echo off
-rem Runs the shaded jar beside this script on a Java the machine already has. The distribution that
-rem carries a Java of its own has a launcher of its own and does not use this one.
+rem Runs the shaded jar under this script's own directory on a Java the machine already has. It sits
+rem where the other distribution's launcher sits, so whichever of the two was unpacked, the directory
+rem to put on a path is the same one.
 rem
 rem -Xss4m is the stack this compiler is supported on. What a definition may say is bounded
 rem ([#source-structural-complexity-is-bounded]), and holding that bound is what the flag is for:
@@ -14,7 +15,7 @@ if defined JAVA_HOME set "java=%JAVA_HOME%\bin\java.exe"
 if defined JAVA_HOME if not exist "%java%" goto :nojava
 if not defined JAVA_HOME where java.exe >nul 2>&1 || goto :nojava
 
-"%java%" -Xss4m -jar "%~dp0..\lib\souther.jar" %*
+"%java%" -Xss4m -jar "%~dp0lib\souther.jar" %*
 exit /b %ERRORLEVEL%
 
 :nojava

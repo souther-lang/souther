@@ -16,10 +16,13 @@ on:
     paths:
       - '.github/workflows/release.yml'
       - 'bin/package-windows.ps1'
+      - 'install.ps1'
       - 'souther-cli/src/main/launcher/**'
 
+# Writing is the publishing job's alone, and it asks for it there. A job that builds from a pull
+# request's own code runs with a token that can only read.
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   # jpackage builds an image for the platform it runs on, so the Windows distributions are built on
@@ -40,8 +43,7 @@ jobs:
       - name: Package the distributions
         run: |
           mvn -B --no-transfer-progress -DskipTests package
-          $version = (mvn -B -q --no-transfer-progress help:evaluate -Dexpression=project.version -DforceStdout).Trim()
-          bin/package-windows.ps1 -Version $version
+          bin/package-windows.ps1
 
       # Both launchers, over the commands that need most of the runtime the image was built with: a
       # compile writes bytecode, and `japi` reads javadoc out of a library's sources through a
@@ -54,13 +56,57 @@ jobs:
           Expand-Archive (Get-ChildItem "$dist/*-windows-x64.zip").FullName -DestinationPath "$dist/bundled-run"
           Expand-Archive (Get-ChildItem "$dist/*-windows-x64-nojre.zip").FullName -DestinationPath "$dist/nojre-run"
           $model = 'souther-test-support/src/main/resources/souther/corpus/catalog/catalog.sou'
-          $launchers = @("$dist/bundled-run/souther/souther.exe", "$dist/nojre-run/souther/bin/souther.cmd")
+          $launchers = @("$dist/bundled-run/souther/souther.exe", "$dist/nojre-run/souther/souther.cmd")
           foreach ($souther in $launchers) {
               & $souther compile $model -d "$dist/classes"
               if ($LASTEXITCODE -ne 0) { throw "$souther could not compile $model" }
               & $souther japi net.unit8.raoh.Result > $null
               if ($LASTEXITCODE -ne 0) { throw "$souther could not read a library's javadoc" }
           }
+
+      # The installer writes the user's path, points a link and removes a directory recursively, and
+      # nothing else in this repository does any of that. It is run against the archives just
+      # packaged rather than a release, so what is checked is this commit's installer rather than the
+      # last one published — and an entry of the user's own is put on the path first, because what
+      # the installer must not do is as much of the subject as what it must.
+      - name: Install what was packaged, and uninstall it
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $dist = "$PWD/souther-cli/target/dist"
+          Get-ChildItem "$dist/*.zip" | ForEach-Object {
+              "{0}  {1}" -f (Get-FileHash $_ -Algorithm SHA256).Hash.ToLowerInvariant(), $_.Name
+          } | Set-Content "$dist/SHA256SUMS"
+          $version = (Get-ChildItem "$dist/*-windows-x64.zip").BaseName -replace '^souther-' -replace '-windows-x64$'
+
+          $control = 'C:\an-entry-of-the-users-own'
+          [Environment]::SetEnvironmentVariable('Path', $control, 'User')
+          function Get-Entries {
+              @(([Environment]::GetEnvironmentVariable('Path', 'User') -split ';') | Where-Object { $_ })
+          }
+
+          $owned = Join-Path $env:LOCALAPPDATA 'Programs\souther'
+          $link = Join-Path $owned 'current'
+
+          # Both distributions, second over first, so what is checked is an install and then an
+          # install onto one already there.
+          foreach ($nojre in @($true, $false)) {
+              ./install.ps1 -Version $version -From $dist -Nojre:$nojre
+              $launcher = @(Get-ChildItem "$link/souther.exe", "$link/souther.cmd" -ErrorAction SilentlyContinue)[0]
+              if (-not $launcher) { throw "no launcher under $link after installing (nojre=$nojre)" }
+              & $launcher.FullName help > $null
+              if ($LASTEXITCODE -ne 0) { throw "the installed launcher could not answer (nojre=$nojre)" }
+              $entries = Get-Entries
+              if (@($entries | Where-Object { $_ -eq $link }).Count -ne 1) {
+                  throw "PATH holds $link other than once: $($entries -join ';')"
+              }
+              if ($entries -notcontains $control) { throw "the installer took $control off PATH" }
+          }
+
+          ./install.ps1 -Uninstall
+          if (Test-Path $owned) { throw "$owned is still there after an uninstall" }
+          $entries = Get-Entries
+          if ($entries -contains $link) { throw "PATH still holds $link after an uninstall" }
+          if ($entries -notcontains $control) { throw "the uninstall took $control off PATH" }
 
       - name: Upload the distributions to the workflow run
         uses: actions/upload-artifact@v7
@@ -72,6 +118,8 @@ jobs:
     needs: windows
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v7
 
