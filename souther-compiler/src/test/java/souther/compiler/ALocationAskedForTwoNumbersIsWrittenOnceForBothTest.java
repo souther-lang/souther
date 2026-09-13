@@ -122,6 +122,12 @@ class ALocationAskedForTwoNumbersIsWrittenOnceForBothTest {
      * other free the way the parts of a time do, so nothing composes the two together and the
      * condition above the line is still one the row was written without. Read as passing because
      * the models above pass, this test would be saying that any two numbers at a location compose.
+     *
+     * <p>And nothing else answers it either: the only string of no characters is the least one
+     * there is, so no value stands below it and no second value put to this point would arrive.
+     * Written at a length several strings have, the search finds one of them and the condition it
+     * was composed without is met by accident — which says nothing about whether the two were
+     * composed together.
      */
     private static final String A_MEASURE_AND_THE_VALUE_MEASURED = """
             module example.string
@@ -134,7 +140,7 @@ class ALocationAskedForTwoNumbersIsWrittenOnceForBothTest {
                 constructs No
 
             let cmp (a, b) = {
-                guard String.length(b) /= 1 else No { why = 0 }
+                guard String.length(b) < 1 else No { why = 0 }
                 guard a < b else No { why = 1 }
                 Yes { v = 1 }
             }

@@ -51,6 +51,23 @@ public final class LevelRealizer {
      */
     public Realization realize(Standing standing, souther.compiler.inputs.SearchRegion within,
                                WitnessSearch looking) {
+        return realize(standing, within, looking, ValuesTried.NONE);
+    }
+
+    /**
+     * The same, leaving out the places this point was already composed at.
+     *
+     * <p>Asked again because the row a place was built into did not stand at the point, which is
+     * the one thing that answers it and is settled after this has returned. So what comes back is a
+     * candidate and not a witness, and a caller that reads it as one has stopped at the first place
+     * the region admits.
+     *
+     * <p>The exclusions are the caller's and are not kept here. A search that remembered what it
+     * had offered would answer differently on two askings of one question, and what it had offered
+     * would outlive the point it was offered for.
+     */
+    public Realization realize(Standing standing, souther.compiler.inputs.SearchRegion within,
+                               WitnessSearch looking, ValuesTried tried) {
         if (within == null) {
             throw new IllegalArgumentException(
                     "a search looks inside a region, and there is always one: an item nothing on the"
@@ -67,8 +84,8 @@ public final class LevelRealizer {
                             + " that composes without asking");
         }
         return switch (standing) {
-            case Standing.OfOneCoordinate one -> ofOne(one, within, looking);
-            case Standing.OfTwoOnOneCarrier two -> ofTwo(two, within, looking);
+            case Standing.OfOneCoordinate one -> ofOne(one, within, looking, tried);
+            case Standing.OfTwoOnOneCarrier two -> ofTwo(two, within, looking, tried);
             case Standing.OfAForm over -> ofAForm(over, within);
         };
     }
@@ -76,9 +93,9 @@ public final class LevelRealizer {
     /** One position at a place of its own carrier that the item accepts. */
     private Realization ofOne(Standing.OfOneCoordinate one,
                               souther.compiler.inputs.SearchRegion within,
-                              WitnessSearch looking) {
+                              WitnessSearch looking, ValuesTried tried) {
         Place at = placeMeeting(one.where(), one.term(), one.of(), bounds(within, one.term()),
-                looking);
+                looking, tried, Map.of());
         return at == null ? Realization.Unknown.nothingComposedOne()
                 : found(Map.of(new RealizationTarget.AtOnePosition(one.term()), at), within);
     }
@@ -104,7 +121,7 @@ public final class LevelRealizer {
      */
     private Realization ofTwo(Standing.OfTwoOnOneCarrier two,
                               souther.compiler.inputs.SearchRegion within,
-                              WitnessSearch looking) {
+                              WitnessSearch looking, ValuesTried tried) {
         // What each reading left behind, in the two vocabularies there are for it. Kept apart all
         // the way here: how a walk ended says which of them it is, and a reader told the wrong one
         // is sent to raise a figure that reached its end or told that no number would have helped
@@ -145,7 +162,8 @@ public final class LevelRealizer {
                 // handed to a reader that asks where its level falls.
                 Criterion here = relativeTo(reading.where(), common, two.of());
                 Place at = here == null ? null
-                        : placeMeeting(here, reading.settles(), two.of(), settled, looking);
+                        : placeMeeting(here, reading.settles(), two.of(), settled, looking, tried,
+                                Map.of(reading.anchors(), common));
                 if (at == null) {
                     continue;
                 }
@@ -897,19 +915,27 @@ public final class LevelRealizer {
      */
     private static Place placeMeeting(Criterion where, NumericTerm.FromOnePosition term,
                                       Carrier carrier, NumericDomain.Bounds bounds,
-                                      WitnessSearch looking) {
+                                      WitnessSearch looking, ValuesTried tried,
+                                      Map<NumericTerm.FromOnePosition, Place> given) {
+        List<Place> apart = tried.apartFor(term, given);
         Place offered = switch (where) {
             // The level itself, and the set is not asked. A point on a line stands where the rule
             // wrote it; held to what the declarations admit, a line drawn at a value they refuse
             // would stop being an item rather than being reported as one nothing can stand at.
-            case Criterion.AtTheLevel at -> placeOf(at.at());
+            // A level already tried with the rest of them standing where they stand now is not
+            // offered again. The rule wrote one place here and a row built from that arrangement
+            // did not stand, so there is nothing else to offer under it — said as nothing composed
+            // rather than as the same place a second time, which a caller asking again would read
+            // as a search that had not moved.
+            case Criterion.AtTheLevel at ->
+                    apart.contains(placeOf(at.at())) ? null : placeOf(at.at());
             // Nothing composed where nothing worked out what the position holds. Which is this
             // compiler's own limit and is reported in the word it has for one: a run searched against
             // a set nobody established would offer a row at a position whose rules were never read.
             case Criterion.Within within ->
                     whatTheValuesAre(term, looking.admitted())
                             instanceof AdmittedValues.Admitted.Values(ValueSet admits)
-                            ? someValueIn(within, carrier, bounds, admits, looking::meter)
+                            ? someValueIn(within, carrier, bounds, admits, apart, looking::meter)
                             : null;
         };
         if (offered == null) {
@@ -967,19 +993,23 @@ public final class LevelRealizer {
      */
     private static Place someValueIn(Criterion.Within within, Carrier carrier,
                                      NumericDomain.Bounds bounds, ValueSet admits,
-                                     Supplier<Meter> allowance) {
+                                     List<Place> apart, Supplier<Meter> allowance) {
         LevelSpace space = LevelSpace.onACarrier(carrier);
         List<LevelInterval> runs = within.runsInside(carrier, bounds.min(), bounds.max());
         for (LevelInterval look : runs) {
+            // And not one this point was already tried at. The run's own representative is the
+            // cheap answer and stays the first one offered; offered again after the row built from
+            // it did not stand, it would be the whole of what a second asking ever reaches, and the
+            // search below it would never be asked.
             if (space.witness(look, within.away()).level() instanceof Level.OnACarrier on
-                    && carrier.admitted(admits, on.at())) {
+                    && carrier.admitted(admits, on.at()) && !apart.contains(on.at())) {
                 return on.at();
             }
         }
         for (LevelInterval look : runs) {
             OrderedInterval run = runOf(look, carrier);
             Place held = run == null ? null
-                    : carrier.somewhereIn(admits, run, List.of(), allowance.get());
+                    : carrier.somewhereIn(admits, run, apart, allowance.get());
             if (held != null) {
                 return held;
             }

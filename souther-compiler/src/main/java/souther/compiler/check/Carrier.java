@@ -1091,15 +1091,25 @@ public sealed interface Carrier extends ValueOrder {
      * <p>Asked of whether this order counts, and not of which carriers do. A walk that named them
      * would be a second list of the carriers with counts, and the day one is added the walk would
      * start nowhere at a carrier the rest of this answers about.
+     *
+     * <p><b>And a place the run holds, where a strict end names one it does not.</b> The walk spends
+     * a step for each value it was told to keep away from, which is what makes it enough: a stretch
+     * that long holds a value none of them names. Started at a value the run itself leaves out, the
+     * first of those steps is spent arriving rather than searching, and a run whose values were all
+     * held apart but one came back with nothing standing in it.
      */
     private Place anchorIn(OrderedInterval range) {
-        if (range.low() != null) {
-            return range.low().at();
+        Endpoint end = range.low() != null ? range.low() : range.high();
+        if (end == null) {
+            return counts() ? Count.ZERO : null;
         }
-        if (range.high() != null) {
-            return range.high().at();
+        if (end.inclusive() || spacing() != Granularity.DISCRETE
+                || !(end.at() instanceof Count at)) {
+            return end.at();
         }
-        return counts() ? Count.ZERO : null;
+        // The count beside the one named, which is where a run this order steps along begins. Null
+        // where the order has no count there, which is the order saying the run begins nowhere.
+        return onTheGrid(range.low() != null ? at.plus(1) : at.minus(1));
     }
 
     /** Whether no place in {@code apart} is this one. */

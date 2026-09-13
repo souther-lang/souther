@@ -35,7 +35,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class WhatTheWayLeftOutIsSaidBeforeWhatTheSearchCameToTest {
 
-    /** A condition above the line measuring a location the comparison below it compares. */
+    /**
+     * A condition above the line measuring a location the comparison below it compares.
+     *
+     * <p>At a length nothing stands below, so that the row composed without the condition does not
+     * meet it by accident. The only string of no characters is the least one there is, and a point
+     * asking for a value under it is one no second value put to it would reach either.
+     */
     private static final String A_MEASURE_OF_A_COMPARED_POSITION = """
             module example.shared
 
@@ -47,7 +53,7 @@ class WhatTheWayLeftOutIsSaidBeforeWhatTheSearchCameToTest {
                 constructs No
 
             let cmp (a, b) = {
-                guard String.length(b) /= 1 else No { why = 0 }
+                guard String.length(b) < 1 else No { why = 0 }
                 guard a < b else No { why = 1 }
                 Yes { v = 1 }
             }

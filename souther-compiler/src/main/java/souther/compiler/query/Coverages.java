@@ -33,6 +33,8 @@ import souther.compiler.partition.BorderQuantity;
 import souther.compiler.partition.StandingAtAPoint;
 import souther.compiler.partition.LevelRealizer;
 import souther.compiler.partition.Realization;
+import souther.compiler.partition.CompositionBudget;
+import souther.compiler.partition.ValuesTried;
 import souther.compiler.partition.EnsuresThresholds;
 import souther.compiler.partition.GuardThresholds;
 import souther.compiler.partition.BoundaryLine;
@@ -1018,8 +1020,55 @@ final class Coverages {
                 // the realizer. What it composes is a candidate and no part of the item: another row
                 // in the same side is at the point as much as this one would be, so what the row is
                 // offered for goes in beside it rather than being read back off it.
+                //
+                // And a candidate is put to the point before the next one is asked for. What the
+                // realizer hands over is a place the region admits, which is less than the question:
+                // a row built there may turn back above the line and never arrive, and the value
+                // beside it arrive perfectly well. Stopping at the first place the region admits,
+                // the search answered a point it had one more value for.
+                ValuesTried tried = ValuesTried.NONE;
+                SearchOutcomes last = null;
+                for (int value = 0;
+                        value < CompositionBudget.VALUES_A_POINT_IS_TRIED_WITH.maximum(); value++) {
+                    Searching came = searchingWith(criterion, label, able, tried);
+                    if (came.stood()) {
+                        return came.outcomes();
+                    }
+                    // Nothing was composed this time round. On the first asking that is the point's
+                    // answer; on a later one it is the answer to a question this narrowed by
+                    // leaving a value out, and what the point came to is what the value that was
+                    // composed came to.
+                    if (came.realized() == null) {
+                        return last == null ? came.outcomes() : last;
+                    }
+                    // The row a reader is offered is the first one composed. Every asking after it
+                    // is put a narrower question — the values already tried are not there to be
+                    // found again — so a row from a later one is a row built with values kept from
+                    // it for a reason of this search's rather than of the model's.
+                    if (last == null) {
+                        last = came.outcomes();
+                    }
+                    // Every way of standing the dependencies in was built and none of them stood,
+                    // so this is the value that did not answer and not one of the rows it was built
+                    // into. Charged here for that reason: a point with more ways to stand its
+                    // dependencies in would otherwise be allowed fewer values than one with fewer.
+                    tried = tried.and(came.realized().fixing());
+                }
+                // The figure ran out, and what the last value came to is what a reader is told. Said
+                // as that outcome rather than as a figure of its own, because every one of these
+                // searches came back with something to say about the point and the last is no less
+                // an answer for there having been others.
+                return last;
+            }
+
+            /** One value put to the point: what the realizer found, and what became of the rows. */
+            private record Searching(Realization.Found realized,
+                                     SearchOutcomes outcomes, boolean stood) {}
+
+            private Searching searchingWith(Criterion criterion, String label,
+                    souther.compiler.partition.Reachability.Reaching able, ValuesTried tried) {
                 return switch (realizer.realize(quantity.standingAt(criterion), able.region(),
-                        looking)) {
+                        looking, tried)) {
                     case Realization.Found found -> {
                         // Asking nothing of what the dependencies answer. A point of a line is a
                         // place the positions stand at, and nothing about it turns on what a
@@ -1032,36 +1081,42 @@ final class Coverages {
                         // point comes to is what they all came to, and a reader asking whether one
                         // reached it, which row to offer, or what would have to give for the rest,
                         // asks that of {@link SearchOutcomes}.
-                        java.util.List<souther.compiler.partition.Generator.BoundaryAttempt> tried =
+                        java.util.List<souther.compiler.partition.Generator.BoundaryAttempt> made =
                                 probe.attempt(label, found.fixing(), able,
                                         souther.compiler.partition.AnswersDemanded.NOTHING);
                         // Nothing was tried at all, which is the classes not linking. An empty
-                        // answer would say the point was searched and nothing happened.
-                        if (tried.isEmpty()) {
-                            yield SearchOutcomes.of(
-                                    whatCameOfIt(null, label, within, () -> null));
+                        // answer would say the point was searched and nothing happened. Not a value
+                        // this point was tried with either: nothing was built, so there is nothing
+                        // to leave out of the next asking and nothing another value would fix.
+                        if (made.isEmpty()) {
+                            yield new Searching(null,
+                                    SearchOutcomes.of(whatCameOfIt(null, label, within, () -> null)),
+                                    false);
                         }
                         SearchOutcomes outcomes = SearchOutcomes.none();
-                        for (souther.compiler.partition.Generator.BoundaryAttempt made : tried) {
-                            outcomes = outcomes.plus(SearchOutcomes.of(
-                                    whatCameOfIt(made, label, within,
-                                            () -> standingThere(probe, line, criterion, site,
-                                                    (souther.compiler.partition.Generator
-                                                            .BoundaryAttempt.Built) made))));
+                        boolean stood = false;
+                        for (souther.compiler.partition.Generator.BoundaryAttempt each : made) {
+                            ItemAssessment.Attempt came = whatCameOfIt(each, label, within,
+                                    () -> standingThere(probe, line, criterion, site,
+                                            (souther.compiler.partition.Generator
+                                                    .BoundaryAttempt.Built) each));
+                            stood |= came instanceof ItemAssessment.Attempt.Certified;
+                            outcomes = outcomes.plus(SearchOutcomes.of(came));
                         }
-                        yield outcomes;
+                        yield new Searching(found, outcomes, stood);
                     }
                     // And the two ways of finding nothing are not one answer. A walk of the whole
                     // of what the rules leave that reaches no value settles the point; a search
                     // that stopped, or one that composed no candidate at all, settles nothing
                     // (ADR-0091).
-                    case Realization.Impossible _ -> SearchOutcomes.of(
+                    case Realization.Impossible _ -> new Searching(null, SearchOutcomes.of(
                             new ItemAssessment.Attempt.Unresolved(
                                     new souther.compiler.partition.Generator.UnresolvedCombination(
                                             java.util.List.of(label),
                                             souther.compiler.partition.Generator
                                                     .UnresolvedCombination.Reason
-                                                    .THE_RULES_LEAVE_NOTHING_THERE), within));
+                                                    .THE_RULES_LEAVE_NOTHING_THERE), within)),
+                            false);
                     // A walk that reached no placement. Where a budget of this compiler's is why it
                     // reached none, that travels: the point is one this declined to look further
                     // for, which is not the point being one nothing promises.
@@ -1071,8 +1126,8 @@ final class Coverages {
                     // so a walk that wrote some of a population is neither a walk a figure stopped
                     // nor a walk that narrowed nothing — read as the second, a pair this looked for
                     // in the one place such an order names came out as the rules leaving none.
-                    case Realization.Unknown unknown ->
-                            SearchOutcomes.of(whatAWalkLeft(label, within, unknown));
+                    case Realization.Unknown unknown -> new Searching(null,
+                            SearchOutcomes.of(whatAWalkLeft(label, within, unknown)), false);
                 };
             }
         };

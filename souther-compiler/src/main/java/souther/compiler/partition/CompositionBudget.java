@@ -110,6 +110,26 @@ public enum CompositionBudget {
      *  condition on the way ({@link ReachabilityGap}). */
     VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT(8),
 
+    /**
+     * How many values a point is tried with after a row composed for one of them does not stand
+     * there.
+     *
+     * <p>Its own figure and not {@link #PLACES_A_PAIR_IS_TRIED_AT}. That one bounds how many places
+     * along a pair's line are walked, which is the geometry of the item; this one bounds how many
+     * values a position is asked for after the whole row was built and read back at the point, and
+     * what it spends is a row apiece.
+     *
+     * <p>Nor {@link #VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT}, which is about getting past a
+     * condition on the way to the border with the row already composed. The question here is the
+     * point itself, asked after the one thing that answers it.
+     *
+     * <p>One per value and never one per row. A value may be built into several rows — one for each
+     * way the dependencies are stood in — and all of them are put to the point before the value is
+     * counted as tried: charged per row, a point with more ways to stand its dependencies in would
+     * be allowed fewer values than one with fewer.
+     */
+    VALUES_A_POINT_IS_TRIED_WITH(8),
+
     /** How many paths through one body a reading of its decision takes. What it had read is carried
      *  out with the figure ({@link DecisionReading.Enumeration.StoppedAtAFigure}), so the rules it
      *  did not reach are neither covered nor gaps. */

@@ -3277,6 +3277,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 case TIMES_THE_RULES_ARE_ASKED_AGAIN -> "how often the rules are read again";
                 case VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT ->
                         "how many values a position on the way is tried at";
+                case VALUES_A_POINT_IS_TRIED_WITH -> "how many values a point is tried with";
                 case DEPTH_A_CONSTRUCTION_PLAN_DESCENDS -> "how deep a value is built";
                 case PATHS_OF_A_DECISION_READ ->
                         "how many paths through one body a decision is read for";
