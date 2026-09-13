@@ -5,6 +5,7 @@ import souther.compiler.core.Core;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.Place;
+import souther.compiler.numeric.PlacesApart;
 import souther.compiler.numeric.Dates;
 import souther.compiler.numeric.DateTimes;
 import souther.compiler.numeric.Granularity;
@@ -782,10 +783,10 @@ public sealed interface Carrier extends ValueOrder {
      *               caller's to say, and an order that named one would be spending at every
      *               position without anything having granted it
      */
-    default Place somethingOtherThan(java.util.List<Place> singled, NumericDomain.Bounds within,
+    default Place somethingOtherThan(PlacesApart singled, NumericDomain.Bounds within,
                                      ValueSet admits, Meter meter) {
         java.util.List<Place> stepped = new ArrayList<>();
-        for (Place from : singled) {
+        for (Place from : singled.places()) {
             if (from instanceof Count count) {
                 stepped.add(count.plus(1));
                 stepped.add(count.minus(1));
@@ -801,7 +802,7 @@ public sealed interface Carrier extends ValueOrder {
             inside.add(somethingInside(within.min(), within.max()));
             // Between the place singled out and each end, which is where a range with no step still
             // has room once the ends themselves are singled out too.
-            for (Place from : singled) {
+            for (Place from : singled.places()) {
                 for (Endpoint end : java.util.Arrays.asList(within.min(), within.max())) {
                     if (end != null) {
                         inside.add(somethingInside(Endpoint.exclusive(from), end));
@@ -851,7 +852,7 @@ public sealed interface Carrier extends ValueOrder {
      * and the values singled out are three ways to be refused, and a candidate source that checked
      * two of them would be a value offered for a class by whichever route composed it.
      */
-    private Place taken(Place candidate, java.util.List<Place> singled,
+    private Place taken(Place candidate, PlacesApart singled,
                         NumericDomain.Bounds within, ValueSet admits) {
         // On the carrier's grid before it is asked anything. Halfway between two adjacent moments
         // is neither of them as a number and is one of them once written, so a class of everything
@@ -859,7 +860,7 @@ public sealed interface Carrier extends ValueOrder {
         Place at = candidate == null ? null : onTheGrid(candidate);
         return at != null && (within == null || within.admits(at))
                 && admitted(admits, at)
-                && singled.stream().noneMatch(at::sameAs) ? at : null;
+                && !singled.has(at) ? at : null;
     }
 
     /**
@@ -907,7 +908,7 @@ public sealed interface Carrier extends ValueOrder {
      *              body singled out is
      * @param meter what building the machine a set of strings needs may cost
      */
-    default Place somewhereIn(ValueSet set, OrderedInterval range, List<Place> apart, Meter meter) {
+    default Place somewhereIn(ValueSet set, OrderedInterval range, PlacesApart apart, Meter meter) {
         OrderedInterval held = extent().meet(range);
         if (held.holdsNothing()) {
             return null;
@@ -916,7 +917,7 @@ public sealed interface Carrier extends ValueOrder {
             // Named outright, so the first of them this order places inside the run and holds apart
             // from none. No machine for a set that already has its values in hand.
             case ValueSet.Finite it -> it.values().stream().map(this::placeOf)
-                    .filter(at -> at != null && held.admits(at) && away(apart, at))
+                    .filter(at -> at != null && held.admits(at) && !apart.has(at))
                     .findFirst().orElse(null);
             case ValueSet.Cofinite it -> {
                 Place cheap = firstHeldIn(held, anchorIn(range), it.excluded(), apart);
@@ -956,7 +957,7 @@ public sealed interface Carrier extends ValueOrder {
      * set whose strings are all control characters has a value to offer and none to write, and a row
      * nobody can paste is not a row.
      */
-    private Place writableIn(ValueSet set, OrderedInterval held, List<Place> apart, Meter meter) {
+    private Place writableIn(ValueSet set, OrderedInterval held, PlacesApart apart, Meter meter) {
         Language strings = TextExtents.stringsIn(set, held, meter);
         // Only the words the run leaves in, which the language answers about for nothing. A word it
         // does not hold is one the machine built to take it out would be built to change nothing.
@@ -986,8 +987,8 @@ public sealed interface Carrier extends ValueOrder {
      * with the shortest.
      */
     private Place firstHeldIn(OrderedInterval range, Place from, Set<Value> excluded,
-                              List<Place> apart) {
-        int named = excluded.size() + apart.size();
+                              PlacesApart apart) {
+        int named = excluded.size() + apart.count();
         // A string has no step and nothing between two others that this language names — the string
         // above one is a character nobody wrote. What it has is a least value with every longer one
         // after it, and the ones a source can carry are what a row wants, so the run is walked by
@@ -1032,16 +1033,16 @@ public sealed interface Carrier extends ValueOrder {
      * the day one of them learns about a fourth way of being refused the other two do not.
      */
     private Place heldAt(Place candidate, OrderedInterval range, Set<Value> excluded,
-                         List<Place> apart) {
+                         PlacesApart apart) {
         Place at = candidate == null ? null : onTheGrid(candidate);
         Value wrote = at == null ? null : valueAt(at);
-        return wrote != null && range.admits(at) && !excluded.contains(wrote) && away(apart, at)
+        return wrote != null && range.admits(at) && !excluded.contains(wrote) && !apart.has(at)
                 ? at : null;
     }
 
     /** The places inside {@code range} that {@code excluded} or {@code apart} names, in the order
      *  they lie in. */
-    private List<Place> ruledOutIn(OrderedInterval range, Set<Value> excluded, List<Place> apart) {
+    private List<Place> ruledOutIn(OrderedInterval range, Set<Value> excluded, PlacesApart apart) {
         List<Place> out = new ArrayList<>();
         for (Value each : excluded) {
             Place at = placeOf(each);
@@ -1049,7 +1050,7 @@ public sealed interface Carrier extends ValueOrder {
                 out.add(at);
             }
         }
-        for (Place each : apart) {
+        for (Place each : apart.places()) {
             if (range.admits(each)) {
                 out.add(each);
             }
@@ -1067,7 +1068,7 @@ public sealed interface Carrier extends ValueOrder {
      * order's own answer ({@link #somethingInside}) rather than a second way of writing a number.
      */
     private Place betweenTheNamed(OrderedInterval range, List<Place> named, Set<Value> excluded,
-                                  List<Place> apart) {
+                                  PlacesApart apart) {
         Endpoint from = range.low();
         for (Place at : named) {
             Place found = heldAt(somethingInside(from, Endpoint.exclusive(at)),
@@ -1112,15 +1113,10 @@ public sealed interface Carrier extends ValueOrder {
         return onTheGrid(range.low() != null ? at.plus(1) : at.minus(1));
     }
 
-    /** Whether no place in {@code apart} is this one. */
-    private static boolean away(List<Place> apart, Place at) {
-        return apart.stream().noneMatch(at::sameAs);
-    }
-
     /** The strings standing at {@code places}, which is what a language can be asked to leave out. */
-    private List<String> textsAt(List<Place> places) {
+    private List<String> textsAt(PlacesApart places) {
         List<String> out = new ArrayList<>();
-        for (Place at : places) {
+        for (Place at : places.places()) {
             if (valueAt(at) instanceof Value.Text text) {
                 out.add(text.value());
             }

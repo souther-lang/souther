@@ -9,6 +9,7 @@ import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.OrderedInterval;
 import souther.compiler.numeric.Place;
+import souther.compiler.numeric.PlacesApart;
 import souther.compiler.regex.Meter;
 import souther.compiler.values.ValueSet;
 
@@ -917,7 +918,7 @@ public final class LevelRealizer {
                                       Carrier carrier, NumericDomain.Bounds bounds,
                                       WitnessSearch looking, ValuesTried tried,
                                       Map<NumericTerm.FromOnePosition, Place> given) {
-        List<Place> apart = tried.apartFor(term, given);
+        PlacesApart apart = tried.apartFor(term, given);
         Place offered = switch (where) {
             // The level itself, and the set is not asked. A point on a line stands where the rule
             // wrote it; held to what the declarations admit, a line drawn at a value they refuse
@@ -928,7 +929,7 @@ public final class LevelRealizer {
             // rather than as the same place a second time, which a caller asking again would read
             // as a search that had not moved.
             case Criterion.AtTheLevel at ->
-                    apart.contains(placeOf(at.at())) ? null : placeOf(at.at());
+                    apart.has(placeOf(at.at())) ? null : placeOf(at.at());
             // Nothing composed where nothing worked out what the position holds. Which is this
             // compiler's own limit and is reported in the word it has for one: a run searched against
             // a set nobody established would offer a row at a position whose rules were never read.
@@ -993,7 +994,7 @@ public final class LevelRealizer {
      */
     private static Place someValueIn(Criterion.Within within, Carrier carrier,
                                      NumericDomain.Bounds bounds, ValueSet admits,
-                                     List<Place> apart, Supplier<Meter> allowance) {
+                                     PlacesApart apart, Supplier<Meter> allowance) {
         LevelSpace space = LevelSpace.onACarrier(carrier);
         List<LevelInterval> runs = within.runsInside(carrier, bounds.min(), bounds.max());
         for (LevelInterval look : runs) {
@@ -1002,7 +1003,7 @@ public final class LevelRealizer {
             // it did not stand, it would be the whole of what a second asking ever reaches, and the
             // search below it would never be asked.
             if (space.witness(look, within.away()).level() instanceof Level.OnACarrier on
-                    && carrier.admitted(admits, on.at()) && !apart.contains(on.at())) {
+                    && carrier.admitted(admits, on.at()) && !apart.has(on.at())) {
                 return on.at();
             }
         }

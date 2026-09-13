@@ -69,9 +69,8 @@ class ACountNoValueOfTheOrderStandsAtComposesNothingTest {
         List<String> reasons = new ArrayList<>();
         for (BorderAssessment border : measured()) {
             border.items().forEach((role, item) -> {
-                if (item instanceof ItemAssessment.Owed owed
-                        && owed.searches().only() instanceof ItemAssessment.Attempt.Unresolved unresolved) {
-                    reasons.add(unresolved.why().reason().toString());
+                if (item instanceof ItemAssessment.Owed owed && wordOf(owed) != null) {
+                    reasons.add(wordOf(owed).toString());
                 }
             });
         }
@@ -79,6 +78,22 @@ class ACountNoValueOfTheOrderStandsAtComposesNothingTest {
         assertEquals(List.of(), reasons.stream()
                         .filter(each -> !each.equals("NOTHING_COMPOSES_ONE")).toList(),
                 "and that is what a point nothing composes a value at says: " + reasons);
+    }
+
+    /**
+     * The word the one search of a point came back with, or null where it composed a row.
+     *
+     * <p>Asked of the outcome and not of which outcome it is. A point is put one value after
+     * another and the figure for how many ends the asking, so what a search that reached no row
+     * came to arrives wearing that figure as often as not — and what this test is about is the
+     * word, which is the same word either way.
+     */
+    private static Generator.UnresolvedCombination.Reason wordOf(ItemAssessment.Owed owed) {
+        return switch (owed.searches().only()) {
+            case ItemAssessment.Attempt.Unresolved it -> it.why().reason();
+            case ItemAssessment.Attempt.Limited it -> it.why().reason();
+            default -> null;
+        };
     }
 
     /** And the points that do have values keep them, so the line was not emptied to get here. */

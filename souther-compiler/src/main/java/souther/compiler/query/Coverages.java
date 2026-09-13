@@ -1054,16 +1054,42 @@ final class Coverages {
                     // dependencies in would otherwise be allowed fewer values than one with fewer.
                     tried = tried.and(came.realized().fixing());
                 }
-                // The figure ran out, and what the last value came to is what a reader is told. Said
-                // as that outcome rather than as a figure of its own, because every one of these
-                // searches came back with something to say about the point and the last is no less
-                // an answer for there having been others.
-                return last;
+                // The figure ran out, and what the values came to is over fewer values than the
+                // point had. Both halves are said: the word is what the searches themselves came
+                // to, and the figure is why that word is not about the whole of the point. Said as
+                // the word alone, a point this compiler stopped working on reads as one that had
+                // everything and reached nothing, and the number an author would raise to be told
+                // differently is nowhere on the page.
+                return overFewerValues(last);
             }
 
             /** One value put to the point: what the realizer found, and what became of the rows. */
             private record Searching(Realization.Found realized,
                                      SearchOutcomes outcomes, boolean stood) {}
+
+            /**
+             * The same answer, said as one that is about fewer values than the point had.
+             *
+             * <p>On the searches' own answers and nowhere else. An outcome already naming something
+             * of this compiler's — a plan that stopped short, a population it writes some of — is
+             * one where the values were never what ran out, and a second figure beside it is a
+             * number an author would raise to be told the same thing.
+             *
+             * <p>The word each of them came back with is kept. What the figure adds is that the
+             * word is about what was tried rather than about the point, which is a second half and
+             * not a different first one.
+             */
+            private SearchOutcomes overFewerValues(SearchOutcomes outcomes) {
+                java.util.List<ItemAssessment.Attempt> out = new java.util.ArrayList<>();
+                for (ItemAssessment.Attempt each : outcomes.each()) {
+                    out.add(each instanceof ItemAssessment.Attempt.Unresolved it
+                            ? new ItemAssessment.Attempt.Limited(it.why(), it.way(), it.uncomposed(),
+                                    PublicationOrders.COMPOSITION_BUDGETS.keep(java.util.List.of(
+                                            CompositionBudget.VALUES_A_POINT_IS_TRIED_WITH)))
+                            : each);
+                }
+                return new SearchOutcomes(out);
+            }
 
             private Searching searchingWith(Criterion criterion, String label,
                     souther.compiler.partition.Reachability.Reaching able, ValuesTried tried) {

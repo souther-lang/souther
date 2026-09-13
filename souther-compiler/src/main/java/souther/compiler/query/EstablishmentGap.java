@@ -82,10 +82,15 @@ public sealed interface EstablishmentGap {
      * either from the word would be recovering something that may never have happened. Some of the
      * figures written here come back with no word at all.
      *
-     * <p><b>Only where nothing was composed.</b> A budget that cut an offering short after a value
-     * was built took nothing away from the point: the value is there, and what was lost is the rest
+     * <p><b>Only where the figure took something from the point.</b> A budget that cut an offering
+     * short after a value was built took nothing: the value is there, and what was lost is the rest
      * of an offer. Such a budget travels on what was built and not here, because a gap here is read
      * as the point having been left open by this compiler rather than by the model.
+     *
+     * <p>Which is not the same as nothing having been built. A point may be tried with one value
+     * after another, each built into a row that turned back above the line, until a figure for how
+     * many values ends the asking — and what the figure took is the value that might have stood.
+     * The rows are there and the point is open on a number somebody could raise.
      *
      * <p>Which covers each way that happens. A figure may end the search before it had tried what
      * it held; the search may run to the end of a population this compiler writes some of; a figure

@@ -125,6 +125,11 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/query/SearchOutcomes;",
                     "stops asking a point for another value to stand a row on, and answers with"
                             + " what the values it did try came to"),
+            Map.entry("souther.compiler.query.Coverages$2#overFewerValues("
+                            + "Lsouther/compiler/query/SearchOutcomes;)"
+                            + "Lsouther/compiler/query/SearchOutcomes;",
+                    "hands that figure on with the answer, which is what says the answer is about"
+                            + " fewer values than the point had"),
             Map.entry("souther.compiler.partition.LevelRealizer#ofAForm("
                             + "Lsouther/compiler/partition/Standing$OfAForm;"
                             + "Lsouther/compiler/inputs/SearchRegion;)"

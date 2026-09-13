@@ -7,6 +7,7 @@ import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.OrderedInterval;
 import souther.compiler.numeric.Place;
+import souther.compiler.numeric.PlacesApart;
 import souther.compiler.numeric.Text;
 import souther.compiler.regex.CodePoints;
 import souther.compiler.regex.Meter;
@@ -55,7 +56,7 @@ class AValueStandingForEverythingElseIsOneThePositionAdmitsTest {
 
     private static Place otherThan(Carrier carrier, List<Place> singled,
                                    NumericDomain.Bounds within, ValueSet admits) {
-        return carrier.somethingOtherThan(singled, within, admits, meter());
+        return carrier.somethingOtherThan(PlacesApart.of(singled), within, admits, meter());
     }
 
     /**
@@ -102,7 +103,7 @@ class AValueStandingForEverythingElseIsOneThePositionAdmitsTest {
     void theValueTheSetOffersFirstBeingSingledOutIsNotTheEndOfTheChoice() {
         ValueSet admits = lengths(1, PatternSyntax.Repeated.NO_CEILING);
         Place first = Carrier.TEXT.somewhereIn(admits, new OrderedInterval(null, null),
-                List.of(), meter());
+                PlacesApart.NONE, meter());
         assertNotNull(first, "the set has a value to offer, which is what this case is about");
 
         Place at = otherThan(Carrier.TEXT, List.of(first), null, admits);

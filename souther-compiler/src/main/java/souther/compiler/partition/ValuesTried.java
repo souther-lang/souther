@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.numeric.Place;
+import souther.compiler.numeric.PlacesApart;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -47,16 +48,26 @@ public record ValuesTried(List<Map<NumericTerm.FromOnePosition, Place>> rejected
      * others only as it reaches them — held to naming all of them, the exclusion would be spent on
      * the first asking and the same place offered for the rest of the search.
      */
-    public List<Place> apartFor(NumericTerm.FromOnePosition term,
+    public PlacesApart apartFor(NumericTerm.FromOnePosition term,
                                 Map<NumericTerm.FromOnePosition, Place> given) {
         List<Place> apart = new ArrayList<>();
         for (Map<NumericTerm.FromOnePosition, Place> one : rejected) {
             Place was = one.get(term);
-            if (was != null && standingAs(one, term, given) && !apart.contains(was)) {
+            if (was != null && standingAs(one, term, given)) {
                 apart.add(was);
             }
         }
-        return List.copyOf(apart);
+        return PlacesApart.of(apart);
+    }
+
+    /** Whether two arrangements stand the same positions at the same places on their orders. */
+    private static boolean standingAlike(Map<NumericTerm.FromOnePosition, Place> one,
+                                         Map<NumericTerm.FromOnePosition, Place> other) {
+        if (!one.keySet().equals(other.keySet())) {
+            return false;
+        }
+        return one.entrySet().stream()
+                .allMatch(each -> each.getValue().sameAs(other.get(each.getKey())));
     }
 
     /** Whether the rest of a rejected assignment stands where {@code given} has it standing. */
@@ -83,6 +94,11 @@ public record ValuesTried(List<Map<NumericTerm.FromOnePosition, Place>> rejected
      * <p>All of them together and not the one a reader thinks was chosen. Which position's value the
      * row turned on is not something the fixing says, and a search that guessed would go on offering
      * the arrangement it did not exclude.
+     *
+     * <p>Each place as the search composed it, and told from another on the order. Two arrangements
+     * differ where they stand different places and not where one of them was written differently —
+     * asked of what holds them, the same arrangement written two ways would be two, and a point
+     * would spend on one value what it is allowed for two.
      */
     public ValuesTried and(Map<RealizationTarget, Place> fixing) {
         Map<NumericTerm.FromOnePosition, Place> one = new LinkedHashMap<>();
@@ -91,7 +107,7 @@ public record ValuesTried(List<Map<NumericTerm.FromOnePosition, Place>> rejected
                 one.put(at, place);
             }
         });
-        if (one.isEmpty() || rejected.contains(one)) {
+        if (one.isEmpty() || rejected.stream().anyMatch(each -> standingAlike(each, one))) {
             return this;
         }
         List<Map<NumericTerm.FromOnePosition, Place>> next = new ArrayList<>(rejected);

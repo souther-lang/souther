@@ -115,11 +115,47 @@ class APointTriedWithSeveralValuesIsAnsweredByWhatWasBuiltTest {
         }
     }
 
+    /**
+     * And the figure that ended the asking is what a reader is told about.
+     *
+     * <p>The point is open because this compiler stopped putting values to it, which is a number
+     * somebody could raise. Left off, the page says a search had everything and reached nothing,
+     * and the one thing an author could do about it is not on it.
+     */
+    @Test
+    void andTheFigureThatEndedTheAskingIsSaid() {
+        List<String> said = whereNothingCouldShowARow(EVERY_ROW_TURNS_BACK);
+
+        assertFalse(said.isEmpty(), "this model has points nothing established a row at");
+        for (String each : said) {
+            assertTrue(each.contains("how many values a point is tried with"),
+                    () -> "the figure the asking stopped at is on the line: " + each);
+        }
+    }
+
+    /**
+     * And a point whose values ran out says no such thing.
+     *
+     * <p>The control. Nothing of this compiler's ended that asking — the positions had no further
+     * value to stand at — so a figure said there would be a number an author could raise to be
+     * told exactly the same thing.
+     */
+    @Test
+    void andAPointWhoseValuesRanOutNamesNoFigure() {
+        List<String> said = whereNothingCouldShowARow(THE_VALUES_RUN_OUT);
+
+        assertFalse(said.isEmpty(), "this model has points nothing established a row at");
+        for (String each : said) {
+            assertFalse(each.contains("how many values a point is tried with"),
+                    () -> "the values ran out before the figure did: " + each);
+        }
+    }
+
     /** The point lines of the page that say a search came to nothing. */
     private static List<String> whereNothingCouldShowARow(String model) {
         List<String> found = new ArrayList<>();
         for (String line : human(model).split("\n")) {
-            if (line.contains("nothing composed one")) {
+            if (line.contains("nothing composed one") || line.contains("over less than the point")) {
                 found.add(line.trim());
             }
         }

@@ -127,6 +127,12 @@ public enum CompositionBudget {
      * way the dependencies are stood in — and all of them are put to the point before the value is
      * counted as tried: charged per row, a point with more ways to stand its dependencies in would
      * be allowed fewer values than one with fewer.
+     *
+     * <p><b>So this stops no search either, and what it stops carries it.</b> Each search ran to
+     * the end of what it was handed and said what it found; this says the values it was handed were
+     * fewer than the point had, which is the answer being over less than the point
+     * ({@code Attempt.Limited}). Held nowhere, the figure would be spent on a point whose report
+     * says a search had everything and reached nothing.
      */
     VALUES_A_POINT_IS_TRIED_WITH(8),
 

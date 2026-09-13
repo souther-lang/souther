@@ -2975,19 +2975,21 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 // nothing about this; what it says is that the point is open because of a policy
                 // here, which is what keeps it out of the work they are told they owe.
                 //
-                // Said without claiming a search stopped, because one of the two ways to get here
-                // is a search that ran to the end of what it was handed while the thing it was
-                // handed was short of the point. The gap holds figures and not which of the two
-                // this was, so what is written is what both of them establish: nothing was
-                // composed, and a figure of this compiler's is why. Which way it happened is said
-                // per search, where the outcome that knows is still in hand.
+                // Said without claiming a search stopped, because one of the ways to get here is a
+                // search that ran to the end of what it was handed while the thing it was handed
+                // was short of the point. Nor that nothing was built: a point may have been tried
+                // with value after value, each of them built into a row that turned back, until
+                // the figure for how many ended the asking. The gap holds figures and not which of
+                // those it was, so what is written is the one thing they all establish — nothing
+                // here settled the point, and a figure of this compiler's is why. Which way it
+                // happened is said per search, where the outcome that knows is still in hand.
                 // Two sentences and not one list, because what a reader does about them differs. A
                 // figure is a number to raise and reaching it is why the search went no further; a
                 // population this writes some of is work nobody has done, and no number anybody
                 // raises reaches the rest of it. Run together, an author reads the second as
                 // something to raise and finds that raising it changes nothing.
                 case EstablishmentGap.Composition(var budgets, var repertoires) ->
-                        "nothing was composed for it"
+                        "nothing here settled it"
                                 + (budgets.isEmpty() ? ""
                                         : ", and a figure of this compiler's is why: "
                                                 + said(budgets))
@@ -3101,7 +3103,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // as the word alone, an author reads a proof about a value this compiler never planned
             // for; said as the figure alone, they go looking for a search that stopped.
             case ItemAssessment.Attempt.Limited it ->
-                    " — as far as this compiler plans, which stops at "
+                    " — over less than the point had, which stops at "
                             + said(it.limitedBy()) + ": "
                             + it.why().said().orElseGet(() -> whyUnresolved(it.why()))
                             + alsoLeftOut(it.unaccountedFor(), shown, rendering, declaredIn);
