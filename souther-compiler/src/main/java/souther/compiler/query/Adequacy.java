@@ -4394,7 +4394,7 @@ public final class Adequacy {
                                 .of(spec.name(), body, plan, domain, reading),
                         trial, baselines, each, budget));
             }
-            return souther.compiler.partition.FillResult.union(searched);
+            return souther.compiler.partition.FillResult.acrossRuns(searched);
         }
 
         /**

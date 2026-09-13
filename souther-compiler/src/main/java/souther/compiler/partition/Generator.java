@@ -1050,6 +1050,11 @@ public final class Generator {
     /**
      * What became of one arm, over every place a run through it is recorded at.
      *
+     * <p>One of the two folds an arm's answer is made by, and the one over the places. The other is
+     * over the runs a behavior whose dependencies a way leaves open is searched by, and it combines
+     * what this returns — so the two are named apart, and what a payload means over the places is
+     * not what it means over the runs.
+     *
      * <p>Built wins over everything, because a row through any splice goes through the arm the
      * author wrote. Where none built, the reasons of every place are kept together: they are not
      * one fact and they do not order against each other — one splice the model refuses says the arm
@@ -1063,10 +1068,10 @@ public final class Generator {
      * whichever place came first, the same body with its two call sites swapped answered one and
      * then the other.
      */
-    private static ArmDisposition armAnswer(ArmOwed asked, Map<ArmProbe, RowId> built,
-                                            Map<ArmProbe, List<UnresolvedCombination>> failed,
-                                            Set<ArmProbe> cutOff,
-                                            souther.compiler.reading.CoverageRead.Read read) {
+    private static ArmDisposition acrossOccurrences(
+            ArmOwed asked, Map<ArmProbe, RowId> built,
+            Map<ArmProbe, List<UnresolvedCombination>> failed, Set<ArmProbe> cutOff,
+            souther.compiler.reading.CoverageRead.Read read) {
         List<UnresolvedCombination> why = new ArrayList<>();
         boolean anyCutOff = false;
         for (ArmProbe probe : asked.occurrences()) {
@@ -1491,7 +1496,7 @@ public final class Generator {
         // about the one beside it.
         Map<ArmOwed, ArmDisposition> armAnswers = new LinkedHashMap<>();
         for (ArmOwed asked : plan.armsOwed()) {
-            armAnswers.put(asked, armAnswer(asked, built, failed, cutOff, read));
+            armAnswers.put(asked, acrossOccurrences(asked, built, failed, cutOff, read));
         }
         // Said once, at the end, and about both searches. One that ran out on the classes stopped
         // whether or not the arms had anything left to do, and two limits reported apart would be
