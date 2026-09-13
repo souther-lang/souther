@@ -16,7 +16,7 @@ rem refused here, because what the JVM says instead names a class file version a
 rem to work out which Java that was.
 rem
 rem Not being able to read it is not a refusal. A Java can be reached through something that is not
-rem its own image directory — a shim, a wrapper, a path a user assembled — and a launcher that
+rem its own image directory (a shim, a wrapper, a path a user assembled), and a launcher that
 rem refused whatever it could not account for would refuse a working Java. Such a run gets what it
 rem would have got had nothing been read at all.
 setlocal
