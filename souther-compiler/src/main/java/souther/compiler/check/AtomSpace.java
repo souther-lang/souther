@@ -66,8 +66,8 @@ public final class AtomSpace {
     /**
      * The names to descend from, in the order the type states them.
      *
-     * <p>A union states none — it holds a set — so one is put on it here. Everything else names one
-     * type and there is nothing to order.
+     * <p>A union holds its members in one order whoever built it, so there is nothing to put on it
+     * here. Everything else names one type and there is nothing to order.
      */
     private static List<TypeSymbol> roots(Type t) {
         if (t instanceof Type.Union union) {
@@ -76,10 +76,15 @@ public final class AtomSpace {
         return List.copyOf(TypeOps.namesOf(t));
     }
 
-    /** The members of {@code union}, in the order a union states them, which is
-     *  {@link CanonicalNameOrder}'s — a union states none of its own. */
+    /**
+     * The members of {@code union}, in the order it states them.
+     *
+     * <p>Read and not decided. A union is built with its members in the order they are shown
+     * ({@link CanonicalNameOrder}), so arranging them again here would be a second owner of one
+     * order — and the one that went untested would be whichever of the two somebody later changed.
+     */
     static List<TypeSymbol> statedBy(Type.Union union) {
-        return CanonicalNameOrder.shown(union.members());
+        return List.copyOf(union.members());
     }
 
     /**
