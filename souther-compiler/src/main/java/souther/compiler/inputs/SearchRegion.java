@@ -66,14 +66,19 @@ public interface SearchRegion {
      * written value states where on the order it lies and states no arithmetic — and the form above
      * has nowhere to put a place that is not a number.
      *
-     * <p>One term and a place, never a form: a sum needs its terms to add, and two strings do not.
-     * A relation between two such positions is a distance and goes to the form above, which is why
-     * this is asked only where a written value is one side of the comparison.
+     * <p>One position and a place, never a form: a sum needs its terms to add, and two strings do
+     * not. A relation between two such positions is a distance and goes to the form above, which is
+     * why this is asked only where a written value is one side of the comparison.
+     *
+     * <p>{@code rel} says where a run stops. A relation that leaves a hole rather than an end is
+     * not one this narrows by, and it is refused where such a constraint would be built rather than
+     * arriving here to be dropped — a caller whose condition went nowhere would otherwise have no
+     * way of finding out.
      *
      * <p>Unchanged where nothing here orders that term, on the same principle as the form above: a
      * condition nothing took in leaves a region that still holds every row that arrives.
      */
-    SearchRegion assuming(NumericTerm term, Place at, Rel rel);
+    SearchRegion assuming(NumericTerm.FromOnePosition term, Place at, Rel rel);
 
     /** The same region, with these positions standing at these values. */
     SearchRegion given(Map<NumericTerm, Count> fixed);

@@ -244,7 +244,15 @@ public record ReachingCuts(Map<ModelOccurrence, List<OnTheWay>> byComparison) {
      * falls, which is the whole of an ordered constraint.
      *
      * <p>Taken the way the path met it, like the form above: an arm reached by the condition failing
-     * has what holds exactly where the comparison does not.
+     * has what holds exactly where the comparison does not. Which is why the relation is settled
+     * before the bound is asked for and not after: {@code /= } coming out one way and {@code ==}
+     * coming out the other are the same relation, and a reading that looked at what the author
+     * wrote would carry one of them and refuse the other.
+     *
+     * <p>Null as well where that relation draws no bound, which is what a hole in an order is. A
+     * region has no word for one, so a condition that comes to it is a condition this reading could
+     * not turn into a cut — said as that rather than carried as something taken in, since what a
+     * reader of {@link OnTheWay.TakenIn} does with it is take the search for narrowed.
      */
     private static OnTheWay.TakenIn onAnOrder(Condition.Compares comparison, InputReading read,
                                               boolean holding, ConditionReportAnchor at) {
@@ -254,8 +262,9 @@ public record ReachingCuts(Map<ModelOccurrence, List<OnTheWay>> byComparison) {
             return null;
         }
         Rel states = drawn.claim().statedRelation();
-        return new OnTheWay.TakenIn(at, new TakenConstraint.Ordered(drawn.term(), drawn.value(),
-                holding ? states : states.denied()));
+        TakenConstraint.Ordered bound = TakenConstraint.Ordered.of(drawn.term(), drawn.value(),
+                holding ? states : states.denied());
+        return bound == null ? null : new OnTheWay.TakenIn(at, bound);
     }
 
     /** These conditions, with the rule stated at {@code states} reached under {@code assumed}. */

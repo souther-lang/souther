@@ -151,8 +151,8 @@ final class ReadQuantities implements Quantities {
         }
 
         /** One position held against a written place on the order it stands on. */
-        record OnAnOrder(NumericTerm term, souther.compiler.numeric.Place at, Rel rel)
-                implements Assumed {
+        record OnAnOrder(NumericTerm.FromOnePosition term, souther.compiler.numeric.Place at,
+                         Rel rel) implements Assumed {
 
             @Override
             public Set<NumericTerm> terms() {
@@ -385,13 +385,14 @@ final class ReadQuantities implements Quantities {
      * where a term is asked as itself ({@link #whereOneTermRuns}) rather than solved with the
      * relations.
      *
-     * <p>This value back where the relation states no bound. {@link Rel#NE} holds everywhere except
-     * at one place, which is a hole and not an end — and a range is what this vocabulary has. Kept
-     * as a bound either way, it would be read back as one and would narrow the order to a side the
-     * rule never named.
+     * <p>{@code rel} says where a run stops, which is what the vocabulary is, and a relation that
+     * leaves a hole instead is refused where such a constraint is built. So nothing arrives here
+     * that this would have to drop: a condition that went nowhere is one its own reader was told
+     * about, rather than one this silently left out.
      */
-    ReadQuantities assuming(NumericTerm term, souther.compiler.numeric.Place at, Rel rel) {
-        if (term == null || at == null || boundsAt(at, rel) == null) {
+    ReadQuantities assuming(NumericTerm.FromOnePosition term, souther.compiler.numeric.Place at,
+                            Rel rel) {
+        if (term == null || at == null) {
             return this;
         }
         held(term);
@@ -410,11 +411,16 @@ final class ReadQuantities implements Quantities {
     }
 
     /**
-     * The range {@code rel at} leaves, or null where the relation leaves no range.
+     * The range {@code rel at} leaves.
      *
      * <p>An equality is both ends at one place, which is a range of one value and not a fixing: what
      * a caller fixed is where a row was told to stand, and what a rule said is what the values may
      * be. The two are read together at {@link #whereOneTermRuns} and are not one another.
+     *
+     * <p>{@link Rel#NE} leaves a hole rather than an end, and there is no range to answer with. It
+     * is refused where a bound on an order is built, so it does not arrive; read as a range here,
+     * the value the rule refuses would become an end and one whole side of the order would go with
+     * it.
      */
     private static NumericDomain.Bounds boundsAt(souther.compiler.numeric.Place at, Rel rel) {
         return switch (rel) {
@@ -423,9 +429,8 @@ final class ReadQuantities implements Quantities {
             case LE -> new NumericDomain.Bounds(null, Endpoint.inclusive(at));
             case LT -> new NumericDomain.Bounds(null, Endpoint.exclusive(at));
             case EQ -> new NumericDomain.Bounds(Endpoint.inclusive(at), Endpoint.inclusive(at));
-            // A hole, and this vocabulary says where a run stops. Said as a range, the value the
-            // rule refuses would become an end and one whole side of the order would go with it.
-            case NE -> null;
+            case NE -> throw new IllegalArgumentException(
+                    "a hole is not a range, and a bound on an order is never built from " + rel);
         };
     }
 

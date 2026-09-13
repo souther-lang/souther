@@ -60,16 +60,45 @@ public sealed interface TakenConstraint {
      * arithmetic's even where the values are not, which is why {@code a < b} over two strings is an
      * {@link Affine} and {@code a < "t"} is this.
      *
+     * <p>A position of the input and not any number of it. What a bound on an order is about is
+     * where a value stands, and a count taken over a run or a form of several is not something an
+     * order holds a place for — a term of one of those kinds would be a bound this could spell and
+     * nothing could read.
+     *
+     * <p><b>A bound, so a relation that is not one cannot be spelled here.</b> {@link Rel#NE} holds
+     * everywhere but at one place, which is a hole and not an end; this vocabulary says where a run
+     * stops. Admitted, it would be a value that says a region was narrowed by something no region
+     * can be narrowed by — and every reader of {@link OnTheWay.TakenIn} takes that for the search
+     * having been narrowed. So it is refused where it would be built ({@link #of}), and a condition
+     * that comes to one is a condition this reading could not turn into a cut.
+     *
      * @param term the position this bounds
      * @param at   the place on its order the rule names
      */
-    record Ordered(NumericTerm term, Place at, Rel rel) implements TakenConstraint {
+    record Ordered(NumericTerm.FromOnePosition term, Place at, Rel rel)
+            implements TakenConstraint {
 
         public Ordered {
             if (term == null || at == null) {
                 throw new IllegalArgumentException(
                         "a bound on an order is a position and a place on it: " + term + " " + at);
             }
+            if (!isABound(rel)) {
+                throw new IllegalArgumentException(
+                        "a bound on an order says where a run stops, and " + rel + " does not");
+            }
+        }
+
+        /** The bound {@code rel} draws at {@code at}, or null where the relation draws none. The
+         *  one place that decides it, so that what is built and what a region can be narrowed by
+         *  are one answer rather than two that agree until one of them is edited. */
+        public static Ordered of(NumericTerm.FromOnePosition term, Place at, Rel rel) {
+            return isABound(rel) ? new Ordered(term, at, rel) : null;
+        }
+
+        /** Whether {@code rel} says where a run stops. */
+        private static boolean isABound(Rel rel) {
+            return rel != Rel.NE;
         }
 
         @Override

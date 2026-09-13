@@ -28,7 +28,8 @@ record ReadRegion(ReadQuantities within) implements SearchRegion {
     }
 
     @Override
-    public SearchRegion assuming(NumericTerm term, souther.compiler.numeric.Place at, Rel rel) {
+    public SearchRegion assuming(NumericTerm.FromOnePosition term,
+                                 souther.compiler.numeric.Place at, Rel rel) {
         ReadQuantities taken = within.assuming(term, at, rel);
         return taken == within ? this : new ReadRegion(taken);
     }

@@ -30,7 +30,8 @@ record ARunOfThisMany(int many) implements SearchRegion {
     }
 
     @Override
-    public SearchRegion assuming(NumericTerm term, souther.compiler.numeric.Place at, Rel rel) {
+    public SearchRegion assuming(NumericTerm.FromOnePosition term,
+                                 souther.compiler.numeric.Place at, Rel rel) {
         return this;
     }
 

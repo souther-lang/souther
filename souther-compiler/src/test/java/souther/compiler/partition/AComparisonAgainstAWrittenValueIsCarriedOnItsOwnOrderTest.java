@@ -6,6 +6,9 @@ import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.core.Core;
 import souther.compiler.inputs.InputReads;
+import souther.compiler.inputs.SearchRegion;
+import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.NumericDomain;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
@@ -47,6 +50,9 @@ class AComparisonAgainstAWrittenValueIsCarriedOnItsOwnOrderTest {
             behavior textAtAWrittenValue : (p: Pair) -> Bool
             let textAtAWrittenValue (p) = p.a == "t"
 
+            behavior textAboveAWrittenValue : (p: Pair) -> Bool
+            let textAboveAWrittenValue (p) = p.a >= "t"
+
             behavior textBelowAnotherPosition : (p: Pair) -> Bool
             let textBelowAnotherPosition (p) = p.a < p.b
 
@@ -75,10 +81,47 @@ class AComparisonAgainstAWrittenValueIsCarriedOnItsOwnOrderTest {
     void aWrittenValueOnAnOrderThatCountsNothingIsABoundOnIt() {
         assertEquals(Map.of(true, "p.a LT t", false, "p.a GE t"),
                 bothWays("textBelowAWrittenValue"));
-        assertEquals(Map.of(true, "p.a NE t", false, "p.a EQ t"),
-                bothWays("textApartFromAWrittenValue"));
-        assertEquals(Map.of(true, "p.a EQ t", false, "p.a NE t"),
-                bothWays("textAtAWrittenValue"));
+        assertEquals("p.a EQ t", said(taken("textApartFromAWrittenValue", false)));
+        assertEquals("p.a EQ t", said(taken("textAtAWrittenValue", true)));
+    }
+
+    /**
+     * A relation that leaves a hole is not taken in, because no region is narrowed by one.
+     *
+     * <p>The half of this a reading could get wrong without any test noticing. What a reader of a
+     * condition taken in does with it is take the search for narrowed by it, and the region it is
+     * handed to has no word for a hole — so a bound spelled {@code NE} would be a value saying the
+     * search was narrowed by something that narrows nothing, and the shortfall would stop being
+     * observable at the moment it was named a comparison.
+     *
+     * <p>Both spellings of it, since which relation reaches this is what the path met and not what
+     * the author wrote: {@code /= } holding and {@code ==} denied are one relation.
+     */
+    @Test
+    void aRelationThatLeavesAHoleIsNotTakenIn() {
+        for (Map.Entry<String, Boolean> each : Map.of(
+                "textApartFromAWrittenValue", true, "textAtAWrittenValue", false).entrySet()) {
+            OnTheWay.Declined left = assertInstanceOf(OnTheWay.Declined.class,
+                    only(each.getKey(), each.getValue()),
+                    each.getKey() + " comes out " + each.getValue() + " as a hole in the order");
+            assertEquals(new OnTheWay.Why.ComparisonNotRepresentedAsACut(), left.why());
+        }
+    }
+
+    /**
+     * And what is taken in narrows the region a row is looked for in.
+     *
+     * <p>Against the region this compiler builds and not a stand-in that records what it was told.
+     * A reading that produced the right constraint and handed it to an implementation with nothing
+     * to do with it would pass every question asked of the reading alone, and the search below the
+     * guard would go on running over the rows the guard excludes.
+     */
+    @Test
+    void whatIsTakenInNarrowsWhereARowIsLookedFor() {
+        assertEquals("[t, null]", runsAt("textAboveAWrittenValue"),
+                "a bound above a written value moves the end the run starts at");
+        assertEquals("[t, t]", runsAt("textAtAWrittenValue"),
+                "and an equality leaves the one place the rule names");
     }
 
     /**
@@ -142,6 +185,29 @@ class AComparisonAgainstAWrittenValueIsCarriedOnItsOwnOrderTest {
         return bound.term() + " " + bound.rel() + " " + bound.at().key();
     }
 
+    /**
+     * Where the bounded position runs once the region has been narrowed by what the way took in,
+     * as the two ends the rules leave it.
+     *
+     * <p>Asked of the position the condition is about, which is the one shape a carrier that counts
+     * nothing is ever asked in. The ends are places and are spelled by what they are: two writings
+     * of one place are one end, and a test keyed on a spelling would be about the writing.
+     */
+    private static String runsAt(String behavior) {
+        TakenConstraint.Ordered bound = assertInstanceOf(TakenConstraint.Ordered.class,
+                taken(behavior, true), behavior + " is a bound on an order");
+        SearchRegion narrowed = new WayToTheBorder(stating(behavior, true))
+                .narrowing(regionOf(behavior));
+        NumericDomain.Bounds runs = narrowed.runsBetween(bound.term());
+        return "[" + end(runs == null ? null : runs.min()) + ", "
+                + end(runs == null ? null : runs.max()) + "]";
+    }
+
+    /** One end as the place it is at, or the word for no end. */
+    private static String end(Endpoint at) {
+        return at == null ? "null" : at.at().key();
+    }
+
     /** What the body states coming out each way, which is one condition read twice and never two
      *  readings. */
     private static Map<Boolean, String> bothWays(String behavior) {
@@ -162,19 +228,48 @@ class AComparisonAgainstAWrittenValueIsCarriedOnItsOwnOrderTest {
     }
 
     private static List<OnTheWay> stating(String behavior, boolean holding) {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.answerEverything();
-        String module = compilation.modules().get(0);
-        Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
-        assertNotNull(checked, "the model under test compiles");
-        Core body = checked.behaviorBodies().get(behavior);
-        assertNotNull(body, () -> "the model under test writes " + behavior);
-        RuleReadingSource rules = RuleReadings.of(compilation, module);
-        souther.compiler.inputs.InputDomain inputs =
-                compilation.db().ask(new Adequacy.Inputs(module)).value().get(behavior);
-        InputReads reads = InputReads.ofParameters(inputs.parameterReads(),
-                checked.elementBindings().get(behavior));
-        return ReachingCuts.stating(Condition.of(body, reads, rules.symbols(), rules.newtypes(),
-                new ConditionNumbering(module, behavior)), inputs.reading(rules), holding);
+        return readingOf(behavior).stating(holding);
+    }
+
+    /** The region this compiler builds for the behavior's input, off the reading its conditions
+     *  were read against — so a term of one is a term of the other. */
+    private static SearchRegion regionOf(String behavior) {
+        return readingOf(behavior).read().quantities().region();
+    }
+
+    /**
+     * One behavior of the model, read once.
+     *
+     * <p>Kept per behavior, because the reading of an input is what the conditions are read against
+     * and the region is built from: asked twice, a term of the one would be compared against a term
+     * of the other, and what the test established would be that two readings of one model agree.
+     */
+    private record Read(Core body, souther.compiler.inputs.InputReading read, InputReads reads,
+                        RuleReadingSource rules, String module, String behavior) {
+
+        List<OnTheWay> stating(boolean holding) {
+            return ReachingCuts.stating(Condition.of(body, reads, rules.symbols(),
+                    rules.newtypes(), new ConditionNumbering(module, behavior)), read, holding);
+        }
+    }
+
+    private static final Map<String, Read> READINGS = new java.util.concurrent.ConcurrentHashMap<>();
+
+    private static Read readingOf(String behavior) {
+        return READINGS.computeIfAbsent(behavior, name -> {
+            Compilation compilation = Compilation.ofSource(MODEL, "Main");
+            compilation.answerEverything();
+            String module = compilation.modules().get(0);
+            Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
+            assertNotNull(checked, "the model under test compiles");
+            Core body = checked.behaviorBodies().get(name);
+            assertNotNull(body, () -> "the model under test writes " + name);
+            RuleReadingSource rules = RuleReadings.of(compilation, module);
+            souther.compiler.inputs.InputDomain inputs =
+                    compilation.db().ask(new Adequacy.Inputs(module)).value().get(name);
+            InputReads reads = InputReads.ofParameters(inputs.parameterReads(),
+                    checked.elementBindings().get(name));
+            return new Read(body, inputs.reading(rules), reads, rules, module, name);
+        });
     }
 }

@@ -2168,8 +2168,8 @@
           "obligationId" : {
             "behavior" : "redeem",
             "conditions" : [ {
-              "kind" : "comparison",
-              "condition" : "EQ voucher spring",
+              "kind" : "not_read",
+              "condition" : "condition 1 of `redeem`",
               "outcome" : "denied"
             } ]
           },
@@ -2184,8 +2184,8 @@
         "obligationId" : {
           "behavior" : "redeem",
           "conditions" : [ {
-            "kind" : "comparison",
-            "condition" : "EQ voucher spring",
+            "kind" : "not_read",
+            "condition" : "condition 1 of `redeem`",
             "outcome" : "denied"
           } ]
         },

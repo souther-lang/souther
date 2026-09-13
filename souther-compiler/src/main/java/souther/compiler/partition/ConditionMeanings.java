@@ -23,8 +23,8 @@ import java.util.List;
  * way, a column of a decision table and a line drawn on the same comparison would be free to
  * disagree.
  *
- * @param inputs the reading of what this behavior's input holds
- * @param rules  the reading of the declarations the comparisons are read against
+ * @param read the reading of this behavior's input: where its positions are, what the rules leave
+ *             the numbers at them, and the declarations both were read against
  */
 record ConditionMeanings(souther.compiler.inputs.InputReading read) {
 
