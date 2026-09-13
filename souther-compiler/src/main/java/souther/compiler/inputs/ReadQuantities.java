@@ -96,6 +96,17 @@ final class ReadQuantities implements Quantities {
      */
     private final List<Assumed> assumed;
     /**
+     * What the ones taken in on an order leave each term, worked out from {@link #assumed} when
+     * this value is made.
+     *
+     * <p>A projection of the list beside it and not a second place to put one. Where a term runs is
+     * asked once per term of every form a search reads, and that question is not memoised — walked
+     * over the whole list each time, every condition on the way is visited for the sake of the rare
+     * one that is a bound on an order. Derived here, it cannot say anything the list does not:
+     * nothing adds to it, and meeting the ends is the same answer in any order they are met.
+     */
+    private final Map<NumericTerm, NumericDomain.Bounds> orderedBounds;
+    /**
      * What has already been worked out, by the context it was worked out under.
      *
      * <p>A memo of {@link #constraints} and of nothing else. What the rules leave under a context is
@@ -173,6 +184,7 @@ final class ReadQuantities implements Quantities {
         this.ruleReading = ruleReading;
         this.typeAt = typeAt;
         this.assumed = List.copyOf(assumed);
+        this.orderedBounds = boundsOnOrdersIn(this.assumed);
         // In the order the behavior declares its parameters. A proof of emptiness names one of them
         // and a report is a document compared against the one written last time, so an order read
         // off a hash would move which parameter is named between runs.
@@ -1217,11 +1229,7 @@ final class ReadQuantities implements Quantities {
         // relations, because this is the one shape such a rule has: a bound on a carrier that counts
         // nothing is about one position, and the arithmetic that adds terms together has no word for
         // the place it names.
-        for (Assumed taken : assumed) {
-            if (taken instanceof Assumed.OnAnOrder each && each.term().equals(term)) {
-                runs = meeting(runs, boundsAt(each.at(), each.rel()));
-            }
-        }
+        runs = meeting(runs, orderedBounds.get(term));
         Fixed fixedAt = fixed.get(term);
         // Where two values were fixed there, between them: the rules leave nothing at all, which
         // {@link #emptiness} says, and a range that crossed itself is not something to hand a
@@ -1229,6 +1237,18 @@ final class ReadQuantities implements Quantities {
         return fixedAt == null ? runs
                 : meeting(runs, new NumericDomain.Bounds(Endpoint.inclusive(fixedAt.least()),
                         Endpoint.inclusive(fixedAt.most())));
+    }
+
+    /** What the bounds taken in on an order leave each term they are about, met together. Empty
+     *  where none were taken in, which is every reading nothing said such a thing to. */
+    private static Map<NumericTerm, NumericDomain.Bounds> boundsOnOrdersIn(List<Assumed> assumed) {
+        Map<NumericTerm, NumericDomain.Bounds> out = new LinkedHashMap<>();
+        for (Assumed taken : assumed) {
+            if (taken instanceof Assumed.OnAnOrder each) {
+                out.merge(each.term(), boundsAt(each.at(), each.rel()), ReadQuantities::meeting);
+            }
+        }
+        return Map.copyOf(out);
     }
 
     /** The tighter end on each side, where an absent bound is no bound and never the tighter. */
