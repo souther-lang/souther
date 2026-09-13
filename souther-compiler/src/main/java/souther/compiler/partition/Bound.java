@@ -41,6 +41,18 @@ public record Bound(CutPosition at, boolean inclusive) {
         return new Bound(at.canonical(), inclusive);
     }
 
+    /**
+     * The same end on the quantity read the other way round, which is the other end of the region.
+     *
+     * <p>Whether the place is one of the region's own does not move with it. Which side of a bound
+     * the values lie on is the region's business and is said by which end this is; whether the
+     * bound keeps the value at its own place is what the rule wrote, and reading the quantity
+     * backwards does not turn a rule that admits its threshold into one that refuses it.
+     */
+    public Bound reflected() {
+        return new Bound(at.reflected(), inclusive);
+    }
+
     /** Whether {@code value} is on the upper side of this, read as the lower end of a region. */
     public boolean admitsFromBelow(Level value) {
         int order = at.compare(value);

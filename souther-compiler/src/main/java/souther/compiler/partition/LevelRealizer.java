@@ -93,42 +93,113 @@ public final class LevelRealizer {
      * about the pair. Where they leave none, nothing is composed — and that is reported as a search
      * that found nothing rather than as a proof, because two ranges leaving no place in common is a
      * fact about the ranges and the pair may be refused or admitted by a rule neither range holds.
+     *
+     * <p><b>From either position, because a relation has no first coordinate.</b> Which of the two
+     * is settled before the other is asked is this search's own arrangement and is no part of what
+     * the rule said, so both arrangements are tried and the pair is what either of them reaches. A
+     * relation over an order that names a value above any of its own and none below one — which
+     * every order over strings is — is composable from the lower position and from neither other
+     * way round, so settling the same one of the two always made {@code a < b} answerable and
+     * {@code b > a} not.
      */
     private Realization ofTwo(Standing.OfTwoOnOneCarrier two,
                               souther.compiler.inputs.SearchRegion within,
                               WitnessSearch looking) {
-        NumericDomain.Bounds on = bounds(within, two.on());
-        NumericDomain.Bounds together = commonRange(on, bounds(within, two.against()), two.of(),
-                two.where().anchor().asACount());
-        Outwards.Walked walked = alongTheLine(together, two.of());
-        for (Place common : walked) {
-            // Where the first has to stand relative to the second: the place the level's distance
-            // from it, and then whatever the item asks of that place. Arithmetic on the carrier's
-            // counts and not a walk along it — a walk is an addition that only exists where the
-            // order has a smallest step, so a rule over two decimals had no pair anything could
-            // compose.
-            // Null where the carrier's arithmetic could not put the item's levels beside the place
-            // the other position stands at — read on, an item with no level in it was handed to a
-            // reader that asks where its level falls.
-            Criterion here = relativeTo(two.where(), common, two.of());
-            Place at = here == null ? null
-                    : placeMeeting(here, two.on(), two.of(), on, looking);
-            if (at == null) {
+        // What each reading left behind, in the two vocabularies there are for it. Kept apart all
+        // the way here: how a walk ended says which of them it is, and a reader told the wrong one
+        // is sent to raise a figure that reached its end or told that no number would have helped
+        // where one would.
+        java.util.Set<CompositionBudget> stoppedBy =
+                java.util.EnumSet.noneOf(CompositionBudget.class);
+        java.util.Set<CompositionRepertoire> notAllOf =
+                java.util.EnumSet.noneOf(CompositionRepertoire.class);
+        for (Reading reading : readings(two)) {
+            NumericDomain.Bounds settled = bounds(within, reading.settles());
+            NumericDomain.Bounds together = commonRange(settled,
+                    bounds(within, reading.anchors()), two.of(),
+                    reading.where().anchor().asACount());
+            Outwards.Walked walked = alongTheLine(together, two.of());
+            if (walked == null) {
+                // Nothing composed a place to anchor at, which is this reading's own answer and
+                // says nothing about how much of the line was looked at.
                 continue;
             }
-            Map<RealizationTarget, Place> fixing = new LinkedHashMap<>();
-            fixing.put(new RealizationTarget.AtOnePosition(two.on()), at);
-            fixing.put(new RealizationTarget.AtOnePosition(two.against()), common);
-            if (found(fixing, within) instanceof Realization.Found made) {
-                return made;
+            // How the walk ended, put to the vocabulary that ending belongs to. Read over the
+            // endings rather than off a boolean made from them: a walk that met the figure and one
+            // that had no step to take are both walks that did not try every place, and told apart
+            // only afterwards they were named for each other.
+            switch (walked.ended()) {
+                case HAVING_TRIED_THEM_ALL -> { }
+                case AT_THE_FIGURE -> stoppedBy.add(CompositionBudget.PLACES_A_PAIR_IS_TRIED_AT);
+                case WITH_NO_STEP_TO_TAKE -> notAllOf.add(
+                        CompositionRepertoire.PLACES_A_PAIR_IS_TRIED_AT_ON_A_LINE);
+            }
+            for (Place common : walked) {
+                // Where the settled one has to stand relative to the anchored one: the place the
+                // level's distance from it, and then whatever the item asks of that place.
+                // Arithmetic on the carrier's counts and not a walk along it — a walk is an
+                // addition that only exists where the order has a smallest step, so a rule over two
+                // decimals had no pair anything could compose.
+                // Null where the carrier's arithmetic could not put the item's levels beside the
+                // place the other position stands at — read on, an item with no level in it was
+                // handed to a reader that asks where its level falls.
+                Criterion here = relativeTo(reading.where(), common, two.of());
+                Place at = here == null ? null
+                        : placeMeeting(here, reading.settles(), two.of(), settled, looking);
+                if (at == null) {
+                    continue;
+                }
+                Map<RealizationTarget, Place> fixing = new LinkedHashMap<>();
+                fixing.put(new RealizationTarget.AtOnePosition(reading.settles()), at);
+                fixing.put(new RealizationTarget.AtOnePosition(reading.anchors()), common);
+                if (found(fixing, within) instanceof Realization.Found made) {
+                    return made;
+                }
             }
         }
         // Nothing was composed, which is what a pair the ranges leave no place for comes to and
-        // what this has always said. Where the walk stopped at its figure, that is said beside the
-        // answer rather than in place of it.
-        return Realization.Unknown.nothingComposedOne(walked.stoppedShort()
-                ? java.util.Set.of(CompositionBudget.PLACES_A_PAIR_IS_TRIED_AT)
-                : java.util.Set.of());
+        // what this has always said. What a walk left is said beside that answer rather than in
+        // place of it, each in its own vocabulary: raising a figure goes past it, and raising
+        // anything reaches no second place on an order that has no step.
+        //
+        // The word follows the walk that has one. A walk with no step to take composed a place and
+        // tried it, which is what the second word is for; a walk that met the figure says what this
+        // has always said, and the figures hold it to that at both ends. They cannot both be here —
+        // both readings walk the one order this pair is on, and an order with no step reaches no
+        // figure — and it is {@link Realization.Unknown} that holds them to it rather than this
+        // sentence.
+        if (!notAllOf.isEmpty()) {
+            return Realization.Unknown.searchLeftSomethingUntried(stoppedBy, notAllOf);
+        }
+        return Realization.Unknown.nothingComposedOne(stoppedBy);
+    }
+
+    /**
+     * One way round to search a pair: which position is settled first, and what is asked of it once
+     * the other is standing somewhere.
+     *
+     * <p>The criterion travels with the pair because it is about a quantity, and the quantity is
+     * how far one of them stands from the other — which is two quantities for two positions
+     * ({@link Criterion#reflected()}). A reading that carried the positions and left the criterion
+     * alone would ask the second one for the distance the first one owes.
+     *
+     * @param settles the position a place is composed for, given where the other one stands
+     * @param anchors the position a place is taken for first, from what both of them admit
+     */
+    private record Reading(NumericTerm.FromOnePosition settles,
+                           NumericTerm.FromOnePosition anchors, Criterion where) {}
+
+    /**
+     * The ways round to search this pair, in the order they are tried.
+     *
+     * <p>Both, always, and the first is the one the rule was written as. Which of them reaches a
+     * pair is an answer about the order the positions are on and not about the item, so trying only
+     * the one that comes to hand is what made the same relation answerable written one way and not
+     * the other.
+     */
+    private static List<Reading> readings(Standing.OfTwoOnOneCarrier two) {
+        return List.of(new Reading(two.on(), two.against(), two.where()),
+                new Reading(two.against(), two.on(), two.where().reflected()));
     }
 
     /**
@@ -155,12 +226,16 @@ public final class LevelRealizer {
      * only pair on the line that cannot be written.
      *
      * <p>One place where the carrier's values do not count. There is no next place to step to, so
-     * the one the ranges leave is the whole of what there is to try.
+     * the one the ranges leave is the whole of what this can name — and the walk says so, because
+     * it is not the whole of what the line holds.
+     *
+     * <p>Null where nothing composed a place to start from, which is this one's own answer and not
+     * something to ask a walk about: a walk of no places would have to say whether there were more,
+     * and there was never a walk.
      */
     private static Outwards.Walked alongTheLine(NumericDomain.Bounds together, Carrier carrier) {
-        // Nothing composed, which is this one's own answer and not something to ask a walk about.
         Place first = carrier.somethingInside(together.min(), together.max());
-        return first == null ? new Outwards.Walked(List.of(), false)
+        return first == null ? null
                 : Outwards.from(first, Count.of(1), carrier, together,
                         HOW_MANY_PLACES_A_PAIR_IS_TRIED_AT);
     }
@@ -581,8 +656,15 @@ public final class LevelRealizer {
             // only said where the run held one more and this did not take it — added whenever the
             // walk came back empty, it would name a figure over a run that had nothing further in
             // it, which is this compiler claiming to have been stopped where it was not.
-            if (walked.stoppedShort()) {
-                stoppedBy.add(CompositionBudget.VALUES_OF_AN_UNBOUNDED_PROGRESSION_TRIED);
+            switch (walked.ended()) {
+                case HAVING_TRIED_THEM_ALL -> { }
+                case AT_THE_FIGURE ->
+                        stoppedBy.add(CompositionBudget.VALUES_OF_AN_UNBOUNDED_PROGRESSION_TRIED);
+                // A progression is a sum of counts, and a sum exists only over orders that count
+                // ({@link LevelSpace#addedUpOver}). So a walk of one that had no step to take is a
+                // form over an order with no arithmetic, which is refused before a search is built.
+                case WITH_NO_STEP_TO_TAKE -> throw new IllegalStateException(
+                        "a progression over an order with no step: " + carriers[i]);
             }
             return Reached.INCOMPLETE;
         }

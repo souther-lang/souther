@@ -269,7 +269,8 @@ public final class PublicationOrders {
      */
     public static final CanonicalSelection.Order<CompositionRepertoire> COMPOSITION_REPERTOIRES =
             CanonicalSelection.Order.overValues(
-                    List.of(CompositionRepertoire.WAYS_A_TOTAL_IS_SPREAD));
+                    List.of(CompositionRepertoire.WAYS_A_TOTAL_IS_SPREAD,
+                            CompositionRepertoire.PLACES_A_PAIR_IS_TRIED_AT_ON_A_LINE));
 
     /**
      * What stopped this compiler showing a row can be written, by how far it had got.

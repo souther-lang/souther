@@ -31,5 +31,20 @@ public enum CompositionRepertoire {
      * many. Which of them a rule tells apart is the rule's own business, so no reading of the two
      * says anything about the rest.
      */
-    WAYS_A_TOTAL_IS_SPREAD
+    WAYS_A_TOTAL_IS_SPREAD,
+
+    /**
+     * The places on a line between two positions that a pair is tried standing at.
+     *
+     * <p>Where the order has a smallest step, the places either side of the first one are stepped
+     * to and what stops the walk is a figure ({@link CompositionBudget#PLACES_A_PAIR_IS_TRIED_AT}).
+     * Where it has none there is no step to take, so the one place the two ranges give up is the
+     * whole of what this names — and the line holds every other place it could have named. Raising
+     * anything reaches none of them; what would is a way of naming a second place on such an order.
+     *
+     * <p>Which is why a pair found nowhere there is this and not a proof. Two strings the rules
+     * leave a pair for anywhere but at that one place come back with nothing composed, and read as
+     * an answer about the rules it says the model refuses a relation it satisfies.
+     */
+    PLACES_A_PAIR_IS_TRIED_AT_ON_A_LINE
 }

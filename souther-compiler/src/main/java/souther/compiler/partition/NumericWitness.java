@@ -125,11 +125,22 @@ final class NumericWitness {
             }
             standing.remove(term);
         }
-        // Every value this position had to offer was tried and none of them led anywhere. Where
-        // there were more and a figure of this compiler's is why they were not tried, that is what
-        // the caller is owed beside the empty hand.
-        if (walked.stoppedShort()) {
-            stoppedBy.add(CompositionBudget.VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT);
+        // What the walk of this position came to, read over the ways it can end rather than off one
+        // of them. Each says something different about an empty hand, and a reading that asked only
+        // whether a figure was met said the first of them about all three.
+        switch (walked.ended()) {
+            // Every value this position had to offer was tried and none of them led anywhere.
+            case HAVING_TRIED_THEM_ALL -> { }
+            // There were more, and a figure of this compiler's is why they were not tried, which is
+            // what the caller is owed beside the empty hand.
+            case AT_THE_FIGURE ->
+                    stoppedBy.add(CompositionBudget.VALUES_A_POSITION_ON_THE_WAY_IS_TRIED_AT);
+            // And an order with no step to take, where the one place this named is not the whole of
+            // what the position holds. Nothing is recorded, because what was left is a population
+            // and what travels from here is figures: an entry made here would tell a reader to raise
+            // a number that reaches none of it. Said as the arm it is rather than left to the figure
+            // above being false, which is how the same fact was lost at the pair search.
+            case WITH_NO_STEP_TO_TAKE -> { }
         }
         return false;
     }

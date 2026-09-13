@@ -85,6 +85,32 @@ public sealed interface Level {
         return count.at();
     }
 
+    /**
+     * The same distance measured the other way round.
+     *
+     * <p>For a quantity that is how far two positions stand apart, which is the one kind of level
+     * there is a second way to read. {@code a - b} and {@code b - a} are one relation and two
+     * quantities, and a reader holding a demand about the first reads it about the second by
+     * negating every level in it — which is what lets either position be the one a search settles
+     * ({@link Criterion#reflected()}).
+     *
+     * <p>Refused for a level that is not a number. A value of a carrier is a value of a position and
+     * not a distance between two of them, so there is nothing for the other way round to mean.
+     */
+    default Level negated() {
+        return switch (this) {
+            case ACount(Count at) -> new ACount(at.negate());
+            case OnACarrier(Carrier of, Place at) -> {
+                if (!(at instanceof Count count)) {
+                    throw new IllegalStateException(
+                            "an order with no numbers has no distance to read the other way round: "
+                                    + this);
+                }
+                yield new OnACarrier(of, count.negate());
+            }
+        };
+    }
+
     /** What makes two levels one level: what they are, and not how the number was written. The same
      *  rule {@link Place#key()} states, asked of a level so that a reader holding one never reaches
      *  past it for the place inside. */

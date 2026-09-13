@@ -33,13 +33,20 @@ final class Outwards {
     }
 
     /**
-     * The places walked, and whether there were more this stopped short of.
+     * The places walked, and how the walk came to end.
      *
      * <p>Two halves of one answer. A caller reading only the first cannot tell a run with nothing
-     * further in it from one this stopped walking, and only the second of those is a figure
-     * somebody could raise.
+     * further in it from one this stopped walking, and the three mean different things about an
+     * empty hand.
+     *
+     * <p><b>No word for "not all of them", which is what a caller has to be stopped from asking
+     * for.</b> Two of the endings answer that alike and are what a reader does two different things
+     * about, so a caller handed the question in that shape names one of them for the other: the
+     * pair search took an order with no step and a figure met for one fact, and told a reader to
+     * raise a number that reaches nothing. So what is offered is the ending itself, and every
+     * caller says what it does with each.
      */
-    record Walked(List<Place> places, boolean stoppedShort) implements Iterable<Place> {
+    record Walked(List<Place> places, Ended ended) implements Iterable<Place> {
 
         Walked {
             places = List.copyOf(places);
@@ -50,6 +57,29 @@ final class Outwards {
         public java.util.Iterator<Place> iterator() {
             return places.iterator();
         }
+    }
+
+    /**
+     * How a walk came to end.
+     *
+     * <p><b>Three, because two of them are limits and they are not the same limit.</b> A figure is a
+     * number somebody wrote down and raising it walks further; an order with no step is one this has
+     * no way of naming another place on, and raising anything reaches none of them
+     * ({@link CompositionRepertoire}). Held as one boolean, the second was reported as the first —
+     * a reader told to raise a figure that stopped nothing — or as neither, which is a walk of one
+     * place claiming to have walked them all.
+     */
+    enum Ended {
+
+        /** Neither direction had a value left, so what came back is every place there was. */
+        HAVING_TRIED_THEM_ALL,
+
+        /** A place the run holds was found and not taken, the caller's figure having been reached. */
+        AT_THE_FIGURE,
+
+        /** This order has no step to take, so what came back is the one place this could name and
+         *  whether the run holds others is not something this walked. */
+        WITH_NO_STEP_TO_TAKE
     }
 
     /**
@@ -79,9 +109,17 @@ final class Outwards {
                             + first);
         }
         // One place where the carrier's values do not count. There is no next place to step to, so
-        // the one the caller started from is the whole of what there is to try.
+        // the one the caller started from is the whole of what this can name — and never the whole
+        // of what the run holds, which is why it ends its own way. Reported as a walk that tried
+        // them all, a pair the rules leave a place for anywhere but here came back as a pair
+        // nothing could build.
+        //
+        // Unless the run is that one place, and then there is nothing further for a way of naming
+        // one to reach. Said the other way, a run bounded to a single value would have this
+        // compiler reporting a population it writes some of — of a walk that wrote all of it.
         if (!carrier.counts()) {
-            return new Walked(List.of(first), false);
+            return new Walked(List.of(first), onePlace(within, first)
+                    ? Ended.HAVING_TRIED_THEM_ALL : Ended.WITH_NO_STEP_TO_TAKE);
         }
         List<Place> out = new ArrayList<>();
         out.add(first);
@@ -91,7 +129,7 @@ final class Outwards {
         // a value the run holds that this did not take. Read off the count instead, a run walked to
         // its end reports a budget nobody reached, and a point nothing could stop is reported as one
         // this stopped: the same trade this file is here to prevent, made the other way round.
-        boolean stoppedShort = false;
+        Ended ended = Ended.HAVING_TRIED_THEM_ALL;
         outward:
         for (int step = 1; ; step++) {
             BigDecimal away = BigDecimal.valueOf(step);
@@ -104,7 +142,7 @@ final class Outwards {
                     continue;
                 }
                 if (out.size() == howManyValues) {
-                    stoppedShort = true;   // one the run holds and this is not taking
+                    ended = Ended.AT_THE_FIGURE;   // one the run holds and this is not taking
                     break outward;
                 }
                 out.add(next);
@@ -114,6 +152,19 @@ final class Outwards {
                 break;   // neither direction has a value left, so this walked the whole of it
             }
         }
-        return new Walked(out, stoppedShort);
+        return new Walked(out, ended);
+    }
+
+    /**
+     * Whether the run is the one place already in hand.
+     *
+     * <p>Both ends the place itself and both of them its own, which is the only shape an order with
+     * no arithmetic can be asked about: anything else needs a comparison this would have to make
+     * with the order's own values, and the caller already holds what came of asking that.
+     */
+    private static boolean onePlace(NumericDomain.Bounds within, Place first) {
+        return within.min() != null && within.max() != null
+                && within.min().inclusive() && within.max().inclusive()
+                && within.min().at().sameAs(first) && within.max().at().sameAs(first);
     }
 }

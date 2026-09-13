@@ -53,12 +53,22 @@ public sealed interface Realization {
      *
      * <p>The item stays owed. What a report says of it is that it is not known to be writable, which
      * is the account any unpromised edge gets.
+     *
+     * <p><b>Two vocabularies for what was left untried, because what a reader does about them
+     * differs.</b> {@code stoppedBy} is a figure somebody wrote down and raising it goes further;
+     * {@code notAllOf} is a set this compiler has no way of producing the rest of, and raising
+     * anything reaches none of it ({@link CompositionRepertoire}). Either may be empty and both may
+     * be there. Held as one vocabulary, a reader is sent to raise a number that changes nothing —
+     * and held as neither, a search that could name one place and no second one came back saying
+     * what a search that had looked everywhere says.
      */
-    record Unknown(Reason why, java.util.Set<CompositionBudget> stoppedBy)
+    record Unknown(Reason why, java.util.Set<CompositionBudget> stoppedBy,
+                   java.util.Set<CompositionRepertoire> notAllOf)
             implements Realization {
 
         public Unknown {
             stoppedBy = java.util.Set.copyOf(stoppedBy);
+            notAllOf = java.util.Set.copyOf(notAllOf);
             // What a walk stopped by these says is the budgets' to say, so the two cannot be put
             // here disagreeing. A pair that could is a pair somebody has to keep in step, and
             // keeping two spellings of one answer in step by hand is what a stopped walk lost its
@@ -85,7 +95,7 @@ public sealed interface Realization {
          * of this compiler's is why.
          */
         public static Unknown nothingComposedOne(java.util.Set<CompositionBudget> stoppedBy) {
-            return new Unknown(Reason.NOTHING_COMPOSED_ONE, stoppedBy);
+            return new Unknown(Reason.NOTHING_COMPOSED_ONE, stoppedBy, java.util.Set.of());
         }
 
         /** The same, of a walk that composed no candidate and met no figure. */
@@ -103,7 +113,21 @@ public sealed interface Realization {
          */
         public static Unknown searchLeftSomethingUntried(
                 java.util.Set<CompositionBudget> stoppedBy) {
-            return new Unknown(Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED, stoppedBy);
+            return searchLeftSomethingUntried(stoppedBy, java.util.Set.of());
+        }
+
+        /**
+         * The same, of a walk that also wrote some of a population rather than all of it.
+         *
+         * <p>Both, and neither stands for the other. A walk may meet a figure and separately be
+         * unable to name the rest of what it was walking, and a reader owed only one of the two is
+         * told either to raise something that was not what stopped it or that nothing of this
+         * compiler's is why — of a walk that looked in one place.
+         */
+        public static Unknown searchLeftSomethingUntried(
+                java.util.Set<CompositionBudget> stoppedBy,
+                java.util.Set<CompositionRepertoire> notAllOf) {
+            return new Unknown(Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED, stoppedBy, notAllOf);
         }
 
         public enum Reason {

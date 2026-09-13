@@ -1030,17 +1030,13 @@ final class Coverages {
                     // A walk that reached no placement. Where a budget of this compiler's is why it
                     // reached none, that travels: the point is one this declined to look further
                     // for, which is not the point being one nothing promises.
-                    case Realization.Unknown unknown -> unknown.stoppedBy().isEmpty()
-                            ? new ItemAssessment.Attempt.Unresolved(
-                                    new souther.compiler.partition.Generator.UnresolvedCombination(
-                                            java.util.List.of(label), wordOf(unknown)), within)
-                            : new ItemAssessment.Attempt.Stopped(
-                                    new souther.compiler.partition.Generator.UnresolvedCombination(
-                                            java.util.List.of(label), wordOf(unknown)),
-                                    within, java.util.List.of(),
-                                    PublicationOrders.COMPOSITION_BUDGETS.keep(unknown.stoppedBy()),
-                                    PublicationOrders.COMPOSITION_REPERTOIRES.keep(
-                                            java.util.List.of()));
+                    //
+                    // And where what it could not reach is a population rather than a figure, that
+                    // travels too and under its own name. Raising nothing reaches the rest of one,
+                    // so a walk that wrote some of a population is neither a walk a figure stopped
+                    // nor a walk that narrowed nothing — read as the second, a pair this looked for
+                    // in the one place such an order names came out as the rules leaving none.
+                    case Realization.Unknown unknown -> whatAWalkLeft(label, within, unknown);
                 };
             }
         };
@@ -1177,6 +1173,36 @@ final class Coverages {
             }
         }
         return EstablishmentGap.Observation.of(codes);
+    }
+
+    /**
+     * What a walk that reached no placement left behind, in the words an assessment is read in.
+     *
+     * <p>Three shapes and not two, because what a reader does about each differs. A figure is a
+     * number to raise; a population this writes some of is work nobody has done and no number
+     * reaches the rest of it; and a walk with neither to say narrowed nothing at all. Held as two,
+     * the middle one was read as the last — so a search that looked in the one place an order
+     * without a step names came back saying the rules leave nothing there.
+     *
+     * <p>The word is the walk's own either way and is not read off what it left, which is why it is
+     * taken from the same place for all three.
+     */
+    private static ItemAssessment.Attempt whatAWalkLeft(
+            String label, souther.compiler.partition.WayToTheBorder within,
+            Realization.Unknown unknown) {
+        souther.compiler.partition.Generator.UnresolvedCombination why =
+                new souther.compiler.partition.Generator.UnresolvedCombination(
+                        java.util.List.of(label), wordOf(unknown));
+        if (!unknown.stoppedBy().isEmpty()) {
+            return new ItemAssessment.Attempt.Stopped(why, within, java.util.List.of(),
+                    PublicationOrders.COMPOSITION_BUDGETS.keep(unknown.stoppedBy()),
+                    PublicationOrders.COMPOSITION_REPERTOIRES.keep(unknown.notAllOf()));
+        }
+        if (!unknown.notAllOf().isEmpty()) {
+            return new ItemAssessment.Attempt.Unexhausted(why, within, java.util.List.of(),
+                    PublicationOrders.COMPOSITION_REPERTOIRES.keep(unknown.notAllOf()));
+        }
+        return new ItemAssessment.Attempt.Unresolved(why, within);
     }
 
     /**
