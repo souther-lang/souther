@@ -28,10 +28,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * above the line sends elsewhere does not reach the point — so a page with no point left
  * unestablished is the statement that the value answers both numbers at once.
  *
- * <p><b>And only what one value can be built to answer.</b> Which numbers those are is the
- * realizer's, and a location asked for its own content beside a number taken of it is not among
- * them. The last model here holds that, so this does not read as a claim about every two numbers at
- * one location.
+ * <p><b>Its own content among them.</b> What a string is and how long it is are two numbers of one
+ * location as much as the parts of a time are, and a row is composed holding both: the value the
+ * comparison puts the string at is one of however many have the length the rule leaves.
+ *
+ * <p><b>And only where a value answers both.</b> Which pairs those are is the model's and not this
+ * compiler's — two rules can leave a location nothing at all — so the last model here is one whose
+ * two numbers no value holds together, and this does not read as a claim that any two of them
+ * compose.
  */
 class ALocationAskedForTwoNumbersIsWrittenOnceForBothTest {
 
@@ -96,6 +100,31 @@ class ALocationAskedForTwoNumbersIsWrittenOnceForBothTest {
             }
             """;
 
+    /**
+     * A location asked for its own value and for a number taken of that value.
+     *
+     * <p>The comparison puts {@code b} at a place of the strings and the rule above it puts {@code
+     * b} at a place of its lengths, which is one location measured at two numbers and is not two
+     * locations. Composed for one of them at a time, the row was written at whatever the line's own
+     * edge chose and arrived only where that value happened to meet the rule that was dropped.
+     */
+    private static final String A_VALUE_AND_A_NUMBER_TAKEN_OF_IT = """
+            module example.string
+
+            data Yes = { v: Int }
+            data No = { why: Int }
+
+            behavior cmp : (a: String, b: String) -> Yes | No
+                constructs Yes
+                constructs No
+
+            let cmp (a, b) = {
+                guard String.length(b) /= 1 else No { why = 0 }
+                guard a < b else No { why = 1 }
+                Yes { v = 1 }
+            }
+            """;
+
     /** One part alone, which is what the parts beside it being free looks like when nothing asks
      *  for them. */
     private static final String ONE_PART_OF_A_TIME = """
@@ -156,7 +185,7 @@ class ALocationAskedForTwoNumbersIsWrittenOnceForBothTest {
     @Test
     void bothNumbersAreAnsweredByTheOneValueTheRowWrites() {
         for (String model : List.of(TWO_PARTS_OF_A_TIME, TWO_PARTS_OF_A_DATE,
-                TWO_PARTS_COMPARED_WITH_EACH_OTHER)) {
+                TWO_PARTS_COMPARED_WITH_EACH_OTHER, A_VALUE_AND_A_NUMBER_TAKEN_OF_IT)) {
             List<String> open = whatNothingCouldShow(model);
 
             assertEquals(List.of(), open,
