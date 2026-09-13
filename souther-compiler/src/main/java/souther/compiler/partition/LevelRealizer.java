@@ -105,12 +105,14 @@ public final class LevelRealizer {
     private Realization ofTwo(Standing.OfTwoOnOneCarrier two,
                               souther.compiler.inputs.SearchRegion within,
                               WitnessSearch looking) {
+        // What each reading left behind, in the two vocabularies there are for it. Kept apart all
+        // the way here: how a walk ended says which of them it is, and a reader told the wrong one
+        // is sent to raise a figure that reached its end or told that no number would have helped
+        // where one would.
         java.util.Set<CompositionBudget> stoppedBy =
                 java.util.EnumSet.noneOf(CompositionBudget.class);
-        // Whether what these walked was everything there was to walk. A reading that could name no
-        // second place to try the pair at leaves the item where it was, and an answer that did not
-        // carry this said the rules leave no pair — of a search that looked in one place.
-        boolean everyPlaceWasTried = true;
+        java.util.Set<CompositionRepertoire> notAllOf =
+                java.util.EnumSet.noneOf(CompositionRepertoire.class);
         for (Reading reading : readings(two)) {
             NumericDomain.Bounds settled = bounds(within, reading.settles());
             NumericDomain.Bounds together = commonRange(settled,
@@ -122,10 +124,16 @@ public final class LevelRealizer {
                 // says nothing about how much of the line was looked at.
                 continue;
             }
-            if (walked.stoppedShort()) {
-                stoppedBy.add(CompositionBudget.PLACES_A_PAIR_IS_TRIED_AT);
+            // How the walk ended, put to the vocabulary that ending belongs to. Read over the
+            // endings rather than off a boolean made from them: a walk that met the figure and one
+            // that had no step to take are both walks that did not try every place, and told apart
+            // only afterwards they were named for each other.
+            switch (walked.ended()) {
+                case HAVING_TRIED_THEM_ALL -> { }
+                case AT_THE_FIGURE -> stoppedBy.add(CompositionBudget.PLACES_A_PAIR_IS_TRIED_AT);
+                case WITH_NO_STEP_TO_TAKE -> notAllOf.add(
+                        CompositionRepertoire.PLACES_A_PAIR_IS_TRIED_AT_ON_A_LINE);
             }
-            everyPlaceWasTried &= walked.triedThemAll();
             for (Place common : walked) {
                 // Where the settled one has to stand relative to the anchored one: the place the
                 // level's distance from it, and then whatever the item asks of that place.
@@ -150,19 +158,20 @@ public final class LevelRealizer {
             }
         }
         // Nothing was composed, which is what a pair the ranges leave no place for comes to and
-        // what this has always said. Where a figure was reached, or where a reading could name no
-        // second place to try, that is said beside the answer rather than in place of it — and the
-        // two are said in their own vocabularies, since raising a figure reaches further and
-        // raising anything reaches no second place on an order that has no step.
+        // what this has always said. What a walk left is said beside that answer rather than in
+        // place of it, each in its own vocabulary: raising a figure goes past it, and raising
+        // anything reaches no second place on an order that has no step.
         //
-        // Never both. Both readings walk the one order this pair is on, and an order with no step
-        // yields the one place and reaches no figure — so the budgets are handed over either way
-        // and {@link Realization.Unknown} is where that is held to.
-        if (everyPlaceWasTried) {
-            return Realization.Unknown.nothingComposedOne(stoppedBy);
+        // The word follows the walk that has one. A walk with no step to take composed a place and
+        // tried it, which is what the second word is for; a walk that met the figure says what this
+        // has always said, and the figures hold it to that at both ends. They cannot both be here —
+        // both readings walk the one order this pair is on, and an order with no step reaches no
+        // figure — and it is {@link Realization.Unknown} that holds them to it rather than this
+        // sentence.
+        if (!notAllOf.isEmpty()) {
+            return Realization.Unknown.searchLeftSomethingUntried(stoppedBy, notAllOf);
         }
-        return Realization.Unknown.searchLeftSomethingUntried(stoppedBy,
-                java.util.Set.of(CompositionRepertoire.PLACES_A_PAIR_IS_TRIED_AT_ON_A_LINE));
+        return Realization.Unknown.nothingComposedOne(stoppedBy);
     }
 
     /**
@@ -647,8 +656,15 @@ public final class LevelRealizer {
             // only said where the run held one more and this did not take it — added whenever the
             // walk came back empty, it would name a figure over a run that had nothing further in
             // it, which is this compiler claiming to have been stopped where it was not.
-            if (walked.stoppedShort()) {
-                stoppedBy.add(CompositionBudget.VALUES_OF_AN_UNBOUNDED_PROGRESSION_TRIED);
+            switch (walked.ended()) {
+                case HAVING_TRIED_THEM_ALL -> { }
+                case AT_THE_FIGURE ->
+                        stoppedBy.add(CompositionBudget.VALUES_OF_AN_UNBOUNDED_PROGRESSION_TRIED);
+                // A progression is a sum of counts, and a sum exists only over orders that count
+                // ({@link LevelSpace#addedUpOver}). So a walk of one that had no step to take is a
+                // form over an order with no arithmetic, which is refused before a search is built.
+                case WITH_NO_STEP_TO_TAKE -> throw new IllegalStateException(
+                        "a progression over an order with no step: " + carriers[i]);
             }
             return Reached.INCOMPLETE;
         }

@@ -36,25 +36,20 @@ final class Outwards {
      * The places walked, and how the walk came to end.
      *
      * <p>Two halves of one answer. A caller reading only the first cannot tell a run with nothing
-     * further in it from one this stopped walking, and the two mean opposite things about an empty
-     * hand.
+     * further in it from one this stopped walking, and the three mean different things about an
+     * empty hand.
+     *
+     * <p><b>No word for "not all of them", which is what a caller has to be stopped from asking
+     * for.</b> Two of the endings answer that alike and are what a reader does two different things
+     * about, so a caller handed the question in that shape names one of them for the other: the
+     * pair search took an order with no step and a figure met for one fact, and told a reader to
+     * raise a number that reaches nothing. So what is offered is the ending itself, and every
+     * caller says what it does with each.
      */
     record Walked(List<Place> places, Ended ended) implements Iterable<Place> {
 
         Walked {
             places = List.copyOf(places);
-        }
-
-        /** Whether a place the run holds was left untaken because the caller's figure was reached,
-         *  which is the one ending a figure somebody could raise would carry further. */
-        boolean stoppedShort() {
-            return ended == Ended.AT_THE_FIGURE;
-        }
-
-        /** Whether what came back is every place there was, which is the one ending that lets a
-         *  caller say its own empty hand was not for want of looking. */
-        boolean triedThemAll() {
-            return ended == Ended.HAVING_TRIED_THEM_ALL;
         }
 
         /** The places, so that a caller wanting only those walks this. */
