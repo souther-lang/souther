@@ -5,6 +5,7 @@ import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.TypeView;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.Quantities;
 import souther.compiler.inputs.TermOrders;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.CountDomain;
@@ -20,7 +21,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.SequencedMap;
 import java.util.Set;
-import java.util.function.Function;
 
 /**
  * The values that put a term at a number, which is the other direction of reading a
@@ -267,23 +267,23 @@ final class TermRealizations {
      * be written on a carrier a caller found elsewhere.
      */
     static Realization together(Type sourceType, SequencedMap<RealizationTarget, Place> demands,
-                                Function<NumericTerm, TermOrders> ordersOf,
+                                Quantities measuring,
                                 souther.compiler.inputs.SearchRegion within,
                                 RuleReadingContext reading) {
         if (demands.size() == 1) {
             Map.Entry<RealizationTarget, Place> one = demands.firstEntry();
-            return at(sourceType, ordersOf.apply(one.getKey().term()), one.getValue(), within,
+            return at(sourceType, measuring.ordersOf(one.getKey().term()), one.getValue(), within,
                     reading);
         }
         if (sourceType == null || !oneValueAnswersThemTogether(demands.keySet())) {
             return new Realization.None(
                     Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
         }
-        SequencedMap<TakenAs.TimePart, Count> times = new LinkedHashMap<>();
-        SequencedMap<TakenAs.DatePart, Count> dates = new LinkedHashMap<>();
+        Map<TakenAs.TimePart, Count> times = new LinkedHashMap<>();
+        Map<TakenAs.DatePart, Count> dates = new LinkedHashMap<>();
         Carrier observed = null;
         for (Map.Entry<RealizationTarget, Place> each : demands.entrySet()) {
-            TermOrders orders = ordersOf.apply(each.getKey().term());
+            TermOrders orders = measuring.ordersOf(each.getKey().term());
             if (orders == null || !(each.getValue() instanceof Count count)
                     || !(each.getKey().term() instanceof NumericTerm.TakenOf taken)) {
                 return new Realization.None(
@@ -465,7 +465,7 @@ final class TermRealizations {
      * {@link Carrier}'s one answer — named here, this would be a second place saying what a time
      * counts, and the two would part the day the first one moved.
      */
-    private static Realization atThoseParts(SequencedMap<TakenAs.TimePart, Count> parts,
+    private static Realization atThoseParts(Map<TakenAs.TimePart, Count> parts,
                                             Type sourceType, Carrier observed,
                                             RuleReadingSource ruleSource) {
         if (observed == null || parts.isEmpty()) {
@@ -505,9 +505,7 @@ final class TermRealizations {
             return new Realization.None(
                     Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
         }
-        SequencedMap<TakenAs.TimePart, Count> one = new LinkedHashMap<>();
-        one.put(part, count);
-        return atThoseParts(one, sourceType, observed, ruleSource);
+        return atThoseParts(Map.of(part, count), sourceType, observed, ruleSource);
     }
 
     /**
@@ -529,7 +527,7 @@ final class TermRealizations {
      * what a witness can be built from, and reading the second off the first would make a bound
      * loosened by hand into dates that cannot be written.
      */
-    private static Realization onThoseParts(SequencedMap<TakenAs.DatePart, Count> parts,
+    private static Realization onThoseParts(Map<TakenAs.DatePart, Count> parts,
                                             Type sourceType, Carrier observed,
                                             RuleReadingSource ruleSource) {
         if (observed == null || parts.isEmpty()) {
@@ -571,7 +569,7 @@ final class TermRealizations {
      * that month's and a rule about the thirty-first of a short one has no witness because the
      * calendar has none.
      */
-    private static java.time.LocalDate dateOn(SequencedMap<TakenAs.DatePart, Count> parts) {
+    private static java.time.LocalDate dateOn(Map<TakenAs.DatePart, Count> parts) {
         for (Count each : parts.values()) {
             if (!each.whole()) {
                 return null;
@@ -597,7 +595,7 @@ final class TermRealizations {
     }
 
     /** The number a part was asked to stand at, or null where nobody asked for it. */
-    private static java.math.BigDecimal asked(SequencedMap<TakenAs.DatePart, Count> parts,
+    private static java.math.BigDecimal asked(Map<TakenAs.DatePart, Count> parts,
                                               TakenAs.DatePart part) {
         Count count = parts.get(part);
         return count == null ? null : count.at();
@@ -611,9 +609,7 @@ final class TermRealizations {
             return new Realization.None(
                     Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
         }
-        SequencedMap<TakenAs.DatePart, Count> one = new LinkedHashMap<>();
-        one.put(part, count);
-        return onThoseParts(one, sourceType, observed, ruleSource);
+        return onThoseParts(Map.of(part, count), sourceType, observed, ruleSource);
     }
 
     /** The year a month or a day is offered in. Every month is a month of every year, and the month

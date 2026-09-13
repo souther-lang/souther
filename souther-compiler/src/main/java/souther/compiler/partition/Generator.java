@@ -3404,7 +3404,7 @@ public final class Generator {
         // arrives where they part. Handed over as the question rather than as an answer, since a
         // group is over several terms and each of them is measured where this reading says.
         return edgeFrom(TermRealizations.together(writtenAt, group,
-                subject.quantities()::ordersOf, within, subject.ruleReading()), group);
+                subject.quantities(), within, subject.ruleReading()), group);
     }
 
     /**
