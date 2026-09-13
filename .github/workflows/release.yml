@@ -113,6 +113,11 @@ jobs:
           }
           $env:JAVA_HOME = $env:JAVA_HOME_25_X64
 
+          # Every reading above that is not a refusal ends by running a java that is an empty file,
+          # so the last thing run here is meant to fail and leaves its code behind for the step to be
+          # judged by. What this step found is said by what it threw, and it threw nothing.
+          exit 0
+
       # The installer writes the user's path, points a link and removes a directory recursively, and
       # nothing else in this repository does any of that. It is run against the archives just
       # packaged rather than a release, so what is checked is this commit's installer rather than the
