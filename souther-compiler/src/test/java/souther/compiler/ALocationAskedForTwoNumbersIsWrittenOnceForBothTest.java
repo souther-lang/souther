@@ -32,10 +32,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * location as much as the parts of a time are, and a row is composed holding both: the value the
  * comparison puts the string at is one of however many have the length the rule leaves.
  *
- * <p><b>And only where a value answers both.</b> Which pairs those are is the model's and not this
- * compiler's — two rules can leave a location nothing at all — so the last model here is one whose
- * two numbers no value holds together, and this does not read as a claim that any two of them
- * compose.
+ * <p><b>And only where a value stands at the point.</b> Whether one does is the model's answer and
+ * not this compiler's reach — two rules can leave a location nothing at all — so the last model
+ * here is one whose rules leave no value standing at the point, and this does not read as a claim
+ * that a row comes of two numbers belonging to one location.
  */
 class ALocationAskedForTwoNumbersIsWrittenOnceForBothTest {
 
