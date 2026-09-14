@@ -689,10 +689,9 @@ class CompilePartialAdequacyTest {
 
                 partial let spin (n: Int): Int = spin(n)
 
+                // Injected, so that both positions are in the space whatever the body decides
+                // on: what this is about is a count over rows that did not come back.
                 behavior pick : (a: Flag, b: Flag) -> Ok
-                    constructs Ok
-
-                let pick (a, b) = Ok { n = spin(1) }
 
                 example pick
                     | (Yes, Yes) -> Ok { n = 0 }
@@ -704,7 +703,7 @@ class CompilePartialAdequacyTest {
         assertEquals(MeasurementStatus.PARTIAL, AdequacyReport.statusOf(partition.pairs().counted()),
                 "the one row could not be placed at either position");
         String human = AdequacyReport.of(compilation).human(SourceRendering.namedByIdentity(compilation.texts()));
-        assertTrue(human.contains("unknown of the rows that were read"),
+        assertTrue(human.contains("uncovered of the rows that were read"),
                 () -> "the count is over the rows that came back, and the line says so: " + human);
     }
 
@@ -729,10 +728,9 @@ class CompilePartialAdequacyTest {
 
                 partial let spin (n: Int): Int = spin(n)
 
+                // Injected, so the space is over both positions: what this holds to each other is
+                // two readings of one row that did not come back.
                 behavior pick : (a: Flag, b: Flag) -> Ok
-                    constructs Ok
-
-                let pick (a, b) = Ok { n = spin(1) }
 
                 example pick
                     | (Yes, Yes) -> Ok { n = 0 }

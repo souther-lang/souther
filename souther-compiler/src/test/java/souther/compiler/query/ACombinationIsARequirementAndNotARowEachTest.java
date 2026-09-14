@@ -9,41 +9,37 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 
 /**
- * A combination of two classes is not a thing a row is owed at.
+ * A combination is something a row is owed for, and not something owed a row of its own.
  *
- * <p>What the pair space counts is how much of the model's own product the rows happen to reach.
- * Nothing asks for a row at a combination and nothing offers one: a row composed for a pair moves
- * two positions at once and says nothing about which of them the answer turned on, which is what
- * issue #967 settled. So a count of combinations no row reaches is not work anybody is behind on,
- * and the report says so beside it.
+ * <p>What #967 settled was that a row composed for a pair of classes moves two positions at once
+ * and says nothing about which of them the answer turned on. That is an argument about how a search
+ * composes rows, and it was written down here as the other sentence — that a combination is nothing
+ * a row is owed at. The two come apart as soon as the combinations are the body's own: a criterion
+ * states requirements, and a test set meets one where some row settles it, whichever requirement
+ * that row was composed for.
  *
- * <p><b>This is what makes that sentence true.</b> A report saying nothing is owed on the strength
- * of a formatter's reading would go on saying it the day a finding about a combination was added.
- * What holds it is that no gap this compiler can find is about one: the vocabulary of findings has
- * no arm for a combination, and the offering of rows answers every arm it has.
+ * <p>So what this file holds is the half that survives. A combination of the decisions a body
+ * settles a value by is a requirement; nothing composes a row for one; and a requirement something
+ * already settles is not work anybody is behind on.
  *
- * <p>So a change that gave a combination a finding fails here rather than in a formatter, and
- * whoever makes it is asked the question this test is named for. Answering it is allowed — the
- * decision is #967's and may be revisited — but it is a change to what a row is owed at, and this
- * says so out loud.
+ * <p>Held over the types rather than over the words, for the reason the walk below gives: a name
+ * says what somebody called an arm and not what it is about.
  */
-class PairCombinationsAreNotRowObligationsTest {
+class ACombinationIsARequirementAndNotARowEachTest {
 
     /**
-     * Every kind of gap this compiler can find, named, and none of them is about a combination.
+     * Every kind of gap this compiler can find, named, and one of them is about a combination.
      *
      * <p>The kinds are written out rather than matched on their names. A name says what somebody
      * called an arm and not what it is about, so a finding about a combination added under another
-     * word would pass a sweep for the word — and this is a law about what a row is owed at, which a
-     * spelling does not settle.
+     * word would pass a sweep for the word.
      *
      * <p>So an arm added to {@link About} arrives here as a kind nobody has said anything about,
-     * and whoever adds it answers the question this test is named for: is a row owed at one? The
-     * answer may be yes. The decision is #967's and may be revisited; what it may not be is made
-     * without saying so.
+     * and whoever adds it says which of the two it is: something the model owes a row for, or
+     * something this compiler is short of. What it may not be is added without saying.
      */
     @Test
-    void everyKindOfGapIsOneOfTheseAndNoneIsAboutACombination() {
+    void everyKindOfGapIsOneOfTheseAndOneIsAboutACombination() {
         List<String> every = new ArrayList<>();
         walk(About.class, every);
 
@@ -51,7 +47,14 @@ class PairCombinationsAreNotRowObligationsTest {
         // under two of the seals above, and the walk says so rather than folding what it found.
         assertEquals(List.of(
                 "ACaseNoRowExpects", "ACaseNothingWasSeenToProduce", "ACaseNoRowAppliesItTo",
-                "AClassNoRowIsIn", "APointOfABorder", "APointOfADeclaredBorder",
+                "AClassNoRowIsIn",
+                // One combination of the decisions a body settles one value by, which is a
+                // requirement of the interaction criterion.
+                "ACombinationNoRowMakes",
+                // And one combination of two classes, which is what the fallback criterion asks
+                // for where a behavior's decisions meet nowhere.
+                "ACombinationOfTwoClassesNoRowIsIn",
+                "APointOfABorder", "APointOfADeclaredBorder",
                 // An arm and a row at it: what a row is owed at is the arm either way, and the
                 // second says the row is written and its answer is not.
                 "AnArmNoRowGoesThrough",
@@ -84,23 +87,24 @@ class PairCombinationsAreNotRowObligationsTest {
     }
 
     /**
-     * And nothing a row can be offered for is a combination either.
+     * What a row can be offered for now names two combinations, and nothing raises either yet.
      *
-     * <p>The other half of what this law says it rests on, and the half a check over the findings
-     * alone leaves open: a change that offered a row for a combination without giving it a finding
-     * would say a row is owed at one in the only way an author meets — the command that hands them
-     * the row to write.
+     * <p>The universe gained the combination of a body's decisions and the fallback pair, which is
+     * what a criterion states requirements in. What no measure does yet is raise one: the findings
+     * above have no arm about a combination, so nothing puts one in front of an author.
      *
-     * <p>Read from what says what a row can be offered for, and none of its shapes is a relation
-     * between two positions.
+     * <p>Written out, so that the two halves are asked separately. A reader of this file is owed
+     * the difference between a shape that exists to be asked about and a shape something asks
+     * about — and the day a measure raises one, the walk above is where it says so.
      */
     @Test
-    void nothingARowIsOfferedForIsACombination() {
+    void whatARowCanBeOfferedForNamesACombinationAndNothingRaisesOne() {
         List<String> every = new ArrayList<>();
         walk(souther.compiler.partition.ObligationIdentity.class, every);
 
         assertEquals(
-                List.of("OfALine", "OfAnArm", "OfADecisionRule", "OfAClass", "OfAnInputCase"),
+                List.of("OfALine", "OfAnArm", "OfADecisionRule", "OfACombinationOfDecisions",
+                        "OfAFallbackPairCell", "OfAClass", "OfAnInputCase"),
                 every, "a thing a row can be offered for that this law says nothing about");
     }
 

@@ -19,8 +19,10 @@ import souther.compiler.numeric.Towards;
 import souther.compiler.partition.AuthoredLine;
 import souther.compiler.partition.BorderObligationPoint;
 import souther.compiler.partition.ObligationIdentity;
+import souther.compiler.partition.ClassOfAPosition;
 import souther.compiler.partition.ClosureGap;
 import souther.compiler.partition.ConditionReportAnchor;
+import souther.compiler.reading.Condition;
 import souther.compiler.partition.CompositionBudget;
 import souther.compiler.partition.CompositionRepertoire;
 import souther.compiler.partition.DecidedCondition;
@@ -72,7 +74,9 @@ import souther.compiler.coverage.CoverageSites;
 import souther.compiler.coverage.DecidedBy;
 import souther.compiler.coverage.SuppliedRules;
 import souther.compiler.query.About;
+import souther.compiler.query.CombinationCriterion;
 import souther.compiler.query.DecisionEvidence;
+import souther.compiler.query.InteractionEvidence;
 import souther.compiler.query.DecisionRuleReading;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.ArmDisposition;
@@ -209,7 +213,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         };
     }
 
-    public static final int SCHEMA_VERSION = 21;
+    public static final int SCHEMA_VERSION = 22;
 
     /**
      * Where the schema this writes documents ships.
@@ -721,6 +725,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         // what a page costs would grow with its behaviors reading one another's bodies.
         Map<String, DecisionEvidence> decisions =
                 compilation.db().ask(new Adequacy.Decides(name)).value();
+        // And the combinations of those decisions, asked the same way and for the same reason.
+        Map<String, InteractionEvidence> meetings =
+                compilation.db().ask(new Adequacy.Interacts(name)).value();
         // What each body declared, read where it was judged. Beside the measures and never inside
         // one: this report is where the two are put together.
         Map<String, ClaimAnnotations> claims =
@@ -773,7 +780,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // is the one thing that has to be in reach for that question to be asked at all.
             BehaviorEvidence evidence = new BehaviorEvidence(reading, signature, partition, read,
                     accounts == null ? null : accounts.get(behavior.name()), branch,
-                    decisions == null ? null : decisions.get(behavior.name()));
+                    decisions == null ? null : decisions.get(behavior.name()),
+                    meetings == null ? null : meetings.get(behavior.name()));
             behaviors.add(new BehaviorReport(behavior.name(),
                     module.implementationOf(behavior),
                     evidence,
@@ -2117,27 +2125,28 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         // Under the same condition as before and not a new one: these counts used to be the tail of
         // the partition line, which is written in the arm this tests for. Moving them out of that
         // arm is what makes the condition something to spell rather than something to inherit.
-        if (partitioned.counted()) {
+        // Under the criterion this behavior is held to, which is the model's answer and not this
+        // page's: a behavior whose body brings decisions together is measured against those, and
+        // the product of its positions is a neighbouring technique it is not held to. Asked of the
+        // evidence rather than worked out here, so that what is printed and what a build refuses
+        // over are the same choice.
+        if (behavior.evidence().combinations() instanceof CombinationCriterion.Interactions(
+                var meetings)) {
+            interaction(out, meetings);
+        } else if (partitioned.counted()) {
             String combinations = combinations(partition.pairs());
-            List<String> relations = new ArrayList<>();
-            if (partition.pairs().counted().made().isPresent()) {
-                for (PartitionEvidence.PairSpace.AxisPair pair : partition.pairs().space()) {
-                    if (partition.pairs().unknown(pair) > 0) {
-                        relations.add(String.format("      · %s × %s: %d covered, %d unknown%n",
-                                pair.between().one().term(), pair.between().other().term(),
-                                partition.pairs().counts().covered(pair.between()),
-                                partition.pairs().unknown(pair)));
-                    }
-                }
-            }
             if (!combinations.isEmpty()) {
                 out.append(String.format("    combination %s%n", combinations));
-                // And which relations hold what no row reaches. Summed, the count says how much of
-                // the product the rows cover and nothing about where it is: most of it sitting in
-                // the two relations one position takes part in is the whole of what a reader acts
-                // on, and it is invisible in one number. Only the relations with something unknown,
-                // since a relation the rows cover has nothing here to say.
-                relations.forEach(out::append);
+                // And which of them no row is in, one to a line, as every gap is named. Summed,
+                // the count says how much of the space the rows cover and nothing about where the
+                // rest of it is — and where it is is the whole of what a reader acts on.
+                for (ReportedFinding f : behavior.reported()) {
+                    if (f.finding().about()
+                            instanceof About.ACombinationOfTwoClassesNoRowIsIn(var combination)) {
+                        out.append(String.format("      %s no row is in %s%n",
+                                mark(f.finding()), twoClasses(combination)));
+                    }
+                }
             }
         }
         // Counted over the obligations and named as such. A border owes a row at up to four points,
@@ -2575,6 +2584,45 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     }
 
     /**
+     * The two classes of a combination, in the words a report writes for a class of a position.
+     *
+     * <p>Both positions and both classes, and in a steady order: a class id is unique within its
+     * axis and not across two, and what a combination is of is a pair rather than an order of them.
+     */
+    private static String twoClasses(ObligationIdentity.OfAFallbackPairCell combination) {
+        return combination.classes().stream()
+                .sorted(java.util.Comparator
+                        .comparing((ClassOfAPosition each) -> each.at().toString())
+                        .thenComparing(ClassOfAPosition::classId))
+                .map(each -> "`" + each.classId() + "` at " + each.at())
+                .collect(java.util.stream.Collectors.joining(" with "));
+    }
+
+    /**
+     * How many of the combinations the body settles a value by the rows were seen making.
+     *
+     * <p>The count and the gaps beside it, which the findings under the behavior name one to a
+     * line. What a combination is of is not printed here: the decisions are held in the terms the
+     * account keys on, and a line spelling them would show an author comparisons they did not
+     * write.
+     *
+     * <p>The meetings the measure would not walk are said beside the count rather than folded into
+     * it. What they hold is combinations nobody counted, and a reader told only the ratio would
+     * take a behavior measured in part for one measured in full.
+     */
+    private void interaction(StringBuilder out, InteractionEvidence meetings) {
+        Optional<InteractionEvidence.RowsMeeting> made = meetings.made().made();
+        String held = meetings.asked().notMeasured().isEmpty() ? ""
+                : String.format("   %d meetings not walked", meetings.asked().notMeasured().size());
+        out.append(made
+                .map(rows -> String.format("    interaction combinations %d/%d%s%n",
+                        rows.met().size(), meetings.counted(), held))
+                .orElseGet(() -> String.format("    interaction combinations %d   %s%s%n",
+                        meetings.counted(),
+                        ReasonProse.of(meetings.made().why()).sentence(), held)));
+    }
+
+    /**
      * Which rules of the decision the body states the rows take.
      *
      * <p>Beside the arms and never among them. An arm is one branch the author wrote and a rule is
@@ -2812,34 +2860,34 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * be five impossibilities.
      */
     private static String combinations(PartitionEvidence.PairSpace pairs) {
-        if (pairs == null || pairs.total() == 0 || pairs.counted().made().isEmpty()) {
+        if (pairs == null || pairs.total() == 0) {
             return "";
         }
-        // A space too large to walk says so, and says it from what weakened the measurement rather
-        // than from a flag kept beside it that had to be held in step.
-        if (pairs.counted().weakening().causes().stream()
-                .anyMatch(Weakening.PairSpaceTruncated.class::isInstance)) {
+        // A space too large to walk says so, and says it from the reason the measure has no number
+        // rather than from what weakened it. The two used to be one thing here because the measure
+        // carried an account of the rows either way, and a reader had to know to ask the weakening
+        // before believing it.
+        if (pairs.counted() instanceof Measurement.FailedToMeasure<?>(
+                PartitionEvidence.PairSpace.TooLarge _, WeakeningSet _)) {
             return String.format("pairs %d, too many to enumerate", pairs.total());
+        }
+        if (pairs.counted().made().isEmpty()) {
+            return "";
         }
         if (pairs.decided()) {
             return String.format("pairs %d/%d", pairs.counts().covered(), pairs.total());
         }
-        // Two numbers, because there are two facts. What the rows reach is counted, and what is
-        // left is not known: nothing tried to build a row for it, so it has not been shown
-        // unreachable either. `unknown` is the word the document writes, and it is written here
-        // too — `untried` reads as an instruction to try, which is what nobody is asked to do.
+        // Two numbers, because there are two facts: what the rows reach, and what is left. The
+        // second is what this behavior is behind on — where the pair space is the criterion, a
+        // combination of it is a thing a row is owed at — and each of them is named one to a line
+        // under this.
         //
         // And whose rows, where not all of them were read. A combination none of the rows seen
         // reaches is not one none of the rows reaches, and the same number means the smaller thing.
         boolean whole = pairs.counted() instanceof Measurement.Complete<?>;
-        // And that nobody is behind on the second number. A count printed with no obligation
-        // beside it is read as one, which is what sent an author after a row that bought a
-        // combination and no evidence; a combination is not a thing this compiler finds a gap
-        // about, and nothing refuses over one (PairCombinationsAreNotRowObligationsTest).
-        return String.format("pairs %d covered, %d unknown%s%s",
+        return String.format("pairs %d covered, %d uncovered%s",
                 pairs.counts().covered(), pairs.unknown(),
-                whole ? "" : " of the rows that were read",
-                pairs.unknown() == 0 ? "" : "; no row is owed at one");
+                whole ? "" : " of the rows that were read");
     }
 
     /**
@@ -3643,26 +3691,60 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             }
             case ObligationIdentity.OfADecisionRule(var behavior, var rule) ->
                     ruleId(into, behavior, rule);
+            case ObligationIdentity.OfACombinationOfDecisions(var behavior, var settled) ->
+                    combinationId(into, behavior, settled);
+            // The behavior and the two classes, which is what a combination of two positions is
+            // told apart by where the body's decisions meet nowhere. Each written the way a class
+            // of a position is above, since that is the same thing being named.
+            case ObligationIdentity.OfAFallbackPairCell(var behavior, var classes) -> {
+                into.put("behavior", behavior);
+                ArrayNode of = into.putArray("classes");
+                classes.stream()
+                        .sorted(java.util.Comparator
+                                .comparing((ClassOfAPosition each) -> each.at().toString())
+                                .thenComparing(ClassOfAPosition::classId))
+                        .forEach(each -> {
+                            ObjectNode one = of.addObject();
+                            one.put("axis", each.at().toString());
+                            one.put("class", each.classId());
+                        });
+            }
         }
+    }
+
+    /**
+     * What tells one combination of a body's decisions from every other: the behavior, and each
+     * decision a run has to have made.
+     *
+     * <p>The decisions and not the places they are recorded at. Which probe a run lights is how
+     * this compilation instruments the body, and a consumer joining on it would be joining on
+     * something that moves when nothing about the model has.
+     *
+     * <p>Sorted by what each decision is written as, for the reason a rule's conditions are: what a
+     * run has to have done is a set, and a walk that met the way in before the outcomes is one
+     * order of writing it down.
+     */
+    private static void combinationId(ObjectNode into, String behavior,
+                                      Set<Condition> settled) {
+        into.put("behavior", behavior);
+        ArrayNode decisions = into.putArray("decisions");
+        // Sorted by what each is written as here, which is every field of it. What a run has to
+        // have done is a set, so the order a walk met them is no part of the identity — and two
+        // documents of one model have to write it the same way round for a consumer to join on it.
+        settled.stream().map(AdequacyReport::decisionId)
+                .sorted(java.util.Comparator.comparing(Object::toString))
+                .forEach(decisions::add);
     }
 
     /**
      * What tells one rule of a decision from every other, which is not what a reader is shown.
      *
      * <p>The behavior and what the path consulted. The propositions are the canonical ones — a
-     * comparison and its denial are one column, so {@code n > 100} in a source is written here as
-     * {@code n <= 100} denied — which is what makes the table exclusive and is the reason nothing
-     * here goes into a sentence. What a person is shown is under {@code subject} and in the notes
-     * beside it, where the construct the author wrote is pointed at instead.
+     * comparison and its denial are one column — which is what makes the table exclusive and is the
+     * reason nothing here goes into a sentence.
      *
      * <p>Sorted by what each condition is written as, and not in the order a walk met them. Two
-     * runs that read one body's ways in two orders state one rule, so an identity carrying the walk
-     * order would have a consumer joining on it land on nothing after a change that moved nothing.
-     * The order the author wrote them in is a thing a reader is shown and is in the notes.
-     *
-     * <p>A condition the path never consulted is absent, which is what a rule leaving it out means:
-     * a short-circuit that settled before reaching a condition states nothing about it, and an
-     * entry saying so would be a don't-care written as a value.
+     * runs that read one body's ways in two orders state one rule.
      */
     private static void ruleId(ObjectNode into, String behavior, DecisionRule rule) {
         into.put("behavior", behavior);
@@ -3710,6 +3792,96 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             }
         }
         return out;
+    }
+
+    /**
+     * One decision of a body, as the identity of a combination keys it.
+     *
+     * <p>Written in the coordinates this document already names constructs by — the owner, the
+     * construct the source counted, and which copy of it — rather than in the words the reading
+     * spells them for itself. What a reading calls a construct is a value of this compiler's whose
+     * shape is nobody's contract, and a consumer handed it would be keyed on a rendering.
+     *
+     * <p>Which copy, because a helper spliced into two calls holds one construct twice under one
+     * origin: the comparison inside a charge helper is one construct of the model and as many
+     * decisions as there are calls to it.
+     */
+    private static ObjectNode decisionId(Condition condition) {
+        ObjectNode out = JsonNodeFactory.instance.objectNode();
+        switch (condition) {
+            // The position and which case of it, which is the same pair an axis of this document
+            // is named by. No construct: what the run matched is the case, wherever it is written.
+            case Condition.Case(var at, var name) -> {
+                out.put("kind", "case");
+                out.put("at", at.toString());
+                out.put("outcome", name);
+            }
+            case Condition.Side(var _, var comparison, var held) -> {
+                out.put("kind", "comparison");
+                constructId(out.putObject("construct"), comparison);
+                out.put("outcome", held ? "held" : "denied");
+            }
+            // A fork the reading could not name a position for. There is nothing to name it by but
+            // where it is, which is what the reading already decided rather than a second answer
+            // here.
+            case Condition.Arm(var arm) -> {
+                out.put("kind", "arm");
+                constructId(out.putObject("construct"), arm.fork());
+                out.put("part", arm.part());
+            }
+        }
+        return out;
+    }
+
+    /**
+     * Which construct of which body, and which copy of it, in the words the document names
+     * constructs by.
+     *
+     * <p>The same fields an arm is written under. A consumer joining a combination's decision to
+     * the arm it goes through joins on these, and a second spelling here would join to nothing.
+     */
+    private static void constructId(ObjectNode into,
+                                    souther.compiler.types.ConstructOccurrence occurrence) {
+        into.put("module", occurrence.origin().owner().module());
+        // The definition whose body wrote it, asked of the owner the way an arm's identity asks:
+        // two definitions' first constructs are one identity under the module alone.
+        into.put("definition", souther.compiler.types.WrittenOwner
+                .theBodyThatWrote(occurrence.origin().owner()).definition());
+        into.put("construct", occurrence.origin().ordinal());
+        into.put("lowered", occurrence.origin().lowered());
+        // The calls the copy was made through, outermost last, and absent where the construct is
+        // where it was written. An empty array and an absent one read alike to a person and not to
+        // a consumer that asks whether the field is there.
+        List<souther.compiler.types.ExpansionLineage.Step> steps = new ArrayList<>();
+        souther.compiler.types.ExpansionLineage at = occurrence.lineage();
+        while (at instanceof souther.compiler.types.ExpansionLineage.Expansion copy) {
+            steps.add(copy.step());
+            at = copy.within();
+        }
+        if (steps.isEmpty()) {
+            return;
+        }
+        ArrayNode through = into.putArray("through");
+        for (souther.compiler.types.ExpansionLineage.Step step : steps.reversed()) {
+            ObjectNode one = through.addObject();
+            one.put("expanded", step.expanded().toString());
+            switch (step.at()) {
+                case souther.compiler.types.ExpansionSite.Written(var origin) -> {
+                    one.put("module", origin.owner().module());
+                    one.put("definition", souther.compiler.types.WrittenOwner
+                            .theBodyThatWrote(origin.owner()).definition());
+                    one.put("call", origin.ordinal());
+                    one.put("lowered", origin.lowered());
+                }
+                // A site named by what stands there rather than by a call the author wrote, and one
+                // read off where the block came from. Neither has a construct of its own to name,
+                // so what is written is what the site is.
+                case souther.compiler.types.ExpansionSite.Named named ->
+                        one.put("name", named.toString());
+                case souther.compiler.types.ExpansionSite.Supplied supplied ->
+                        one.put("supplied", supplied.toString());
+            }
+        }
     }
 
     /** What a truth is the truth of, as the identity spells it. */
@@ -4185,9 +4357,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 signature(b, behavior.name(), behavior.signature(), sources);
                 partition(b, behavior.partition(), behavior.boundaryReadings(),
                         behavior.account(), behavior.claimed(), sources,
-                        behavior.rulePlace(), behavior.partPlace());
+                        behavior.rulePlace(), behavior.partPlace(),
+                        behavior.evidence().combinations());
                 branch(b, behavior, sources);
                 decision(b, behavior, sources);
+                interaction(b, behavior);
                 findings(b, behavior, sources);
             }
         }
@@ -4393,7 +4567,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                                   Measure<List<BorderAssessment>> lines,
                                   List<BorderObligationPointAssessment> account,
                                   ClaimAnnotations claimed, DocumentSources sources,
-                                  PublishedRuleHandle.WhereARuleIs places, WhereAPartIs parts) {
+                                  PublishedRuleHandle.WhereARuleIs places, WhereAPartIs parts,
+                                  CombinationCriterion criterion) {
         // The one decision, the same one the page reads. Written here as well, the two surfaces
         // answered a reader differently about which behaviors have a section at all.
         if (!(PartitionSection.of(partition) instanceof PartitionSection.Present)) {
@@ -4592,32 +4767,38 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         // here, on the point, where on the line and the rule; and every reading is published, so
         // nothing a text report left out for room is missing from the document.
         obligations(DocumentPart.OBLIGATIONS.putArray(out), account, null, sources, places);
-        ObjectNode pairs = out.putObject("pairs");
-        // The size of the space is the model's and is written whether or not anybody counted. The
-        // counts are the measurement's and are written only where one was made; `truncated` is gone
-        // from here entirely, since a space too large to walk says so under `weakening`.
-        pairs.put("total", partition.pairs().total());
-        // Which two positions each of them is between, and how many of that relation the rows
-        // reach. The sizes are the model's and are written whether or not anybody counted; the
-        // counts are the measurement's and are written where one was made.
-        ArrayNode between = pairs.putArray("between");
-        for (PartitionEvidence.PairSpace.AxisPair pair : partition.pairs().space()) {
-            ObjectNode said = between.addObject();
-            said.put("one", pair.between().one().toString());
-            said.put("other", pair.between().other().toString());
-            said.put("total", pair.total());
-            if (partition.pairs().counted().made().isPresent()) {
-                said.put("covered", partition.pairs().counts().covered(pair.between()));
-                said.put("unknown", partition.pairs().unknown(pair));
+        // Written where the pair space is what this behavior is held to, and left out where its
+        // decisions meet: the criterion is one or the other, and a document carrying both would
+        // hand a consumer a second universe of combinations nobody is owed a row in.
+        if (criterion instanceof CombinationCriterion.PairFallback) {
+            ObjectNode pairs = out.putObject("pairs");
+            // The size of the space is the model's and is written whether or not anybody
+            // counted. The counts are the measurement's and are written only where one was made;
+            // `truncated` is gone from here entirely, since a space too large to walk says so
+            // under `weakening`.
+            pairs.put("total", partition.pairs().total());
+            // Which two positions each of them is between, and how many of that relation the rows
+            // reach. The sizes are the model's and are written whether or not anybody counted; the
+            // counts are the measurement's and are written where one was made.
+            ArrayNode between = pairs.putArray("between");
+            for (PartitionEvidence.PairSpace.AxisPair pair : partition.pairs().space()) {
+                ObjectNode said = between.addObject();
+                said.put("one", pair.between().one().toString());
+                said.put("other", pair.between().other().toString());
+                said.put("total", pair.total());
+                if (partition.pairs().counted().made().isPresent()) {
+                    said.put("covered", partition.pairs().counts().covered(pair.between()));
+                    said.put("unknown", partition.pairs().unknown(pair));
+                }
             }
+            // The two numbers over the whole space, and neither of them worked out here. What is
+            // left needs the sizes and the counts together, and a writer that subtracted them
+            // would be the second mechanism for one fact.
+            measured(pairs, partition.pairs().counted(), (node, counts) -> {
+                node.put("covered", counts.covered());
+                node.put("unknown", partition.pairs().unknown());
+            });
         }
-        // The two numbers over the whole space, and neither of them worked out here. What is left
-        // needs the sizes and the counts together, and a writer that subtracted them would be the
-        // second mechanism for one fact.
-        measured(pairs, partition.pairs().counted(), (node, counts) -> {
-            node.put("covered", counts.covered());
-            node.put("unknown", partition.pairs().unknown());
-        });
         // Both arrays either way. An absent one and an empty one read the same to a person and not
         // to a reader that checks whether the field is there, and this document's shape is what the
         // schema is written against.
@@ -4778,6 +4959,38 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     causes(one, came.synthesisShortfall(), sources, behavior.rulePlace());
                 }
             }
+        }
+    }
+
+    /**
+     * The combinations of one body's decisions, and which of them a row was seen making.
+     *
+     * <p>The account itself and not the findings about it, for the reason the rules above are
+     * published: a finding names the combination it is about by an identity, and a consumer acting
+     * on one looks it up here.
+     *
+     * <p>One entry per combination the body has a path to, whatever the rows did. Whether a row
+     * made it is the entry's own answer and is absent where the coverage has no value — a
+     * combination nothing was read about is not one no row makes.
+     *
+     * <p>The groups the measure would not walk are counted beside the entries rather than left out
+     * of the number. What they hold is combinations nobody counted, and an account whose total said
+     * only what it walked would call a behavior measured in full over the part of it that fitted.
+     */
+    static void interaction(ObjectNode into, BehaviorReport behavior) {
+        if (!(behavior.evidence().combinations()
+                instanceof CombinationCriterion.Interactions(var meetings))) {
+            return;
+        }
+        ObjectNode out = into.putObject("interaction");
+        measured(out.putObject("coverage"), meetings.made());
+        out.put("groupsNotMeasured", meetings.asked().notMeasured().size());
+        ArrayNode all = out.putArray("obligations");
+        Optional<InteractionEvidence.RowsMeeting> met = meetings.made().made();
+        for (ObligationIdentity.OfACombinationOfDecisions each : meetings.asked().ways().keySet()) {
+            ObjectNode one = all.addObject();
+            combinationId(one.putObject("obligationId"), each.behavior(), each.settled());
+            met.ifPresent(rows -> one.put("made", rows.met().contains(each)));
         }
     }
 
@@ -5199,7 +5412,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // A rule is a way through the whole body and stands at no one place in it. Where its
             // conditions are is said under the finding, one note apiece, so a coordinate here
             // would name whichever of them a walk reached first.
-            case About.ARuleNoRowTakes _ -> false;
+            //
+            // A combination is the same shape: it is a meeting and the decisions that reach it,
+            // which are as many places as it has decisions.
+            //
+            // And a combination of two classes stands at neither of the positions it is of.
+            case About.ARuleNoRowTakes _, About.ACombinationNoRowMakes _,
+                    About.ACombinationOfTwoClassesNoRowIsIn _ -> false;
             case About.ACaseNoRowExpects _, About.ACaseNothingWasSeenToProduce _,
                     About.ACaseNoRowAppliesItTo _, About.AClassNoRowIsIn _,
                     About.APointOfABorder _, About.APointOfADeclaredBorder _,
@@ -5248,6 +5467,15 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // file. A row that wrote no name answers to nothing outside it and is shown as the
             // place it is written, which the entry carries beside this.
             case About.AnUnansweredRow(var _, var row, var _) -> words(row.shown());
+            // The behavior whose decisions the combination is of, for the reason a rule's subject
+            // is the behavior: what tells one combination from another is the decisions it is of,
+            // held in the terms the account keys on, and a subject spelling those would publish
+            // this compiler's own way of writing them as though it were the model's.
+            case About.ACombinationNoRowMakes(var combination) -> words(combination.behavior());
+            // The behavior, and the classes under it. What a consumer joins on is the identity
+            // beside this; two combinations of one behavior are told apart there and not here.
+            case About.ACombinationOfTwoClassesNoRowIsIn(var combination) ->
+                    words(combination.behavior());
             // The behavior whose decision it is a rule of, and no more. What tells one rule from
             // another is the proposition each condition is keyed on, written the one way round
             // that makes a comparison and its denial one column — so a subject spelling it would
@@ -5875,6 +6103,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             case Weakening.BoundaryNotDerived _ -> WeakeningWord.BEHAVIOR_BOUNDARY_NOT_DERIVED;
             case Weakening.InputNotRead _ -> WeakeningWord.BEHAVIOR_INPUT_NOT_READ;
             case Weakening.PairSpaceTruncated _ -> WeakeningWord.PAIR_SPACE_TRUNCATED;
+            case Weakening.MeetingsNotWalked _ -> WeakeningWord.MEETINGS_NOT_WALKED;
             case Weakening.ProofContradicted _ -> WeakeningWord.PROOF_CONTRADICTED;
             case Weakening.ArmsUnsettled _ -> WeakeningWord.ARMS_UNSETTLED;
             // One word for the three shortfalls the reading can meet. A consumer acts on all of

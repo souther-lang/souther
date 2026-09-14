@@ -166,15 +166,17 @@ class OnlyAProjectionSaysHowFarAMeasurementGotTest {
      * thing in: a caller hands over the one it is looking at. This holds the other half — that the
      * canonical constructor, which a public record cannot hide, is not how anybody makes one.
      *
-     * <p>The three take a {@link souther.compiler.query.FindingSubject} and not a behavior's name.
-     * What a finding is about is a value rather than a word, because not every finding is about a
+     * <p>Each takes a {@link souther.compiler.query.FindingSubject} and not a behavior's name. What
+     * a finding is about is a value rather than a word, because not every finding is about a
      * behavior. The overloads that take a name hand one over and make nothing, which is why they are
      * not here.
      *
-     * <p>Two of them and not one, because what finds a finding is not always a measure. A point of
-     * an authored line is answered by {@link souther.compiler.query.ObligationCoverage}, which folds
-     * the readings and has no status of its own, and it is taken whole for the reason a measure is:
-     * there is no argument here to pass a set worked out somewhere else.
+     * <p>Several of them, because what finds a finding is not always a measure. A point of an
+     * authored line is answered by {@link souther.compiler.query.ObligationCoverage}, which folds
+     * the readings and has no status of its own; one of a body's meetings is answered by the
+     * reading of that meeting, which is narrower than the measure of every meeting. Each is taken
+     * whole for the reason a measure is: there is no argument here to pass a set worked out
+     * somewhere else.
      */
     @Test
     void aFindingIsMadeFromTheMeasurementThatFoundIt() throws IOException {
@@ -204,6 +206,15 @@ class OnlyAProjectionSaysHowFarAMeasurementGotTest {
                         "souther.compiler.query.Adequacy$Finding#by("
                                 + "Lsouther/compiler/query/FindingSubject;"
                                 + "Lsouther/compiler/query/DecisionEvidence;"
+                                + "Lsouther/compiler/query/About;)"
+                                + "Lsouther/compiler/query/Adequacy$Finding;",
+                        // And the reading of one of a body's meetings, which is not the measure of
+                        // every meeting: a group too wide to walk bears on the meetings it could
+                        // have stated and on no others. Which those are is that reading's own to
+                        // work out, and this takes the answer whole like the rest.
+                        "souther.compiler.query.Adequacy$Finding#by("
+                                + "Lsouther/compiler/query/FindingSubject;"
+                                + "Lsouther/compiler/query/InteractionEvidence$OfOneMeeting;"
                                 + "Lsouther/compiler/query/About;)"
                                 + "Lsouther/compiler/query/Adequacy$Finding;",
                         "souther.compiler.query.Adequacy$Finding#noticed("

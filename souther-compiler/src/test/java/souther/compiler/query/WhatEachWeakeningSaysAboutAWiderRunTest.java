@@ -80,6 +80,8 @@ class WhatEachWeakeningSaysAboutAWiderRunTest {
         table.put("ArmsUnsettled", "answers/UNAFFECTED");
         // The one arm that is a figure the query graph hands the analysis.
         table.put("PairSpaceTruncated", "answers/MAY_CHANGE");
+        // And the same figure on the other criterion: a build allowed more walks the group.
+        table.put("MeetingsNotWalked", "answers/MAY_CHANGE");
         // A run this reading cannot place among the rules is not placed by allowing more.
         table.put("DecisionOfRowUnreadable", "answers/UNAFFECTED");
         // And a run nothing recorded is not recorded by allowing more either: what watched it is
@@ -203,6 +205,7 @@ class WhatEachWeakeningSaysAboutAWiderRunTest {
                  Weakening.InputNotRead _, Weakening.PairSpaceTruncated _,
                  Weakening.ProofContradicted _, Weakening.ArmsUnsettled _,
                  Weakening.DecisionOfRowUnreadable _, Weakening.DecisionRunNotWatched _,
+                 Weakening.MeetingsNotWalked _,
                  Weakening.DecisionReadingIncomplete _ -> "answers";
         };
     }
@@ -235,6 +238,7 @@ class WhatEachWeakeningSaysAboutAWiderRunTest {
                 new SourceConstructOrigin(new WrittenOwner.Body("m", "b"), 1, 0,
                         SourceConstruct.IF)));
         out.add(new Weakening.PairSpaceTruncated("b", 9, 4));
+        out.add(new Weakening.MeetingsNotWalked("b", 1));
         out.add(new Weakening.DecisionOfRowUnreadable("b",
                 souther.compiler.partition.RulesTaken.WhichRule.Why.NO_RECOGNISABLE_RULE_MATCHES));
         out.add(new Weakening.DecisionRunNotWatched("b"));

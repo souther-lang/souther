@@ -157,17 +157,27 @@ class ARowOfferedForACombinationIsRunWhereAnythingCanRunItTest {
 
 
     /**
-     * A row the author already wrote is not offered back to them because nothing watched it.
+     * A row the author already wrote is not offered back to them, at either level.
      *
      * <p>Where nothing can say what a row did, the two kinds of row part. An author's row is in the
      * file whatever this establishes about it, so passing over a combination it may fill costs a
      * combination left owed; offering one costs them work they have already done. A row this search
      * composed is in nobody's file and gets no such benefit.
+     *
+     * <p><b>Held over the values and not over the two levels agreeing.</b> They do not agree here,
+     * and should not: this body's decisions meet, a meeting is settled by a run, and a build that
+     * watches none establishes nothing about which of them the rows make. What that costs is
+     * combinations left unasked-about, never a row handed back to whoever wrote it.
      */
     @Test
     void aWrittenRowIsNotOfferedBackWhereNothingCouldWatchIt() {
-        assertEquals(offeredBy(Adequacy.Level.ALL), offeredBy(Adequacy.Level.WITNESS),
-                "what is left to write does not turn on whether the build was measuring");
+        for (Adequacy.Level level : List.of(Adequacy.Level.WITNESS, Adequacy.Level.ALL)) {
+            assertEquals(List.of(), valuesOfferedBy(level).stream()
+                            .filter(List.of(List.of("Premium", "Express"),
+                                    List.of("Standard", "Regular"))::contains)
+                            .toList(),
+                    () -> "the rows in the file are not offered back at " + level);
+        }
     }
 
     /**
@@ -190,9 +200,12 @@ class ARowOfferedForACombinationIsRunWhereAnythingCanRunItTest {
         }
     }
 
-    private static List<List<String>> offeredBy(Adequacy.Level level) {
+    /** The values of each row the search offers, as a person reads them in the block. */
+    private static List<List<String>> valuesOfferedBy(Adequacy.Level level) {
         return generationOf(WRITTEN, "shippingFee", level).composed().rows().stream()
-                .map(souther.compiler.partition.Generator.GeneratedRow::labels).toList();
+                .map(row -> row.inputs().stream()
+                        .map(souther.compiler.partition.FixtureTemplate::text).toList())
+                .toList();
     }
 
     private static List<GenerationReason> unconfirmed(Adequacy.Filling filling) {

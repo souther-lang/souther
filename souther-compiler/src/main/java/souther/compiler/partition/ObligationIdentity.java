@@ -4,6 +4,7 @@ import souther.compiler.coverage.CoverageSites;
 import souther.compiler.types.TypeSymbol;
 
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * What tells one thing a row is owed for from every other, over the derivations that state such
@@ -28,7 +29,9 @@ import java.util.Objects;
  */
 public sealed interface ObligationIdentity
         permits ObligationIdentity.OfALine, ObligationIdentity.OfAnArm,
-                ObligationIdentity.OfADecisionRule, WhereACaseOfAnInputIsOwed {
+                ObligationIdentity.OfADecisionRule,
+                ObligationIdentity.OfACombinationOfDecisions,
+                ObligationIdentity.OfAFallbackPairCell, WhereACaseOfAnInputIsOwed {
 
     /** A point of a line, which is what the border accounts are owed at. */
     record OfALine(BorderObligationPoint point) implements ObligationIdentity {
@@ -103,6 +106,72 @@ public sealed interface ObligationIdentity
         public OfADecisionRule {
             Objects.requireNonNull(behavior, "a rule of a decision is some body's");
             Objects.requireNonNull(rule, "an obligation is told apart by something");
+        }
+    }
+
+    /**
+     * One combination of the decisions a body settles a value by: the way in to where they meet,
+     * and one outcome of each of them at it.
+     *
+     * <p>Told apart by what a row has to have been seen doing, in the words the model states it in.
+     * A {@link souther.compiler.reading.Condition} is the reading's own half of a decision — which position, which way it
+     * came out, at which occurrence — and the claim beside it is where a run of this compilation is
+     * recorded doing it. Held on the claims, one requirement would be renamed by the body being
+     * instrumented differently; held on the group, a factor gaining an outcome would rename the
+     * combinations that have nothing to do with it.
+     *
+     * <p>A set, and so two ways of arriving at the same decisions are one thing to ask for. What
+     * divides them between the way in and the outcomes is how the walk found them, which is not
+     * something a row can do differently.
+     *
+     * <p>The classes are no part of it. Which classes of a position a combination leaves open is
+     * how a search steers a candidate towards it, and a row that was seen making the decisions
+     * settles this however that reading came out.
+     */
+    record OfACombinationOfDecisions(String behavior, Set<souther.compiler.reading.Condition> settled)
+            implements ObligationIdentity {
+
+        public OfACombinationOfDecisions {
+            Objects.requireNonNull(behavior, "a combination of decisions is some body's");
+            settled = Set.copyOf(settled);
+            if (settled.isEmpty()) {
+                // A combination of a body's decisions is decisions being settled. Empty, it would
+                // be a requirement every run meets by having run at all.
+                throw new IllegalArgumentException(
+                        "a combination of decisions is some decisions coming out some way");
+            }
+        }
+    }
+
+    /**
+     * One combination of two classes, where the body's decisions meet nowhere and the pair space is
+     * the criterion.
+     *
+     * <p>Beside {@link OfACombinationOfDecisions} and not under it. What settles the one is a run
+     * seen making the decisions; what settles this is where the values classify, because there is
+     * no meeting for a run to have reached — a behavior whose decisions never come together, and an
+     * injected behavior, which has no body to read at all. Held as one shape, a reader would have
+     * to ask which kind it had before it knew what evidence to look for.
+     *
+     * <p>The two classes, unordered. A combination is between two positions and neither of them is
+     * the first one.
+     */
+    record OfAFallbackPairCell(String behavior, Set<ClassOfAPosition> classes)
+            implements ObligationIdentity {
+
+        public OfAFallbackPairCell {
+            Objects.requireNonNull(behavior, "a combination of two classes is some behavior's");
+            classes = Set.copyOf(classes);
+            if (classes.size() != 2) {
+                throw new IllegalArgumentException(
+                        "a combination of two classes is of two of them: " + classes);
+            }
+            if (classes.stream().map(ClassOfAPosition::at).distinct().count() != 2) {
+                // Two classes of one position are not a combination: no value holds both, so the
+                // requirement is one nothing could ever meet.
+                throw new IllegalArgumentException(
+                        "a combination is between two positions: " + classes);
+            }
         }
     }
 }

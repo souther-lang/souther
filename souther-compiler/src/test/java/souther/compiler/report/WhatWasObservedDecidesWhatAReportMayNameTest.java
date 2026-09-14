@@ -65,7 +65,7 @@ class WhatWasObservedDecidesWhatAReportMayNameTest {
         return new AdequacyReport.BehaviorReport("b", BehaviorImplementation.IMPLEMENTED,
                 new souther.compiler.query.BehaviorEvidence(
                         souther.compiler.query.Adequacy.RowReading.NONE,
-                        null, null, null, null, read(), null),
+                        null, null, null, null, read(), null, null),
                 null, List.of(), shown(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of());
     }
 

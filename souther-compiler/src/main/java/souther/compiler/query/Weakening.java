@@ -344,6 +344,34 @@ public sealed interface Weakening {
     }
 
     /**
+     * A meeting of the body's decisions the measure would not walk the combinations of.
+     *
+     * <p>The group is read and its combinations are not enumerated, so which of them the rows make
+     * is unknown — and nothing is owed at any of them, because nothing established that a row is
+     * missing. What that costs is said here: a wider build would walk the group and may find a
+     * combination this one never asked about.
+     *
+     * <p>Beside {@link PairSpaceTruncated}, which is the same figure running out on the other
+     * criterion. Two words because a reader raising a limit raises a different one for each.
+     */
+    record MeetingsNotWalked(String behavior, int groups) implements Weakening {
+
+        public MeetingsNotWalked {
+            if (groups < 1) {
+                throw new IllegalArgumentException(
+                        "a measure that walked every group went without nothing here: " + groups);
+            }
+        }
+
+        /** A figure the query graph hands the analysis, like the pair space's: a run under a wider
+         *  {@code AdequacyPolicy} walks the group this one held back. */
+        @Override
+        public RunSensitivity runSensitivity() {
+            return RunSensitivity.MAY_CHANGE;
+        }
+    }
+
+    /**
      * The ways through a body could not all be written down, so what rules its decision has is not
      * known.
      *

@@ -202,7 +202,7 @@ public final class Front {
          */
         static final souther.compiler.partition.AdequacyPolicy STANDARD =
                 new souther.compiler.partition.AdequacyPolicy(
-                        new souther.compiler.partition.AdequacyPolicy.OfTheMeasures(20_000,
+                        new souther.compiler.partition.AdequacyPolicy.OfTheMeasures(20_000, 4096,
                                 PatternPlan.Budget.OF_BEHAVIOR_DISTINCTIONS),
                         new souther.compiler.partition.AdequacyPolicy.OfTheGeneration(200, 4096));
     }

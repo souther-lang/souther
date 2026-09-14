@@ -96,6 +96,16 @@ public enum WeakeningWord {
     /** The space of combinations was too large to walk to the end of. */
     PAIR_SPACE_TRUNCATED,
 
+    /**
+     * A meeting of the body's decisions had more combinations than this build walks, so which of
+     * them the rows make was never established.
+     *
+     * <p>Its own word beside the one above, which is the same figure running out on the other
+     * criterion. A consumer raising a limit raises a different one for each, and one word for the
+     * two would send it to whichever it guessed.
+     */
+    MEETINGS_NOT_WALKED,
+
     /** A row went through an arm this compiler had proven nothing arrives at. */
     PROOF_CONTRADICTED,
 

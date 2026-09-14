@@ -280,7 +280,7 @@ class WhatIsWrittenInAnEnsuresIsQuotedOverTheRowsTest {
         return new Adequacy.Filling(
                 souther.compiler.partition.FillResult.nothingAskedOf(
                         new souther.compiler.partition.GenerationPlan(subject, List.of(),
-                                List.of())),
+                                List.of(), List.of(), List.of())),
                 souther.compiler.partition.Generator.GenerationResult.NONE,
                 Adequacy.Generated.RowsForRules.NOTHING,
                                 List.of());

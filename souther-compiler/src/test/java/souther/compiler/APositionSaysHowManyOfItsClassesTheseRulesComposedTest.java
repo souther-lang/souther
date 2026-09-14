@@ -106,15 +106,19 @@ class APositionSaysHowManyOfItsClassesTheseRulesComposedTest {
     }
 
     /**
-     * And the count of what no row reaches says that no row is owed there.
+     * And a position the behavior separates none of makes no combination to count.
      *
-     * <p>The sentence #1444 is about. Every measure over the model below comes back full and a
-     * number in the middle says some combinations are unknown; a reader who takes that as work to
-     * do writes a row, moves the number by one, and buys no evidence with it. What stops that is
-     * said where the number is.
+     * <p>What #1444 was about, answered where the number comes from rather than in a sentence
+     * beside it. A reader shown "some combinations are unknown" writes a row, moves the number by
+     * one and buys no evidence with it — and the reason they buy none is that this behavior never
+     * tells the position apart. So the space is over what the body draws a distinction about, and a
+     * position it says nothing about is in none of it: there is no number to read as work.
+     *
+     * <p>What the reader is told instead is the line above — the position is taken wider than the
+     * rules separate — which is a decision about the model and not a row to write.
      */
     @Test
-    void whatNoRowReachesSaysNobodyIsOwedARowThere() {
+    void aPositionTheRulesSeparateNoneOfMakesNoCombination() {
         String human = report("""
                 module example.owed
 
@@ -138,8 +142,11 @@ class APositionSaysHowManyOfItsClassesTheseRulesComposedTest {
                     | (TooLong, 50)  -> Ok { n = 1 }
                 """);
 
-        assertTrue(human.contains("unknown; no row is owed at one"),
-                () -> "the count says nobody is behind on it: " + human);
+        assertFalse(human.contains("    combination "),
+                () -> "a position this behavior separates none of is in no combination: " + human);
+        assertTrue(human.contains("holds 3 classes and this behavior's rules compose 0 of them"),
+                () -> "and what the reader is told is what it takes wider than it separates: "
+                        + human);
     }
 
     /**
@@ -242,10 +249,10 @@ class APositionSaysHowManyOfItsClassesTheseRulesComposedTest {
 
                 data Ok = { n: Int }
 
+                // Injected, so the space is over all three positions: what this weighs is which
+                // of them a relation leaves something unknown in, and a behavior with a body has
+                // its space over the positions it draws a distinction about.
                 behavior judge : (a: Flag, b: Flag, c: Wide) -> Ok
-                    constructs Ok
-
-                let judge (a, b, c) = Ok { n = 0 }
 
                 example judge
                     | (Yes, Yes, A1) -> Ok { n = 0 }

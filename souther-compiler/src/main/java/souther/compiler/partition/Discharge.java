@@ -18,10 +18,14 @@ import java.util.Map;
  * message about one run reading the same way twice, and is not something to build an answer from.
  */
 public record Discharge(Map<ClassOfAPosition, ClassDisposition> classes,
-                        Map<Generator.ArmOwed, ArmDisposition> arms) {
+                        Map<Generator.ArmOwed, ArmDisposition> arms,
+                        Map<ObligationIdentity.OfAFallbackPairCell, ClassDisposition> pairs,
+                        Map<ObligationIdentity.OfACombinationOfDecisions, ClassDisposition>
+                                meetings) {
 
     /** Nothing asked for and nothing answered, which is the only run this is right for. */
-    public static final Discharge NOTHING = new Discharge(Map.of(), Map.of());
+    public static final Discharge NOTHING =
+            new Discharge(Map.of(), Map.of(), Map.of(), Map.of());
 
     public Discharge {
         // Neither half of an entry missing. A key with nothing under it is an obligation that was
@@ -29,6 +33,23 @@ public record Discharge(Map<ClassOfAPosition, ClassDisposition> classes,
         // have none of — and it satisfied a check written over the keys alone.
         classes = Ordered.copyOf(classes);
         arms = Ordered.copyOf(arms);
+        // A combination of two classes, under the same shape a class's answer has: a row was
+        // composed for it or none was, and why. What differs between them is the requirement and
+        // not the news about it.
+        pairs = Ordered.copyOf(pairs);
+        // And a combination of the body's decisions, under that shape again. What a row is for
+        // differs between the three; that a row was composed or none was does not.
+        meetings = Ordered.copyOf(meetings);
+    }
+
+    /** What became of one combination of the body's decisions, or null where nothing asked. */
+    public ClassDisposition at(ObligationIdentity.OfACombinationOfDecisions owed) {
+        return meetings.get(owed);
+    }
+
+    /** What became of one combination of two classes, or null where nothing asked about it. */
+    public ClassDisposition at(ObligationIdentity.OfAFallbackPairCell owed) {
+        return pairs.get(owed);
     }
 
     /** What became of one class, or null where this run was not asked about it. */

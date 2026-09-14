@@ -188,6 +188,8 @@ public enum DiagnosticCode {
     E1933("a-behavior-has-at-most-one-stand-in-table", "check.example.title"),
     E1934("every-row-has-its-answer-written", "check.example.title"),
     E1935("every-decision-rule-has-a-row", "check.example.title"),
+    E1936("every-combination-of-decisions-has-a-row", "check.example.title"),
+    E1937("every-combination-of-two-classes-has-a-row", "check.example.title"),
 
     // --- totality, invariant discharge, attempted construction ---
     E2001("helper-carries-its-termination-guarantee", "check.totality.title"),
@@ -268,7 +270,7 @@ public enum DiagnosticCode {
     /** The rules that are reported without failing the build. */
     private static final java.util.Set<DiagnosticCode> WARNINGS =
             java.util.EnumSet.of(E1327, E1913, E1915, E1916, E1917, E1918, E1919, E1920, E1921,
-                    E1922, E1931, E1934, E1935, E2011);
+                    E1922, E1931, E1934, E1935, E1936, E1937, E2011);
 
     /** The catalog key of the header category this code is shown under. Shared across codes. */
     public String titleKey() {

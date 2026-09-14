@@ -111,6 +111,54 @@ public sealed interface About {
     }
 
     /**
+     * A combination of the decisions a body settles a value by that no row was seen making.
+     *
+     * <p>One entry of the interaction account. What tells it from every other is the decisions a
+     * run has to have made, which is the obligation it carries; the claims it would be certified by
+     * are how a run is held to it and are the measure's, not the account's.
+     *
+     * <p>Said only of a combination the body has a path to. A choice whose decisions leave a
+     * position no class is not a combination at all — the body cannot take both — so it is not
+     * owed a row and is not one of these.
+     */
+    record ACombinationNoRowMakes(ObligationIdentity.OfACombinationOfDecisions combination)
+            implements OfAnObligation {
+
+        public ACombinationNoRowMakes {
+            java.util.Objects.requireNonNull(combination, "a finding is about something");
+        }
+
+        @Override
+        public ObligationIdentity obligationIdentity() {
+            return combination;
+        }
+    }
+
+    /**
+     * A combination of two classes no row is in, where the pair space is the criterion.
+     *
+     * <p>One entry of the fallback account. Beside {@link ACombinationNoRowMakes} and not among it:
+     * that one is a meeting of the body's own decisions and is settled by a run, and this is two
+     * positions a behavior whose decisions meet nowhere has, settled by where the values fall.
+     *
+     * <p>Said only of a combination the model has. Two classes no one value holds together make no
+     * combination — the positions are under different cases of a sum — so there is nothing there to
+     * ask for.
+     */
+    record ACombinationOfTwoClassesNoRowIsIn(
+            ObligationIdentity.OfAFallbackPairCell combination) implements OfAnObligation {
+
+        public ACombinationOfTwoClassesNoRowIsIn {
+            java.util.Objects.requireNonNull(combination, "a finding is about something");
+        }
+
+        @Override
+        public ObligationIdentity obligationIdentity() {
+            return combination;
+        }
+    }
+
+    /**
      * A finding about one thing a row is owed for, which is what carries its identity.
      *
      * <p>Which findings these are is answered here and nowhere else, for the reason {@link OfARule}

@@ -104,7 +104,8 @@ class WhoMaySayWhatARuleHandleReadsAsTest {
                     + " PartitionEvidence$NotRead)",
             "souther/compiler/report/AdequacyReport#partition(ObjectNode, PartitionEvidence,"
                     + " Measure, List, ClaimAnnotations, DocumentSources,"
-                    + " PublishedRuleHandle$WhereARuleIs, WhereAPartIs)");
+                    + " PublishedRuleHandle$WhereARuleIs, WhereAPartIs,"
+                    + " CombinationCriterion)");
 
     @Test
     void everyClassThatTurnsARuleHandleIntoWordsIsWrittenDown() {

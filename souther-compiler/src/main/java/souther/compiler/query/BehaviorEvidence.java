@@ -51,6 +51,11 @@ import java.util.Set;
  *                         Beside {@code branch} and not among it: two rules can go through one
  *                         arm, and a body whose arms answer alike states two rules that one row
  *                         through each arm covers
+ * @param interaction      the combinations of decisions its body settles a value by and which of
+ *                         them the rows made, or null where the compile did not get far enough.
+ *                         Beside {@code decision} for the reason that one is beside {@code branch}:
+ *                         a rule is one way through the body and a combination is one meeting on
+ *                         it, so a row through every way can leave a combination unmade
  */
 public record BehaviorEvidence(Adequacy.RowReading reading,
                                Adequacy.SignatureEvidence signature,
@@ -58,7 +63,19 @@ public record BehaviorEvidence(Adequacy.RowReading reading,
                                Measure<java.util.List<BorderAssessment>> boundaryReadings,
                                Measure<java.util.List<BorderObligationPointAssessment>> account,
                                Adequacy.BranchEvidence branch,
-                               DecisionEvidence decision) implements RuleCitations {
+                               DecisionEvidence decision,
+                               InteractionEvidence interaction) implements RuleCitations {
+
+    /**
+     * Which criterion this behavior's combinations are measured against, settled in one place.
+     *
+     * <p>Derived rather than held, so that the parts and the choice made from them cannot come
+     * apart. Every surface reads this rather than asking whether the meetings are empty: the same
+     * rule written at each of them is the one that ends up worded differently.
+     */
+    public CombinationCriterion combinations() {
+        return CombinationCriterion.of(interaction, partition);
+    }
 
     public BehaviorEvidence {
         java.util.Objects.requireNonNull(reading,
@@ -120,6 +137,11 @@ public record BehaviorEvidence(Adequacy.RowReading reading,
         // reaches a status, a verdict and a document without each of them asking the decision
         // itself.
         parts.put("decision", decision == null ? null : decision.took());
+        // And which combinations of those decisions the rows made, which is a measure of this
+        // behavior like the rest. Left out, a behavior whose meetings could not all be walked, or
+        // whose rows ran unwatched, came back whole — the status, the verdict and the document each
+        // read this map, and none of them was told.
+        parts.put("interaction", interaction == null ? null : interaction.made());
         return java.util.Collections.unmodifiableMap(parts);
     }
 

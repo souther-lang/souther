@@ -303,9 +303,11 @@ public record Settlements(List<ObligationIdentity> requested,
                                souther.compiler.partition.MeasuredInput subject, Sig sig,
                                BoundaryValues building, Generator.Trial trial,
                                List<ClassOfAPosition> classes, List<Generator.ArmOwed> arms,
+                               List<ObligationIdentity.OfAFallbackPairCell> pairs,
                                Map<ArmProbe, CoverageSites.Obligation> armsOf,
                                Map<CoverageSites.Obligation, List<ArmProbe>> occurrencesOf,
                                RulesTaken rules,
+                               souther.compiler.partition.InteractionRequirements combinations,
                                Adequacy.Generated.RowsForRules ruleRows,
                                Map<ObligationIdentity.OfALine, List<AtAPoint>> reads) {
 
@@ -395,9 +397,38 @@ public record Settlements(List<ObligationIdentity> requested,
                                     RequiredDependencies.of(db, module, behavior)),
                     filling == null ? List.of() : filling.composed().plan().classesOwed(),
                     filling == null ? List.of() : filling.composed().plan().armsOwed(),
+                    filling == null ? List.of() : filling.composed().plan().pairsOwed(),
                     armsOf, occurrencesOf, rulesOf(db, module, behavior),
+                    combinationsOf(db, module, behavior, subject),
                     filling == null ? Adequacy.Generated.RowsForRules.NOTHING : filling.rules(),
                     reads);
+        }
+
+        /**
+         * The combinations of this body's decisions, and what a run that made each would be seen
+         * doing.
+         *
+         * <p>Read off the one walk of the body this module holds, and under the measurement's own
+         * budget: what the generation may spend on a group is a different question from how much of
+         * the model is measured, and a behavior would otherwise be asked for what one dial allows
+         * and measured against what the other does.
+         *
+         * <p>Nothing where the body was not lowered, which is a behavior with no meetings to state
+         * requirements rather than one whose meetings state none.
+         */
+        private static souther.compiler.partition.InteractionRequirements combinationsOf(
+                Db db, String module, String behavior,
+                souther.compiler.partition.MeasuredInput subject) {
+            Map<String, souther.compiler.reading.CoverageRead.Read> met =
+                    db.ask(new Adequacy.Meets(module)).value();
+            souther.compiler.reading.CoverageRead.Read here =
+                    met == null ? null : met.get(behavior);
+            if (here == null) {
+                return souther.compiler.partition.InteractionRequirements.NONE;
+            }
+            return souther.compiler.partition.InteractionRequirements.of(behavior,
+                    here.interactions(), subject.axes().axes(),
+                    db.ask(new Front.Adequacy()).value().measures().cellsPerGroup());
         }
 
         /**
@@ -437,6 +468,16 @@ public record Settlements(List<ObligationIdentity> requested,
                             RowKey.of(behavior, filling.composed().rowFor(built.rowId())));
                 }
             }
+            // And the combinations of two classes, where the pair space is the criterion. The
+            // plan says which were asked for and the discharge says which got a row; read off the
+            // rows instead, a row that happens to sit in a combination nobody asked about would be
+            // published as having been composed for it.
+            for (ObligationIdentity.OfAFallbackPairCell each : pairs) {
+                if (filling.composed().discharge().at(each)
+                        instanceof souther.compiler.partition.ClassDisposition.Built built) {
+                    out.put(each, RowKey.of(behavior, filling.composed().rowFor(built.rowId())));
+                }
+            }
             filling.rules().byRule().forEach((rule, row) ->
                     out.put(new ObligationIdentity.OfADecisionRule(behavior, rule),
                             RowKey.of(behavior, row)));
@@ -465,6 +506,10 @@ public record Settlements(List<ObligationIdentity> requested,
                 }
                 out.add(new ObligationIdentity.OfAnArm(arm));
             }
+            // And the combinations of two classes this run was asked about, which is the plan's
+            // answer: what the criterion states is the account's, and a universe read off the
+            // space here would hold what nobody asked for.
+            out.addAll(pairs);
             // And every rule of this behavior's decision a row was asked for, which is not the
             // rules a row was composed for. A row composed for a class may take a rule as well,
             // and a universe read off what this run managed to compose would leave such a rule
@@ -494,7 +539,63 @@ public record Settlements(List<ObligationIdentity> requested,
                 case ObligationIdentity.OfAnArm(var owed) -> throughArm(asRead, owed);
                 case ObligationIdentity.OfALine at -> atThePoint(asRead, at);
                 case ObligationIdentity.OfADecisionRule owed -> takingTheRule(asRead, owed);
+                case ObligationIdentity.OfACombinationOfDecisions owed ->
+                        makingTheDecisions(asRead, owed);
+                case ObligationIdentity.OfAFallbackPairCell owed -> inBothClasses(asRead, owed);
             };
+        }
+
+        /**
+         * Whether running the row made the decisions the combination is of.
+         *
+         * <p>The run and not the values. What a combination of a body's decisions asks for is that
+         * they were settled those ways together, and a row whose values sit where a search would
+         * have steered it may have gone elsewhere — which is the reading this measure exists to
+         * stop standing in for the fact.
+         *
+         * <p>Some one way of arriving at them, which {@link InteractionRequirements} answers. Where
+         * this behavior states no way to the combination it is another behavior's, and a row
+         * written here does not settle it.
+         */
+        private Settlement makingTheDecisions(RowAsRead asRead,
+                                              ObligationIdentity.OfACombinationOfDecisions owed) {
+            if (!behavior.equals(owed.behavior())) {
+                return new Settlement.DoesNotSettle();
+            }
+            return switch (asRead.watched()) {
+                case Generator.Watched.Ran(var account) ->
+                        combinations.met(owed, claim -> claim.satisfiedBy(account))
+                                ? new Settlement.Settles() : new Settlement.DoesNotSettle();
+                case Generator.Watched.NoAccount _ ->
+                        new Settlement.Undetermined(Settlement.Reason.NO_ACCOUNT_OF_THE_RUN);
+            };
+        }
+
+        /**
+         * Whether the row's values sit in both classes of the pair.
+         *
+         * <p>The values and not the run, which is where this parts from the combination above. A
+         * fallback pair is the criterion of a behavior whose decisions meet nowhere — and of one
+         * with no body at all — so there is nothing for a run to have been seen doing, and where a
+         * row sits is the whole of the evidence there is.
+         *
+         * <p>Undetermined where either position could not be read. A row placed at one class and
+         * unreadable at the other says nothing about the pair, and reading the second as a miss
+         * would report a combination as untried on the strength of a value nobody could classify.
+         */
+        private Settlement inBothClasses(RowAsRead asRead,
+                                         ObligationIdentity.OfAFallbackPairCell owed) {
+            Settlement answer = new Settlement.Settles();
+            for (ClassOfAPosition each : owed.classes()) {
+                Settlement here = inClass(asRead, each);
+                if (here instanceof Settlement.DoesNotSettle) {
+                    return here;
+                }
+                if (here instanceof Settlement.Undetermined) {
+                    answer = here;
+                }
+            }
+            return answer;
         }
 
         /**

@@ -312,6 +312,29 @@ public sealed interface ExampleMessage extends Message {
     record NoRowTakesADecisionRule(String behavior) implements ExampleMessage, Reported {}
 
     /**
+     * No row makes one of the combinations of decisions a body settles a value by.
+     *
+     * <p>The behavior and nothing else, for the reason the rule above carries nothing: which
+     * decisions the combination is of is held in the terms an account keys on, and a sentence
+     * spelling them would show an author comparisons they did not write. Which combination it is,
+     * is said underneath.
+     */
+    @Code(DiagnosticCode.E1936)
+    record NoRowMakesACombinationOfDecisions(String behavior)
+            implements ExampleMessage, Reported {}
+
+    /**
+     * No row is in one combination of two of a behavior's classes.
+     *
+     * <p>The classes and the positions, because that is the whole of what one of these is: two
+     * positions of one behavior divide into classes that read alike, so a sentence naming the
+     * classes alone is one two combinations answer to.
+     */
+    @Code(DiagnosticCode.E1937)
+    record NoRowIsInThatCombinationOfClasses(String classes, String behavior)
+            implements ExampleMessage, Reported {}
+
+    /**
      * One condition of that rule: a comparison the author wrote, which the rule takes holding.
      *
      * <p>Carries nothing. Which comparison it is is where the label is put, so a reader reads the

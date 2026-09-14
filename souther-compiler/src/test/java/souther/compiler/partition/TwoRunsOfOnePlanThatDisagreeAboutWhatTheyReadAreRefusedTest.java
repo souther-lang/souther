@@ -157,7 +157,7 @@ class TwoRunsOfOnePlanThatDisagreeAboutWhatTheyReadAreRefusedTest {
     void twoPlansOfOneValueAreOneQuestion() {
         GenerationPlan asked = planOver(List.of(A_CLASS), 1);
         GenerationPlan same = new GenerationPlan(asked.subject(), asked.classesOwed(),
-                asked.armsOwed());
+                asked.armsOwed(), asked.pairsOwed(), asked.meetingsOwed());
 
         assertNotSame(asked, same);
         assertEquals(asked, same);
@@ -202,7 +202,8 @@ class TwoRunsOfOnePlanThatDisagreeAboutWhatTheyReadAreRefusedTest {
     private static FillResult nothingCameOfIt(GenerationPlan asked) {
         return new FillResult(asked, new LinkedHashMap<>(), List.of(), List.of(),
                 new Discharge(Map.of(asked.classesOwed().getFirst(),
-                        new ClassDisposition.Unresolved(NO_CANDIDATE)), Map.of()));
+                        new ClassDisposition.Unresolved(NO_CANDIDATE)),
+                        Map.of(), Map.of(), Map.of()));
     }
 
     /**
@@ -222,7 +223,7 @@ class TwoRunsOfOnePlanThatDisagreeAboutWhatTheyReadAreRefusedTest {
                 InputDomain.of(List.of(new InputDomain.Parameter("days", null, Type.INT)),
                         SYMBOLS, ReadAs.THE_COMPILATION_DOES).reading(SYMBOLS),
                 AxesATestWrote.asAMeasurement("fee", List.of(days)));
-        return new GenerationPlan(subject, classes, List.of());
+        return new GenerationPlan(subject, classes, List.of(), List.of(), List.of());
     }
 
     private static PartitionClass divided(String id, long value) {

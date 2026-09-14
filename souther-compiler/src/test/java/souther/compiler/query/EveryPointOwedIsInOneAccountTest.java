@@ -221,11 +221,11 @@ class EveryPointOwedIsInOneAccountTest {
                 "the two behaviors are owed different rows");
 
         assertDoesNotThrow(() -> new BehaviorEvidence(Adequacy.RowReading.NONE, null,
-                partitions.get("keep"), lines.get("keep"), accounts.get("keep"), null, null));
+                partitions.get("keep"), lines.get("keep"), accounts.get("keep"), null, null, null));
         assertThrows(IllegalArgumentException.class,
                 () -> new BehaviorEvidence(Adequacy.RowReading.NONE, null,
                         partitions.get("keep"), lines.get("hold"), accounts.get("keep"), null,
-                        null),
+                        null, null),
                 "an account and the lines of another behavior are two measurements");
     }
 
