@@ -54,25 +54,38 @@ The complete runnable example is [`businesstrip`](https://github.com/souther-lan
 
 ## Install
 
-Every release attaches its artifacts to the [GitHub Release](https://github.com/souther-lang/souther/releases), and the `SHA256SUMS` beside them covers all of them: download it too, and `sha256sum -c SHA256SUMS` in the directory the assets were downloaded into says which arrived intact.
+On macOS and Linux, through Homebrew:
 
-On Unix the asset named `souther` is the whole of the command line — a launcher prepended to an uber jar. Put it somewhere on `PATH` and it runs on a Java 25 it finds there.
+```sh
+brew install souther-lang/souther/souther
+```
 
-On Windows there are two archives, and which one to take is a question of whose Java runs Souther. `souther-<version>-windows-x64.zip` carries a Java runtime of its own, so nothing has to be installed beside it, and the command in it is `souther\souther.exe`. That executable is not a native form of Souther: it is what WinGet's portable package is able to name, which has to be an executable, and `jpackage` writes it from the same jar the other archive runs. `souther-<version>-windows-x64-nojdk.zip` is that same command line without the runtime, for a machine that already has a JDK 25 and for a CI image that would rather not carry a second one, and the command in it is `souther\souther.cmd`, which reads `JAVA_HOME` and otherwise takes `java` from `PATH`. Either way the launcher is at the root of what you unpacked, so the directory to put on `PATH` is the same one.
+On Windows, through [Scoop](https://scoop.sh):
 
-A JDK and not a JRE, because `souther japi` reads a library's javadoc out of its sources and reaches a compiler to do it. On a runtime without one, that command ends on a class it cannot find and every other command answers as though nothing were missing.
+```powershell
+scoop bucket add souther https://github.com/souther-lang/scoop-souther
+scoop install souther
+```
 
-Neither archive puts it there itself, and `install.ps1` is what does: it takes a release, holds it against the `SHA256SUMS` beside it, unpacks it under `%LOCALAPPDATA%\Programs\souther` with a `current` link at the version it just wrote, and adds that link to the user's `PATH`. It installs for one user, needs no administrator, and owns that directory — an uninstall removes it and the one `PATH` entry it added, and leaves everything else on `PATH` alone.
+`install.ps1` is the Windows install without Scoop. It takes a release, holds it against the `SHA256SUMS` published beside it, unpacks it under `%LOCALAPPDATA%\Programs\souther` with a `current` link at the version it just wrote, and puts that link on the user's `PATH`. It installs for one user, needs no administrator, and owns that directory: an uninstall removes it and the one `PATH` entry it added, and leaves the rest of `PATH` alone.
 
 ```powershell
 irm https://raw.githubusercontent.com/souther-lang/souther/main/install.ps1 | iex
 ```
 
-That installs the latest release with its runtime. The script's own header says how to ask it for the other distribution, for a version of your choosing, and for an uninstall — piping into `iex` is a form that passes no arguments, so each of those names the script block instead.
+Piping into `iex` passes no arguments, so asking for a particular version, for the distribution without a runtime, or for an uninstall names the script block instead. The script's header says how.
 
-The Java that runs Souther and the Java a Souther project's build runs on are separate questions, and the bundled runtime answers only the first. A project consuming Souther's output still needs JDK 25, for the reason the next section gives.
+Every release also attaches its artifacts to the [GitHub Release](https://github.com/souther-lang/souther/releases) for a download by hand. `SHA256SUMS` covers all of them, so `sha256sum -c SHA256SUMS` in the directory they were downloaded into says which arrived intact.
 
-Neither Windows distribution keeps the class-data archive described below, so a compile there costs what a first compile costs on Unix. Writing one is only sound for the commands that reach the compiler, and the bundled launcher's options are fixed before it is handed a command line; the other Windows distribution holds none either, so the two behave alike.
+- `souther` is the whole of the command line on Unix — a launcher prepended to an uber jar. Put it somewhere on `PATH` and it runs on a Java 25 it finds there.
+- `souther-<version>-windows-x64.zip` carries a Java runtime of its own, so nothing has to be installed beside it. The command in it is `souther\souther.exe`, which `jpackage` writes from the same jar the other archive runs.
+- `souther-<version>-windows-x64-nojdk.zip` is that same command line without the runtime, for a machine that has a JDK 25 already and for a CI image that would rather not carry a second one. The command in it is `souther\souther.cmd`, which reads `JAVA_HOME` and otherwise takes `java` from `PATH`.
+
+Either Windows archive unpacks to one directory with the launcher at its root, so the directory to put on `PATH` is the same one. Neither keeps the class-data archive described below, so a compile there costs what a first compile costs on Unix.
+
+A JDK and not a JRE, because `souther japi` reads a library's javadoc out of its sources and reaches a compiler to do it. On a runtime without one, that command ends on a class it cannot find and every other command answers as though nothing were missing.
+
+The Java that runs Souther and the Java a Souther project's build runs on are separate questions, and a bundled runtime answers only the first. A project consuming Souther's output still needs JDK 25, for the reason the next section gives.
 
 ## Try it
 
