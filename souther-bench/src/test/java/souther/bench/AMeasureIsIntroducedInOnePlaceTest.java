@@ -138,8 +138,8 @@ class AMeasureIsIntroducedInOnePlaceTest {
             // Which combinations of a body's decisions the rows made, the same two places and for
             // the same reason: the gates say why no run could be read at all, and the fold over
             // the runs says how far reading them got.
-            Map.entry("souther.compiler.query.Adequacy$Interacts#whatTheRowsMade(Lsouther/compiler/partition/InteractionRequirements;ZLsouther/compiler/query/Adequacy$RowReading;Ljava/util/Optional;)Lsouther/compiler/query/InteractionEvidence;", 3),
-            Map.entry("souther.compiler.query.InteractionEvidence#of(Lsouther/compiler/partition/InteractionRequirements;Ljava/util/List;Lsouther/compiler/query/WeakeningSet;)Lsouther/compiler/query/InteractionEvidence;", 2),
+            Map.entry("souther.compiler.query.Adequacy$Interacts#whatTheRowsMade(Ljava/lang/String;Lsouther/compiler/partition/InteractionRequirements;ZLsouther/compiler/query/Adequacy$RowReading;Ljava/util/Optional;)Lsouther/compiler/query/InteractionEvidence;", 3),
+            Map.entry("souther.compiler.query.InteractionEvidence#of(Ljava/lang/String;Lsouther/compiler/partition/InteractionRequirements;Ljava/util/List;Lsouther/compiler/query/WeakeningSet;)Lsouther/compiler/query/InteractionEvidence;", 2),
             // And the one place the rules and the runs are put together, which downgrades a
             // reading of every run to a partial one where the rules themselves are partial. It
             // chooses no state of its own: a measurement that walked half the body is complete

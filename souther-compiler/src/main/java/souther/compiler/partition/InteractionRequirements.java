@@ -24,21 +24,37 @@ import java.util.SequencedMap;
  * run through both.
  */
 public record InteractionRequirements(
+        int read,
         SequencedMap<ObligationIdentity.OfACombinationOfDecisions, List<List<ControlClaim>>> ways,
         List<InteractionCells.NotOffered> notMeasured) {
 
     public InteractionRequirements {
         ways = Collections.unmodifiableSequencedMap(new LinkedHashMap<>(ways));
         notMeasured = List.copyOf(notMeasured);
+        if (read < 0) {
+            throw new IllegalArgumentException("meetings are counted from none: " + read);
+        }
+        if (read < notMeasured.size()) {
+            throw new IllegalArgumentException("more meetings were held back than were read: "
+                    + notMeasured.size() + " of " + read);
+        }
     }
 
     /** Nothing asked of a behavior whose decisions meet nowhere, which is not a group of none. */
     public static final InteractionRequirements NONE =
-            new InteractionRequirements(new LinkedHashMap<>(), List.of());
+            new InteractionRequirements(0, new LinkedHashMap<>(), List.of());
 
-    /** Whether this behavior is one the interaction criterion has anything to say about. */
+    /**
+     * Whether the body has meetings at all, which is what says the criterion this behavior is held
+     * to is the interactions.
+     *
+     * <p>Read off what the walk found and never off what came of it. A meeting whose combinations
+     * the classes could not place, and one the measure would not walk, are meetings — and a
+     * behavior falling back to the pair space because a measurement went short is the criterion
+     * moving with how the measuring went, which is what the fallback must never be.
+     */
     public boolean any() {
-        return !ways.isEmpty();
+        return read > 0;
     }
 
     /**
@@ -70,7 +86,7 @@ public record InteractionRequirements(
                 }
             }
         }
-        return new InteractionRequirements(ways, offered.notOffered());
+        return new InteractionRequirements(groups.size(), ways, offered.notOffered());
     }
 
     /**

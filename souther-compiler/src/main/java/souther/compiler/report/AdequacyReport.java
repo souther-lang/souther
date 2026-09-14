@@ -74,6 +74,7 @@ import souther.compiler.coverage.CoverageSites;
 import souther.compiler.coverage.DecidedBy;
 import souther.compiler.coverage.SuppliedRules;
 import souther.compiler.query.About;
+import souther.compiler.query.CombinationCriterion;
 import souther.compiler.query.DecisionEvidence;
 import souther.compiler.query.InteractionEvidence;
 import souther.compiler.query.DecisionRuleReading;
@@ -2124,7 +2125,15 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         // Under the same condition as before and not a new one: these counts used to be the tail of
         // the partition line, which is written in the arm this tests for. Moving them out of that
         // arm is what makes the condition something to spell rather than something to inherit.
-        if (partitioned.counted()) {
+        // Under the criterion this behavior is held to, which is the model's answer and not this
+        // page's: a behavior whose body brings decisions together is measured against those, and
+        // the product of its positions is a neighbouring technique it is not held to. Asked of the
+        // evidence rather than worked out here, so that what is printed and what a build refuses
+        // over are the same choice.
+        if (behavior.evidence().combinations() instanceof CombinationCriterion.Interactions(
+                var meetings)) {
+            interaction(out, meetings);
+        } else if (partitioned.counted()) {
             String combinations = combinations(partition.pairs());
             List<String> relations = new ArrayList<>();
             if (partition.pairs().counted().made().isPresent()) {
@@ -2579,6 +2588,30 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         f.at().said(rendering, declaredIn)));
             }
         }
+    }
+
+    /**
+     * How many of the combinations the body settles a value by the rows were seen making.
+     *
+     * <p>The count and the gaps beside it, which the findings under the behavior name one to a
+     * line. What a combination is of is not printed here: the decisions are held in the terms the
+     * account keys on, and a line spelling them would show an author comparisons they did not
+     * write.
+     *
+     * <p>The meetings the measure would not walk are said beside the count rather than folded into
+     * it. What they hold is combinations nobody counted, and a reader told only the ratio would
+     * take a behavior measured in part for one measured in full.
+     */
+    private void interaction(StringBuilder out, InteractionEvidence meetings) {
+        Optional<InteractionEvidence.RowsMeeting> made = meetings.made().made();
+        String held = meetings.asked().notMeasured().isEmpty() ? ""
+                : String.format("   %d meetings not walked", meetings.asked().notMeasured().size());
+        out.append(made
+                .map(rows -> String.format("    interaction combinations %d/%d%s%n",
+                        rows.met().size(), meetings.counted(), held))
+                .orElseGet(() -> String.format("    interaction combinations %d   %s%s%n",
+                        meetings.counted(),
+                        ReasonProse.of(meetings.made().why()).sentence(), held)));
     }
 
     /**
@@ -4257,7 +4290,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 signature(b, behavior.name(), behavior.signature(), sources);
                 partition(b, behavior.partition(), behavior.boundaryReadings(),
                         behavior.account(), behavior.claimed(), sources,
-                        behavior.rulePlace(), behavior.partPlace());
+                        behavior.rulePlace(), behavior.partPlace(),
+                        behavior.evidence().combinations());
                 branch(b, behavior, sources);
                 decision(b, behavior, sources);
                 interaction(b, behavior);
@@ -4466,7 +4500,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                                   Measure<List<BorderAssessment>> lines,
                                   List<BorderObligationPointAssessment> account,
                                   ClaimAnnotations claimed, DocumentSources sources,
-                                  PublishedRuleHandle.WhereARuleIs places, WhereAPartIs parts) {
+                                  PublishedRuleHandle.WhereARuleIs places, WhereAPartIs parts,
+                                  CombinationCriterion criterion) {
         // The one decision, the same one the page reads. Written here as well, the two surfaces
         // answered a reader differently about which behaviors have a section at all.
         if (!(PartitionSection.of(partition) instanceof PartitionSection.Present)) {
@@ -4665,32 +4700,38 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         // here, on the point, where on the line and the rule; and every reading is published, so
         // nothing a text report left out for room is missing from the document.
         obligations(DocumentPart.OBLIGATIONS.putArray(out), account, null, sources, places);
-        ObjectNode pairs = out.putObject("pairs");
-        // The size of the space is the model's and is written whether or not anybody counted. The
-        // counts are the measurement's and are written only where one was made; `truncated` is gone
-        // from here entirely, since a space too large to walk says so under `weakening`.
-        pairs.put("total", partition.pairs().total());
-        // Which two positions each of them is between, and how many of that relation the rows
-        // reach. The sizes are the model's and are written whether or not anybody counted; the
-        // counts are the measurement's and are written where one was made.
-        ArrayNode between = pairs.putArray("between");
-        for (PartitionEvidence.PairSpace.AxisPair pair : partition.pairs().space()) {
-            ObjectNode said = between.addObject();
-            said.put("one", pair.between().one().toString());
-            said.put("other", pair.between().other().toString());
-            said.put("total", pair.total());
-            if (partition.pairs().counted().made().isPresent()) {
-                said.put("covered", partition.pairs().counts().covered(pair.between()));
-                said.put("unknown", partition.pairs().unknown(pair));
+        // Written where the pair space is what this behavior is held to, and left out where its
+        // decisions meet: the criterion is one or the other, and a document carrying both would
+        // hand a consumer a second universe of combinations nobody is owed a row in.
+        if (criterion instanceof CombinationCriterion.PairFallback) {
+            ObjectNode pairs = out.putObject("pairs");
+            // The size of the space is the model's and is written whether or not anybody
+            // counted. The counts are the measurement's and are written only where one was made;
+            // `truncated` is gone from here entirely, since a space too large to walk says so
+            // under `weakening`.
+            pairs.put("total", partition.pairs().total());
+            // Which two positions each of them is between, and how many of that relation the rows
+            // reach. The sizes are the model's and are written whether or not anybody counted; the
+            // counts are the measurement's and are written where one was made.
+            ArrayNode between = pairs.putArray("between");
+            for (PartitionEvidence.PairSpace.AxisPair pair : partition.pairs().space()) {
+                ObjectNode said = between.addObject();
+                said.put("one", pair.between().one().toString());
+                said.put("other", pair.between().other().toString());
+                said.put("total", pair.total());
+                if (partition.pairs().counted().made().isPresent()) {
+                    said.put("covered", partition.pairs().counts().covered(pair.between()));
+                    said.put("unknown", partition.pairs().unknown(pair));
+                }
             }
+            // The two numbers over the whole space, and neither of them worked out here. What is
+            // left needs the sizes and the counts together, and a writer that subtracted them
+            // would be the second mechanism for one fact.
+            measured(pairs, partition.pairs().counted(), (node, counts) -> {
+                node.put("covered", counts.covered());
+                node.put("unknown", partition.pairs().unknown());
+            });
         }
-        // The two numbers over the whole space, and neither of them worked out here. What is left
-        // needs the sizes and the counts together, and a writer that subtracted them would be the
-        // second mechanism for one fact.
-        measured(pairs, partition.pairs().counted(), (node, counts) -> {
-            node.put("covered", counts.covered());
-            node.put("unknown", partition.pairs().unknown());
-        });
         // Both arrays either way. An absent one and an empty one read the same to a person and not
         // to a reader that checks whether the field is there, and this document's shape is what the
         // schema is written against.
@@ -4870,8 +4911,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * only what it walked would call a behavior measured in full over the part of it that fitted.
      */
     static void interaction(ObjectNode into, BehaviorReport behavior) {
-        InteractionEvidence meetings = behavior.evidence().interaction();
-        if (meetings == null || meetings.counted() == 0) {
+        if (!(behavior.evidence().combinations()
+                instanceof CombinationCriterion.Interactions(var meetings))) {
             return;
         }
         ObjectNode out = into.putObject("interaction");

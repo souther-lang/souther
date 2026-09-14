@@ -2396,7 +2396,7 @@
     },
     "interaction": {
       "type": "object",
-      "description": "The combinations of decisions this behavior's body settles one value by, and which of them a row was seen making. Beside `decision` and not among it: a rule is one way through the body and a combination is one meeting on it, so a row through every way can leave a combination unmade. One entry per combination the body has a path to, whatever the rows did — an `interaction_uncovered` finding names one of these by its `obligationId`.",
+      "description": "The combinations of decisions this behavior's body settles one value by, and which of them a row was seen making. Beside `decision` and not among it: a rule is one way through the body and a combination is one meeting on it, so a row through every way can leave a combination unmade. One entry per combination the body has a path to, whatever the rows did — an `interaction_uncovered` finding names one of these by its `obligationId`. Present exactly where the body's decisions meet, which is where `partition.pairs` is absent.",
       "required": [
         "coverage",
         "obligations"
@@ -2655,7 +2655,6 @@
         "axes",
         "boundaries",
         "obligations",
-        "pairs",
         "notDerivable"
       ],
       "additionalProperties": false,
@@ -3149,7 +3148,7 @@
         },
         "pairs": {
           "type": "object",
-          "description": "Two-class combinations, kept as the relations they are between. Counts rather than a ratio: a combination no row reaches has not been shown unreachable, only unknown, so the denominator is not known.",
+          "description": "Two-class combinations, kept as the relations they are between. Counts rather than a ratio: a combination no row reaches has not been shown unreachable, only unknown, so the denominator is not known. Present exactly where the pair space is the criterion this behavior is held to, which is where its decisions meet nowhere and where it has no body to read — a behavior whose body brings decisions together carries `interaction` instead, and never both: the two state different requirements, and a consumer reading the one that is not the criterion would act on a combination nobody is owed.",
           "required": [
             "total",
             "status",

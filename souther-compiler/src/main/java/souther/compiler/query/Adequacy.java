@@ -1019,7 +1019,7 @@ public final class Adequacy {
                 souther.compiler.partition.InteractionRequirements asked =
                         souther.compiler.partition.InteractionRequirements.of(behavior,
                                 read.interactions(), subject.axes().axes(), cells);
-                out.put(behavior, whatTheRowsMade(asked, instrumented,
+                out.put(behavior, whatTheRowsMade(behavior, asked, instrumented,
                         RowReadings.readingFor(byTarget, behavior), numbering));
             });
             return Answer.of(Ordered.map(out));
@@ -1034,7 +1034,7 @@ public final class Adequacy {
          * leaves what they meet unknown — because the rows meeting them may be sitting in the
          * source nothing could evaluate.
          */
-        private static InteractionEvidence whatTheRowsMade(
+        private static InteractionEvidence whatTheRowsMade(String behavior,
                 souther.compiler.partition.InteractionRequirements asked, boolean instrumented,
                 RowReading observed, Optional<SiteNumbering> numbering) {
             if (!instrumented) {
@@ -1056,7 +1056,7 @@ public final class Adequacy {
             for (RowOutcome row : rows) {
                 watched.add(ObservedInputs.of(row, numbering).watched());
             }
-            return InteractionEvidence.of(asked, watched, observed.measured().weakening());
+            return InteractionEvidence.of(behavior, asked, watched, observed.measured().weakening());
         }
     }
 
@@ -5731,8 +5731,9 @@ public final class Adequacy {
                 if (branch != null && branch.measured().made().isPresent()) {
                     out.addAll(armFindings(behavior.name(), branch.arms()));
                 }
-                interactionFindings(
-                        meetings == null ? null : meetings.get(behavior.name()), out);
+                interactionFindings(CombinationCriterion.of(
+                        meetings == null ? null : meetings.get(behavior.name()),
+                        partitions == null ? null : partitions.get(behavior.name())), out);
             }
             declaredFindings(db, name, out);
             return Answer.of(List.copyOf(out));
@@ -5751,8 +5752,12 @@ public final class Adequacy {
          * whether anything could compose a row for it is a further question, and the answer to it
          * is not part of whether the requirement stands.
          */
-        private static void interactionFindings(InteractionEvidence meetings, List<Finding> out) {
-            if (meetings == null || meetings.made().made().isEmpty()) {
+        private static void interactionFindings(CombinationCriterion criterion, List<Finding> out) {
+            // Only where the interactions are what this behavior is held to, which the criterion
+            // says once for every surface. A behavior held to the pair space is owed nothing here,
+            // and asking the meetings directly would be this reader deciding that a second time.
+            if (!(criterion instanceof CombinationCriterion.Interactions(var meetings))
+                    || meetings.made().made().isEmpty()) {
                 return;
             }
             for (ObligationIdentity.OfACombinationOfDecisions each : meetings.notMadeByRows()) {

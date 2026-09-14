@@ -100,8 +100,15 @@ public record InteractionEvidence(InteractionRequirements asked, Measure<RowsMee
      * is made, and a run that took one of the two places a body records it did what the combination
      * asks. Which is the whole of the reading — nothing here says a row does not meet one, because
      * a row that met none of them is evidence about that row and not about the combinations.
+     *
+     * <p><b>A row nothing watched weakens the reading.</b> Such a row may be the row that makes a
+     * combination nothing else does, so a measurement that called itself complete over the rows it
+     * could see would hand the account a gap a written row already fills — and a build is entitled
+     * to refuse over a gap. Said here rather than left to the reading of the rows, for the reason
+     * the rules' measure says it: a row with no account can sit in a reading of the rows that
+     * finished.
      */
-    public static InteractionEvidence of(InteractionRequirements asked,
+    public static InteractionEvidence of(String behavior, InteractionRequirements asked,
                                          List<Generator.Watched> watched,
                                          WeakeningSet weakening) {
         Set<ObligationIdentity.OfACombinationOfDecisions> met = new LinkedHashSet<>();
@@ -123,8 +130,11 @@ public record InteractionEvidence(InteractionRequirements asked, Measure<RowsMee
         }
         RowsMeeting rows =
                 new RowsMeeting(watched.size(), met, seen, watched.size() - seen);
-        return new InteractionEvidence(asked, weakening.isEmpty()
-                ? new Measurement.Complete<>(rows) : new Measurement.Partial<>(rows, weakening));
+        WeakeningSet went = rows.everyRowWasWatched() ? weakening
+                : weakening.union(WeakeningSet.of(
+                        new Weakening.DecisionRunNotWatched(behavior)));
+        return new InteractionEvidence(asked, went.isEmpty()
+                ? new Measurement.Complete<>(rows) : new Measurement.Partial<>(rows, went));
     }
 
     /**

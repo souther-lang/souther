@@ -66,6 +66,17 @@ public record BehaviorEvidence(Adequacy.RowReading reading,
                                DecisionEvidence decision,
                                InteractionEvidence interaction) implements RuleCitations {
 
+    /**
+     * Which criterion this behavior's combinations are measured against, settled in one place.
+     *
+     * <p>Derived rather than held, so that the parts and the choice made from them cannot come
+     * apart. Every surface reads this rather than asking whether the meetings are empty: the same
+     * rule written at each of them is the one that ends up worded differently.
+     */
+    public CombinationCriterion combinations() {
+        return CombinationCriterion.of(interaction, partition);
+    }
+
     public BehaviorEvidence {
         java.util.Objects.requireNonNull(reading,
                 "there is always an answer to how far a behavior's rows were read");
