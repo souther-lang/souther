@@ -303,6 +303,7 @@ public record Settlements(List<ObligationIdentity> requested,
                                souther.compiler.partition.MeasuredInput subject, Sig sig,
                                BoundaryValues building, Generator.Trial trial,
                                List<ClassOfAPosition> classes, List<Generator.ArmOwed> arms,
+                               List<ObligationIdentity.OfAFallbackPairCell> pairs,
                                Map<ArmProbe, CoverageSites.Obligation> armsOf,
                                Map<CoverageSites.Obligation, List<ArmProbe>> occurrencesOf,
                                RulesTaken rules,
@@ -396,6 +397,7 @@ public record Settlements(List<ObligationIdentity> requested,
                                     RequiredDependencies.of(db, module, behavior)),
                     filling == null ? List.of() : filling.composed().plan().classesOwed(),
                     filling == null ? List.of() : filling.composed().plan().armsOwed(),
+                    filling == null ? List.of() : filling.composed().plan().pairsOwed(),
                     armsOf, occurrencesOf, rulesOf(db, module, behavior),
                     combinationsOf(db, module, behavior, subject),
                     filling == null ? Adequacy.Generated.RowsForRules.NOTHING : filling.rules(),
@@ -466,6 +468,16 @@ public record Settlements(List<ObligationIdentity> requested,
                             RowKey.of(behavior, filling.composed().rowFor(built.rowId())));
                 }
             }
+            // And the combinations of two classes, where the pair space is the criterion. The
+            // plan says which were asked for and the discharge says which got a row; read off the
+            // rows instead, a row that happens to sit in a combination nobody asked about would be
+            // published as having been composed for it.
+            for (ObligationIdentity.OfAFallbackPairCell each : pairs) {
+                if (filling.composed().discharge().at(each)
+                        instanceof souther.compiler.partition.ClassDisposition.Built built) {
+                    out.put(each, RowKey.of(behavior, filling.composed().rowFor(built.rowId())));
+                }
+            }
             filling.rules().byRule().forEach((rule, row) ->
                     out.put(new ObligationIdentity.OfADecisionRule(behavior, rule),
                             RowKey.of(behavior, row)));
@@ -494,6 +506,10 @@ public record Settlements(List<ObligationIdentity> requested,
                 }
                 out.add(new ObligationIdentity.OfAnArm(arm));
             }
+            // And the combinations of two classes this run was asked about, which is the plan's
+            // answer: what the criterion states is the account's, and a universe read off the
+            // space here would hold what nobody asked for.
+            out.addAll(pairs);
             // And every rule of this behavior's decision a row was asked for, which is not the
             // rules a row was composed for. A row composed for a class may take a rule as well,
             // and a universe read off what this run managed to compose would leave such a rule

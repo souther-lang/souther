@@ -1664,8 +1664,22 @@ public final class Adequacy {
             // Counted with nothing a body claims in scope. What was claimed travels beside the
             // numbers rather than into them ({@link Claimed}), and the two meet where a report
             // is written.
+            // And which of its positions the body decides on, where there is a body. A pair of
+            // classes is a thing to ask a row for because the behavior tells the two apart; a
+            // position no decision is about keeps the rows its own classes are owed and makes no
+            // combination with anything. A behavior with no body has no such reading and its
+            // space is over every position measured — the difference is what is known, not a
+            // rule for one kind of behavior.
+            Map<String, CoverageRead.Read> met = db.ask(new Meets(name)).value();
+            Bodies.Elaborated checked = db.ask(new Bodies.Checked(name)).value();
+            Set<souther.compiler.partition.AxisId> decided =
+                    checked == null || !checked.behaviorBodies().containsKey(spec.name())
+                            || met == null || met.get(spec.name()) == null
+                            ? null
+                            : souther.compiler.partition.PairFallbackPositions.of(
+                                    met.get(spec.name()), subject.axes().axes());
             return Coverages.of(subject, seen, level,
-                    db.ask(new Front.Adequacy()).value().measures());
+                    db.ask(new Front.Adequacy()).value().measures(), decided);
         }
     }
 
@@ -2421,13 +2435,15 @@ public final class Adequacy {
             // this would be told what the search happens to be arranged to do.
             case About.APointOfABorder _, About.APointOfADeclaredBorder _,
                  About.ACaseNoRowAppliesItTo _, About.AClassNoRowIsIn _,
-                 About.AnArmNoRowGoesThrough _ -> null;
+                 About.AnArmNoRowGoesThrough _, About.ACombinationOfTwoClassesNoRowIsIn _ -> null;
             // A combination of the body's decisions. A row could answer one — the search already
             // walks the combinations looking for a row for an arm — and nothing is asked to look
             // for one yet, which is what this says.
-            case About.ACombinationNoRowMakes _, About.ACombinationOfTwoClassesNoRowIsIn _ ->
-                    new GenerationOutcome.NotSupported(GenerationOutcome.NotSupported
-                            .Reason.NOTHING_SEARCHES_FOR_A_COMBINATION);
+            case About.ACombinationNoRowMakes _ -> new GenerationOutcome.NotSupported(
+                    GenerationOutcome.NotSupported.Reason.NOTHING_SEARCHES_FOR_A_COMBINATION);
+            // A combination of two classes: a row that sits in both is a row, and what composes one
+            // is the search a class goes through with both positions held instead of one. What
+            // became of it is that search's answer and is read where the rows are.
             // A row is written and is waiting for its answer, at an arm or on its own. What is left
             // is the answer, which is the author's to write and nothing a search can compose; a row
             // offered for either would be a second row for a question already written down.
@@ -3892,6 +3908,8 @@ public final class Adequacy {
                             case About.ACaseNoRowAppliesItTo(var _, var _, var owed) ->
                                     atCase(owed, composed);
                             case About.AClassNoRowIsIn(var missing) -> atClass(missing, composed);
+                            case About.ACombinationOfTwoClassesNoRowIsIn(var combination) ->
+                                    atPair(combination, composed);
                             case About.AnArmNoRowGoesThrough(var arm) -> atArm(arm, composed);
                             case About.ARuleNoRowTakes(var _, var ruled) ->
                                     atRule(finding, ruled.rule(), rules);
@@ -3902,7 +3920,6 @@ public final class Adequacy {
                                     About.ACaseNoRowExpects _, About.ACaseNothingWasSeenToProduce _,
                                     About.ARowAtAnArmAwaitsItsAnswer _, About.AnUnansweredRow _,
                                     About.ACombinationNoRowMakes _,
-                                    About.ACombinationOfTwoClassesNoRowIsIn _,
                                     About.APositionNoLineDivides _,
                                     About.APositionThisCouldNotRead _,
                                     About.ARuleWithoutALine _, About.ARuleNothingClassified _,
@@ -4235,6 +4252,31 @@ public final class Adequacy {
             if (answer == null) {
                 throw new IllegalStateException(
                         "a finding names a class this run was not asked about: " + at + "=" + classId);
+            }
+            return switch (answer) {
+                case souther.compiler.partition.ClassDisposition.Built built ->
+                        new GenerationOutcome.Generated(List.of(composed.rowFor(built.rowId())));
+                case souther.compiler.partition.ClassDisposition.Unresolved none ->
+                        new GenerationOutcome.CannotGenerate(none.why());
+            };
+        }
+
+        /**
+         * What the search made of one combination of two classes.
+         *
+         * <p>Read off the discharge the way a class's answer is, and total over the plan for the
+         * same reason: a finding and a plan disagreeing about what is owed is this compiler
+         * answering two ways about one reading of the rows.
+         */
+        private static GenerationOutcome atPair(
+                ObligationIdentity.OfAFallbackPairCell combination,
+                souther.compiler.partition.FillResult composed) {
+            souther.compiler.partition.ClassDisposition answer =
+                    composed.discharge().at(combination);
+            if (answer == null) {
+                throw new IllegalStateException(
+                        "a finding names a combination this run was not asked about: "
+                                + combination);
             }
             return switch (answer) {
                 case souther.compiler.partition.ClassDisposition.Built built ->
@@ -4579,8 +4621,19 @@ public final class Adequacy {
                     arms.computeIfAbsent(arm.obligation(), of -> everyPlaceOf(plan, of));
                 }
             }
+            // And the combinations of two classes, where the pair space is what this behavior is
+            // held to. Read off the findings like the arms above: what a run is asked for is what
+            // the account says is missing, and a plan that walked the space itself would ask for
+            // work the account does not.
+            List<ObligationIdentity.OfAFallbackPairCell> pairs = new ArrayList<>();
+            for (Finding finding : owed) {
+                if (finding.about()
+                        instanceof About.ACombinationOfTwoClassesNoRowIsIn(var combination)) {
+                    pairs.add(combination);
+                }
+            }
             return new souther.compiler.partition.GenerationPlan(subject, classesOwed(evidence),
-                    arms.values().stream().map(Generator.ArmOwed::new).toList());
+                    arms.values().stream().map(Generator.ArmOwed::new).toList(), pairs);
         }
 
         /**
@@ -5744,7 +5797,7 @@ public final class Adequacy {
                 if (branch != null && branch.measured().made().isPresent()) {
                     out.addAll(armFindings(behavior.name(), branch.arms()));
                 }
-                combinationFindings(behavior.name(), CombinationCriterion.of(
+                combinationFindings(db, name, behavior.name(), CombinationCriterion.of(
                         meetings == null ? null : meetings.get(behavior.name()),
                         partitions == null ? null : partitions.get(behavior.name())), out);
             }
@@ -5765,7 +5818,8 @@ public final class Adequacy {
          * whether anything could compose a row for it is a further question, and the answer to it
          * is not part of whether the requirement stands.
          */
-        private static void combinationFindings(String behavior, CombinationCriterion criterion,
+        private static void combinationFindings(Db db, String module, String behavior,
+                                                CombinationCriterion criterion,
                                                 List<Finding> out) {
             // Under the criterion the behavior is held to, which the one choice says for every
             // surface. Asking the measures directly would be this reader deciding it a second
@@ -5782,17 +5836,22 @@ public final class Adequacy {
                                 meetings.made(), new About.ACombinationNoRowMakes(each)));
                     }
                 }
-                // The combinations of two classes nothing is in, which the space can now name
-                // ({@link PartitionEvidence.PairSpace#uncovered}) and which nothing is asked for
-                // yet.
-                //
-                // <p>Held back until a row can be composed for one. What a block is for is that an
-                // author pastes it, answers it, and the report beside it names no gap; a gap
-                // nothing offers a row against leaves a run that cannot reach that state, which is
-                // the thing the account exists to make reachable. So the two arrive together: the
-                // search that composes a row at a combination of two classes, and the finding that
-                // asks for one.
-                case CombinationCriterion.PairFallback _ -> { }
+                // The combinations of two classes nothing is in. Made where the count was made and
+                // nowhere else: a space nobody walked is not a space every combination of which is
+                // missing, which is what a list of the whole of it would say.
+                case CombinationCriterion.PairFallback(var space) -> {
+                    souther.compiler.partition.MeasuredInput subject =
+                            subjectOf(db, module, behavior);
+                    if (subject == null) {
+                        return;
+                    }
+                    for (ObligationIdentity.OfAFallbackPairCell each
+                            : Coverages.uncovered(behavior, subject.axes(), space)) {
+                        out.add(Finding.by(new FindingSubject.OfABehavior(behavior),
+                                space.counted(),
+                                new About.ACombinationOfTwoClassesNoRowIsIn(each)));
+                    }
+                }
             }
         }
 

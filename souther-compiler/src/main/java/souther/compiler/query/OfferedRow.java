@@ -53,12 +53,16 @@ public record OfferedRow(RowKey key, List<FixtureTemplate> inputs, List<StoodInA
         answers = List.copyOf(answers);
         namedFor = List.copyOf(namedFor);
         for (Generator.Purpose purpose : namedFor) {
+            // A combination of two classes is one of these too, where the pair space is what the
+            // behavior is held to: the search composed the row for it and the row's own values are
+            // what settle it, so nothing an edit does elsewhere moves what it is for.
             if (!(purpose instanceof Generator.Purpose.ForAClass
                     || purpose instanceof Generator.Purpose.ForAnArm
-                    || purpose instanceof Generator.Purpose.ForADecisionRule)) {
+                    || purpose instanceof Generator.Purpose.ForADecisionRule
+                    || purpose instanceof Generator.Purpose.ForAFallbackPairCell)) {
                 throw new IllegalArgumentException(
-                        "a row is composed for a class, an arm or a rule, and never for a line: "
-                                + purpose);
+                        "a row is composed for a class, an arm, a rule or a combination of two"
+                                + " classes, and never for a line: " + purpose);
             }
         }
     }

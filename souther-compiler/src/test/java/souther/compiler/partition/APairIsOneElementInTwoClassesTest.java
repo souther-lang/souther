@@ -95,25 +95,33 @@ class APairIsOneElementInTwoClassesTest {
     }
 
     /**
-     * And the search offers nothing for them, the row's elements being in every class there is.
+     * And the row the search offers for one is an element in both of its classes.
      *
-     * <p>The same counterexample, put to the other reader. A pair is measured and is not something
-     * a row is owed for (<<a-bar-is-a-criterion-and-what-it-adds>>): what the search composes for
-     * is a class of a position no row is in, and this row's elements are in all four. So the
-     * combinations two of them are not in stay untried in the count and nothing is offered — which
-     * is the measure saying what it saw and the generator answering the findings, rather than the
-     * two of them disagreeing about one word.
+     * <p>The same counterexample, put to the other reader. A combination two of the elements are
+     * not in is a combination no row is in, and where the pair space is the criterion that is work
+     * somebody is owed — so the search composes a row for it. What it composes is the law this
+     * file is about, arriving from the other side: a list whose one element is in both classes,
+     * rather than a list of two elements each in one of them.
+     *
+     * <p>Which is what makes the measure and the generator one account. The count says a
+     * combination is left; the search offers a row that sits in it; and the row it offers is one
+     * the count reads as sitting there.
      */
     @Test
-    void theSearchOffersNothingForACombinationNothingIsOwedFor() {
+    void theRowOfferedForACombinationIsOneElementInBothItsClasses() {
         Map<String, Adequacy.Filling> generated = Adequacy.generatedOf(compiled("""
                 [ Person { age = 17, status = Active },
                   Person { age = 20, status = Inactive } ]""").db(), MODULE);
         assertNotNull(generated, "rows are offered");
 
-        assertEquals(List.of(), generated.get("select").composed().rows().stream()
+        // The written rows sit in two of the four combinations — under 18 with Active, and 18 or
+        // over with Inactive — so the two left are what the search is asked for. Each row it
+        // composes is one element, in both classes of the combination it is for.
+        assertEquals(List.of("[Person { age = 17, status = Inactive }]",
+                        "[Person { age = 18, status = Active }]"),
+                generated.get("select").composed().rows().stream()
                         .map(row -> row.inputs().get(0).text()).toList(),
-                () -> "every class of both positions has a row: "
+                () -> "a row for each combination nothing is in: "
                         + generated.get("select").composed().reasons());
     }
 

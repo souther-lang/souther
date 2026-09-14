@@ -514,6 +514,22 @@ public final class InteractionCells {
     }
 
     /**
+     * Which position one decision is about, or -1 where this run measures none.
+     *
+     * <p>The one lookup, so that what a condition narrows and what it is about are the same
+     * question asked once. A second walk written beside it would answer for a position the
+     * narrowing never reached.
+     */
+    static int positionOf(souther.compiler.reading.Condition condition, List<Axis> axes) {
+        return switch (condition) {
+            case souther.compiler.reading.Condition.Case one -> axisAt(axes, one.at());
+            case souther.compiler.reading.Condition.Side one -> axisOf(axes, one.at());
+            // A fork this reading could not name a position for is about none of them.
+            case souther.compiler.reading.Condition.Arm _ -> -1;
+        };
+    }
+
+    /**
      * The axis measuring {@code term}, or -1 where none does.
      *
      * <p>The number and never the path it is read from. A location may be measured at more than one

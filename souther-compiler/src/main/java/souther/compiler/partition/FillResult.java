@@ -61,6 +61,12 @@ public record FillResult(GenerationPlan plan, SequencedMap<RowId, ComposedRow> c
                             + " asked " + plan.armsOwed()
                             + ", answered " + discharge.arms().keySet());
         }
+        if (!discharge.pairs().keySet().equals(new LinkedHashSet<>(plan.pairsOwed()))) {
+            throw new IllegalStateException(
+                    "the combinations this run was asked for and the ones it answered for are not"
+                            + " the same: asked " + plan.pairsOwed()
+                            + ", answered " + discharge.pairs().keySet());
+        }
         // And the rows against what the answers point at, in both directions. A row nothing points
         // at is one nobody was offered — it would come out of the projection below with nothing to
         // say it is for, which is not a row — and an answer pointing at a row that is not here is
@@ -73,6 +79,11 @@ public record FillResult(GenerationPlan plan, SequencedMap<RowId, ComposedRow> c
         }
         for (ArmDisposition each : discharge.arms().values()) {
             if (each instanceof ArmDisposition.Built built) {
+                answered.add(built.rowId());
+            }
+        }
+        for (ClassDisposition each : discharge.pairs().values()) {
+            if (each instanceof ClassDisposition.Built built) {
                 answered.add(built.rowId());
             }
         }
@@ -148,6 +159,16 @@ public record FillResult(GenerationPlan plan, SequencedMap<RowId, ComposedRow> c
             }
             arms.put(owed, offering(ArmDisposition.acrossRuns(runs), searched, composed, named));
         }
+        // And the combinations of two classes, folded the way the classes above are: what the runs
+        // came to together is one answer, and a row one of them composed keeps being the row.
+        Map<ObligationIdentity.OfAFallbackPairCell, ClassDisposition> pairs = new LinkedHashMap<>();
+        for (ObligationIdentity.OfAFallbackPairCell owed : plan.pairsOwed()) {
+            List<ClassDisposition> runs = new ArrayList<>();
+            for (FillResult each : searched) {
+                runs.add(each.discharge().at(owed));
+            }
+            pairs.put(owed, offering(ClassDisposition.acrossRuns(runs), searched, composed, named));
+        }
         Set<Generator.UnresolvedCombination> unresolved = new LinkedHashSet<>();
         Set<GenerationReason> reasons = new LinkedHashSet<>();
         for (FillResult each : searched) {
@@ -155,7 +176,7 @@ public record FillResult(GenerationPlan plan, SequencedMap<RowId, ComposedRow> c
             reasons.addAll(each.reasons());
         }
         return new FillResult(plan, composed, List.copyOf(unresolved), List.copyOf(reasons),
-                new Discharge(classes, arms));
+                new Discharge(classes, arms, pairs));
     }
 
     /**
@@ -262,8 +283,16 @@ public record FillResult(GenerationPlan plan, SequencedMap<RowId, ComposedRow> c
             arms.put(owed, new ArmDisposition.Unresolved(
                     List.of(new Generator.UnresolvedCombination(List.of(), why))));
         }
+        Map<ObligationIdentity.OfAFallbackPairCell, ClassDisposition> pairs = new LinkedHashMap<>();
+        for (ObligationIdentity.OfAFallbackPairCell owed : plan.pairsOwed()) {
+            pairs.put(owed, new ClassDisposition.Unresolved(
+                    new Generator.UnresolvedCombination(
+                            owed.classes().stream().map(ClassOfAPosition::classId).sorted()
+                                    .toList(),
+                            why)));
+        }
         return new FillResult(plan, new LinkedHashMap<>(), List.of(), reasons,
-                new Discharge(classes, arms));
+                new Discharge(classes, arms, pairs));
     }
 
     /**
@@ -306,6 +335,18 @@ public record FillResult(GenerationPlan plan, SequencedMap<RowId, ComposedRow> c
                 // stands in the body more than once, the row went through one of the splices and a
                 // purpose naming another would say the row does what it does not.
                 purposes.add(new Generator.Purpose.ForAnArm(built.at()));
+            }
+        }
+        // And the combinations of two classes this row is in. A row composed for one may sit in
+        // others, and each of them points at it here — which is what makes one row the offer for
+        // as many requirements as it settles rather than one row apiece.
+        for (ObligationIdentity.OfAFallbackPairCell owed : plan.pairsOwed()) {
+            if (discharge.at(owed) instanceof ClassDisposition.Built built
+                    && built.rowId().equals(id)) {
+                purposes.add(new Generator.Purpose.ForAFallbackPairCell(owed.classes(),
+                        owed.classes().stream()
+                                .map(each -> Generator.labelOf(plan.subject(), each))
+                                .sorted().toList()));
             }
         }
         return new Generator.GeneratedRow(purposes, row.inputs(), row.answers());

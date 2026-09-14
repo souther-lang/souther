@@ -237,7 +237,8 @@ final class Coverages {
     static PartitionEvidence of(souther.compiler.partition.MeasuredInput subject,
                                 souther.compiler.query.Adequacy.RowReading observed,
                                 souther.compiler.query.Adequacy.Level level,
-                                souther.compiler.partition.AdequacyPolicy.OfTheMeasures budget) {
+                                souther.compiler.partition.AdequacyPolicy.OfTheMeasures budget,
+                                Set<souther.compiler.partition.AxisId> decided) {
         List<RowOutcome> rows = observed.rowsSeen();
         Partitions.Partitioning partitioning = subject.partitioning();
 
@@ -265,7 +266,7 @@ final class Coverages {
         return new PartitionEvidence(
                 PartitionDerivation.of(axes, partitioning.partitionClosure(),
                         partitioning.inputIsEmpty()),
-                pairsOf(subject.behavior(), readings, level.readsRows(), budget),
+                pairsOf(subject.behavior(), readings, level.readsRows(), budget, decided),
                 partitioning.undivided(), partitioning.rulesWithoutALine(), partitioning.blocked(),
                 // What the model asked and nothing answered, taken whole and not gathered as the
                 // axes are walked. The questions are the model's; whether a position could be
@@ -442,7 +443,9 @@ final class Coverages {
     private static PartitionEvidence.PairSpace pairsOf(String behavior,
                                                       Readings readings, boolean asked,
                                                       souther.compiler.partition.AdequacyPolicy
-                                                              .OfTheMeasures budget) {
+                                                              .OfTheMeasures budget,
+                                                      Set<souther.compiler.partition.AxisId>
+                                                              decided) {
         // Every measure a row is placed at, which is the locations above flattened rather than a
         // list somebody gathered beside them. A pair is between two positions, so this question is
         // the one that reads across them.
@@ -461,9 +464,22 @@ final class Coverages {
         // Kept as the pairs they were worked out between, rather than added up here. Which two
         // positions a combination is between is what the walk knows at the moment it counts, and a
         // sum is the one projection of that from which no reader can get it back.
+        // Over the positions the body decides on, where something read a body. What a combination
+        // of two classes asks is that the behavior was tried with both at once, which is worth
+        // asking where the behavior tells them apart: a position no decision is about answers the
+        // same however the other one moves, so the product of it with anything asks for a row that
+        // shows nothing the two rows apart do not. Null is a behavior with no body to read — the
+        // space is then over every position measured, because what is missing is the reading and
+        // not the relevance.
         List<PartitionEvidence.PairSpace.AxisPair> space = new ArrayList<>();
         for (int i = 0; i < axes.size(); i++) {
+            if (decided != null && !decided.contains(axes.get(i).id())) {
+                continue;
+            }
             for (int j = i + 1; j < axes.size(); j++) {
+                if (decided != null && !decided.contains(axes.get(j).id())) {
+                    continue;
+                }
                 long between = combinationsOf(axes.get(i), axes.get(j));
                 if (between > 0) {
                     space.add(new PartitionEvidence.PairSpace.AxisPair(

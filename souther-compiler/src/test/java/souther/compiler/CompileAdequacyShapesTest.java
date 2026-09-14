@@ -202,10 +202,10 @@ class CompileAdequacyShapesTest {
 
                 data Picked = { n: Int }
 
+                // Injected, so the space is over all three positions: what this counts is how
+                // many combinations one row sits in, and a behavior with a body has its space
+                // over the positions its decisions are about.
                 behavior pick : (a: Flag, b: Flag, c: Flag) -> Picked
-                    constructs Picked
-
-                let pick (a, b, c) = Picked { n = 0 }
 
                 example pick
                     | (Yes, Yes, Yes) -> Picked { n = 0 }

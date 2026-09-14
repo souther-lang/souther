@@ -42,10 +42,15 @@ class PairSpaceTest {
             behavior submit : (request: Request) -> Submitted | Waiting
                 constructs Submitted, Waiting
 
-            let submit (request) = {
-                guard request.cost.value <= 100 else Waiting { cost = request.cost }
-                Submitted { cost = request.cost }
-            }
+            // Both positions are decided on and the two decisions meet nowhere — the answer is a
+            // construction and not a value made of them — which is the behavior the pair space is
+            // the criterion of.
+            let submit (request) = match request.kind with
+                | Domestic -> {
+                    guard request.cost.value <= 100 else Waiting { cost = request.cost }
+                    Submitted { cost = request.cost }
+                }
+                | Overseas -> Submitted { cost = request.cost }
             """;
 
     private static PartitionEvidence evidence(String source, String behavior) {

@@ -69,4 +69,5 @@ example 送料を出す
         }
     )
         -> <?>
+// no row for `指示.集荷時刻=12 <= x <= 23` in `出荷する`: nothing here writes a value whose Time.hour is in this range
 // nothing offers a row for `a combination of the decisions of 送料を出す` in `送料を出す`: nothing composes a row for a combination of this body's decisions yet, so what covers one is a row written for something else

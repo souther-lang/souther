@@ -2453,29 +2453,17 @@
           } ]
         } ],
         "pairs" : {
-          "total" : 16,
+          "total" : 4,
           "between" : [ {
-            "one" : "出荷する/指示.重量",
-            "other" : "出荷する/指示.区分",
-            "total" : 6,
-            "covered" : 4,
-            "unknown" : 2
-          }, {
             "one" : "出荷する/指示.重量",
             "other" : "出荷する/Time.hour(指示.集荷時刻)",
             "total" : 4,
             "covered" : 3,
             "unknown" : 1
-          }, {
-            "one" : "出荷する/指示.区分",
-            "other" : "出荷する/Time.hour(指示.集荷時刻)",
-            "total" : 6,
-            "covered" : 4,
-            "unknown" : 2
           } ],
           "status" : "complete",
-          "covered" : 11,
-          "unknown" : 5
+          "covered" : 3,
+          "unknown" : 1
         },
         "notDerivable" : [ "指示.記録時刻" ],
         "notRead" : [ {
@@ -3073,6 +3061,21 @@
           "ordinal" : 1,
           "lowered" : 0
         }
+      }, {
+        "kind" : "pair_uncovered",
+        "disposition" : "refused",
+        "subject" : "出荷する",
+        "obligationId" : {
+          "behavior" : "出荷する",
+          "classes" : [ {
+            "axis" : "出荷する/Time.hour(指示.集荷時刻)",
+            "class" : "Time.hour(指示.集荷時刻)/12 <= x <= 23"
+          }, {
+            "axis" : "出荷する/指示.重量",
+            "class" : "指示.重量/30000 < x"
+          } ]
+        },
+        "code" : "E1937"
       } ]
     }, {
       "name" : "送料を出す",

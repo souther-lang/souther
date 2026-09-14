@@ -94,8 +94,13 @@ class AMeasureWithNoNumberSaysWhyTest {
 
             behavior sift : (p: Pair) -> Res
                 constructs Res
+            // Both positions are told apart, so the space is over both of them: what this file is
+            // about is a measure with no rows to count, and a behavior whose space is empty would
+            // have no number missing to say why about.
             let sift (p) = match p.left with
-                | Yes -> Res { n = 1 }
+                | Yes -> match p.right with
+                    | Yes -> Res { n = 1 }
+                    | No -> Res { n = 2 }
                 | No -> Res { n = 0 }
             """;
 
@@ -253,11 +258,15 @@ class AMeasureWithNoNumberSaysWhyTest {
                     partition   axes 2   equivalence partitions 0/0   (2 not measured: no row names this behavior)
                     border      not applicable (the rules of this behavior draw no line)
                     branch      not measured (no row names this behavior)
-                    decision    rules 2   taken 0
+                    decision    rules 3   taken 0
                       ! no row takes a decision rule
-                          · it goes through `case Yes` (46:16)
+                          · it goes through `case Yes` (49:16)
+                          · it goes through `case Yes` (50:14)
                       ! no row takes a decision rule
-                          · it goes through `case No` (46:16)
+                          · it goes through `case Yes` (49:16)
+                          · it goes through `case No` (50:14)
+                      ! no row takes a decision rule
+                          · it goes through `case No` (49:16)
                   declarations   obligations 0/4
                       ? undecided whether a row is at the ON point value = 0 (invariant Amount #1) — no row names this behavior
                           · read as baseRate/r.cost: = 0
@@ -274,7 +283,7 @@ class AMeasureWithNoNumberSaysWhyTest {
 
                 7 behaviors: 6 implemented, 0 unimplemented, 1 injected; 0 rows waiting for a `let`.
                 adequacy: not satisfied
-                6 gaps marked `!`: what a strict build refuses over.
+                7 gaps marked `!`: what a strict build refuses over.
                 """, human());
     }
 

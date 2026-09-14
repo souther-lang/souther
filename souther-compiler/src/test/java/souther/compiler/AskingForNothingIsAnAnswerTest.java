@@ -49,10 +49,15 @@ class AskingForNothingIsAnAnswerTest {
             behavior submit : (flag: Flag, cost: Amount) -> Charged | Refused
                 constructs Charged, Refused
 
-            let submit (flag, cost) = {
-                guard cost.value <= 100 else Refused { reason = "over" }
-                Charged { cost = cost }
-            }
+            // Both positions are decided on, so the pair space is over both of them and has
+            // something to say nobody asked about. The decisions meet nowhere — the answers are
+            // constructions — which is what the pair space is the criterion of.
+            let submit (flag, cost) = match flag with
+                | Yes -> {
+                    guard cost.value <= 100 else Refused { reason = "over" }
+                    Charged { cost = cost }
+                }
+                | No -> Refused { reason = "no" }
 
             example submit
                 | "within" : (Yes, Amount(50)) -> Charged

@@ -35,7 +35,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class ABudgetIsTheCompilationsToSetTest {
 
-    /** Two positions of two classes each, which is four pairs — one more than a budget of three. */
+    /**
+     * Two positions of two classes each, which is four pairs — one more than a budget of three.
+     *
+     * <p>Injected, so that the space is over both positions whatever either is decided on. What
+     * this file is about is what a budget does to a measurement; a behavior with a body has its
+     * pair space over the positions its decisions are about, and a fixture with one would be
+     * asking two questions at once.
+     */
     private static final String FOUR_PAIRS = """
             module example.pairs
 
@@ -45,8 +52,6 @@ class ABudgetIsTheCompilationsToSetTest {
             data Res = { n: Int }
 
             behavior pick : (x: Flag, y: Flag) -> Res
-                constructs Res
-            let pick (x, y) = Res { n = 1 }
 
             example pick
                 | "one" : (A, A) -> Res { n = 1 }

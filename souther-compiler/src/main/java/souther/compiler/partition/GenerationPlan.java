@@ -26,18 +26,26 @@ import java.util.Set;
  * @param subject     the behavior a row would be written for
  * @param classesOwed one class of one position apiece, in the order they were gathered
  * @param armsOwed    one arm apiece, in the order the plan numbered them
+ * @param pairsOwed   one combination of two classes apiece, where the pair space is the criterion
+ *                    this behavior is held to. Beside the classes and not among them: a class is
+ *                    met by a value falling in it, and one of these by two values falling in two —
+ *                    so a row for each of two classes is two rows and neither shows what the
+ *                    behavior does where both hold
  */
 public record GenerationPlan(MeasuredInput subject, List<ClassOfAPosition> classesOwed,
-                             List<Generator.ArmOwed> armsOwed) {
+                             List<Generator.ArmOwed> armsOwed,
+                             List<ObligationIdentity.OfAFallbackPairCell> pairsOwed) {
 
     public GenerationPlan {
         classesOwed = List.copyOf(classesOwed);
         armsOwed = List.copyOf(armsOwed);
+        pairsOwed = List.copyOf(pairsOwed);
         if (subject == null) {
             throw new IllegalArgumentException("a generation is asked for on behalf of a subject");
         }
         onlyOnce("class", classesOwed);
         onlyOnce("arm", armsOwed);
+        onlyOnce("combination", pairsOwed);
         // A class of another behavior, which is the same disagreement a measured input refuses among its
         // axes. Held here, one run would be answering for two behaviors and every sentence about
         // what it was asked for would be right about one of them.
@@ -52,7 +60,7 @@ public record GenerationPlan(MeasuredInput subject, List<ClassOfAPosition> class
 
     /** Whether anything at all is owed, which is what a run with nothing to do looks like. */
     public boolean isEmpty() {
-        return classesOwed.isEmpty() && armsOwed.isEmpty();
+        return classesOwed.isEmpty() && armsOwed.isEmpty() && pairsOwed.isEmpty();
     }
 
     private static void onlyOnce(String kind, List<?> owed) {

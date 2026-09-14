@@ -192,13 +192,30 @@ public sealed interface ReaderDisposition {
             if (axis.cutOrParted() || axis.divides().size() >= axis.classes().size()) {
                 continue;
             }
+            // A position the space has no relation for, where the behavior has others. The space
+            // is over what the body draws a distinction about, so this is the strongest form of
+            // the first half: the behavior takes this position wider than it separates, beside
+            // positions it does separate. There is no relation to ask whether anything is left in,
+            // and none is needed — what a reader weighs is whether this behavior needs the
+            // distinction, and nothing here makes one.
+            //
+            // Beside others, because a behavior of one position has no relation to be missing
+            // from: what it takes wider than it separates is said by the count above it, and a
+            // line here would be raised for every such behavior whatever its rows do.
+            boolean inARelation = false;
             for (PartitionEvidence.PairSpace.AxisPair pair : pairs.space()) {
                 boolean here = pair.between().one().equals(axis.at())
                         || pair.between().other().equals(axis.at());
-                if (here && pairs.unknown(pair) > 0) {
-                    out.add(axis);
-                    break;
+                if (here) {
+                    inARelation = true;
+                    if (pairs.unknown(pair) > 0) {
+                        out.add(axis);
+                        break;
+                    }
                 }
+            }
+            if (!inARelation && axes.size() > 1) {
+                out.add(axis);
             }
         }
         return List.copyOf(out);

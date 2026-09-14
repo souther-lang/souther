@@ -908,7 +908,7 @@ class EveryFindingHasAGenerationDispositionTest {
             souther.compiler.partition.GenerationReason why) {
         souther.compiler.partition.GenerationPlan plan =
                 new souther.compiler.partition.GenerationPlan(nothingIsDivided(), List.of(),
-                        List.of());
+                        List.of(), List.of());
         return why == null ? souther.compiler.partition.FillResult.nothingAskedOf(plan)
                 : new souther.compiler.partition.FillResult(plan, new java.util.LinkedHashMap<>(),
                         List.of(), List.of(why),

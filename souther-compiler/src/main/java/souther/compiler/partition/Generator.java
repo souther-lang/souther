@@ -187,6 +187,32 @@ public final class Generator {
         }
 
         /**
+         * One combination of two classes: the row a behavior held to the pair space is owed there.
+         *
+         * <p>The two classes the requirement is of and nothing else. A row that reaches them may
+         * have had to move a third position to be a value at all — where two classes require a
+         * third thing the baseline does not have — and that position is part of the row and no part
+         * of what it is for. Written in, the row would be named for a combination nobody asked
+         * about, which is what a row composed for a pair used to do (issue #967).
+         *
+         * <p>A set, because a combination is a pair rather than an order of them. Which order a
+         * search settles them in is {@link Pins}'s and is not something a row is named by.
+         */
+        record ForAFallbackPairCell(java.util.Set<ClassOfAPosition> classes, List<String> labels)
+                implements Purpose {
+
+            public ForAFallbackPairCell {
+                classes = java.util.Set.copyOf(classes);
+                labels = List.copyOf(labels);
+            }
+
+            @Override
+            public List<String> labels() {
+                return labels;
+            }
+        }
+
+        /**
          * One arm of the body: the row an arm nothing reaches is owed.
          *
          * <p>The arm and not the combination a witness for it was found at. A combination is where
@@ -982,7 +1008,8 @@ public final class Generator {
      */
     public static GenerationPlan planOver(MeasuredInput subject, List<ClassOfAPosition> classes,
                                           List<ArmProbe> arms) {
-        return new GenerationPlan(subject, classes, arms.stream().map(ArmOwed::new).toList());
+        return new GenerationPlan(subject, classes, arms.stream().map(ArmOwed::new).toList(),
+                List.of());
     }
 
     /**
@@ -1560,8 +1587,104 @@ public final class Generator {
                                 UnresolvedCombination.Reason.THE_RULES_LEAVE_NOTHING_THERE)));
             }
         }
+        // And the combinations of two classes, where the pair space is what this behavior is held
+        // to. The same search as a class, with both positions held instead of one: what the
+        // requirement names is a hard pin at each, and everything else is chosen beside them — so a
+        // combination the baseline cannot be moved to directly is repaired at the positions the
+        // requirement says nothing about, and is not answered by giving one of the two up.
+        Map<ObligationIdentity.OfAFallbackPairCell, ClassDisposition> pairAnswers =
+                new LinkedHashMap<>();
+        for (ObligationIdentity.OfAFallbackPairCell asked : plan.pairsOwed()) {
+            if (composed.size() >= budget.rowLimit()) {
+                UnresolvedCombination why = new UnresolvedCombination(labelsOf(axes, asked),
+                        UnresolvedCombination.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED);
+                pairAnswers.put(asked, new ClassDisposition.Unresolved(why));
+                unresolved.add(why);
+                continue;
+            }
+            Map<Integer, Integer> wanted = pinned(axes, asked);
+            if (wanted == null) {
+                // A class of a position this run has no axis for. Nothing here can be steered to
+                // it, which is this compiler's shortfall and not something the model states.
+                UnresolvedCombination why = new UnresolvedCombination(labelsOf(axes, asked),
+                        UnresolvedCombination.Reason.NOTHING_TO_BUILD_AGAINST);
+                pairAnswers.put(asked, new ClassDisposition.Unresolved(why));
+                unresolved.add(why);
+                continue;
+            }
+            Pins pins = Pins.of(axes, wanted);
+            // A row this run has already composed that sits in both classes. One row settles as
+            // many requirements as it settles, so a search here would compose a second row with
+            // the same values and hand a person the same work twice — which is what the offering
+            // would then have to take back out.
+            RowId already = null;
+            for (Map.Entry<RowId, ComposedRow> each : composed.entrySet()) {
+                if (pins.holds(axes, each.getValue().inputs(), check)) {
+                    already = each.getKey();
+                    break;
+                }
+            }
+            if (already != null) {
+                pairAnswers.put(asked, new ClassDisposition.Built(already));
+                continue;
+            }
+            Composed made = rowFor(axes, pins,
+                    List.of(new Purpose.ForAFallbackPairCell(asked.classes(), pins.labels())),
+                    origins, check, references, answers);
+            if (made.row() == null) {
+                pairAnswers.put(asked, new ClassDisposition.Unresolved(made.why()));
+                unresolved.add(made.why());
+            } else {
+                pairAnswers.put(asked, new ClassDisposition.Built(compose(composed, made.row())));
+            }
+        }
         return new FillResult(plan, composed, unresolved, reasons,
-                new Discharge(classAnswers, armAnswers));
+                new Discharge(classAnswers, armAnswers, pairAnswers));
+    }
+
+    /**
+     * Where each class of a combination of two stands among this run's positions, or null where
+     * one of them is at a position this run has no axis for.
+     *
+     * <p>By the axis the class names, which is the identity both sides join on. Looked up by the
+     * position's words instead, this would be a second answer to which axis a class is of.
+     */
+    private static Map<Integer, Integer> pinned(MeasuredInput.MeasuredAxes axes,
+                                                ObligationIdentity.OfAFallbackPairCell asked) {
+        Map<Integer, Integer> out = new LinkedHashMap<>();
+        for (ClassOfAPosition each : asked.classes()) {
+            int at = -1;
+            for (int i = 0; i < axes.axes().size(); i++) {
+                if (axes.get(i).id().equals(each.at())) {
+                    at = i;
+                    break;
+                }
+            }
+            if (at < 0) {
+                return null;
+            }
+            int cls = -1;
+            for (int c = 0; c < axes.get(at).classes().size(); c++) {
+                if (axes.get(at).classes().get(c).id().equals(each.classId())) {
+                    cls = c;
+                    break;
+                }
+            }
+            if (cls < 0) {
+                return null;
+            }
+            out.put(at, cls);
+        }
+        return out;
+    }
+
+    /** What a report writes the two classes of a combination as, in a steady order. */
+    private static List<String> labelsOf(MeasuredInput.MeasuredAxes axes,
+                                         ObligationIdentity.OfAFallbackPairCell asked) {
+        Map<Integer, Integer> wanted = pinned(axes, asked);
+        return wanted == null
+                ? asked.classes().stream().map(ClassOfAPosition::classId).sorted().toList()
+                : Pins.of(axes, wanted).labels();
     }
 
     /**
@@ -1785,6 +1908,64 @@ public final class Generator {
     private static final int MOST_REPAIRS = 64;
 
     /**
+     * The classes a row is composed for, in the order a search settles them.
+     *
+     * <p>What a requirement is and how a search is told about it are two things. A class of a
+     * position is one of these and a combination of two classes is one of these; what tells the
+     * second from every other is a set, because a combination is a pair rather than an order of
+     * them — and a search walks positions in an order. Made here and nowhere else, so the order is
+     * this type's answer rather than whatever order a caller's collection happened to iterate in:
+     * one requirement would otherwise be searched two ways and offer two rows depending on how its
+     * classes were stored.
+     *
+     * <p>By the position's number, ascending. Which order it is does not matter and that there is
+     * one does: the walk below spends a budget in order, so two runs asked for one thing have to
+     * ask it the same way round.
+     */
+    record Pins(List<Pin> at) {
+
+        /** One class of one position, with the words a report writes for it. */
+        record Pin(int axis, int cls, String classId, String label) {}
+
+        Pins {
+            at = List.copyOf(at);
+            if (at.isEmpty()) {
+                throw new IllegalArgumentException("a row is composed for something");
+            }
+        }
+
+        /** The pins of {@code wanted}, which is a class apiece at the positions it names. */
+        static Pins of(MeasuredInput.MeasuredAxes axes, Map<Integer, Integer> wanted) {
+            List<Pin> out = new ArrayList<>();
+            wanted.keySet().stream().sorted().forEach(at -> {
+                Axis axis = axes.get(at);
+                int cls = wanted.get(at);
+                out.add(new Pin(at, cls, axis.classes().get(cls).id(), label(axis, cls)));
+            });
+            return new Pins(out);
+        }
+
+        /** The demand these make over the positions, which is what the walk is asked for. */
+        Interpretation reading() {
+            Map<Integer, Integer> pins = new LinkedHashMap<>();
+            at.forEach(each -> pins.put(each.axis(), each.cls()));
+            return new Interpretation(pins);
+        }
+
+        /** What a report writes this row as being about. */
+        List<String> labels() {
+            return at.stream().map(Pin::label).toList();
+        }
+
+        /** Whether a row's values are in every one of them, which is what certifies it. */
+        boolean holds(MeasuredInput.MeasuredAxes axes, List<FixtureTemplate> inputs,
+                      CandidateCheck check) {
+            return at.stream()
+                    .allMatch(each -> inTheClass(axes, each.axis(), each.classId(), inputs, check));
+        }
+    }
+
+    /**
      * A row for one class: composed against what the model already says where it can be, and moving
      * as little else as it takes.
      *
@@ -1813,32 +1994,57 @@ public final class Generator {
                                        List<StoodInAnswer> answers) {
         Axis axis = axes.get(at);
         String classId = axis.classes().get(cls).id();
-        String label = label(axis, cls);
-        // A class is a demand over one position: it asks for that class there and says nothing
-        // about anywhere else, which is what every other position being free means. Written as a
-        // reading, it goes through the same walk a combination's readings do.
-        Interpretation reading = new Interpretation(Map.of(at, cls));
+        Pins pins = Pins.of(axes, Map.of(at, cls));
+        Composed made = rowFor(axes, pins,
+                List.of(new Purpose.ForAClass(axis.id(), classId, pins.labels().getFirst())),
+                origins, check, references, answers);
+        return made.row() == null
+                ? new ClassAttempt.Unresolved(axis.id(), classId, made.why())
+                : new ClassAttempt.Built(axis.id(), classId, made.row());
+    }
+
+    /** What a search for one requirement came back with: the row, or why there is none. */
+    private record Composed(GeneratedRow row, UnresolvedCombination why) {}
+
+    /**
+     * The same, for any requirement the pins say: every one of them is held and everything else is
+     * chosen beside them.
+     *
+     * <p>One search for a class and for a combination of two classes. What differs between them is
+     * what is pinned and what the row is named for, and neither of those is a way of searching —
+     * so a second walk written for the second would be the same order of origins, the same repairs
+     * and the same certification, free to answer differently.
+     */
+    private static Composed rowFor(MeasuredInput.MeasuredAxes axes, Pins pins,
+                                   List<Purpose> purposes,
+                                   List<ResolvedOrigin> origins, CandidateCheck check,
+                                   FixtureReferences references,
+                                   List<StoodInAnswer> answers) {
+        String label = String.join(" with ", pins.labels());
+        // What the pins ask for and nothing else, which is what every other position being free
+        // means. Written as a reading, it goes through the same walk a combination's readings do.
+        Interpretation reading = pins.reading();
         // Every baseline the module states rather than the one this compiler picked. Narrowed to
         // the only value of a type, a module that states a second one lost the spread from every
         // row of every behavior taking it — a change somewhere else in the file, answering a
         // question nobody asked it. What order they are walked in is {@link #nearestFirst}'s to
         // say; how many of them may be built is this class's own budget.
-        Building building =
-                new Building(axes, at, classId, label, check, MOST_REPAIRS, references, answers);
+        Building building = new Building(axes, pins, purposes, label, check, MOST_REPAIRS,
+                references, answers);
         Traversal stated = nearestFirst(axes.axes(), reading, origins, (_, _) -> true, building);
         if (stated == Traversal.SATISFIED) {
-            return new ClassAttempt.Built(axis.id(), classId, building.found);
+            return new Composed(building.found, null);
         }
         // The composition, whatever the stated values spent, and with a budget of its own.
-        Building composing =
-                new Building(axes, at, classId, label, check, MOST_REPAIRS, references, answers);
+        Building composing = new Building(axes, pins, purposes, label, check, MOST_REPAIRS,
+                references, answers);
         Traversal composed = composing(axes.axes(), reading, origins, (_, _) -> true, composing);
         if (composed == Traversal.SATISFIED) {
-            return new ClassAttempt.Built(axis.id(), classId, composing.found);
+            return new Composed(composing.found, null);
         }
-        // What the walks came to, added up the way a combination's readings are. A class has the
-        // one reading — its own class at its own position — so what is left to say is whether
-        // either walk was stopped in front of work nobody did.
+        // What the walks came to, added up the way a combination's readings are. What is pinned
+        // is one reading — a class apiece at the positions the requirement names — so what is left
+        // to say is whether either walk was stopped in front of work nobody did.
         Completeness looked = building.builds == 0 && composing.builds == 0
                 ? Completeness.NOTHING_YET : Completeness.NOTHING_YET.searched();
         if (stated == Traversal.STOPPED || composed == Traversal.STOPPED) {
@@ -1849,21 +2055,21 @@ public final class Generator {
             // Nothing to try: the class cannot stand at its own position beside what the position
             // itself requires, under any origin. Which is the model not having this row rather than
             // a search that failed to find it.
-            case Completeness.Nothing.NO_READING -> new UnresolvedCombination(List.of(label),
+            case Completeness.Nothing.NO_READING -> new UnresolvedCombination(pins.labels(),
                     UnresolvedCombination.Reason.ONE_POSITION_CANNOT_BE_BOTH, null,
-                    Optional.of("nothing this class can stand beside was left to try"));
+                    Optional.of("nothing these classes can stand beside was left to try"));
             // The search stopped in front of a candidate it did not build. Said so whatever the ones
             // it did build came to: the refusal of the sixty-fourth is a fact about that candidate,
             // and offered as the class's answer it stands for a space the search never entered.
-            case Completeness.Nothing.SEARCH_STOPPED -> new UnresolvedCombination(List.of(label),
+            case Completeness.Nothing.SEARCH_STOPPED -> new UnresolvedCombination(pins.labels(),
                     UnresolvedCombination.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED);
             case Completeness.Nothing.LOOKED_EVERYWHERE -> last == null
-                    ? new UnresolvedCombination(List.of(label),
+                    ? new UnresolvedCombination(pins.labels(),
                             UnresolvedCombination.Reason.NO_CANDIDATE_WAS_OFFERED)
-                    : new UnresolvedCombination(List.of(label), last.reason(), last.detail(),
+                    : new UnresolvedCombination(pins.labels(), last.reason(), last.detail(),
                             last.said(), last.alsoShort());
         };
-        return new ClassAttempt.Unresolved(axis.id(), classId, why);
+        return new Composed(null, why);
     }
 
     /**
@@ -1886,9 +2092,9 @@ public final class Generator {
 
         private final MeasuredInput.MeasuredAxes axes;
 
-        private final int at;
+        private final Pins pins;
 
-        private final String classId;
+        private final List<Purpose> purposes;
 
         private final String label;
 
@@ -1911,12 +2117,12 @@ public final class Generator {
         /** What every row of this behavior stands its dependencies in with. */
         private final List<StoodInAnswer> answers;
 
-        private Building(MeasuredInput.MeasuredAxes axes, int at, String classId, String label,
-                         CandidateCheck check, int most, FixtureReferences references,
-                         List<StoodInAnswer> answers) {
+        private Building(MeasuredInput.MeasuredAxes axes, Pins pins, List<Purpose> purposes,
+                         String label, CandidateCheck check, int most,
+                         FixtureReferences references, List<StoodInAnswer> answers) {
             this.axes = axes;
-            this.at = at;
-            this.classId = classId;
+            this.pins = pins;
+            this.purposes = purposes;
             this.label = label;
             this.check = check;
             this.most = most;
@@ -1941,14 +2147,15 @@ public final class Generator {
                 last = made;
                 return Taken.AND_MORE;
             }
-            if (!inTheClass(axes, at, classId, made.row().inputs(), check)) {
+            // Every pin, and the values are what says so. What a row was steered towards is the
+            // reading that produced the candidate; where it landed is what the classifier answers,
+            // and a row certified on the first of two pins is a row that fills half a requirement.
+            if (!pins.holds(axes, made.row().inputs(), check)) {
                 last = new Attempt(null, UnresolvedCombination.Reason.NO_CERTIFIED_WITNESS, label,
                         Optional.empty());
                 return Taken.AND_MORE;
             }
-            found = new GeneratedRow(
-                    List.of(new Purpose.ForAClass(axes.get(at).id(), classId, label)),
-                    made.row().inputs(), made.row().answers());
+            found = new GeneratedRow(purposes, made.row().inputs(), made.row().answers());
             return Taken.AND_DONE;
         }
     }

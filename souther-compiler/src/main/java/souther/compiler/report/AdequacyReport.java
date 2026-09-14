@@ -2872,22 +2872,17 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         if (pairs.decided()) {
             return String.format("pairs %d/%d", pairs.counts().covered(), pairs.total());
         }
-        // Two numbers, because there are two facts. What the rows reach is counted, and what is
-        // left is not known: nothing tried to build a row for it, so it has not been shown
-        // unreachable either. `unknown` is the word the document writes, and it is written here
-        // too — `untried` reads as an instruction to try, which is what nobody is asked to do.
+        // Two numbers, because there are two facts: what the rows reach, and what is left. The
+        // second is what this behavior is behind on — where the pair space is the criterion, a
+        // combination of it is a thing a row is owed at — and each of them is named one to a line
+        // under this.
         //
         // And whose rows, where not all of them were read. A combination none of the rows seen
         // reaches is not one none of the rows reaches, and the same number means the smaller thing.
         boolean whole = pairs.counted() instanceof Measurement.Complete<?>;
-        // And that nobody is behind on the second number, which holds while nothing is asked for
-        // at one. The space can say which combinations are left ({@link Coverages#uncovered}) and
-        // the account does not ask for them yet: a gap nothing offers a row against is one an
-        // author cannot act on, so the sentence changes when the search does.
-        return String.format("pairs %d covered, %d unknown%s%s",
+        return String.format("pairs %d covered, %d uncovered%s",
                 pairs.counts().covered(), pairs.unknown(),
-                whole ? "" : " of the rows that were read",
-                pairs.unknown() == 0 ? "" : "; no row is owed at one");
+                whole ? "" : " of the rows that were read");
     }
 
     /**

@@ -102,7 +102,8 @@ class AGenerationThatWentOnDoesNotSayItStoppedTest {
     /** A run asked for nothing, which is what a reason about the run alone is written against. */
     private static souther.compiler.partition.FillResult stoppedWith(GenerationReason why) {
         souther.compiler.partition.GenerationPlan plan =
-                new souther.compiler.partition.GenerationPlan(subject(), List.of(), List.of());
+                new souther.compiler.partition.GenerationPlan(subject(), List.of(), List.of(),
+                        List.of());
         return new souther.compiler.partition.FillResult(plan, new LinkedHashMap<>(), List.of(),
                 List.of(why),
                 souther.compiler.partition.Discharge.NOTHING);
