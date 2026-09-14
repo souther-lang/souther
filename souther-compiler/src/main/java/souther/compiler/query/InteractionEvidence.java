@@ -56,6 +56,46 @@ public record InteractionEvidence(InteractionRequirements asked, Measure<RowsMee
     }
 
     /**
+     * What the reading of one meeting went without, which is not always what the measure did.
+     *
+     * <p>A behavior is measured in part where anything about its meetings went unread, and a
+     * meeting is undecided where something unread bears on <em>it</em>. The two are different
+     * questions and one answer served both: a group too wide to walk left every meeting of every
+     * other group as one a row might already make, so a gap the rows established and nothing could
+     * take away was reported as one nobody could decide — and no row was offered for it.
+     *
+     * <p>Which of them bear on one meeting. Rows the reading could not place, and rows nothing
+     * watched, bear on every meeting alike: any of them may be the row that makes this one. A group
+     * the walk would not take bears on a meeting only where that group could have stated it, which
+     * is what {@link InteractionCells.NotOffered#mightState} answers — and answers conservatively,
+     * so a meeting is kept undecided wherever there is any doubt.
+     *
+     * <p>Its own value rather than a set handed to whoever raises the finding. What a finding rests
+     * on is the thing that found it, and a caller free to assemble a set could give one meeting's
+     * finding what another meeting's reading went without.
+     */
+    public OfOneMeeting at(ObligationIdentity.OfACombinationOfDecisions meeting) {
+        WeakeningSet bearing = WeakeningSet.none();
+        for (Weakening each : made.weakening().causes()) {
+            if (each instanceof Weakening.MeetingsNotWalked
+                    && asked.notMeasured().stream().noneMatch(
+                            held -> held.mightState(meeting.settled()))) {
+                continue;
+            }
+            bearing = bearing.union(WeakeningSet.of(each));
+        }
+        return new OfOneMeeting(bearing);
+    }
+
+    /** What one meeting's reading went without, as the thing a finding about it rests on. */
+    public record OfOneMeeting(WeakeningSet weakening) {
+
+        public OfOneMeeting {
+            java.util.Objects.requireNonNull(weakening, "a reading went without something or not");
+        }
+    }
+
+    /**
      * What every row of the behavior came to, against the combinations.
      *
      * <p>Three states and every row is in one. A row whose run was read either made some of the

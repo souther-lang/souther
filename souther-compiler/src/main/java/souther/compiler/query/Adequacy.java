@@ -5253,6 +5253,20 @@ public final class Adequacy {
             return new Finding(subject, found.weakening(), about);
         }
 
+        /**
+         * The same, where what found it is the reading of one of a body's meetings.
+         *
+         * <p>A fifth, because what a meeting's reading went without is not what the measure of
+         * every meeting went without: a group too wide to walk bears on the meetings it could have
+         * stated and on no others. Which those are is the reading's own to work out
+         * ({@link InteractionEvidence#at}), and this takes the answer whole for the reason the four
+         * above do.
+         */
+        public static Finding by(FindingSubject subject, InteractionEvidence.OfOneMeeting found,
+                                 About about) {
+            return new Finding(subject, found.weakening(), about);
+        }
+
         /** The same, about a behavior. */
         public static Finding by(String behavior, ObligationCoverage found, About about) {
             return by(new FindingSubject.OfABehavior(behavior), found, about);
@@ -5894,8 +5908,13 @@ public final class Adequacy {
                     }
                     for (ObligationIdentity.OfACombinationOfDecisions each
                             : meetings.notMadeByRows()) {
+                        // What this meeting's own reading went without, and not what the measure
+                        // did. A group the walk would not take leaves the meetings it could have
+                        // stated undecided and says nothing about the rest — held to the measure,
+                        // a gap the rows established would be undecided because something else
+                        // went unwalked.
                         out.add(Finding.by(new FindingSubject.OfABehavior(each.behavior()),
-                                meetings.made(), new About.ACombinationNoRowMakes(each)));
+                                meetings.at(each), new About.ACombinationNoRowMakes(each)));
                     }
                 }
                 // The combinations of two classes nothing is in. Made where the count was made and

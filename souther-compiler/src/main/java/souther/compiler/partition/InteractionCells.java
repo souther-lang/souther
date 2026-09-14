@@ -249,11 +249,31 @@ public final class InteractionCells {
      * <p>A union and so a superset: no single combination claims all of these, and one of them may
      * be claimed by another group that was offered. A caller reads it for what is left owed after
      * every offered group has been searched, which is where the difference stops mattering.
+     *
+     * <p>And the conditions beside them, under the same union and for a different question. What a
+     * requirement is told apart by is the decisions it settles a value by, so a reader holding one
+     * can ask whether this group could have stated it — and a requirement none of whose conditions
+     * this group has is one it certainly could not, whatever went unwalked. Without that, a group
+     * held back leaves every requirement of every other group as one it might have stated.
      */
-    public record NotOffered(List<souther.compiler.coverage.ControlClaim> claims) {
+    public record NotOffered(List<souther.compiler.coverage.ControlClaim> claims,
+                             java.util.Set<souther.compiler.reading.Condition> settles) {
 
         public NotOffered {
             claims = List.copyOf(claims);
+            settles = java.util.Set.copyOf(settles);
+        }
+
+        /**
+         * Whether this group could have stated {@code settled}, as far as anything here can say.
+         *
+         * <p>True where every condition of the requirement is one this group has an outcome for.
+         * That is not proof it states it — the product was never walked, and the conditions may
+         * belong to combinations it has no path to — and it does not need to be: what a reader
+         * wants is to be sure when the answer is no.
+         */
+        public boolean mightState(java.util.Set<souther.compiler.reading.Condition> settled) {
+            return settles.containsAll(settled);
         }
     }
 
@@ -327,7 +347,7 @@ public final class InteractionCells {
             // of one group going untried; what saying nothing cost is an arm among them reading as
             // one the body never reaches.
             if (productOf(placed, mostCellsPerGroup) > mostCellsPerGroup) {
-                held.add(new NotOffered(claimsOf(reach, placed)));
+                held.add(new NotOffered(claimsOf(reach, placed), settlesOf(reach, placed)));
                 continue;
             }
             Group built = new Group(reach, placed);
@@ -336,6 +356,28 @@ public final class InteractionCells {
             }
         }
         return new Offered(out, held);
+    }
+
+    /**
+     * Every condition a combination of this group could settle a value by.
+     *
+     * <p>The union over the way in and every outcome of every factor, which is the same pass
+     * {@link #claimsOf} makes and is not the product this declined to walk. A superset, and that is
+     * what it is for: a requirement whose conditions are not all in here is one this group cannot
+     * state, whichever of its combinations went unwalked. So a reader holding a requirement can
+     * tell the groups that might have stated it from the ones that certainly could not, without
+     * enumerating anything the limit refused.
+     */
+    private static java.util.Set<souther.compiler.reading.Condition> settlesOf(
+            Placed reach, List<List<Placed>> byFactor) {
+        java.util.LinkedHashSet<souther.compiler.reading.Condition> out =
+                new java.util.LinkedHashSet<>(reach.settles());
+        for (List<Placed> factor : byFactor) {
+            for (Placed outcome : factor) {
+                out.addAll(outcome.settles());
+            }
+        }
+        return java.util.Collections.unmodifiableSet(out);
     }
 
     /** Every control point any combination of this group could claim, which is the union over the

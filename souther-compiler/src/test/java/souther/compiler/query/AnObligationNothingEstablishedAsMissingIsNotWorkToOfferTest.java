@@ -28,12 +28,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class AnObligationNothingEstablishedAsMissingIsNotWorkToOfferTest {
 
     /**
-     * A body with two meetings, one of them wider than the measure will walk.
+     * A body with two meetings, one wider than the measure will walk and over the same decisions.
      *
-     * <p>The first sums three outcomes with two and the second two with two, so a limit between
-     * them walks one group and holds the other back. What the walked group leaves unmade is
-     * reported — and the measurement that reported it is short of the group nobody walked, so a
-     * combination it named as unmade is one an unwalked row may already make.
+     * <p>The wide one settles a value by all four decisions and the narrow one by two of them, so a
+     * limit between them walks the narrow group and holds the wide one back — and every requirement
+     * the narrow group states is one the wide group could stated too. So what the walked group
+     * leaves unmade is a combination the unwalked group may already have, and nothing here
+     * establishes it is missing.
      */
     private static final String MODEL = """
             module example.unread
@@ -55,7 +56,7 @@ class AnObligationNothingEstablishedAsMissingIsNotWorkToOfferTest {
                 constructs Fee
 
             let shippingFee (total, member, delivery, insured) = Fee {
-                charge = baseFee(total, member) + expressFee(delivery),
+                charge = baseFee(total, member) + expressFee(delivery) + coverFee(insured),
                 cover = coverFee(insured) + expressFee(delivery)
             }
 
