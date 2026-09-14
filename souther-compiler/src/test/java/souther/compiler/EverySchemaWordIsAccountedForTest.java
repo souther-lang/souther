@@ -350,6 +350,17 @@ class EverySchemaWordIsAccountedForTest {
             new LinkedHashSet<>(List.of("complete", "partial", "unavailable"));
 
     /**
+     * What a decision of a body is written as in the identity of a combination.
+     *
+     * <p>The image of the projection and not the arms of {@link souther.compiler.reading.Condition}
+     * read back: what a reading calls its own arms is this compiler's business, and the words a
+     * consumer keys on are the ones the writer can write. Which is
+     * {@code theDecisionWordsAreWhatTheWriterCanWrite}'s to hold against the writer.
+     */
+    private static final Set<String> DECISION_WORDS =
+            new LinkedHashSet<>(List.of("case", "comparison", "arm"));
+
+    /**
      * Every enumerated field the schema has.
      *
      * <p>Written out rather than discovered. A test that walked the schema for `enum` and looked for
@@ -392,6 +403,13 @@ class EverySchemaWordIsAccountedForTest {
             // inside the compiler is not a change to the contract, and would be one if this read
             // the constants.
             new Vocabulary("status", List.of("$defs", "status"), STATUS_WORDS),
+            // Which kind of decision a combination is of. Written as the words rather than as the
+            // reading's arms, for the reason `status` is: the document promises what the writer
+            // writes, and a reading renaming one of its own cases is not a change to the contract.
+            new Vocabulary("combinationObligationId.decisions[].kind",
+                    List.of("$defs", "combinationObligationId", "properties", "decisions", "items",
+                            "properties", "kind"),
+                    DECISION_WORDS),
             Vocabulary.of("branch.reason", List.of("$defs", "branch", "properties", "reason"),
                     Adequacy.BranchEvidence.class),
             // Why nobody read which rules of a body's decision the rows took. Its own field beside
@@ -835,6 +853,24 @@ class EverySchemaWordIsAccountedForTest {
             written.add(AdequacyReport.wire(status));
         }
         assertEquals(STATUS_WORDS, written);
+    }
+
+    /**
+     * A decision of a body has a word for every shape a reading of one can take.
+     *
+     * <p>The writer's switch over those shapes is what makes it say so — an arm added to the
+     * reading does not compile until it is given a word — and this is the other half: that the
+     * words the schema allows are as many as there are shapes, so an arm given the word of another
+     * is a document keying two things alike.
+     *
+     * <p>Counted rather than matched on names. What a reading calls its own arms is this compiler's
+     * and moves; how many kinds of decision a document can carry is the contract.
+     */
+    @Test
+    void everyShapeOfADecisionHasAWordOfItsOwn() {
+        assertEquals(souther.compiler.reading.Condition.class.getPermittedSubclasses().length,
+                DECISION_WORDS.size(),
+                "a shape of a decision the document has no word of its own for");
     }
 
     /**

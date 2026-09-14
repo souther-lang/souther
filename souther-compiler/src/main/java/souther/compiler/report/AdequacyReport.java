@@ -3720,54 +3720,23 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                                       Set<Condition> settled) {
         into.put("behavior", behavior);
         ArrayNode decisions = into.putArray("decisions");
+        // Sorted by what each is written as here, which is every field of it. What a run has to
+        // have done is a set, so the order a walk met them is no part of the identity — and two
+        // documents of one model have to write it the same way round for a consumer to join on it.
         settled.stream().map(AdequacyReport::decisionId)
-                .sorted(java.util.Comparator.comparing(each -> each.get("kind").asString()
-                        + "/" + each.get("decision").asString()))
+                .sorted(java.util.Comparator.comparing(Object::toString))
                 .forEach(decisions::add);
-    }
-
-    /** One decision of a body, as the identity of a combination keys it. */
-    private static ObjectNode decisionId(Condition condition) {
-        ObjectNode out = JsonNodeFactory.instance.objectNode();
-        switch (condition) {
-            case Condition.Case(var at, var name) -> {
-                out.put("kind", "case");
-                out.put("decision", at.toString());
-                out.put("outcome", name);
-            }
-            case Condition.Side(var at, var comparison, var held) -> {
-                out.put("kind", "comparison");
-                out.put("decision", at + " at " + comparison);
-                out.put("outcome", held ? "held" : "denied");
-            }
-            // A fork the reading could not say a position for. There is nothing to name it by but
-            // the occurrence, which is what the reading already decided rather than a second
-            // answer here.
-            case Condition.Arm(var arm) -> {
-                out.put("kind", "arm");
-                out.put("decision", String.valueOf(arm));
-            }
-        }
-        return out;
     }
 
     /**
      * What tells one rule of a decision from every other, which is not what a reader is shown.
      *
      * <p>The behavior and what the path consulted. The propositions are the canonical ones — a
-     * comparison and its denial are one column, so {@code n > 100} in a source is written here as
-     * {@code n <= 100} denied — which is what makes the table exclusive and is the reason nothing
-     * here goes into a sentence. What a person is shown is under {@code subject} and in the notes
-     * beside it, where the construct the author wrote is pointed at instead.
+     * comparison and its denial are one column — which is what makes the table exclusive and is the
+     * reason nothing here goes into a sentence.
      *
      * <p>Sorted by what each condition is written as, and not in the order a walk met them. Two
-     * runs that read one body's ways in two orders state one rule, so an identity carrying the walk
-     * order would have a consumer joining on it land on nothing after a change that moved nothing.
-     * The order the author wrote them in is a thing a reader is shown and is in the notes.
-     *
-     * <p>A condition the path never consulted is absent, which is what a rule leaving it out means:
-     * a short-circuit that settled before reaching a condition states nothing about it, and an
-     * entry saying so would be a don't-care written as a value.
+     * runs that read one body's ways in two orders state one rule.
      */
     private static void ruleId(ObjectNode into, String behavior, DecisionRule rule) {
         into.put("behavior", behavior);
@@ -3815,6 +3784,96 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             }
         }
         return out;
+    }
+
+    /**
+     * One decision of a body, as the identity of a combination keys it.
+     *
+     * <p>Written in the coordinates this document already names constructs by — the owner, the
+     * construct the source counted, and which copy of it — rather than in the words the reading
+     * spells them for itself. What a reading calls a construct is a value of this compiler's whose
+     * shape is nobody's contract, and a consumer handed it would be keyed on a rendering.
+     *
+     * <p>Which copy, because a helper spliced into two calls holds one construct twice under one
+     * origin: the comparison inside a charge helper is one construct of the model and as many
+     * decisions as there are calls to it.
+     */
+    private static ObjectNode decisionId(Condition condition) {
+        ObjectNode out = JsonNodeFactory.instance.objectNode();
+        switch (condition) {
+            // The position and which case of it, which is the same pair an axis of this document
+            // is named by. No construct: what the run matched is the case, wherever it is written.
+            case Condition.Case(var at, var name) -> {
+                out.put("kind", "case");
+                out.put("at", at.toString());
+                out.put("outcome", name);
+            }
+            case Condition.Side(var _, var comparison, var held) -> {
+                out.put("kind", "comparison");
+                constructId(out.putObject("construct"), comparison);
+                out.put("outcome", held ? "held" : "denied");
+            }
+            // A fork the reading could not name a position for. There is nothing to name it by but
+            // where it is, which is what the reading already decided rather than a second answer
+            // here.
+            case Condition.Arm(var arm) -> {
+                out.put("kind", "arm");
+                constructId(out.putObject("construct"), arm.fork());
+                out.put("part", arm.part());
+            }
+        }
+        return out;
+    }
+
+    /**
+     * Which construct of which body, and which copy of it, in the words the document names
+     * constructs by.
+     *
+     * <p>The same fields an arm is written under. A consumer joining a combination's decision to
+     * the arm it goes through joins on these, and a second spelling here would join to nothing.
+     */
+    private static void constructId(ObjectNode into,
+                                    souther.compiler.types.ConstructOccurrence occurrence) {
+        into.put("module", occurrence.origin().owner().module());
+        // The definition whose body wrote it, asked of the owner the way an arm's identity asks:
+        // two definitions' first constructs are one identity under the module alone.
+        into.put("definition", souther.compiler.types.WrittenOwner
+                .theBodyThatWrote(occurrence.origin().owner()).definition());
+        into.put("construct", occurrence.origin().ordinal());
+        into.put("lowered", occurrence.origin().lowered());
+        // The calls the copy was made through, outermost last, and absent where the construct is
+        // where it was written. An empty array and an absent one read alike to a person and not to
+        // a consumer that asks whether the field is there.
+        List<souther.compiler.types.ExpansionLineage.Step> steps = new ArrayList<>();
+        souther.compiler.types.ExpansionLineage at = occurrence.lineage();
+        while (at instanceof souther.compiler.types.ExpansionLineage.Expansion copy) {
+            steps.add(copy.step());
+            at = copy.within();
+        }
+        if (steps.isEmpty()) {
+            return;
+        }
+        ArrayNode through = into.putArray("through");
+        for (souther.compiler.types.ExpansionLineage.Step step : steps.reversed()) {
+            ObjectNode one = through.addObject();
+            one.put("expanded", step.expanded().toString());
+            switch (step.at()) {
+                case souther.compiler.types.ExpansionSite.Written(var origin) -> {
+                    one.put("module", origin.owner().module());
+                    one.put("definition", souther.compiler.types.WrittenOwner
+                            .theBodyThatWrote(origin.owner()).definition());
+                    one.put("call", origin.ordinal());
+                    one.put("lowered", origin.lowered());
+                }
+                // A site named by what stands there rather than by a call the author wrote, and one
+                // read off where the block came from. Neither has a construct of its own to name,
+                // so what is written is what the site is.
+                case souther.compiler.types.ExpansionSite.Named named ->
+                        one.put("name", named.toString());
+                case souther.compiler.types.ExpansionSite.Supplied supplied ->
+                        one.put("supplied", supplied.toString());
+            }
+        }
     }
 
     /** What a truth is the truth of, as the identity spells it. */

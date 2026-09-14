@@ -1893,10 +1893,32 @@
                       }
                     },
                     "else": {
-                      "not": {
+                      "if": {
+                        "properties": {
+                          "kind": {
+                            "const": "interaction_uncovered"
+                          }
+                        },
+                        "required": [
+                          "kind"
+                        ]
+                      },
+                      "then": {
                         "required": [
                           "obligationId"
-                        ]
+                        ],
+                        "properties": {
+                          "obligationId": {
+                            "$ref": "#/$defs/combinationObligationId"
+                          }
+                        }
+                      },
+                      "else": {
+                        "not": {
+                          "required": [
+                            "obligationId"
+                          ]
+                        }
                       }
                     }
                   }
@@ -1935,7 +1957,7 @@
             ]
           },
           "obligationId": {
-            "description": "Which thing a row is owed for the finding is about, written for every kind that is about one and for no other. What a consumer joins the finding to its obligation by — in `partition.obligations` where a body's rule drew the line, in `declarations[].obligations` where one of the module's declarations owns it, in `branch.obligations` where it is an arm of the body, and in `partition.axes` where it is a class of a position. Its shape is the shape that account keeps, and which one follows from `kind`: a point of a line for `boundary_unmet` and `domain_point_uncovered`, an arm for `arm_unreached`, an axis and a class for `axis_class_uncovered`. For `input_case_unspecified` it is one of two, because that case is one obligation with the class of its position only where the behavior has a position of its own: an axis and a class where it does, and the behavior, the input's number and the case where its input is read at its stages and nothing divides it. `subject` beside it is what a reader is shown, and two obligations are shown the same words where what differs is not in the words: one rule at one level in one role owes two `in` points when two cases stop the run in different places, a fork whose caller supplies the rule owes one arm per rule handed in at one place and under one label, and two positions of one behavior divide into classes that read alike.",
+            "description": "Which thing a row is owed for the finding is about, written for every kind that is about one and for no other. What a consumer joins the finding to its obligation by — in `partition.obligations` where a body's rule drew the line, in `declarations[].obligations` where one of the module's declarations owns it, in `branch.obligations` where it is an arm of the body, and in `partition.axes` where it is a class of a position. Its shape is the shape that account keeps, and which one follows from `kind`: a point of a line for `boundary_unmet` and `domain_point_uncovered`, an arm for `arm_unreached`, an axis and a class for `axis_class_uncovered`. For `input_case_unspecified` it is one of two, because that case is one obligation with the class of its position only where the behavior has a position of its own: an axis and a class where it does, and the behavior, the input's number and the case where its input is read at its stages and nothing divides it. `subject` beside it is what a reader is shown, and two obligations are shown the same words where what differs is not in the words: one rule at one level in one role owes two `in` points when two cases stop the run in different places, a fork whose caller supplies the rule owes one arm per rule handed in at one place and under one label, and two positions of one behavior divide into classes that read alike. A combination of a body's decisions is one of these too, written as the decisions a run has to have made.",
             "oneOf": [
               {
                 "$ref": "#/$defs/obligationId"
@@ -1951,6 +1973,9 @@
               },
               {
                 "$ref": "#/$defs/ruleObligationId"
+              },
+              {
+                "$ref": "#/$defs/combinationObligationId"
               }
             ]
           },
@@ -2020,6 +2045,114 @@
               "outcome": {
                 "type": "string",
                 "description": "What the path came out as: `held` or `denied` for a comparison, a truth and a condition nothing read, and the case the subject was read as for a fork."
+              }
+            }
+          }
+        }
+      }
+    },
+    "combinationObligationId": {
+      "type": "object",
+      "description": "What tells one combination of a body's decisions from every other: the behavior, and the decisions a run has to have made. Not what a reader is shown — the decisions are held in the terms the account keys on, and `subject` beside a finding says only which behavior. `decisions` is sorted by what each is written as here and not by the order a walk met them: what a run has to have done is a set, so two documents of one model write it the same way round.",
+      "required": [
+        "behavior",
+        "decisions"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "behavior": {
+          "type": "string"
+        },
+        "decisions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "description": "One decision of the body coming out one way. `case` is a union the body matched on, named by the position and the case. `comparison` is a comparison of the body, named by the construct and which way it came out — the number it compares is not part of it, because the construct is what tells one decision from another. `arm` is a fork the reading could not name a position for, named by the fork and which arm.",
+            "required": [
+              "kind"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "enum": [
+                  "case",
+                  "comparison",
+                  "arm"
+                ]
+              },
+              "at": {
+                "type": "string",
+                "description": "Which position, for a case."
+              },
+              "outcome": {
+                "type": "string",
+                "description": "Which case, for a case; `held` or `denied` for a comparison."
+              },
+              "construct": {
+                "type": "object",
+                "description": "Which construct of which body, and which copy of it. The same coordinates an arm is written under, so a consumer joining a decision to the arm it goes through joins on these. `construct` is the number the body counted its constructs by and `lowered` which fork a lowering made of it — neither is a place in a source, which `sources` answers for.",
+                "required": [
+                  "module",
+                  "definition",
+                  "construct",
+                  "lowered"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "module": {
+                    "type": "string"
+                  },
+                  "definition": {
+                    "type": "string"
+                  },
+                  "construct": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "lowered": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "through": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "description": "One call the copy was made at: what it reached, and where the call is written. A site named by what stands there rather than by a call carries `name` or `supplied` instead.",
+                      "additionalProperties": false,
+                      "properties": {
+                        "expanded": {
+                          "type": "string"
+                        },
+                        "module": {
+                          "type": "string"
+                        },
+                        "definition": {
+                          "type": "string"
+                        },
+                        "call": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "lowered": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "supplied": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "description": "The calls the copy was made through, outermost last. Absent where the construct is where it was written: a helper spliced into two calls holds one construct twice under one `construct` number, and this is what tells the copies apart."
+                  }
+                }
+              },
+              "part": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Which arm of the fork, for an arm."
               }
             }
           }
@@ -2444,7 +2577,7 @@
             "additionalProperties": false,
             "properties": {
               "obligationId": {
-                "$ref": "#/$defs/obligationId"
+                "$ref": "#/$defs/combinationObligationId"
               },
               "made": {
                 "type": "boolean",

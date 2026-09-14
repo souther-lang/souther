@@ -1192,7 +1192,7 @@
         "axis" : "String.length(value)",
         "against" : "1",
         "knownWritable" : true,
-        "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+        "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it", "a_value_was_built" ],
         "status" : "complete",
         "hit" : true,
         "disposition" : "met",
@@ -1210,6 +1210,13 @@
           "against" : "1",
           "status" : "complete",
           "hit" : true
+        }, {
+          "behavior" : "送料を出す",
+          "axis" : "送料を出す/String.length(指示.番号)",
+          "relation" : "=",
+          "against" : "1",
+          "status" : "complete",
+          "hit" : false
         } ]
       }, {
         "obligationId" : {
@@ -1277,6 +1284,13 @@
         }, {
           "behavior" : "台帳へ書く",
           "axis" : "台帳へ書く/String.length(指示.番号)",
+          "relation" : "in",
+          "against" : "1 < String.length(指示.番号)",
+          "status" : "complete",
+          "hit" : true
+        }, {
+          "behavior" : "送料を出す",
+          "axis" : "送料を出す/String.length(指示.番号)",
           "relation" : "in",
           "against" : "1 < String.length(指示.番号)",
           "status" : "complete",
@@ -1607,7 +1621,7 @@
           } ]
         }, {
           "at" : "指示.品目",
-          "rule" : "comparison@1:75:39",
+          "rule" : "comparison@1:85:39",
           "ruleId" : {
             "kind" : "comparison",
             "declaredIn" : "conformance.shipping",
@@ -1757,7 +1771,7 @@
           } ]
         }, {
           "axis" : "出荷する/指示.重量",
-          "origin" : "comparison@1:78:17",
+          "origin" : "comparison@1:88:17",
           "kind" : "at_value",
           "value" : "30000",
           "items" : [ {
@@ -1976,7 +1990,7 @@
             }
           },
           "point" : "on",
-          "rule" : "comparison@1:78:17",
+          "rule" : "comparison@1:88:17",
           "ruleId" : {
             "kind" : "comparison",
             "declaredIn" : "conformance.shipping",
@@ -2033,7 +2047,7 @@
             }
           },
           "point" : "off",
-          "rule" : "comparison@1:78:17",
+          "rule" : "comparison@1:88:17",
           "ruleId" : {
             "kind" : "comparison",
             "declaredIn" : "conformance.shipping",
@@ -2102,7 +2116,7 @@
             }
           },
           "point" : "in",
-          "rule" : "comparison@1:78:17",
+          "rule" : "comparison@1:88:17",
           "ruleId" : {
             "kind" : "comparison",
             "declaredIn" : "conformance.shipping",
@@ -2163,7 +2177,7 @@
             }
           },
           "point" : "out",
-          "rule" : "comparison@1:78:17",
+          "rule" : "comparison@1:88:17",
           "ruleId" : {
             "kind" : "comparison",
             "declaredIn" : "conformance.shipping",
@@ -2491,7 +2505,7 @@
         }, {
           "position" : "指示.品目",
           "reason" : "unsupported_syntax",
-          "rule" : "comparison@1:75:39",
+          "rule" : "comparison@1:85:39",
           "ruleId" : {
             "kind" : "comparison",
             "declaredIn" : "conformance.shipping",
@@ -2518,7 +2532,7 @@
           "construct" : "guard",
           "at" : {
             "sourceId" : "1",
-            "line" : 78,
+            "line" : 88,
             "column" : 5,
             "writtenAt" : {
               "kind" : "here"
@@ -2581,7 +2595,7 @@
           "construct" : "if",
           "at" : {
             "sourceId" : "1",
-            "line" : 79,
+            "line" : 89,
             "column" : 11,
             "writtenAt" : {
               "kind" : "outOfSight",
@@ -2603,7 +2617,7 @@
           "construct" : "if",
           "at" : {
             "sourceId" : "1",
-            "line" : 79,
+            "line" : 89,
             "column" : 11,
             "writtenAt" : {
               "kind" : "outOfSight",
@@ -2625,7 +2639,7 @@
           "construct" : "guard",
           "at" : {
             "sourceId" : "1",
-            "line" : 79,
+            "line" : 89,
             "column" : 5,
             "writtenAt" : {
               "kind" : "here"
@@ -2646,7 +2660,7 @@
           "construct" : "match",
           "at" : {
             "sourceId" : "1",
-            "line" : 80,
+            "line" : 90,
             "column" : 5,
             "writtenAt" : {
               "kind" : "here"
@@ -2667,7 +2681,7 @@
           "construct" : "match",
           "at" : {
             "sourceId" : "1",
-            "line" : 80,
+            "line" : 90,
             "column" : 5,
             "writtenAt" : {
               "kind" : "here"
@@ -2688,7 +2702,7 @@
           "construct" : "if",
           "at" : {
             "sourceId" : "1",
-            "line" : 75,
+            "line" : 85,
             "column" : 28,
             "writtenAt" : {
               "kind" : "here"
@@ -2709,7 +2723,7 @@
           "construct" : "if",
           "at" : {
             "sourceId" : "1",
-            "line" : 75,
+            "line" : 85,
             "column" : 28,
             "writtenAt" : {
               "kind" : "here"
@@ -2730,7 +2744,7 @@
           "construct" : "guard",
           "at" : {
             "sourceId" : "1",
-            "line" : 79,
+            "line" : 89,
             "column" : 5,
             "writtenAt" : {
               "kind" : "here"
@@ -2751,7 +2765,7 @@
           "construct" : "guard",
           "at" : {
             "sourceId" : "1",
-            "line" : 78,
+            "line" : 88,
             "column" : 5,
             "writtenAt" : {
               "kind" : "here"
@@ -2869,7 +2883,7 @@
       "findings" : [ {
         "kind" : "domain_point_uncovered",
         "disposition" : "refused",
-        "subject" : "OUT point of comparison@1:78:17",
+        "subject" : "OUT point of comparison@1:88:17",
         "obligationId" : {
           "line" : {
             "which" : {
@@ -3050,7 +3064,7 @@
       }, {
         "kind" : "rule_unaccounted",
         "disposition" : "reported",
-        "subject" : "comparison@1:75:39 — what this rule states about 指示.品目",
+        "subject" : "comparison@1:85:39 — what this rule states about 指示.品目",
         "ruleId" : {
           "kind" : "comparison",
           "declaredIn" : "conformance.shipping",
@@ -3059,6 +3073,1134 @@
           "ordinal" : 1,
           "lowered" : 0
         }
+      } ]
+    }, {
+      "name" : "送料を出す",
+      "implementation" : "implemented",
+      "rows" : 3,
+      "pending" : 0,
+      "status" : "partial",
+      "weakening" : [ "decision_of_row_unreadable" ],
+      "signature" : {
+        "status" : "unavailable",
+        "reason" : "not_a_sum",
+        "output" : {
+          "declared" : [ ],
+          "status" : "unavailable",
+          "reason" : "not_a_sum"
+        },
+        "inputs" : [ {
+          "declared" : [ ],
+          "excluded" : [ ],
+          "obligations" : [ ],
+          "status" : "unavailable",
+          "reason" : "not_a_sum"
+        } ]
+      },
+      "partition" : {
+        "axesMeasure" : {
+          "status" : "complete"
+        },
+        "boundariesMeasure" : {
+          "status" : "complete"
+        },
+        "axes" : [ {
+          "axis" : "送料を出す/指示.区分",
+          "path" : "指示.区分",
+          "read" : {
+            "extent" : "complete"
+          },
+          "classes" : [ "通常", "速達", "冷蔵" ],
+          "excluded" : [ ],
+          "unprovenClaims" : [ ],
+          "status" : "complete",
+          "covered" : [ "冷蔵", "通常", "速達" ],
+          "unclassifiedRows" : 0
+        }, {
+          "axis" : "送料を出す/Time.hour(指示.集荷時刻)",
+          "path" : "Time.hour(指示.集荷時刻)",
+          "read" : {
+            "extent" : "complete"
+          },
+          "classes" : [ "Time.hour(指示.集荷時刻)/0 <= x < 12", "Time.hour(指示.集荷時刻)/12 <= x <= 23" ],
+          "excluded" : [ ],
+          "unprovenClaims" : [ ],
+          "status" : "complete",
+          "covered" : [ "Time.hour(指示.集荷時刻)/0 <= x < 12", "Time.hour(指示.集荷時刻)/12 <= x <= 23" ],
+          "unclassifiedRows" : 0
+        } ],
+        "claimsOffAxis" : [ ],
+        "boundaries" : [ {
+          "axis" : "送料を出す/String.length(指示.番号)",
+          "origin" : "invariant 送り状番号 #1",
+          "kind" : "at_value",
+          "value" : "1",
+          "items" : [ {
+            "point" : "on",
+            "location" : {
+              "kind" : "at_the_line"
+            },
+            "relation" : "=",
+            "against" : "1",
+            "knownWritable" : true,
+            "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
+            "status" : "complete",
+            "hit" : false
+          }, {
+            "point" : "off",
+            "location" : {
+              "kind" : "beside_the_line",
+              "side" : "below"
+            },
+            "notOwed" : "the_rules_refuse_it"
+          }, {
+            "point" : "in",
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "above"
+            },
+            "relation" : "in",
+            "against" : "1 < String.length(指示.番号)",
+            "knownWritable" : true,
+            "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+            "status" : "complete",
+            "hit" : true
+          }, {
+            "point" : "out",
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "below"
+            },
+            "notOwed" : "the_rules_refuse_it"
+          } ]
+        }, {
+          "axis" : "送料を出す/String.length(指示.品目[*])",
+          "origin" : "invariant Sku #1",
+          "kind" : "at_value",
+          "value" : "1",
+          "items" : [ {
+            "point" : "on",
+            "location" : {
+              "kind" : "at_the_line"
+            },
+            "relation" : "=",
+            "against" : "1",
+            "knownWritable" : true,
+            "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
+            "status" : "complete",
+            "hit" : false
+          }, {
+            "point" : "off",
+            "location" : {
+              "kind" : "beside_the_line",
+              "side" : "below"
+            },
+            "notOwed" : "the_rules_refuse_it"
+          }, {
+            "point" : "in",
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "above"
+            },
+            "relation" : "in",
+            "against" : "1 < String.length(指示.品目[*])",
+            "knownWritable" : true,
+            "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+            "status" : "complete",
+            "hit" : true
+          }, {
+            "point" : "out",
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "below"
+            },
+            "notOwed" : "the_rules_refuse_it"
+          } ]
+        }, {
+          "axis" : "送料を出す/指示.重量",
+          "origin" : "invariant Weight #1",
+          "kind" : "at_value",
+          "value" : "1",
+          "items" : [ {
+            "point" : "on",
+            "location" : {
+              "kind" : "at_the_line"
+            },
+            "relation" : "=",
+            "against" : "1",
+            "knownWritable" : true,
+            "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
+            "status" : "complete",
+            "hit" : false
+          }, {
+            "point" : "off",
+            "location" : {
+              "kind" : "beside_the_line",
+              "side" : "below"
+            },
+            "notOwed" : "the_rules_refuse_it"
+          }, {
+            "point" : "in",
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "above"
+            },
+            "relation" : "in",
+            "against" : "1 < 指示.重量",
+            "knownWritable" : true,
+            "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+            "status" : "complete",
+            "hit" : true
+          }, {
+            "point" : "out",
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "below"
+            },
+            "notOwed" : "the_rules_refuse_it"
+          } ]
+        }, {
+          "axis" : "送料を出す/Time.hour(指示.集荷時刻)",
+          "origin" : "comparison@1:57:50",
+          "kind" : "at_value",
+          "value" : "12",
+          "items" : [ {
+            "point" : "on",
+            "location" : {
+              "kind" : "beside_the_line",
+              "side" : "below"
+            },
+            "relation" : "=",
+            "against" : "11",
+            "knownWritable" : true,
+            "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
+            "status" : "complete",
+            "hit" : false
+          }, {
+            "point" : "off",
+            "location" : {
+              "kind" : "at_the_line"
+            },
+            "relation" : "=",
+            "against" : "12",
+            "knownWritable" : true,
+            "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
+            "status" : "complete",
+            "hit" : false
+          }, {
+            "point" : "in",
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "below"
+            },
+            "relation" : "in",
+            "against" : "0 <= Time.hour(指示.集荷時刻) < 11",
+            "knownWritable" : true,
+            "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+            "status" : "complete",
+            "hit" : true
+          }, {
+            "point" : "out",
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "above"
+            },
+            "relation" : "in",
+            "against" : "12 < Time.hour(指示.集荷時刻) <= 23",
+            "knownWritable" : true,
+            "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+            "status" : "complete",
+            "hit" : true
+          } ]
+        } ],
+        "obligations" : [ {
+          "obligationId" : {
+            "line" : {
+              "which" : {
+                "kind" : "comparison",
+                "rule" : {
+                  "kind" : "comparison",
+                  "declaredIn" : "conformance.shipping",
+                  "definition" : "午前の集荷か",
+                  "behavior" : "送料を出す",
+                  "ordinal" : 1,
+                  "lowered" : 0
+                }
+              },
+              "facts" : {
+                "valueBelongsBelow" : false,
+                "holdsAtTheValue" : false,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
+            },
+            "level" : {
+              "kind" : "on_a_carrier",
+              "carrier" : {
+                "kind" : "whole"
+              },
+              "at" : "12"
+            },
+            "location" : {
+              "kind" : "beside_the_line",
+              "side" : "below"
+            }
+          },
+          "point" : "on",
+          "rule" : "comparison@1:57:50",
+          "ruleId" : {
+            "kind" : "comparison",
+            "declaredIn" : "conformance.shipping",
+            "definition" : "午前の集荷か",
+            "behavior" : "送料を出す",
+            "ordinal" : 1,
+            "lowered" : 0
+          },
+          "relation" : "=",
+          "knownWritable" : true,
+          "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
+          "status" : "complete",
+          "hit" : false,
+          "disposition" : "unmet",
+          "readings" : [ {
+            "behavior" : "送料を出す",
+            "axis" : "送料を出す/Time.hour(指示.集荷時刻)",
+            "relation" : "=",
+            "against" : "11",
+            "status" : "complete",
+            "hit" : false
+          } ]
+        }, {
+          "obligationId" : {
+            "line" : {
+              "which" : {
+                "kind" : "comparison",
+                "rule" : {
+                  "kind" : "comparison",
+                  "declaredIn" : "conformance.shipping",
+                  "definition" : "午前の集荷か",
+                  "behavior" : "送料を出す",
+                  "ordinal" : 1,
+                  "lowered" : 0
+                }
+              },
+              "facts" : {
+                "valueBelongsBelow" : false,
+                "holdsAtTheValue" : false,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
+            },
+            "level" : {
+              "kind" : "on_a_carrier",
+              "carrier" : {
+                "kind" : "whole"
+              },
+              "at" : "12"
+            },
+            "location" : {
+              "kind" : "at_the_line"
+            }
+          },
+          "point" : "off",
+          "rule" : "comparison@1:57:50",
+          "ruleId" : {
+            "kind" : "comparison",
+            "declaredIn" : "conformance.shipping",
+            "definition" : "午前の集荷か",
+            "behavior" : "送料を出す",
+            "ordinal" : 1,
+            "lowered" : 0
+          },
+          "relation" : "=",
+          "knownWritable" : true,
+          "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
+          "status" : "complete",
+          "hit" : false,
+          "disposition" : "unmet",
+          "readings" : [ {
+            "behavior" : "送料を出す",
+            "axis" : "送料を出す/Time.hour(指示.集荷時刻)",
+            "relation" : "=",
+            "against" : "12",
+            "status" : "complete",
+            "hit" : false
+          } ]
+        }, {
+          "obligationId" : {
+            "line" : {
+              "which" : {
+                "kind" : "comparison",
+                "rule" : {
+                  "kind" : "comparison",
+                  "declaredIn" : "conformance.shipping",
+                  "definition" : "午前の集荷か",
+                  "behavior" : "送料を出す",
+                  "ordinal" : 1,
+                  "lowered" : 0
+                }
+              },
+              "facts" : {
+                "valueBelongsBelow" : false,
+                "holdsAtTheValue" : false,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
+            },
+            "level" : {
+              "kind" : "on_a_carrier",
+              "carrier" : {
+                "kind" : "whole"
+              },
+              "at" : "12"
+            },
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "below"
+            },
+            "stops" : {
+              "kind" : "at_the_domain",
+              "at" : {
+                "kind" : "on_a_carrier",
+                "carrier" : {
+                  "kind" : "whole"
+                },
+                "at" : "0"
+              },
+              "per" : "1",
+              "inclusive" : true
+            }
+          },
+          "point" : "in",
+          "rule" : "comparison@1:57:50",
+          "ruleId" : {
+            "kind" : "comparison",
+            "declaredIn" : "conformance.shipping",
+            "definition" : "午前の集荷か",
+            "behavior" : "送料を出す",
+            "ordinal" : 1,
+            "lowered" : 0
+          },
+          "relation" : "in",
+          "knownWritable" : true,
+          "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+          "status" : "complete",
+          "hit" : true,
+          "disposition" : "met",
+          "readings" : [ {
+            "behavior" : "送料を出す",
+            "axis" : "送料を出す/Time.hour(指示.集荷時刻)",
+            "relation" : "in",
+            "against" : "0 <= Time.hour(指示.集荷時刻) < 11",
+            "status" : "complete",
+            "hit" : true
+          } ]
+        }, {
+          "obligationId" : {
+            "line" : {
+              "which" : {
+                "kind" : "comparison",
+                "rule" : {
+                  "kind" : "comparison",
+                  "declaredIn" : "conformance.shipping",
+                  "definition" : "午前の集荷か",
+                  "behavior" : "送料を出す",
+                  "ordinal" : 1,
+                  "lowered" : 0
+                }
+              },
+              "facts" : {
+                "valueBelongsBelow" : false,
+                "holdsAtTheValue" : false,
+                "singles" : false
+              },
+              "narrowedWithin" : [ ]
+            },
+            "level" : {
+              "kind" : "on_a_carrier",
+              "carrier" : {
+                "kind" : "whole"
+              },
+              "at" : "12"
+            },
+            "location" : {
+              "kind" : "in_the_region",
+              "side" : "above"
+            },
+            "stops" : {
+              "kind" : "at_the_domain",
+              "at" : {
+                "kind" : "on_a_carrier",
+                "carrier" : {
+                  "kind" : "whole"
+                },
+                "at" : "23"
+              },
+              "per" : "1",
+              "inclusive" : true
+            }
+          },
+          "point" : "out",
+          "rule" : "comparison@1:57:50",
+          "ruleId" : {
+            "kind" : "comparison",
+            "declaredIn" : "conformance.shipping",
+            "definition" : "午前の集荷か",
+            "behavior" : "送料を出す",
+            "ordinal" : 1,
+            "lowered" : 0
+          },
+          "relation" : "in",
+          "knownWritable" : true,
+          "writableBecause" : [ "the_rules_prove_it", "a_row_is_at_it" ],
+          "status" : "complete",
+          "hit" : true,
+          "disposition" : "met",
+          "readings" : [ {
+            "behavior" : "送料を出す",
+            "axis" : "送料を出す/Time.hour(指示.集荷時刻)",
+            "relation" : "in",
+            "against" : "12 < Time.hour(指示.集荷時刻) <= 23",
+            "status" : "complete",
+            "hit" : true
+          } ]
+        } ],
+        "notDerivable" : [ "指示.品目", "指示.受付日", "指示.締切", "指示.記録時刻" ],
+        "notRead" : [ ]
+      },
+      "branch" : {
+        "status" : "complete",
+        "obligations" : [ {
+          "obligationId" : {
+            "module" : "conformance.shipping",
+            "definition" : "係数",
+            "construct" : 0,
+            "lowered" : 0,
+            "part" : 0,
+            "decidedBy" : "the_declaration"
+          },
+          "label" : "case 通常",
+          "kind" : "case",
+          "construct" : "match",
+          "at" : {
+            "sourceId" : "1",
+            "line" : 43,
+            "column" : 23,
+            "writtenAt" : {
+              "kind" : "here"
+            }
+          },
+          "disposition" : "met"
+        }, {
+          "obligationId" : {
+            "module" : "conformance.shipping",
+            "definition" : "係数",
+            "construct" : 0,
+            "lowered" : 0,
+            "part" : 1,
+            "decidedBy" : "the_declaration"
+          },
+          "label" : "case 速達",
+          "kind" : "case",
+          "construct" : "match",
+          "at" : {
+            "sourceId" : "1",
+            "line" : 43,
+            "column" : 23,
+            "writtenAt" : {
+              "kind" : "here"
+            }
+          },
+          "disposition" : "met"
+        }, {
+          "obligationId" : {
+            "module" : "conformance.shipping",
+            "definition" : "係数",
+            "construct" : 0,
+            "lowered" : 0,
+            "part" : 2,
+            "decidedBy" : "the_declaration"
+          },
+          "label" : "case 冷蔵",
+          "kind" : "case",
+          "construct" : "match",
+          "at" : {
+            "sourceId" : "1",
+            "line" : 43,
+            "column" : 23,
+            "writtenAt" : {
+              "kind" : "here"
+            }
+          },
+          "disposition" : "met"
+        }, {
+          "obligationId" : {
+            "module" : "souther.bool",
+            "definition" : "not",
+            "construct" : 0,
+            "lowered" : 0,
+            "part" : 0,
+            "decidedBy" : "the_declaration"
+          },
+          "label" : "then",
+          "kind" : "then",
+          "construct" : "if",
+          "at" : {
+            "sourceId" : "1",
+            "line" : 61,
+            "column" : 31,
+            "writtenAt" : {
+              "kind" : "outOfSight",
+              "declaration" : "Bool.not"
+            }
+          },
+          "disposition" : "met"
+        }, {
+          "obligationId" : {
+            "module" : "souther.bool",
+            "definition" : "not",
+            "construct" : 0,
+            "lowered" : 0,
+            "part" : 1,
+            "decidedBy" : "the_declaration"
+          },
+          "label" : "else",
+          "kind" : "else",
+          "construct" : "if",
+          "at" : {
+            "sourceId" : "1",
+            "line" : 61,
+            "column" : 31,
+            "writtenAt" : {
+              "kind" : "outOfSight",
+              "declaration" : "Bool.not"
+            }
+          },
+          "disposition" : "met"
+        }, {
+          "obligationId" : {
+            "module" : "conformance.shipping",
+            "definition" : "夜間割増",
+            "construct" : 0,
+            "lowered" : 0,
+            "part" : 0,
+            "decidedBy" : "the_declaration"
+          },
+          "label" : "then",
+          "kind" : "then",
+          "construct" : "if",
+          "at" : {
+            "sourceId" : "1",
+            "line" : 61,
+            "column" : 28,
+            "writtenAt" : {
+              "kind" : "here"
+            }
+          },
+          "disposition" : "met"
+        }, {
+          "obligationId" : {
+            "module" : "conformance.shipping",
+            "definition" : "夜間割増",
+            "construct" : 0,
+            "lowered" : 0,
+            "part" : 1,
+            "decidedBy" : "the_declaration"
+          },
+          "label" : "else",
+          "kind" : "else",
+          "construct" : "if",
+          "at" : {
+            "sourceId" : "1",
+            "line" : 61,
+            "column" : 28,
+            "writtenAt" : {
+              "kind" : "here"
+            }
+          },
+          "disposition" : "met"
+        } ],
+        "denominatorSettled" : true
+      },
+      "decision" : {
+        "coverage" : {
+          "status" : "unavailable",
+          "reason" : "no_rule_is_recognisable",
+          "weakening" : [ "decision_of_row_unreadable" ]
+        },
+        "obligations" : [ {
+          "obligationId" : {
+            "behavior" : "送料を出す",
+            "conditions" : [ {
+              "kind" : "not_read",
+              "condition" : "condition 3 of `送料を出す`",
+              "outcome" : "held"
+            }, {
+              "kind" : "case",
+              "condition" : "指示.区分",
+              "outcome" : "通常"
+            } ]
+          }
+        }, {
+          "obligationId" : {
+            "behavior" : "送料を出す",
+            "conditions" : [ {
+              "kind" : "not_read",
+              "condition" : "condition 3 of `送料を出す`",
+              "outcome" : "denied"
+            }, {
+              "kind" : "case",
+              "condition" : "指示.区分",
+              "outcome" : "通常"
+            } ]
+          }
+        }, {
+          "obligationId" : {
+            "behavior" : "送料を出す",
+            "conditions" : [ {
+              "kind" : "not_read",
+              "condition" : "condition 3 of `送料を出す`",
+              "outcome" : "held"
+            }, {
+              "kind" : "case",
+              "condition" : "指示.区分",
+              "outcome" : "速達"
+            } ]
+          }
+        }, {
+          "obligationId" : {
+            "behavior" : "送料を出す",
+            "conditions" : [ {
+              "kind" : "not_read",
+              "condition" : "condition 3 of `送料を出す`",
+              "outcome" : "denied"
+            }, {
+              "kind" : "case",
+              "condition" : "指示.区分",
+              "outcome" : "速達"
+            } ]
+          }
+        }, {
+          "obligationId" : {
+            "behavior" : "送料を出す",
+            "conditions" : [ {
+              "kind" : "not_read",
+              "condition" : "condition 3 of `送料を出す`",
+              "outcome" : "held"
+            }, {
+              "kind" : "case",
+              "condition" : "指示.区分",
+              "outcome" : "冷蔵"
+            } ]
+          }
+        }, {
+          "obligationId" : {
+            "behavior" : "送料を出す",
+            "conditions" : [ {
+              "kind" : "not_read",
+              "condition" : "condition 3 of `送料を出す`",
+              "outcome" : "denied"
+            }, {
+              "kind" : "case",
+              "condition" : "指示.区分",
+              "outcome" : "冷蔵"
+            } ]
+          }
+        } ]
+      },
+      "interaction" : {
+        "coverage" : {
+          "status" : "complete"
+        },
+        "groupsNotMeasured" : 0,
+        "obligations" : [ {
+          "obligationId" : {
+            "behavior" : "送料を出す",
+            "decisions" : [ {
+              "kind" : "case",
+              "at" : "指示.区分",
+              "outcome" : "通常"
+            }, {
+              "kind" : "comparison",
+              "construct" : {
+                "module" : "conformance.shipping",
+                "definition" : "午前の集荷か",
+                "construct" : 1,
+                "lowered" : 0,
+                "through" : [ {
+                  "expanded" : "conformance.shipping.夜間割増",
+                  "module" : "conformance.shipping",
+                  "definition" : "送料を出す",
+                  "call" : 1,
+                  "lowered" : 0
+                }, {
+                  "expanded" : "conformance.shipping.午前の集荷か",
+                  "module" : "conformance.shipping",
+                  "definition" : "夜間割増",
+                  "call" : 1,
+                  "lowered" : 0
+                } ]
+              },
+              "outcome" : "denied"
+            } ]
+          },
+          "made" : false
+        }, {
+          "obligationId" : {
+            "behavior" : "送料を出す",
+            "decisions" : [ {
+              "kind" : "case",
+              "at" : "指示.区分",
+              "outcome" : "速達"
+            }, {
+              "kind" : "comparison",
+              "construct" : {
+                "module" : "conformance.shipping",
+                "definition" : "午前の集荷か",
+                "construct" : 1,
+                "lowered" : 0,
+                "through" : [ {
+                  "expanded" : "conformance.shipping.夜間割増",
+                  "module" : "conformance.shipping",
+                  "definition" : "送料を出す",
+                  "call" : 1,
+                  "lowered" : 0
+                }, {
+                  "expanded" : "conformance.shipping.午前の集荷か",
+                  "module" : "conformance.shipping",
+                  "definition" : "夜間割増",
+                  "call" : 1,
+                  "lowered" : 0
+                } ]
+              },
+              "outcome" : "denied"
+            } ]
+          },
+          "made" : true
+        }, {
+          "obligationId" : {
+            "behavior" : "送料を出す",
+            "decisions" : [ {
+              "kind" : "case",
+              "at" : "指示.区分",
+              "outcome" : "冷蔵"
+            }, {
+              "kind" : "comparison",
+              "construct" : {
+                "module" : "conformance.shipping",
+                "definition" : "午前の集荷か",
+                "construct" : 1,
+                "lowered" : 0,
+                "through" : [ {
+                  "expanded" : "conformance.shipping.夜間割増",
+                  "module" : "conformance.shipping",
+                  "definition" : "送料を出す",
+                  "call" : 1,
+                  "lowered" : 0
+                }, {
+                  "expanded" : "conformance.shipping.午前の集荷か",
+                  "module" : "conformance.shipping",
+                  "definition" : "夜間割増",
+                  "call" : 1,
+                  "lowered" : 0
+                } ]
+              },
+              "outcome" : "denied"
+            } ]
+          },
+          "made" : false
+        }, {
+          "obligationId" : {
+            "behavior" : "送料を出す",
+            "decisions" : [ {
+              "kind" : "case",
+              "at" : "指示.区分",
+              "outcome" : "通常"
+            }, {
+              "kind" : "comparison",
+              "construct" : {
+                "module" : "conformance.shipping",
+                "definition" : "午前の集荷か",
+                "construct" : 1,
+                "lowered" : 0,
+                "through" : [ {
+                  "expanded" : "conformance.shipping.夜間割増",
+                  "module" : "conformance.shipping",
+                  "definition" : "送料を出す",
+                  "call" : 1,
+                  "lowered" : 0
+                }, {
+                  "expanded" : "conformance.shipping.午前の集荷か",
+                  "module" : "conformance.shipping",
+                  "definition" : "夜間割増",
+                  "call" : 1,
+                  "lowered" : 0
+                } ]
+              },
+              "outcome" : "held"
+            } ]
+          },
+          "made" : true
+        }, {
+          "obligationId" : {
+            "behavior" : "送料を出す",
+            "decisions" : [ {
+              "kind" : "case",
+              "at" : "指示.区分",
+              "outcome" : "速達"
+            }, {
+              "kind" : "comparison",
+              "construct" : {
+                "module" : "conformance.shipping",
+                "definition" : "午前の集荷か",
+                "construct" : 1,
+                "lowered" : 0,
+                "through" : [ {
+                  "expanded" : "conformance.shipping.夜間割増",
+                  "module" : "conformance.shipping",
+                  "definition" : "送料を出す",
+                  "call" : 1,
+                  "lowered" : 0
+                }, {
+                  "expanded" : "conformance.shipping.午前の集荷か",
+                  "module" : "conformance.shipping",
+                  "definition" : "夜間割増",
+                  "call" : 1,
+                  "lowered" : 0
+                } ]
+              },
+              "outcome" : "held"
+            } ]
+          },
+          "made" : false
+        }, {
+          "obligationId" : {
+            "behavior" : "送料を出す",
+            "decisions" : [ {
+              "kind" : "case",
+              "at" : "指示.区分",
+              "outcome" : "冷蔵"
+            }, {
+              "kind" : "comparison",
+              "construct" : {
+                "module" : "conformance.shipping",
+                "definition" : "午前の集荷か",
+                "construct" : 1,
+                "lowered" : 0,
+                "through" : [ {
+                  "expanded" : "conformance.shipping.夜間割増",
+                  "module" : "conformance.shipping",
+                  "definition" : "送料を出す",
+                  "call" : 1,
+                  "lowered" : 0
+                }, {
+                  "expanded" : "conformance.shipping.午前の集荷か",
+                  "module" : "conformance.shipping",
+                  "definition" : "夜間割増",
+                  "call" : 1,
+                  "lowered" : 0
+                } ]
+              },
+              "outcome" : "held"
+            } ]
+          },
+          "made" : true
+        } ]
+      },
+      "findings" : [ {
+        "kind" : "boundary_unmet",
+        "disposition" : "refused",
+        "subject" : "ON point of comparison@1:57:50",
+        "obligationId" : {
+          "line" : {
+            "which" : {
+              "kind" : "comparison",
+              "rule" : {
+                "kind" : "comparison",
+                "declaredIn" : "conformance.shipping",
+                "definition" : "午前の集荷か",
+                "behavior" : "送料を出す",
+                "ordinal" : 1,
+                "lowered" : 0
+              }
+            },
+            "facts" : {
+              "valueBelongsBelow" : false,
+              "holdsAtTheValue" : false,
+              "singles" : false
+            },
+            "narrowedWithin" : [ ]
+          },
+          "level" : {
+            "kind" : "on_a_carrier",
+            "carrier" : {
+              "kind" : "whole"
+            },
+            "at" : "12"
+          },
+          "location" : {
+            "kind" : "beside_the_line",
+            "side" : "below"
+          }
+        },
+        "code" : "E1916"
+      }, {
+        "kind" : "boundary_unmet",
+        "disposition" : "refused",
+        "subject" : "OFF point of comparison@1:57:50",
+        "obligationId" : {
+          "line" : {
+            "which" : {
+              "kind" : "comparison",
+              "rule" : {
+                "kind" : "comparison",
+                "declaredIn" : "conformance.shipping",
+                "definition" : "午前の集荷か",
+                "behavior" : "送料を出す",
+                "ordinal" : 1,
+                "lowered" : 0
+              }
+            },
+            "facts" : {
+              "valueBelongsBelow" : false,
+              "holdsAtTheValue" : false,
+              "singles" : false
+            },
+            "narrowedWithin" : [ ]
+          },
+          "level" : {
+            "kind" : "on_a_carrier",
+            "carrier" : {
+              "kind" : "whole"
+            },
+            "at" : "12"
+          },
+          "location" : {
+            "kind" : "at_the_line"
+          }
+        },
+        "code" : "E1916"
+      }, {
+        "kind" : "partition_not_derivable",
+        "disposition" : "reported",
+        "subject" : "指示.品目"
+      }, {
+        "kind" : "partition_not_derivable",
+        "disposition" : "reported",
+        "subject" : "指示.受付日"
+      }, {
+        "kind" : "partition_not_derivable",
+        "disposition" : "reported",
+        "subject" : "指示.締切"
+      }, {
+        "kind" : "partition_not_derivable",
+        "disposition" : "reported",
+        "subject" : "指示.記録時刻"
+      }, {
+        "kind" : "interaction_uncovered",
+        "disposition" : "refused",
+        "subject" : "送料を出す",
+        "obligationId" : {
+          "behavior" : "送料を出す",
+          "decisions" : [ {
+            "kind" : "case",
+            "at" : "指示.区分",
+            "outcome" : "通常"
+          }, {
+            "kind" : "comparison",
+            "construct" : {
+              "module" : "conformance.shipping",
+              "definition" : "午前の集荷か",
+              "construct" : 1,
+              "lowered" : 0,
+              "through" : [ {
+                "expanded" : "conformance.shipping.夜間割増",
+                "module" : "conformance.shipping",
+                "definition" : "送料を出す",
+                "call" : 1,
+                "lowered" : 0
+              }, {
+                "expanded" : "conformance.shipping.午前の集荷か",
+                "module" : "conformance.shipping",
+                "definition" : "夜間割増",
+                "call" : 1,
+                "lowered" : 0
+              } ]
+            },
+            "outcome" : "denied"
+          } ]
+        },
+        "code" : "E1936"
+      }, {
+        "kind" : "interaction_uncovered",
+        "disposition" : "refused",
+        "subject" : "送料を出す",
+        "obligationId" : {
+          "behavior" : "送料を出す",
+          "decisions" : [ {
+            "kind" : "case",
+            "at" : "指示.区分",
+            "outcome" : "冷蔵"
+          }, {
+            "kind" : "comparison",
+            "construct" : {
+              "module" : "conformance.shipping",
+              "definition" : "午前の集荷か",
+              "construct" : 1,
+              "lowered" : 0,
+              "through" : [ {
+                "expanded" : "conformance.shipping.夜間割増",
+                "module" : "conformance.shipping",
+                "definition" : "送料を出す",
+                "call" : 1,
+                "lowered" : 0
+              }, {
+                "expanded" : "conformance.shipping.午前の集荷か",
+                "module" : "conformance.shipping",
+                "definition" : "夜間割増",
+                "call" : 1,
+                "lowered" : 0
+              } ]
+            },
+            "outcome" : "denied"
+          } ]
+        },
+        "code" : "E1936"
+      }, {
+        "kind" : "interaction_uncovered",
+        "disposition" : "refused",
+        "subject" : "送料を出す",
+        "obligationId" : {
+          "behavior" : "送料を出す",
+          "decisions" : [ {
+            "kind" : "case",
+            "at" : "指示.区分",
+            "outcome" : "速達"
+          }, {
+            "kind" : "comparison",
+            "construct" : {
+              "module" : "conformance.shipping",
+              "definition" : "午前の集荷か",
+              "construct" : 1,
+              "lowered" : 0,
+              "through" : [ {
+                "expanded" : "conformance.shipping.夜間割増",
+                "module" : "conformance.shipping",
+                "definition" : "送料を出す",
+                "call" : 1,
+                "lowered" : 0
+              }, {
+                "expanded" : "conformance.shipping.午前の集荷か",
+                "module" : "conformance.shipping",
+                "definition" : "夜間割増",
+                "call" : 1,
+                "lowered" : 0
+              } ]
+            },
+            "outcome" : "held"
+          } ]
+        },
+        "code" : "E1936"
       } ]
     } ]
   } ],
