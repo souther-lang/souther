@@ -63,6 +63,7 @@ import souther.compiler.partition.GenerationOutcome;
 import souther.compiler.partition.Generator;
 import souther.compiler.partition.InputClassifications;
 import souther.compiler.partition.ObservedInputs;
+import souther.compiler.reading.CoverageRead;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 
@@ -912,6 +913,68 @@ public final class Adequacy {
                                 ElementBindings.of(analysis.core(), analysis.elements(),
                                         reading.value().newtypes())),
                         spec.dependsOnBehaviors()));
+            }
+            return Answer.of(Ordered.map(out));
+        }
+    }
+
+    /**
+     * The meetings each of one module's bodies holds, and how each of its arms is reached.
+     *
+     * <p>What has to be varied together, read off the body. A group is where two values each
+     * settled by a decision are consumed into one, so what it asks for is a row that takes the way
+     * to the meeting and settles each factor there; the product of every two positions, which is
+     * what a measure with the body out of view has to assume, is neither of those.
+     *
+     * <p>Its own key because two questions are put to it. What the rows cover of the groups is one
+     * ({@link Coverage}), and where a row for an arm is looked for is the other ({@link Filling}) —
+     * and a walk made again at each of them would hold one body's meetings beside another's answer
+     * about them, which is the parallel bookkeeping the rest of this account is written to have
+     * none of.
+     *
+     * <p>A behavior whose body was not lowered, and one whose input this compilation could not
+     * read, have no entry. There is no body to meet in, which is not a walk that found no meeting.
+     */
+    public record Meets(String name) implements Key<Map<String, CoverageRead.Read>> {
+
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Map<String, CoverageRead.Read>> compute(Db db) {
+            Answer<CheckSurface> prepared = db.ask(new Shapes.CheckSurface(name));
+            Answer<RuleReadingSource> reading = Shapes.ruleReading(db, name);
+            Answer<Map<String, Sig>> sigs = db.ask(new Bodies.Signatures(name));
+            Answer<Bodies.Elaborated> checked = db.ask(new Bodies.Checked(name));
+            if (!prepared.present() || !reading.present() || !sigs.present()
+                    || !checked.present()) {
+                return Answer.absent();
+            }
+            Map<String, InputDomain> readInputs = db.ask(new Inputs(name)).value();
+            CoverageSites.Plan plan = checked.value().plan();
+            Map<String, CoverageRead.Read> out = new LinkedHashMap<>();
+            for (Hir.BehaviorDef behavior : prepared.value().behaviors()) {
+                // Read off the one classification every other reader of this walk reads. A
+                // composition has no body to meet in, and a behavior whose input could not be read
+                // has no positions for a factor to be about.
+                if (!(BoundaryForMeasurement.of(sigs.value(), readInputs, behavior)
+                        instanceof BoundaryForMeasurement.Derived(
+                                Sig _, InputForMeasurement.Local(Hir.SpecBehavior spec,
+                                        InputDomain read)))) {
+                    continue;
+                }
+                // The lowered body, which is the tree the plan numbers its arms in. The analysis
+                // tree beside it holds the operations the language's own combinators stand for,
+                // and a walk of that one would find meetings at nodes no arm of the plan is in.
+                souther.compiler.core.Core body =
+                        checked.value().behaviorBodies().get(spec.name());
+                if (body == null) {
+                    continue;
+                }
+                out.put(spec.name(),
+                        CoverageRead.of(spec.name(), body, plan, read, reading.value()));
             }
             return Answer.of(Ordered.map(out));
         }
@@ -3575,14 +3638,9 @@ public final class Adequacy {
             }
             souther.compiler.query.Bodies.Elaborated checked =
                     db.ask(new Bodies.Checked(name)).value();
-            Map<String, souther.compiler.core.Core> bodies =
-                    checked == null ? Map.of() : checked.behaviorBodies();
-            souther.compiler.coverage.CoverageSites.Plan plan =
-                    checked == null
-                            ? souther.compiler.coverage.CoverageSites.Plan.NONE : checked.plan();
-            // And what its numbers mean, which the empty plan above has none of: it stands for
-            // every module whose bodies were not read and so is nobody's numbering. Taken off the
-            // value in hand instead, a module without one says it has none.
+            // What the plan's numbers mean, which a module whose bodies were not read has none of.
+            // Taken off the value in hand rather than stood in for, so that such a module says it
+            // has none.
             Optional<SiteNumbering> numbering =
                     checked == null ? Optional.empty()
                             : Optional.of(SiteNumbering.of(checked.numberingIdentity()));
@@ -3614,7 +3672,7 @@ public final class Adequacy {
             if (!(BoundaryForMeasurement.of(sigs.value(), readInputs, spec)
                     instanceof BoundaryForMeasurement.Derived(
                             Sig sig, InputForMeasurement.Local(Hir.SpecBehavior _,
-                                    InputDomain read)))) {
+                                    InputDomain _)))) {
                 return Answer.absent();
             }
             // Asked whatever the level is. Somebody asking for the rows is what a generation is,
@@ -3643,9 +3701,17 @@ public final class Adequacy {
             souther.compiler.partition.GenerationPlan asked =
                     planFor(subject, owed, partitions.get(behavior),
                             checked == null ? CoverageSites.Plan.NONE : checked.plan());
+            // The meetings of this body, read once for the module. A behavior with no entry is one
+            // whose body was not lowered, which is nothing to search in rather than a search that
+            // found nothing — and is the same condition the guards above answer for.
+            Map<String, CoverageRead.Read> met = db.ask(new Meets(name)).value();
+            CoverageRead.Read meetings = met == null ? null : met.get(behavior);
+            if (meetings == null) {
+                return Answer.absent();
+            }
             souther.compiler.partition.FillResult composed;
             try {
-                composed = rowsFor(spec, sig, Shapes.ruleReading(db, name).value(), asked,
+                composed = rowsFor(spec, sig, meetings, asked,
                         baselines(name, spec, sig, definitions.value(), reachable.value(),
                                 prepared.value(), symbols, Shapes.publishedDeclarations(db),
                                 Shapes.declarationKinds(db),
@@ -3656,10 +3722,9 @@ public final class Adequacy {
                                 // nothing about is a value this cannot reach rather than a fault.
                                 new souther.compiler.check.ResolvedFieldTypes(
                                         symbols, Shapes.newtypeInners(db))),
-                        bodies.get(behavior), plan, numbering,
+                        numbering,
                         RowReadings.readingFor(byTarget, behavior),
                         constructing(db, name),
-                        read,
                         runningRowsOf(trialling(db, name), behavior, sig, numbering,
                                 RequiredDependencies.of(db, name, behavior)),
                         // What every row this composes stands the dependencies in with, settled
@@ -4351,13 +4416,11 @@ public final class Adequacy {
         }
 
         private static souther.compiler.partition.FillResult rowsFor(
-                Hir.SpecBehavior spec, Sig sig, RuleReadingSource reading,
+                Hir.SpecBehavior spec, Sig sig, CoverageRead.Read met,
                 souther.compiler.partition.GenerationPlan asked,
                 List<Generator.Baseline> baselines,
-                souther.compiler.core.Core body,
-                souther.compiler.coverage.CoverageSites.Plan plan,
                 Optional<SiteNumbering> numbering, RowReading observed,
-                BoundaryValues building, InputDomain domain,
+                BoundaryValues building,
                 Generator.Trial trial, List<AnswersStoodIn> stood, boolean recording,
                 souther.compiler.partition.AdequacyPolicy.OfTheGeneration budget) {
             if (observed.someRowsUnseen()) {
@@ -4389,9 +4452,7 @@ public final class Adequacy {
             // only where the model has one case to answer about.
             List<souther.compiler.partition.FillResult> searched = new ArrayList<>();
             for (AnswersStoodIn each : stood) {
-                searched.add(Generator.fill(asked, existing, check,
-                        souther.compiler.reading.CoverageRead
-                                .of(spec.name(), body, plan, domain, reading),
+                searched.add(Generator.fill(asked, existing, check, met,
                         trial, baselines, each, budget));
             }
             return souther.compiler.partition.FillResult.acrossRuns(searched);
