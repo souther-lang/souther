@@ -1,7 +1,7 @@
 package souther.compiler.inputs;
 
 import souther.compiler.check.Emptiness;
-import souther.compiler.numeric.Count;
+import souther.compiler.numeric.Place;
 
 /**
  * Why the rules of a behavior's input leave no value, in the words a caller here already has.
@@ -32,7 +32,7 @@ public sealed interface EmptyInput {
      * here rather than by reading the declarations again: what contradicts is the pair of
      * assignments, and the rules were never asked.
      */
-    record TwoValuesAtOnePosition(NumericTerm term, Count one, Count other) implements EmptyInput {}
+    record TwoValuesAtOnePosition(NumericTerm term, Place one, Place other) implements EmptyInput {}
 
     /**
      * One position was asked to be two cases.
@@ -61,7 +61,7 @@ public sealed interface EmptyInput {
      * <p>The place is the term's own and is not said again beside it. A term is a position, so a
      * proof carrying a path of its own here would be one fact in two spellings, free to disagree.
      */
-    record OutsideWhereThePositionRuns(NumericTerm term, Count fixed) implements EmptyInput {}
+    record OutsideWhereThePositionRuns(NumericTerm term, Place fixed) implements EmptyInput {}
 
     /**
      * The rules of every parameter and everything a caller took in, said together, leave no value.

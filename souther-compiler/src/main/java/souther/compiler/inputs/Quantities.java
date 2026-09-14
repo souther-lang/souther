@@ -1,8 +1,8 @@
 package souther.compiler.inputs;
 
-import souther.compiler.numeric.Count;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.Place;
 
 import java.util.Map;
 import java.util.Optional;
@@ -181,10 +181,10 @@ public sealed interface Quantities permits ReadQuantities {
      * way. Where a fixing contradicts what is already held, what comes back proves it
      * ({@link #emptiness}) rather than answering as though nothing had been said.
      */
-    Quantities given(Map<NumericTerm, Count> fixed);
+    Quantities given(Map<NumericTerm, Place> fixed);
 
     /** The same, of one position. */
-    default Quantities given(NumericTerm term, Count fixed) {
+    default Quantities given(NumericTerm term, Place fixed) {
         return given(Map.of(term, fixed));
     }
 

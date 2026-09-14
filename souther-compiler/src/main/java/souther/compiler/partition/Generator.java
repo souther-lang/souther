@@ -3064,9 +3064,7 @@ public final class Generator {
         List<ReachabilityGap.Uncomposed> unrepresented = new ArrayList<>();
         souther.compiler.inputs.SearchRegion here = reaching.region();
         for (Map.Entry<RealizationTarget, Place> each : fixing.entrySet()) {
-            if (each.getValue() instanceof Count count) {
-                here = here.given(each.getKey().term(), count);
-            }
+            here = here.given(each.getKey().term(), each.getValue());
         }
         for (OnTheWay.TakenIn cut : reaching.boundedOnTheWay()) {
             List<NumericTerm.FromOnePosition> owing = new ArrayList<>();
@@ -3129,9 +3127,7 @@ public final class Generator {
                 continue;
             }
             for (Map.Entry<NumericTerm.FromOnePosition, Place> each : standing.entrySet()) {
-                if (each.getValue() instanceof Count count) {
-                    here = here.given(each.getKey(), count);
-                }
+                here = here.given(each.getKey(), each.getValue());
                 out.put(new RealizationTarget.AtOnePosition(each.getKey()), each.getValue());
             }
         }

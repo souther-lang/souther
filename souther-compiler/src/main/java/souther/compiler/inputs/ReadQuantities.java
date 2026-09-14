@@ -11,6 +11,7 @@ import souther.compiler.numeric.CountDomain;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Rational;
 import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.RationalCut;
@@ -163,9 +164,9 @@ final class ReadQuantities implements Quantities {
 
     /** The values fixed at one term, kept as their least and greatest so that what was fixed does
      *  not depend on the order it arrived in. */
-    private record Fixed(Count least, Count most) {
+    private record Fixed(Place least, Place most) {
 
-        Fixed and(Count also) {
+        Fixed and(Place also) {
             return new Fixed(least.compareTo(also) <= 0 ? least : also,
                     most.compareTo(also) >= 0 ? most : also);
         }
@@ -897,7 +898,7 @@ final class ReadQuantities implements Quantities {
     }
 
     @Override
-    public Quantities given(Map<NumericTerm, Count> more) {
+    public Quantities given(Map<NumericTerm, Place> more) {
         return fixing(more);
     }
 
@@ -909,12 +910,12 @@ final class ReadQuantities implements Quantities {
      * which is a cast, and a cast is a check the compiler is not doing. The two faces stay apart
      * because they answer different questions; what they refine is one thing and is typed as one.
      */
-    ReadQuantities fixing(Map<NumericTerm, Count> more) {
+    ReadQuantities fixing(Map<NumericTerm, Place> more) {
         if (more.isEmpty()) {
             return this;
         }
         Map<NumericTerm, Fixed> both = new LinkedHashMap<>(fixed);
-        for (Map.Entry<NumericTerm, Count> each : more.entrySet()) {
+        for (Map.Entry<NumericTerm, Place> each : more.entrySet()) {
             NumericTerm term = held(each.getKey());
             both.merge(term, new Fixed(each.getValue(), each.getValue()),
                     (had, one) -> had.and(one.least()));
@@ -1164,10 +1165,21 @@ final class ReadQuantities implements Quantities {
         return term;
     }
 
-    /** What is fixed under one value, named the way that value's own rules name it. */
+    /**
+     * What is fixed under one value, named the way that value's own rules name it.
+     *
+     * <p>The ones that count to a number, because what this is handed to is the arithmetic the
+     * declarations are read with. A position fixed at a place its carrier counts nothing of is
+     * still fixed — {@link #whereOneTermRuns} leaves it the one value, which is what a reader
+     * choosing a value for it asks — and there is nothing to tell the rules that they could solve
+     * with. Handed over as a number it does not have, it would be a rule about some other place.
+     */
     private Map<NumberAt<RuleKey>, Count> under(TermPath root) {
         Map<NumberAt<RuleKey>, Count> out = new LinkedHashMap<>();
         fixed.forEach((term, fixedAt) -> {
+            if (!(fixedAt.least() instanceof Count counted)) {
+                return;
+            }
             UnderARoot at = rootOf(term.subjectPath());
             // Which number of the place was settled, and not only which place. A count taken of one
             // is a coordinate of its own, and a fixing that named only the value left a rule over
@@ -1176,7 +1188,7 @@ final class ReadQuantities implements Quantities {
             // Only where one value was fixed there. A place fixed at two settles nothing the
             // declarations could be told, and what it contradicts is said here rather than by them.
             if (at != null && root.equals(at.root()) && fixedAt.isOne()) {
-                out.put(coordinateOf(at, term), fixedAt.least());
+                out.put(coordinateOf(at, term), counted);
             }
         });
         return out;

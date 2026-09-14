@@ -59,19 +59,31 @@ class WhatTheWayLeftOutIsSaidBeforeWhatTheSearchCameToTest {
             }
             """;
 
-    /** A condition above the line over positions nothing composed a value at. */
+    /**
+     * A condition above the line over positions nothing composed a value at.
+     *
+     * <p>Over a total taken across a run, which is a number of the input and is at no position of
+     * it: what a row writes is the elements, and a composer choosing a value chooses one where a
+     * value stands. So the condition is stated and the row below it is composed without it.
+     *
+     * <p>Not a position on an order this compiler cannot write a value on. That reached this arm
+     * too, for as long as fixing took a number and a string is not one — a fixture standing on it
+     * stopped exercising the stage the day a position came to stand at a place.
+     */
     private static final String POSITIONS_NOTHING_COMPOSED_A_VALUE_AT = """
             module example.positions
 
             data Yes = { v: Int }
             data No = { why: Int }
 
-            behavior f : (a: String, b: String, n: Int) -> Yes | No
+            data Line = { each: Int }
+
+            behavior f : (xs: List<Line>, n: Int) -> Yes | No
                 constructs Yes
                 constructs No
 
-            let f (a, b, n) = {
-                guard a < b else No { why = 0 }
+            let f (xs, n) = {
+                guard List.sum(List.map(x -> x.each, xs)) > 0 else No { why = 0 }
                 guard n < 10 else No { why = 1 }
                 Yes { v = 1 }
             }
