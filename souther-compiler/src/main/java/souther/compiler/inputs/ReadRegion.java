@@ -34,6 +34,13 @@ record ReadRegion(ReadQuantities within) implements SearchRegion {
     }
 
     @Override
+    public SearchRegion apartFrom(NumericTerm.FromOnePosition term,
+                                  souther.compiler.numeric.Place at) {
+        ReadQuantities taken = within.apartFrom(term, at);
+        return taken == within ? this : new ReadRegion(taken);
+    }
+
+    @Override
     public SearchRegion given(Map<NumericTerm, souther.compiler.numeric.Place> fixed) {
         ReadQuantities taken = within.fixing(fixed);
         return taken == within ? this : new ReadRegion(taken);

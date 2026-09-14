@@ -249,10 +249,9 @@ public record ReachingCuts(Map<ModelOccurrence, List<OnTheWay>> byComparison) {
      * coming out the other are the same relation, and a reading that looked at what the author
      * wrote would carry one of them and refuse the other.
      *
-     * <p>Null as well where that relation draws no bound, which is what a hole in an order is. A
-     * region has no word for one, so a condition that comes to it is a condition this reading could
-     * not turn into a cut — said as that rather than carried as something taken in, since what a
-     * reader of {@link OnTheWay.TakenIn} does with it is take the search for narrowed.
+     * <p>A bound where the relation says where the run stops and a hole where it does not, which
+     * are two shapes and not one with a flag: an end moves where a chooser looks, and a hole leaves
+     * the run where it was and takes one value out of it.
      */
     private static OnTheWay.TakenIn onAnOrder(Condition.Compares comparison, InputReading read,
                                               boolean holding, ConditionReportAnchor at) {
@@ -262,9 +261,10 @@ public record ReachingCuts(Map<ModelOccurrence, List<OnTheWay>> byComparison) {
             return null;
         }
         Rel states = drawn.claim().statedRelation();
-        TakenConstraint.Ordered bound = TakenConstraint.Ordered.of(drawn.term(), drawn.value(),
-                holding ? states : states.denied());
-        return bound == null ? null : new OnTheWay.TakenIn(at, bound);
+        Rel met = holding ? states : states.denied();
+        return new OnTheWay.TakenIn(at, TakenConstraint.Ordered.isABound(met)
+                ? new TakenConstraint.Ordered(drawn.term(), drawn.value(), met)
+                : new TakenConstraint.AwayFrom(drawn.term(), drawn.value()));
     }
 
     /** These conditions, with the rule stated at {@code states} reached under {@code assumed}. */

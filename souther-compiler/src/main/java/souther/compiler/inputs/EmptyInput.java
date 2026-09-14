@@ -64,6 +64,17 @@ public sealed interface EmptyInput {
     record OutsideWhereThePositionRuns(NumericTerm term, Place fixed) implements EmptyInput {}
 
     /**
+     * A position was fixed at a place a rule on the way holds it away from.
+     *
+     * <p>Beside the two above and the same kind of fact: the value is held against what was said
+     * about it, and the declarations were never asked. Its own arm because a hole is its own shape
+     * — the range the position runs between still admits the place, which is what makes a rule of
+     * this kind one an arithmetic over ranges cannot carry and one nothing further down would
+     * find.
+     */
+    record WhereARuleHoldsThePositionApart(NumericTerm term, Place fixed) implements EmptyInput {}
+
+    /**
      * The rules of every parameter and everything a caller took in, said together, leave no value.
      *
      * <p>One proof and one prover. Every parameter's reading is in the space this was proved over,

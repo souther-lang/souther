@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.core.Core;
+import souther.compiler.inputs.EmptyInput;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.numeric.Endpoint;
@@ -19,6 +20,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A comparison whose written value the arithmetic cannot carry is carried on the order instead.
@@ -86,26 +88,47 @@ class AComparisonAgainstAWrittenValueIsCarriedOnItsOwnOrderTest {
     }
 
     /**
-     * A relation that leaves a hole is not taken in, because no region is narrowed by one.
+     * A relation that leaves a hole is carried as one, and not as a bound.
      *
-     * <p>The half of this a reading could get wrong without any test noticing. What a reader of a
-     * condition taken in does with it is take the search for narrowed by it, and the region it is
-     * handed to has no word for a hole — so a bound spelled {@code NE} would be a value saying the
-     * search was narrowed by something that narrows nothing, and the shortfall would stop being
-     * observable at the moment it was named a comparison.
+     * <p>Two shapes because a reader does two things with them. An end moves where a chooser looks;
+     * a hole leaves the run where it was and takes one value out of it. Carried as a bound, the
+     * value the rule refuses would become an end and one whole side of the order would go with it.
      *
      * <p>Both spellings of it, since which relation reaches this is what the path met and not what
      * the author wrote: {@code /= } holding and {@code ==} denied are one relation.
      */
     @Test
-    void aRelationThatLeavesAHoleIsNotTakenIn() {
+    void aRelationThatLeavesAHoleIsCarriedAsAHole() {
         for (Map.Entry<String, Boolean> each : Map.of(
                 "textApartFromAWrittenValue", true, "textAtAWrittenValue", false).entrySet()) {
-            OnTheWay.Declined left = assertInstanceOf(OnTheWay.Declined.class,
-                    only(each.getKey(), each.getValue()),
+            TakenConstraint.AwayFrom away = assertInstanceOf(TakenConstraint.AwayFrom.class,
+                    taken(each.getKey(), each.getValue()),
                     each.getKey() + " comes out " + each.getValue() + " as a hole in the order");
-            assertEquals(new OnTheWay.Why.ComparisonNotRepresentedAsACut(), left.why());
+            assertEquals("t", away.at().key());
         }
+    }
+
+    /**
+     * And the region it reaches refuses a row standing at the place the rule holds apart.
+     *
+     * <p>The other end of the same contract. A hole a region took in and then had no answer about
+     * would be a condition recorded as narrowing a search that goes on offering the one value it
+     * refuses — which is what a reader of a condition taken in is entitled to assume did not
+     * happen.
+     */
+    @Test
+    void aRowStandingInTheHoleIsRefused() {
+        TakenConstraint.AwayFrom away = assertInstanceOf(TakenConstraint.AwayFrom.class,
+                taken("textApartFromAWrittenValue", true));
+        SearchRegion narrowed = new WayToTheBorder(stating("textApartFromAWrittenValue", true))
+                .narrowing(regionOf("textApartFromAWrittenValue"));
+
+        assertInstanceOf(EmptyInput.WhereARuleHoldsThePositionApart.class,
+                narrowed.given(away.term(), away.at()).emptiness().orElse(null),
+                "a row standing where the rule holds the position away cannot be written");
+        assertTrue(narrowed.given(away.term(), souther.compiler.numeric.Text.of("autumn"))
+                        .emptiness().isEmpty(),
+                "and the rest of the order is left where it was, which is what a hole is");
     }
 
     /**

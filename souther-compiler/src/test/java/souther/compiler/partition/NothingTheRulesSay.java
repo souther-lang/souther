@@ -39,6 +39,13 @@ final class NothingTheRulesSay implements SearchRegion {
     }
 
     @Override
+    public SearchRegion apartFrom(NumericTerm.FromOnePosition term,
+                                  souther.compiler.numeric.Place at) {
+        return this;
+    }
+
+
+    @Override
     public NumericDomain.Bounds runsBetween(LinearForm<NumericTerm> form) {
         return NumericDomain.Bounds.OPEN;
     }
