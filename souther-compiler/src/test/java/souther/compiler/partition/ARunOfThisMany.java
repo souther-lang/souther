@@ -40,6 +40,13 @@ record ARunOfThisMany(int many) implements SearchRegion {
         return this;
     }
 
+    @Override
+    public SearchRegion apartFrom(NumericTerm.FromOnePosition term,
+                                  souther.compiler.numeric.Place at) {
+        return this;
+    }
+
+
     /**
      * From nought upward, so that the walk starts inside the run rather than at an end of it.
      *

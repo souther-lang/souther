@@ -80,6 +80,21 @@ public interface SearchRegion {
     SearchRegion assuming(NumericTerm.FromOnePosition term, Place at, Rel rel);
 
     /**
+     * The same region, with {@code term} held away from {@code at}.
+     *
+     * <p>A hole, which is what a disequality states and is not an end: the values either side of it
+     * are both still there. A range cannot say it, so it is its own verb rather than a relation the
+     * one above would have to refuse.
+     *
+     * <p>What it changes is {@link #emptiness}: a row standing where a rule holds the position away
+     * is a row that cannot be written. There is no question here for a chooser to ask before it
+     * offers a value, because nothing yet could spend one — on an order that counts nothing the
+     * places a chooser can name are the ones a rule wrote, so a hole at one of them leaves it with
+     * nothing else to offer and the refusal is what says so.
+     */
+    SearchRegion apartFrom(NumericTerm.FromOnePosition term, Place at);
+
+    /**
      * The same region, with these positions standing at these values.
      *
      * <p>A place and not a number, because what a position stands at is a place on its carrier's

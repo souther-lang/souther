@@ -70,6 +70,8 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
                             region.assuming(affine.form(), affine.rel());
                     case TakenConstraint.Ordered ordered ->
                             region.assuming(ordered.term(), ordered.at(), ordered.rel());
+                    case TakenConstraint.AwayFrom away ->
+                            region.apartFrom(away.term(), away.at());
                 };
             }
         }

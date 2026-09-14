@@ -168,6 +168,16 @@ final class ReadQuantities implements Quantities {
                 return Set.of(term);
             }
         }
+
+        /** One position held away from a place on that order, which is a hole and not an end. */
+        record ApartFrom(NumericTerm.FromOnePosition term, souther.compiler.numeric.Place at)
+                implements Assumed {
+
+            @Override
+            public Set<NumericTerm> terms() {
+                return Set.of(term);
+            }
+        }
     }
 
     /** The values fixed at one term, kept as their least and greatest so that what was fixed does
@@ -405,6 +415,33 @@ final class ReadQuantities implements Quantities {
         }
         held(term);
         return alsoAssuming(new Assumed.OnAnOrder(term, at, rel));
+    }
+
+    /**
+     * The same rules, with {@code term} held away from {@code at}.
+     *
+     * <p>Kept beside the bounds rather than folded into them, because a range says where a run
+     * stops and this says what the run does not hold. What reads it back is the proof that nothing
+     * is left ({@link #emptiness}): a value standing here is one the rules refuse, and that is the
+     * whole of what a hole changes about what this answers.
+     */
+    ReadQuantities apartFrom(NumericTerm.FromOnePosition term, souther.compiler.numeric.Place at) {
+        if (term == null || at == null) {
+            return this;
+        }
+        held(term);
+        return alsoAssuming(new Assumed.ApartFrom(term, at));
+    }
+
+    /** Which places the rules hold {@code term} away from. */
+    private souther.compiler.numeric.PlacesApart apartAt(NumericTerm term) {
+        List<souther.compiler.numeric.Place> out = new ArrayList<>();
+        for (Assumed taken : assumed) {
+            if (taken instanceof Assumed.ApartFrom each && each.term().equals(term)) {
+                out.add(each.at());
+            }
+        }
+        return souther.compiler.numeric.PlacesApart.of(out);
     }
 
     /** The same rules with one more thing taken in, or this where it was already taken in. */
@@ -962,6 +999,17 @@ final class ReadQuantities implements Quantities {
             NumericDomain.Bounds own = each.getKey().intrinsicBounds();
             if (!own.admits(each.getValue().least())) {
                 return Optional.of(new EmptyInput.OutsideWhereThePositionRuns(each.getKey(),
+                        each.getValue().least()));
+            }
+        }
+        // And a position standing where a rule holds it away from. Beside the two above and for
+        // their reason: what contradicts is the value against what was taken in about it, and the
+        // declarations were never asked. A hole is no part of the arithmetic, so nothing further
+        // down would find this.
+        for (Map.Entry<NumericTerm, Fixed> each : inOrder()) {
+            if (each.getValue().isOne()
+                    && apartAt(each.getKey()).has(each.getValue().least())) {
+                return Optional.of(new EmptyInput.WhereARuleHoldsThePositionApart(each.getKey(),
                         each.getValue().least()));
             }
         }

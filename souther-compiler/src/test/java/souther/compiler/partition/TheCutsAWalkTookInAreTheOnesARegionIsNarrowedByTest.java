@@ -60,6 +60,13 @@ class TheCutsAWalkTookInAreTheOnesARegionIsNarrowedByTest {
         }
 
         @Override
+        public SearchRegion apartFrom(NumericTerm.FromOnePosition term,
+                                      souther.compiler.numeric.Place at) {
+            told.add(new TakenConstraint.AwayFrom(term, at));
+            return this;
+        }
+
+        @Override
         public SearchRegion given(Map<NumericTerm, souther.compiler.numeric.Place> fixed) {
             throw new UnsupportedOperationException("narrowing fixes no position");
         }

@@ -67,10 +67,9 @@ public sealed interface TakenConstraint {
      *
      * <p><b>A bound, so a relation that is not one cannot be spelled here.</b> {@link Rel#NE} holds
      * everywhere but at one place, which is a hole and not an end; this vocabulary says where a run
-     * stops. Admitted, it would be a value that says a region was narrowed by something no region
-     * can be narrowed by — and every reader of {@link OnTheWay.TakenIn} takes that for the search
-     * having been narrowed. So it is refused where it would be built ({@link #of}), and a condition
-     * that comes to one is a condition this reading could not turn into a cut.
+     * stops. What a rule states that way is an {@link AwayFrom}, and the two are held apart because
+     * what a reader does with them differs: an end moves where a run starts or stops, and a hole
+     * leaves the run where it was and takes one value out of it.
      *
      * @param term the position this bounds
      * @param at   the place on its order the rule names
@@ -89,16 +88,44 @@ public sealed interface TakenConstraint {
             }
         }
 
-        /** The bound {@code rel} draws at {@code at}, or null where the relation draws none. The
-         *  one place that decides it, so that what is built and what a region can be narrowed by
-         *  are one answer rather than two that agree until one of them is edited. */
-        public static Ordered of(NumericTerm.FromOnePosition term, Place at, Rel rel) {
-            return isABound(rel) ? new Ordered(term, at, rel) : null;
+        /** Whether {@code rel} says where a run stops. */
+        static boolean isABound(Rel rel) {
+            return rel != Rel.NE;
         }
 
-        /** Whether {@code rel} says where a run stops. */
-        private static boolean isABound(Rel rel) {
-            return rel != Rel.NE;
+        @Override
+        public java.util.Set<NumericTerm> terms() {
+            return java.util.Set.of(term);
+        }
+    }
+
+    /**
+     * One position held away from one place on its order.
+     *
+     * <p>What a disequality states. A hole and not an end: the values above it and the values below
+     * it are both still there, so nothing about where the run stops has changed and one value has
+     * gone out of it. Said as a bound, one whole side of the order would go with it.
+     *
+     * <p>Its own shape rather than an {@link Ordered} carrying {@link Rel#NE}, because what a
+     * reader does with it is the other thing. A run's ends are what a chooser looks between; a hole
+     * is what it must not offer, and a row written at one is a row the rules refuse.
+     *
+     * @param term the position this holds apart
+     * @param at   the place on its order no value of the position may be
+     */
+    record AwayFrom(NumericTerm.FromOnePosition term, Place at) implements TakenConstraint {
+
+        public AwayFrom {
+            if (term == null || at == null) {
+                throw new IllegalArgumentException(
+                        "a hole in an order is a position and a place on it: " + term + " " + at);
+            }
+        }
+
+        /** {@link Rel#NE}, which is the only relation that states a hole. */
+        @Override
+        public Rel rel() {
+            return Rel.NE;
         }
 
         @Override

@@ -76,6 +76,13 @@ record DecisionMeanings(ConditionMeanings states, DecisionSubjects subjects,
                             new DecisionCondition.AnOrderedComparison(
                                     new DecisionAtom.OfTheInput(ordered.term()), ordered.at(),
                                     proposition);
+                    // A hole is the same column as the equality it denies, which is what makes the
+                    // table exclusive: `voucher == "spring"` and `voucher /= "spring"` are one
+                    // distinction a body draws, met the two ways a path can meet it.
+                    case TakenConstraint.AwayFrom away ->
+                            new DecisionCondition.AnOrderedComparison(
+                                    new DecisionAtom.OfTheInput(away.term()), away.at(),
+                                    proposition);
                 };
                 yield new DecidedCondition.Compared(column,
                         taken.taken().rel() == proposition);

@@ -2166,13 +2166,15 @@
           "obligationId" : {
             "behavior" : "redeem",
             "conditions" : [ {
-              "kind" : "not_read",
-              "condition" : "condition 1 of `redeem`",
+              "kind" : "comparison",
+              "condition" : "EQ voucher spring",
               "outcome" : "denied"
             } ]
           },
           "taken" : false,
-          "requirement" : "required"
+          "requirement" : "unsettled",
+          "because" : "nothing_was_composed_to_try",
+          "synthesisShortfall" : "all_candidates_rejected"
         } ]
       },
       "findings" : [ {
@@ -2206,19 +2208,6 @@
             "kind" : "comparison",
             "condition" : "GT LinearForm[constant=-4, coefs={party=1}]",
             "outcome" : "held"
-          } ]
-        },
-        "code" : "E1935"
-      }, {
-        "kind" : "decision_rule_uncovered",
-        "disposition" : "refused",
-        "subject" : "redeem",
-        "obligationId" : {
-          "behavior" : "redeem",
-          "conditions" : [ {
-            "kind" : "not_read",
-            "condition" : "condition 1 of `redeem`",
-            "outcome" : "denied"
           } ]
         },
         "code" : "E1935"
