@@ -97,16 +97,24 @@ final class ReadQuantities implements Quantities {
      */
     private final List<Assumed> assumed;
     /**
-     * What the ones taken in on an order leave each term, worked out from {@link #assumed} when
-     * this value is made.
+     * What the ones taken in on an order leave each term, worked out from {@link #assumed} the
+     * first time anybody asks.
      *
      * <p>A projection of the list beside it and not a second place to put one. Where a term runs is
      * asked once per term of every form a search reads, and that question is not memoised — walked
      * over the whole list each time, every condition on the way is visited for the sake of the rare
-     * one that is a bound on an order. Derived here, it cannot say anything the list does not:
-     * nothing adds to it, and meeting the ends is the same answer in any order they are met.
+     * one that is a bound on an order. Derived from the list, it cannot say anything the list does
+     * not: nothing adds to it, and meeting the ends is the same answer in any order they are met.
+     *
+     * <p>On demand and not when the value is made, because a value is made far more often than this
+     * is asked: every fixing a search does builds one, and a fixing changes nothing here. Worked out
+     * eagerly, the walk that chooses a value paid for this list at every candidate it tried.
+     *
+     * <p>Whichever thread gets there first, and the rest read what it wrote. Two that raced would
+     * work out the same map from the same list, so what is published is a value and never a
+     * half-built one.
      */
-    private final Map<NumericTerm, NumericDomain.Bounds> orderedBounds;
+    private volatile Map<NumericTerm, NumericDomain.Bounds> orderedBounds;
     /**
      * What has already been worked out, by the context it was worked out under.
      *
@@ -185,7 +193,6 @@ final class ReadQuantities implements Quantities {
         this.ruleReading = ruleReading;
         this.typeAt = typeAt;
         this.assumed = List.copyOf(assumed);
-        this.orderedBounds = boundsOnOrdersIn(this.assumed);
         // In the order the behavior declares its parameters. A proof of emptiness names one of them
         // and a report is a document compared against the one written last time, so an order read
         // off a hash would move which parameter is named between runs.
@@ -1246,7 +1253,7 @@ final class ReadQuantities implements Quantities {
         // relations, because this is the one shape such a rule has: a bound on a carrier that counts
         // nothing is about one position, and the arithmetic that adds terms together has no word for
         // the place it names.
-        runs = meeting(runs, orderedBounds.get(term));
+        runs = meeting(runs, boundsOnOrders().get(term));
         Fixed fixedAt = fixed.get(term);
         // Where two values were fixed there, between them: the rules leave nothing at all, which
         // {@link #emptiness} says, and a range that crossed itself is not something to hand a
@@ -1258,14 +1265,20 @@ final class ReadQuantities implements Quantities {
 
     /** What the bounds taken in on an order leave each term they are about, met together. Empty
      *  where none were taken in, which is every reading nothing said such a thing to. */
-    private static Map<NumericTerm, NumericDomain.Bounds> boundsOnOrdersIn(List<Assumed> assumed) {
+    private Map<NumericTerm, NumericDomain.Bounds> boundsOnOrders() {
+        Map<NumericTerm, NumericDomain.Bounds> had = orderedBounds;
+        if (had != null) {
+            return had;
+        }
         Map<NumericTerm, NumericDomain.Bounds> out = new LinkedHashMap<>();
         for (Assumed taken : assumed) {
             if (taken instanceof Assumed.OnAnOrder each) {
                 out.merge(each.term(), boundsAt(each.at(), each.rel()), ReadQuantities::meeting);
             }
         }
-        return Map.copyOf(out);
+        Map<NumericTerm, NumericDomain.Bounds> made = Map.copyOf(out);
+        orderedBounds = made;
+        return made;
     }
 
     /** The tighter end on each side, where an absent bound is no bound and never the tighter. */
