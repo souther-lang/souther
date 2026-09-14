@@ -45,11 +45,12 @@ more, and both existed only because develop had been made to claim a number it w
    mvn -Prelease deploy
    ```
 
-   `autoPublish` is false, so what this uploads waits in the Central Portal until it is published
-   there. souther-runtime, souther-syntax, souther-compiler, souther-build-driver and souther-fmt go
-   up, and souther-parent with them, being the pom they name as their parent. souther-cli,
-   souther-lsp and souther-bench do not: the really-executable jar and the language server are
-   distributed through GitHub Releases, and the benchmarks are not an artifact anyone depends on.
+   `autoPublish` is true, so what this uploads is released once the Portal has validated it, with
+   nothing left to do there. souther-runtime, souther-syntax, souther-compiler, souther-build-driver
+   and souther-fmt go up, and souther-parent with them, being the pom they name as their parent.
+   souther-cli, souther-lsp and souther-bench do not: the really-executable jar and the language
+   server are distributed through GitHub Releases, and the benchmarks are not an artifact anyone
+   depends on.
 
 6. Move develop to the next snapshot, committed to develop and pushed:
 

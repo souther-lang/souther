@@ -610,8 +610,8 @@
         </profile>
         <!-- Activate for a Central release: `mvn -Prelease deploy`. Attaches sources and
              javadoc, GPG-signs every artifact, and publishes the reactor to the Sonatype
-             Central Portal (autoPublish=false, so the bundle is reviewed in the Portal before
-             release). Normal build/test is untouched. -->
+             Central Portal (autoPublish=true, so a validated bundle is released without a further
+             step in the Portal). Normal build/test is untouched. -->
         <profile>
             <id>release</id>
             <build>
@@ -668,7 +668,7 @@
                         <extensions>true</extensions>
                         <configuration>
                             <publishingServerId>central</publishingServerId>
-                            <autoPublish>false</autoPublish>
+                            <autoPublish>true</autoPublish>
                         </configuration>
                     </plugin>
                 </plugins>
