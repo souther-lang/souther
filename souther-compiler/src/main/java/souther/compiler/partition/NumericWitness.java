@@ -112,10 +112,7 @@ final class NumericWitness {
         Outwards.Walked walked =
                 Outwards.from(first, Count.of(1), carrier, runs, VALUES_A_POSITION_IS_TRIED_AT);
         for (Place tried : walked) {
-            if (!(tried instanceof Count count)) {
-                continue;
-            }
-            SearchRegion next = within.given(term, count);
+            SearchRegion next = within.given(term, tried);
             if (next.emptiness().isPresent()) {
                 continue;
             }

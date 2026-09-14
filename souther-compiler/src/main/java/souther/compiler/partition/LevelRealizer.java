@@ -1172,13 +1172,9 @@ public final class LevelRealizer {
      */
     private boolean theRulesHaveNotRefused(Map<RealizationTarget, Place> fixing,
                                            souther.compiler.inputs.SearchRegion within) {
-        Map<NumericTerm, Count> counted = new LinkedHashMap<>();
-        fixing.forEach((target, at) -> {
-            if (at instanceof Count count) {
-                counted.put(target.term(), count);
-            }
-        });
-        return counted.isEmpty() || within.given(counted).emptiness().isEmpty();
+        Map<NumericTerm, Place> standing = new LinkedHashMap<>();
+        fixing.forEach((target, at) -> standing.put(target.term(), at));
+        return standing.isEmpty() || within.given(standing).emptiness().isEmpty();
     }
 
     /** The same, of the rules as some of the positions have been fixed. */

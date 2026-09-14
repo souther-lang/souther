@@ -219,9 +219,9 @@ class WhatIsFixedIsAskedTogetherHoweverItArrivedTest {
         return new LinearForm<>(BigDecimal.ZERO, coefs);
     }
 
-    private static Map<NumericTerm, Count> fixing(NumericTerm one, int at,
-                                                  NumericTerm other, int also) {
-        Map<NumericTerm, Count> out = new LinkedHashMap<>();
+    private static Map<NumericTerm, souther.compiler.numeric.Place> fixing(
+            NumericTerm one, int at, NumericTerm other, int also) {
+        Map<NumericTerm, souther.compiler.numeric.Place> out = new LinkedHashMap<>();
         out.put(one, count(at));
         out.put(other, count(also));
         return out;

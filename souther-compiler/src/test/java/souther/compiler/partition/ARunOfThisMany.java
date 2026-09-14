@@ -36,7 +36,7 @@ record ARunOfThisMany(int many) implements SearchRegion {
     }
 
     @Override
-    public SearchRegion given(Map<NumericTerm, Count> fixed) {
+    public SearchRegion given(Map<NumericTerm, souther.compiler.numeric.Place> fixed) {
         return this;
     }
 

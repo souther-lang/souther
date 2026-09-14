@@ -118,7 +118,11 @@ class EveryQuestionAReadingAnswersIsAboutItsOwnInputTest {
             } else if (takes == Map.class) {
                 handed[at] = Map.of(foreignTerm(), Count.of(1));
                 names = true;
-            } else if (takes == Count.class) {
+            } else if (takes == Count.class || takes == souther.compiler.numeric.Place.class) {
+                // A value handed beside a term rather than a naming of one, so it makes nothing
+                // foreign on its own and the question is still asked through whatever names a
+                // place. A count is one kind of place and a string is the other; which of them a
+                // question takes says nothing about whose input it is about.
                 handed[at] = Count.of(1);
             } else {
                 return null;   // something this does not know how to make foreign

@@ -1,6 +1,5 @@
 package souther.compiler.inputs;
 
-import souther.compiler.numeric.Count;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Place;
@@ -80,11 +79,23 @@ public interface SearchRegion {
      */
     SearchRegion assuming(NumericTerm.FromOnePosition term, Place at, Rel rel);
 
-    /** The same region, with these positions standing at these values. */
-    SearchRegion given(Map<NumericTerm, Count> fixed);
+    /**
+     * The same region, with these positions standing at these values.
+     *
+     * <p>A place and not a number, because what a position stands at is a place on its carrier's
+     * order. A count is one kind of place; a string is the other, and a row writes one there as
+     * surely as it writes a number anywhere else. Taken as a number, every value a carrier that
+     * counts nothing offers had to be dropped by whoever was choosing one — which is a position
+     * nothing could compose a value for, said of a position whose values were in hand.
+     *
+     * <p>What the declarations are told of it is theirs to decide. The rules are read with the
+     * arithmetic, so a fixing they have no number for narrows this region and is not among what
+     * they are asked to solve.
+     */
+    SearchRegion given(Map<NumericTerm, Place> fixed);
 
     /** The same, of one position. */
-    default SearchRegion given(NumericTerm term, Count fixed) {
+    default SearchRegion given(NumericTerm term, Place fixed) {
         return given(Map.of(term, fixed));
     }
 

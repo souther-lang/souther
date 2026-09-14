@@ -1472,7 +1472,7 @@
             "relation" : "=",
             "against" : "4",
             "knownWritable" : true,
-            "writableBecause" : [ "the_rules_prove_it" ],
+            "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
             "status" : "unavailable",
             "reason" : "no_rows"
           }, {
@@ -1484,7 +1484,7 @@
             "relation" : "=",
             "against" : "5",
             "knownWritable" : true,
-            "writableBecause" : [ "the_rules_prove_it" ],
+            "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
             "status" : "unavailable",
             "reason" : "no_rows"
           }, {
@@ -1496,7 +1496,7 @@
             "relation" : "in",
             "against" : "1 <= party < 4",
             "knownWritable" : true,
-            "writableBecause" : [ "the_rules_prove_it" ],
+            "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
             "status" : "unavailable",
             "reason" : "no_rows"
           }, {
@@ -1508,7 +1508,7 @@
             "relation" : "in",
             "against" : "5 < party <= 8",
             "knownWritable" : true,
-            "writableBecause" : [ "the_rules_prove_it" ],
+            "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
             "status" : "unavailable",
             "reason" : "no_rows"
           } ]
@@ -1899,7 +1899,7 @@
           },
           "relation" : "=",
           "knownWritable" : true,
-          "writableBecause" : [ "the_rules_prove_it" ],
+          "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
           "status" : "unavailable",
           "reason" : "no_rows",
           "disposition" : "undecided",
@@ -1957,7 +1957,7 @@
           },
           "relation" : "=",
           "knownWritable" : true,
-          "writableBecause" : [ "the_rules_prove_it" ],
+          "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
           "status" : "unavailable",
           "reason" : "no_rows",
           "disposition" : "undecided",
@@ -2027,7 +2027,7 @@
           },
           "relation" : "in",
           "knownWritable" : true,
-          "writableBecause" : [ "the_rules_prove_it" ],
+          "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
           "status" : "unavailable",
           "reason" : "no_rows",
           "disposition" : "undecided",
@@ -2097,7 +2097,7 @@
           },
           "relation" : "in",
           "knownWritable" : true,
-          "writableBecause" : [ "the_rules_prove_it" ],
+          "writableBecause" : [ "the_rules_prove_it", "a_value_was_built" ],
           "status" : "unavailable",
           "reason" : "no_rows",
           "disposition" : "undecided",
@@ -2146,8 +2146,7 @@
             } ]
           },
           "taken" : false,
-          "requirement" : "unsettled",
-          "because" : "a_composed_row_went_elsewhere"
+          "requirement" : "required"
         }, {
           "obligationId" : {
             "behavior" : "redeem",
@@ -2162,8 +2161,7 @@
             } ]
           },
           "taken" : false,
-          "requirement" : "unsettled",
-          "because" : "a_composed_row_went_elsewhere"
+          "requirement" : "required"
         }, {
           "obligationId" : {
             "behavior" : "redeem",
@@ -2178,6 +2176,40 @@
         } ]
       },
       "findings" : [ {
+        "kind" : "decision_rule_uncovered",
+        "disposition" : "refused",
+        "subject" : "redeem",
+        "obligationId" : {
+          "behavior" : "redeem",
+          "conditions" : [ {
+            "kind" : "comparison",
+            "condition" : "EQ voucher spring",
+            "outcome" : "held"
+          }, {
+            "kind" : "comparison",
+            "condition" : "GT LinearForm[constant=-4, coefs={party=1}]",
+            "outcome" : "denied"
+          } ]
+        },
+        "code" : "E1935"
+      }, {
+        "kind" : "decision_rule_uncovered",
+        "disposition" : "refused",
+        "subject" : "redeem",
+        "obligationId" : {
+          "behavior" : "redeem",
+          "conditions" : [ {
+            "kind" : "comparison",
+            "condition" : "EQ voucher spring",
+            "outcome" : "held"
+          }, {
+            "kind" : "comparison",
+            "condition" : "GT LinearForm[constant=-4, coefs={party=1}]",
+            "outcome" : "held"
+          } ]
+        },
+        "code" : "E1935"
+      }, {
         "kind" : "decision_rule_uncovered",
         "disposition" : "refused",
         "subject" : "redeem",

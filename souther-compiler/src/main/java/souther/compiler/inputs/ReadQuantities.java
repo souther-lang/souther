@@ -11,6 +11,7 @@ import souther.compiler.numeric.CountDomain;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Rational;
 import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.RationalCut;
@@ -96,16 +97,24 @@ final class ReadQuantities implements Quantities {
      */
     private final List<Assumed> assumed;
     /**
-     * What the ones taken in on an order leave each term, worked out from {@link #assumed} when
-     * this value is made.
+     * What the ones taken in on an order leave each term, worked out from {@link #assumed} the
+     * first time anybody asks.
      *
      * <p>A projection of the list beside it and not a second place to put one. Where a term runs is
      * asked once per term of every form a search reads, and that question is not memoised — walked
      * over the whole list each time, every condition on the way is visited for the sake of the rare
-     * one that is a bound on an order. Derived here, it cannot say anything the list does not:
-     * nothing adds to it, and meeting the ends is the same answer in any order they are met.
+     * one that is a bound on an order. Derived from the list, it cannot say anything the list does
+     * not: nothing adds to it, and meeting the ends is the same answer in any order they are met.
+     *
+     * <p>On demand and not when the value is made, because a value is made far more often than this
+     * is asked: every fixing a search does builds one, and a fixing changes nothing here. Worked out
+     * eagerly, the walk that chooses a value paid for this list at every candidate it tried.
+     *
+     * <p>Whichever thread gets there first, and the rest read what it wrote. Two that raced would
+     * work out the same map from the same list, so what is published is a value and never a
+     * half-built one.
      */
-    private final Map<NumericTerm, NumericDomain.Bounds> orderedBounds;
+    private volatile Map<NumericTerm, NumericDomain.Bounds> orderedBounds;
     /**
      * What has already been worked out, by the context it was worked out under.
      *
@@ -163,9 +172,9 @@ final class ReadQuantities implements Quantities {
 
     /** The values fixed at one term, kept as their least and greatest so that what was fixed does
      *  not depend on the order it arrived in. */
-    private record Fixed(Count least, Count most) {
+    private record Fixed(Place least, Place most) {
 
-        Fixed and(Count also) {
+        Fixed and(Place also) {
             return new Fixed(least.compareTo(also) <= 0 ? least : also,
                     most.compareTo(also) >= 0 ? most : also);
         }
@@ -184,7 +193,6 @@ final class ReadQuantities implements Quantities {
         this.ruleReading = ruleReading;
         this.typeAt = typeAt;
         this.assumed = List.copyOf(assumed);
-        this.orderedBounds = boundsOnOrdersIn(this.assumed);
         // In the order the behavior declares its parameters. A proof of emptiness names one of them
         // and a report is a document compared against the one written last time, so an order read
         // off a hash would move which parameter is named between runs.
@@ -897,7 +905,7 @@ final class ReadQuantities implements Quantities {
     }
 
     @Override
-    public Quantities given(Map<NumericTerm, Count> more) {
+    public Quantities given(Map<NumericTerm, Place> more) {
         return fixing(more);
     }
 
@@ -909,12 +917,12 @@ final class ReadQuantities implements Quantities {
      * which is a cast, and a cast is a check the compiler is not doing. The two faces stay apart
      * because they answer different questions; what they refine is one thing and is typed as one.
      */
-    ReadQuantities fixing(Map<NumericTerm, Count> more) {
+    ReadQuantities fixing(Map<NumericTerm, Place> more) {
         if (more.isEmpty()) {
             return this;
         }
         Map<NumericTerm, Fixed> both = new LinkedHashMap<>(fixed);
-        for (Map.Entry<NumericTerm, Count> each : more.entrySet()) {
+        for (Map.Entry<NumericTerm, Place> each : more.entrySet()) {
             NumericTerm term = held(each.getKey());
             both.merge(term, new Fixed(each.getValue(), each.getValue()),
                     (had, one) -> had.and(one.least()));
@@ -1164,10 +1172,21 @@ final class ReadQuantities implements Quantities {
         return term;
     }
 
-    /** What is fixed under one value, named the way that value's own rules name it. */
+    /**
+     * What is fixed under one value, named the way that value's own rules name it.
+     *
+     * <p>The ones that count to a number, because what this is handed to is the arithmetic the
+     * declarations are read with. A position fixed at a place its carrier counts nothing of is
+     * still fixed — {@link #whereOneTermRuns} leaves it the one value, which is what a reader
+     * choosing a value for it asks — and there is nothing to tell the rules that they could solve
+     * with. Handed over as a number it does not have, it would be a rule about some other place.
+     */
     private Map<NumberAt<RuleKey>, Count> under(TermPath root) {
         Map<NumberAt<RuleKey>, Count> out = new LinkedHashMap<>();
         fixed.forEach((term, fixedAt) -> {
+            if (!(fixedAt.least() instanceof Count counted)) {
+                return;
+            }
             UnderARoot at = rootOf(term.subjectPath());
             // Which number of the place was settled, and not only which place. A count taken of one
             // is a coordinate of its own, and a fixing that named only the value left a rule over
@@ -1176,7 +1195,7 @@ final class ReadQuantities implements Quantities {
             // Only where one value was fixed there. A place fixed at two settles nothing the
             // declarations could be told, and what it contradicts is said here rather than by them.
             if (at != null && root.equals(at.root()) && fixedAt.isOne()) {
-                out.put(coordinateOf(at, term), fixedAt.least());
+                out.put(coordinateOf(at, term), counted);
             }
         });
         return out;
@@ -1234,7 +1253,7 @@ final class ReadQuantities implements Quantities {
         // relations, because this is the one shape such a rule has: a bound on a carrier that counts
         // nothing is about one position, and the arithmetic that adds terms together has no word for
         // the place it names.
-        runs = meeting(runs, orderedBounds.get(term));
+        runs = meeting(runs, boundsOnOrders().get(term));
         Fixed fixedAt = fixed.get(term);
         // Where two values were fixed there, between them: the rules leave nothing at all, which
         // {@link #emptiness} says, and a range that crossed itself is not something to hand a
@@ -1246,14 +1265,20 @@ final class ReadQuantities implements Quantities {
 
     /** What the bounds taken in on an order leave each term they are about, met together. Empty
      *  where none were taken in, which is every reading nothing said such a thing to. */
-    private static Map<NumericTerm, NumericDomain.Bounds> boundsOnOrdersIn(List<Assumed> assumed) {
+    private Map<NumericTerm, NumericDomain.Bounds> boundsOnOrders() {
+        Map<NumericTerm, NumericDomain.Bounds> had = orderedBounds;
+        if (had != null) {
+            return had;
+        }
         Map<NumericTerm, NumericDomain.Bounds> out = new LinkedHashMap<>();
         for (Assumed taken : assumed) {
             if (taken instanceof Assumed.OnAnOrder each) {
                 out.merge(each.term(), boundsAt(each.at(), each.rel()), ReadQuantities::meeting);
             }
         }
-        return Map.copyOf(out);
+        Map<NumericTerm, NumericDomain.Bounds> made = Map.copyOf(out);
+        orderedBounds = made;
+        return made;
     }
 
     /** The tighter end on each side, where an absent bound is no bound and never the tighter. */

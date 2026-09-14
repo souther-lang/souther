@@ -1,6 +1,5 @@
 package souther.compiler.inputs;
 
-import souther.compiler.numeric.Count;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Rel;
@@ -35,7 +34,7 @@ record ReadRegion(ReadQuantities within) implements SearchRegion {
     }
 
     @Override
-    public SearchRegion given(Map<NumericTerm, Count> fixed) {
+    public SearchRegion given(Map<NumericTerm, souther.compiler.numeric.Place> fixed) {
         ReadQuantities taken = within.fixing(fixed);
         return taken == within ? this : new ReadRegion(taken);
     }

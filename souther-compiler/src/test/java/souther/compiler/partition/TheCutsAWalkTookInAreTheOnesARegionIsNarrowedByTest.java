@@ -6,7 +6,6 @@ import souther.compiler.inputs.EmptyInput;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermPath;
-import souther.compiler.numeric.Count;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
@@ -61,7 +60,7 @@ class TheCutsAWalkTookInAreTheOnesARegionIsNarrowedByTest {
         }
 
         @Override
-        public SearchRegion given(Map<NumericTerm, Count> fixed) {
+        public SearchRegion given(Map<NumericTerm, souther.compiler.numeric.Place> fixed) {
             throw new UnsupportedOperationException("narrowing fixes no position");
         }
 
